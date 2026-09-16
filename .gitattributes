@@ -1,0 +1,10 @@
+* text=auto
+*.rs text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+
+# 執行檔與離線包都納入 Git；大型內容由 Git LFS 儲存。
+dist/*.exe filter=lfs diff=lfs merge=lfs -text
+offline/*.zip filter=lfs diff=lfs merge=lfs -text

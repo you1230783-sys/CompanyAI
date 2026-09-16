@@ -1,0 +1,10 @@
+﻿{
+    "verified_at":  "2026-09-16T22:43:26.5072128+08:00",
+    "archive_sha256":  "02185ba5d9d55c8dd6c15097ef66d1c6ad118a823f9f9954022c70eeb61857f0",
+    "result":  "PASS",
+    "rust_source":  "bundled toolchain",
+    "cargo_cache":  "empty at start",
+    "network":  "Cargo --frozen; local HTTP tests only",
+    "checks":  "fmt, clippy, workspace tests, release build, native UI startup",
+    "prerequisite":  "Installed MSVC v142 (14.29) and Windows SDK 10.0.19041.0"
+}

@@ -1,0 +1,118 @@
+﻿{
+    "generated_at":  "2026-09-16T22:42:00.9616211+08:00",
+    "rust":  "1.98.1",
+    "target":  "x86_64-pc-windows-msvc",
+    "msvc":  "14.29.30133",
+    "windows_sdk":  "10.0.19041.0",
+    "prerequisite":  "Installed MSVC v142 (14.29) and Windows SDK 10.0.19041.0",
+    "files":  [
+                  {
+                      "path":  "src/auth.rs",
+                      "sha256":  "1e3285a15b5c0b35a0119712b1ba644190253578afb6358dcd2468f2f8d7d85b"
+                  },
+                  {
+                      "path":  "src/config.rs",
+                      "sha256":  "2dd11ee572ab6af0a2623599d9340cc01aff72db3a33a391302b93e891d0b6f6"
+                  },
+                  {
+                      "path":  "src/demo.rs",
+                      "sha256":  "86436e5ad94a87f5546d604eb1e8bf96691ad8c06db17eb0836b3dacfffa4979"
+                  },
+                  {
+                      "path":  "src/lib.rs",
+                      "sha256":  "584102057b2059e817885f55cbbf7d39d0c1b962ca1dcc7a03034ae7547c79fa"
+                  },
+                  {
+                      "path":  "src/main.rs",
+                      "sha256":  "205a82c2cb92449a552d35cfb54061e9e75d28a49b8f1486c1f3e97bd28caca5"
+                  },
+                  {
+                      "path":  "src/protocol.rs",
+                      "sha256":  "38268db508ef652f6d576149071f84a91a6cfd7cfd10e92b8dc3a0b965bb7778"
+                  },
+                  {
+                      "path":  "src/storage.rs",
+                      "sha256":  "700323982e801da19c4883c181864c980c621c288a429777f6aa2eb6a5f90c94"
+                  },
+                  {
+                      "path":  "src/transport.rs",
+                      "sha256":  "337389ea567f1221c72caeb4272ed8b93a110f39b18085a70e3c3a2de7285cf4"
+                  },
+                  {
+                      "path":  "src/ui.rs",
+                      "sha256":  "da9c6bb1e02932f5445d88555bc148df94e456d80d2e26778f5fae899c5a6f53"
+                  },
+                  {
+                      "path":  "examples/browser_smoke.rs",
+                      "sha256":  "9c1247232a0f8607984715e24de6f9d1ec6abf60437709c94220e3d565d21b1b"
+                  },
+                  {
+                      "path":  "scripts/Build.ps1",
+                      "sha256":  "1870095b5d706743f256d4ec363c6692d5dbad29b4553845da14887703d9f3b2"
+                  },
+                  {
+                      "path":  "scripts/Configure-VSCode.ps1",
+                      "sha256":  "3bf39530e31560038192ad1e7b6a384209d2fcd61b1951a114890bec7ab3278e"
+                  },
+                  {
+                      "path":  "scripts/Enter-DevShell.ps1",
+                      "sha256":  "a1a89014df12bd4c3f6a06bd6675c667577ed52ac083e05e8ac612133a462986"
+                  },
+                  {
+                      "path":  "scripts/Install-Rust.ps1",
+                      "sha256":  "e34323f8889ae61e91d011eb9a033bf424b985e26deb56d571f768ad77285303"
+                  },
+                  {
+                      "path":  "scripts/Prepare-Delivery.ps1",
+                      "sha256":  "c1a5718fed6596d3ca299d56838dff082ca3260de3559055c21028d4a794091a"
+                  },
+                  {
+                      "path":  "scripts/vs-env.cmd",
+                      "sha256":  "fad72e6f155b672f3d3921a7a208f29fe61a250f533854f474c4f017d5297302"
+                  },
+                  {
+                      "path":  "docs/OFFLINE_AND_GIT.md",
+                      "sha256":  "bd669c6d1f2d97e81bb547d0a055b93d15496b022e7bc2fb3a3add10110f9cbd"
+                  },
+                  {
+                      "path":  "docs/WEB_INTEGRATION.md",
+                      "sha256":  "5835940253302073c3c9c8f949372bffdd1943c4a1e08a4f5723fb0376cb6de6"
+                  },
+                  {
+                      "path":  ".cargo/config.toml",
+                      "sha256":  "eb00d847621074aee7f68d040b43384ee920fb8eacad564198c2a7635534bdfb"
+                  },
+                  {
+                      "path":  "dist/CompanyAI.exe",
+                      "sha256":  "03c81b766a6ccb2a8a584ab3955099aa51a9f4c5dbab8a125b7e9e71c9353f77"
+                  },
+                  {
+                      "path":  "Cargo.toml",
+                      "sha256":  "010bed6cbd6886caaf4e9242388f739625a529e2cd2df2f4c02bb8065fb89453"
+                  },
+                  {
+                      "path":  "Cargo.lock",
+                      "sha256":  "53020a4d49c60a5ebe0eb58aa3433901089877244ca11acf9c27558eb7ee6be4"
+                  },
+                  {
+                      "path":  "rust-toolchain.toml",
+                      "sha256":  "aee16c3e09fbade14ab5474dca5a4f44640cb919f59f26937ed9e8a1d13b7408"
+                  },
+                  {
+                      "path":  "README.md",
+                      "sha256":  "a7e80ccddb62e41865ecf0eb6a7722e04fb93c0cc81521af7dec8fe3054b0842"
+                  },
+                  {
+                      "path":  "AGENTS.md",
+                      "sha256":  "bbbec422412e9fcaad27fc53d4e59c8d30488ce34bf9930a421faafd6da97e83"
+                  },
+                  {
+                      "path":  ".gitignore",
+                      "sha256":  "bc4df617464b7ee1432a5034b93c8f50936ed1833a74e8a035a50f5290117b12"
+                  },
+                  {
+                      "path":  ".gitattributes",
+                      "sha256":  "b4f8683fb86765365daad24533cce59c79f9ce9484bf3d22d4569a1ec894ffbd"
+                  }
+              ]
+}

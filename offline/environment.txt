@@ -1,0 +1,51 @@
+﻿Recorded: 2026-09-16T22:41:57.8480737+08:00
+Host OS: Microsoft Windows NT 10.0.26200.0
+Visual Studio: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools
+MSVC: 14.29.30133
+Windows SDK: 10.0.19041.0\
+Target: x86_64-pc-windows-msvc
+CRT: static
+Rust binaries: Y:\Rust\.tools\rustup\toolchains\1.98.1-x86_64-pc-windows-msvc\bin
+Cargo home: Y:\Rust\.tools\cargo
+EXE SHA256: 03C81B766A6CCB2A8A584AB3955099AA51A9F4C5DBAB8A125B7E9E71C9353F77
+
+rustc 1.98.1 (48a229cea 2026-09-01)
+binary: rustc
+commit-hash: 48a229ceaefd4985c50990b14116b6d856af0985
+commit-date: 2026-09-01
+host: x86_64-pc-windows-msvc
+release: 1.98.1
+LLVM version: 22.1.8
+cargo 1.98.1 (797e8a9bc 2026-08-05)
+
+Microsoft (R) COFF/PE Dumper Version 14.29.30159.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file Y:\Rust\Project\CompanyAI\target\x86_64-pc-windows-msvc\release\company-ai.exe
+
+File Type: EXECUTABLE IMAGE
+
+  Image has the following dependencies:
+
+    kernel32.dll
+    bcrypt.dll
+    user32.dll
+    shell32.dll
+    gdi32.dll
+    crypt32.dll
+    winhttp.dll
+    api-ms-win-core-synch-l1-2-0.dll
+    bcryptprimitives.dll
+    KERNEL32.dll
+    ntdll.dll
+    WS2_32.dll
+
+  Summary
+
+        2000 .data
+        7000 .pdata
+       4A000 .rdata
+        1000 .reloc
+       96000 .text
+        1000 _RDATA

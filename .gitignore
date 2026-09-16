@@ -1,0 +1,13 @@
+/target/
+/.tools/
+/offline/downloads/
+/toolchain/
+/vendor/
+/.build/
+/.vscode/settings.json
+*.pdb
+.env
+.env.*
+!*.example
+session.dpapi
+settings.json
