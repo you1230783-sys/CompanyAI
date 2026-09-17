@@ -1,4 +1,4 @@
-﻿Recorded: 2026-09-17T13:06:44.5199227+08:00
+﻿Recorded: 2026-09-17T13:48:59.2966022+08:00
 Host OS: Microsoft Windows NT 10.0.26200.0
 Visual Studio: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools
 MSVC: 14.29.30133
@@ -10,7 +10,7 @@ Target: x86_64-pc-windows-msvc
 CRT: static
 Rust binaries: Y:\Rust\.tools\rustup\toolchains\1.98.1-x86_64-pc-windows-msvc\bin
 Cargo home: Y:\Rust\.tools\cargo
-EXE SHA256: 120528C65F64A3171EAABA936E95D235DC9D156B8454EE4345B470E305B3E0E7
+EXE SHA256: BF06DA6518211D887A167FAE87D7309DB51C9416D48C2A60336EC19EF5B0BFB6
 
 rustc 1.98.1 (48a229cea 2026-09-01)
 binary: rustc
@@ -35,8 +35,8 @@ File Type: EXECUTABLE IMAGE
     user32.dll
     shell32.dll
     ole32.dll
-    shlwapi.dll
     oleaut32.dll
+    shlwapi.dll
     combase.dll
     propsys.dll
     bcrypt.dll
@@ -52,8 +52,8 @@ File Type: EXECUTABLE IMAGE
   Summary
 
         3000 .data
-        C000 .pdata
-      159000 .rdata
+        D000 .pdata
+      15D000 .rdata
         2000 .reloc
-      109000 .text
+      10E000 .text
         1000 _RDATA

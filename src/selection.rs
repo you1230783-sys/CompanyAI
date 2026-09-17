@@ -14,56 +14,7 @@ use windows_sys::Win32::{
 pub const HOTKEY_ID: i32 = 0x4341;
 const MAX_TEXT_UNITS: usize = 16_000;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Hotkey {
-    pub modifiers: u32,
-    pub key: u32,
-}
-impl Hotkey {
-    /// 使用 Ctrl+Alt 或 Ctrl+Shift 加字母／功能鍵；不接受 Windows 保留快捷鍵。
-    pub fn parse(value: &str) -> AppResult<Self> {
-        let parts: Vec<String> = value
-            .split('+')
-            .map(|s| s.trim().to_ascii_uppercase())
-            .collect();
-        let mut modifiers = 0;
-        let mut key = None;
-        for part in parts {
-            let modifier = match part.as_str() {
-                "CTRL" => MOD_CONTROL,
-                "ALT" => MOD_ALT,
-                "SHIFT" => MOD_SHIFT,
-                _ => 0,
-            };
-            if modifier != 0 {
-                if modifiers & modifier != 0 {
-                    return Err("快捷鍵的修飾鍵不可重複。".into());
-                }
-                modifiers |= modifier;
-            } else {
-                let code = if part.len() == 1 && part.as_bytes()[0].is_ascii_uppercase() {
-                    Some(part.as_bytes()[0] as u32)
-                } else {
-                    part.strip_prefix('F')
-                        .and_then(|s| s.parse::<u32>().ok())
-                        .filter(|n| (1..=24).contains(n))
-                        .map(|number| VK_F1 as u32 + number - 1)
-                };
-                if key.is_some() || code.is_none() {
-                    return Err("請使用例如 Ctrl+Alt+Q 或 Ctrl+Shift+F8 的快捷鍵。".into());
-                }
-                key = code;
-            }
-        }
-        if modifiers & MOD_CONTROL == 0 || modifiers & (MOD_ALT | MOD_SHIFT) == 0 {
-            return Err("快捷鍵需包含 Ctrl，以及 Alt 或 Shift。".into());
-        }
-        Ok(Self {
-            modifiers,
-            key: key.ok_or("快捷鍵缺少字母或功能鍵。")?,
-        })
-    }
-}
+pub use crate::hotkey::Hotkey;
 
 pub(crate) fn register(window: HWND, hotkey: Hotkey) -> AppResult<()> {
     // SAFETY: 呼叫者擁有有效主視窗；Windows 以 WM_HOTKEY 通知，不安裝鍵盤 hook。
@@ -76,7 +27,7 @@ pub(crate) fn register(window: HWND, hotkey: Hotkey) -> AppResult<()> {
         )
     } == 0
     {
-        Err("快捷鍵已被其他程式使用，請修改後再套用。".into())
+        Err("此快捷鍵已被其他程式或 Windows 占用，請錄製其他組合。".into())
     } else {
         Ok(())
     }
@@ -90,15 +41,6 @@ pub(crate) fn unregister(window: HWND) {
 fn key_is_down(key: u16) -> bool {
     unsafe { GetAsyncKeyState(key as i32) < 0 }
 }
-fn same_process(first: HWND, second: HWND) -> bool {
-    let (mut first_pid, mut second_pid) = (0, 0);
-    unsafe {
-        GetWindowThreadProcessId(first, &mut first_pid);
-        GetWindowThreadProcessId(second, &mut second_pid);
-    }
-    first_pid != 0 && first_pid == second_pid
-}
-
 /// 從快捷鍵發生時的前景視窗複製；必須先完成這一步，再把本程式帶到前景。
 pub(crate) fn capture(source: HWND, hotkey: Hotkey) -> AppResult<String> {
     let released_by = Instant::now() + Duration::from_millis(1500);
@@ -159,22 +101,20 @@ pub(crate) fn capture(source: HWND, hotkey: Hotkey) -> AppResult<String> {
             );
             return Err("無法複製選取文字；來源程式可能使用較高權限。可手動複製貼上。".into());
         }
-        let deadline = Instant::now() + Duration::from_millis(1800);
+        let deadline = Instant::now() + Duration::from_millis(3000);
         while Instant::now() < deadline {
-            if GetForegroundWindow() != source {
-                return Err("來源視窗已切換，這次沒有擷取文字。".into());
-            }
             let sequence = GetClipboardSequenceNumber();
             if sequence != 0 && sequence != previous_sequence {
-                // 序號更新還不夠：拒絕同時由其他程式寫入的剪貼簿內容。
-                if !same_process(source, GetClipboardOwner()) {
-                    return Err("剪貼簿被其他程式更新，請重新選字擷取。".into());
-                }
+                // Adobe 等程式可能由另一個程序／隱藏視窗提供剪貼簿。
+                // 只要求本次 Ctrl+C 後有新序號，不以 PID 或後續前景視窗判定失敗。
+                // 這不能證明內容一定來自原選字，因此仍需使用者在草稿確認後送出。
                 if OpenClipboard(ptr::null_mut()) != 0 {
                     let result = read_open_clipboard();
                     CloseClipboard();
                     if GetClipboardSequenceNumber() != sequence {
-                        return Err("擷取期間剪貼簿又有變更，請再試一次。".into());
+                        // 延遲呈現的 PDF 剪貼簿可能在讀取時再次更新；在期限內重讀穩定版本。
+                        thread::sleep(Duration::from_millis(25));
+                        continue;
                     }
                     return result;
                 }
@@ -192,14 +132,15 @@ unsafe fn read_open_clipboard() -> AppResult<String> {
         return Err("選取內容不是可讀取的純文字。".into());
     }
     let size = GlobalSize(handle);
-    if !(2..=(MAX_TEXT_UNITS + 1) * 2).contains(&size) {
-        return Err("選取文字過長，請縮短至 16,000 字元以內。".into());
+    if size < 2 {
+        return Err("剪貼簿沒有可讀取的文字資料。".into());
     }
     let pointer = GlobalLock(handle).cast::<u16>();
     if pointer.is_null() {
         return Err("剪貼簿正在使用中，請再試一次。".into());
     }
-    let units = std::slice::from_raw_parts(pointer, size / 2);
+    // 部分程式配置的緩衝區大於實際文字；只掃描上限範圍，不以配置大小拒絕短文字。
+    let units = std::slice::from_raw_parts(pointer, (size / 2).min(MAX_TEXT_UNITS + 1));
     let result = decode_text(units);
     GlobalUnlock(handle);
     result
@@ -258,7 +199,7 @@ mod tests {
         assert_eq!(Hotkey::parse("Ctrl+Alt+Q").unwrap().key, VK_Q as u32);
         assert_eq!(Hotkey::parse("ctrl+shift+F8").unwrap().key, VK_F8 as u32);
         for key in [
-            "Win+Space",
+            "Win+F12",
             "Ctrl+C",
             "Ctrl+Alt",
             "Ctrl+Alt+Q+W",

@@ -8,7 +8,7 @@ let state = {
   notifications: [],
   config: {
     font_size: 14,
-    hotkey: "Ctrl+Alt+Q",
+    hotkey: "Win+Esc",
     sidebar_collapsed: false,
     notification_popups: true,
   },
@@ -23,6 +23,8 @@ let activeView = "chat",
   stickToBottom = true,
   confirmAction = null;
 let draftTimer, toastTimer;
+let hotkeyRecording = false,
+  hotkeyDraft = null;
 const bridge = window.chrome?.webview;
 function send(command) {
   if (bridge) bridge.postMessage(command);
@@ -365,8 +367,7 @@ function receive(next) {
     : "";
   $("font-size").value = state.config.font_size;
   $("font-value").textContent = state.config.font_size + " px";
-  if (document.activeElement !== $("hotkey"))
-    $("hotkey").value = state.config.hotkey;
+  if (!hotkeyRecording) $("hotkey").value = hotkeyDraft ?? state.config.hotkey;
   $("hotkey-hint").textContent = state.config.hotkey + " 選字帶入";
   $("version-label").textContent =
     `LM_AI ${state.version} · ${state.version_status}`;
@@ -471,6 +472,101 @@ $("notification-popups").onchange = () =>
   });
 $("save-hotkey").onclick = () =>
   send({ type: "hotkey", value: $("hotkey").value });
+// 錄製期間暫停舊全域快捷鍵，避免它攔截正在錄製的同一組按鍵。
+function startHotkeyRecording() {
+  if (!hotkeyRecording) send({ type: "start_hotkey_recording" });
+}
+function setHotkeyRecording(active) {
+  hotkeyRecording = active;
+  $("hotkey").classList.toggle("recording", active);
+  $("record-hotkey").disabled = active;
+  $("save-hotkey").disabled = active;
+  $("cancel-hotkey").hidden = !active;
+  $("hotkey-record-status").textContent = active
+    ? "請在 15 秒內按下組合鍵；單按 Esc 取消。"
+    : "點輸入框或「錄製」，直接按組合鍵，再按套用。";
+  if (active) {
+    $("hotkey").value = "等待按鍵…";
+    $("hotkey").focus();
+  } else $("hotkey").value = hotkeyDraft ?? state.config.hotkey;
+}
+$("hotkey").addEventListener("focus", startHotkeyRecording);
+$("hotkey").addEventListener("click", startHotkeyRecording);
+$("record-hotkey").onclick = startHotkeyRecording;
+$("cancel-hotkey").onclick = () => send({ type: "cancel_hotkey_recording" });
+$("settings-dialog").addEventListener("close", () => {
+  if (hotkeyRecording) send({ type: "cancel_hotkey_recording" });
+});
+$("settings-dialog").addEventListener("cancel", (event) => {
+  if (hotkeyRecording) {
+    event.preventDefault();
+    send({ type: "cancel_hotkey_recording" });
+  }
+});
+// 原生 WebView2 加速鍵為主要入口；DOM keydown 補足一般鍵及瀏覽器預覽。
+// 使用實體 code，避免中文輸入法或不同鍵名大小寫影響組合辨識。
+function keyBindingFromEvent(event) {
+  const modifiers =
+    (event.metaKey ? 8 : 0) |
+    (event.ctrlKey ? 2 : 0) |
+    (event.altKey ? 1 : 0) |
+    (event.shiftKey ? 4 : 0);
+  const names = {
+    Escape: 27,
+    Space: 32,
+    Enter: 13,
+    NumpadEnter: 13,
+    Tab: 9,
+    Backspace: 8,
+    Delete: 46,
+    Insert: 45,
+    Home: 36,
+    End: 35,
+    PageUp: 33,
+    PageDown: 34,
+    ArrowLeft: 37,
+    ArrowUp: 38,
+    ArrowRight: 39,
+    ArrowDown: 40,
+    Minus: 189,
+    Equal: 187,
+    Comma: 188,
+    Period: 190,
+    Slash: 191,
+    Semicolon: 186,
+    Quote: 222,
+    Backquote: 192,
+    BracketLeft: 219,
+    BracketRight: 221,
+    Backslash: 220,
+    NumpadAdd: 107,
+    NumpadSubtract: 109,
+    NumpadMultiply: 106,
+    NumpadDivide: 111,
+    NumpadDecimal: 110,
+  };
+  let key = names[event.code];
+  if (/^Key[A-Z]$/.test(event.code)) key = event.code.charCodeAt(3);
+  else if (/^Digit[0-9]$/.test(event.code)) key = event.code.charCodeAt(5);
+  else if (/^Numpad[0-9]$/.test(event.code))
+    key = 96 + Number(event.code.slice(6));
+  else if (/^F([1-9]|1[0-9]|2[0-4])$/.test(event.code))
+    key = 111 + Number(event.code.slice(1));
+  return key === undefined ? null : { modifiers, key };
+}
+$("hotkey").addEventListener("keydown", (event) => {
+  if (!hotkeyRecording) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (event.repeat || event.isComposing) return;
+  const binding = keyBindingFromEvent(event);
+  if (!binding) return;
+  send(
+    binding.key === 27 && binding.modifiers === 0
+      ? { type: "cancel_hotkey_recording" }
+      : { type: "recorded_hotkey", ...binding },
+  );
+});
 for (const id of ["login", "logout", "refresh", "download"])
   $(id).onclick = () => send({ type: id });
 $("cancel-login").onclick = () => send({ type: "cancel_login" });
@@ -564,6 +660,21 @@ $("analyze-mail").onclick = () =>
       send({ type: "analyze_mail" });
     },
   );
+function receiveHotkeyMessage(message) {
+  if (message.type === "hotkey_recording") setHotkeyRecording(message.active);
+  else if (message.type === "hotkey_recorded") {
+    hotkeyDraft = message.value;
+    setHotkeyRecording(false);
+    $("hotkey").value = message.value;
+    $("hotkey-record-status").textContent =
+      "已錄製 " + message.value + "，按「套用」後生效。";
+  } else if (message.type === "hotkey_saved") {
+    hotkeyDraft = null;
+    $("hotkey").value = message.value;
+    $("hotkey-record-status").textContent = "目前使用 " + message.value;
+  } else if (message.type === "hotkey_error")
+    $("hotkey-record-status").textContent = message.message;
+}
 if (bridge) {
   bridge.addEventListener("message", (event) => {
     if (event.data.type === "state") receive(event.data.state);
@@ -571,11 +682,14 @@ if (bridge) {
       showView("notifications");
     else if (event.data.type === "toast") toast(event.data.text);
     else if (event.data.type === "self_test") window.runSelfTest?.();
+    else receiveHotkeyMessage(event.data);
   });
   send({ type: "ready" });
 }
 // 本機 UI 預覽使用與桌面完全相同的 DOM／CSS；不載入憑證，也不呼叫公司 API。
 window.LMUI = {
+  keyBindingFromEvent,
+  receiveHotkeyMessage,
   receive,
   showView,
   renderMarkdown,

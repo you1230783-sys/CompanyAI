@@ -1,6 +1,6 @@
 ﻿{
-    "verified_at":  "2026-09-17T13:09:57.3431434+08:00",
-    "archive_sha256":  "a6a8529bac5d141d7a6be36f7f998c427a580ca15ffca07a1aa5bb8c3ad92a6b",
+    "verified_at":  "2026-09-17T13:52:04.1568060+08:00",
+    "archive_sha256":  "5ef3764443bdb068c64cde03a329c02c063af697a78fedf30060072e88c5f723",
     "result":  "PASS",
     "rust_source":  "bundled toolchain",
     "cargo_cache":  "empty at start",

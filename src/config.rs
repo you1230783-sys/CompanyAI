@@ -66,7 +66,7 @@ impl<'de> Deserialize<'de> for Config {
         let saved = Preferences::deserialize(deserializer)?;
         Ok(Self {
             model: saved.model,
-            hotkey: saved.hotkey.unwrap_or_else(|| "Ctrl+Alt+Q".into()),
+            hotkey: saved.hotkey.unwrap_or_else(|| "Win+Esc".into()),
             font_size: saved.font_size.unwrap_or(14).clamp(12, 20),
             sidebar_collapsed: saved.sidebar_collapsed,
             notification_popups: saved.notification_popups.unwrap_or(true),
@@ -85,7 +85,7 @@ impl Default for Config {
             model: String::new(),
             auth_header: AuthHeader::Bearer,
             allow_http: true,
-            hotkey: "Ctrl+Alt+Q".into(),
+            hotkey: "Win+Esc".into(),
             font_size: 14,
             sidebar_collapsed: false,
             notification_popups: true,

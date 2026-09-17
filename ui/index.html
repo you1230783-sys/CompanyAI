@@ -133,7 +133,7 @@
             </div>
             <div class="compose-hint">
               <span>Enter 換行 · Ctrl+Enter 送出</span
-              ><span id="hotkey-hint">Ctrl+Alt+Q 選字帶入</span>
+              ><span id="hotkey-hint">Win+Esc 選字帶入</span>
             </div>
           </div>
         </section>
@@ -232,13 +232,22 @@
             <input
               id="hotkey"
               aria-label="快捷鍵"
-              value="Ctrl+Alt+Q"
-              maxlength="64"
+              value="Win+Esc"
+              readonly
+              title="點此後直接按下想使用的組合鍵"
               spellcheck="false"
-            /><button id="save-hotkey" class="secondary-button">套用</button>
+            /><button id="record-hotkey" class="secondary-button">錄製</button>
+            <button id="cancel-hotkey" class="secondary-button" hidden>
+              取消
+            </button>
+            <button id="save-hotkey" class="secondary-button">套用</button>
           </div>
+          <p class="subtle" id="hotkey-record-status" aria-live="polite">
+            點輸入框或「錄製」，直接按 Win+Esc 等組合，再按套用。
+          </p>
           <p class="subtle">
-            例如 Ctrl+Alt+Q、Ctrl+Shift+F8。只帶入草稿，不自動送出。
+            支援 Win、Ctrl、Alt、Shift
+            搭配字母、數字、功能鍵與控制鍵。系統占用的組合會提示；只帶入草稿，不自動送出。
           </p>
         </section>
         <section>
@@ -256,7 +265,7 @@
         </section>
         <section>
           <h3>版本與服務</h3>
-          <p id="version-label">LM_AI 0.4.0</p>
+          <p id="version-label">LM_AI 0.4.1</p>
           <div class="button-row">
             <button id="refresh" class="secondary-button">
               <span data-icon="refresh"></span>重新整理服務</button

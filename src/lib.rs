@@ -3,6 +3,7 @@ pub mod auth;
 pub mod config;
 pub mod demo;
 pub mod history;
+pub mod hotkey;
 pub mod notifications;
 pub mod outlook;
 pub mod protocol;

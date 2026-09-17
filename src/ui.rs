@@ -38,6 +38,12 @@ const TRAY_MESSAGE: u32 = WM_APP + 4;
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Command {
+    StartHotkeyRecording,
+    CancelHotkeyRecording,
+    RecordedHotkey {
+        modifiers: u32,
+        key: u32,
+    },
     Ready,
     Draft {
         text: String,
@@ -138,6 +144,8 @@ struct App {
     mail: Option<MailPreview>,
     mail_busy: bool,
     hotkey: Option<Hotkey>,
+    recording_since: Option<Instant>,
+    suppress_hotkey: bool,
     tx: mpsc::Sender<Event>,
     rx: mpsc::Receiver<Event>,
     commands: mpsc::Receiver<String>,
@@ -237,6 +245,9 @@ impl App {
     }
     fn apply_hotkey(&mut self, value: String) -> AppResult<()> {
         let next = Hotkey::parse(&value)?;
+        if self.recording_since.is_some() {
+            self.stop_recording()?;
+        }
         selection::unregister(self.window);
         if let Err(e) = selection::register(self.window, next) {
             if let Some(old) = self.hotkey {
@@ -244,9 +255,49 @@ impl App {
             }
             return Err(e);
         }
+        let mut config = self.config.clone();
+        config.hotkey = next.label();
+        if let Err(e) = storage::save_config(&self.root, &config) {
+            selection::unregister(self.window);
+            if let Some(old) = self.hotkey {
+                let _ = selection::register(self.window, old);
+            }
+            return Err(e);
+        }
         self.hotkey = Some(next);
-        self.config.hotkey = value;
-        storage::save_config(&self.root, &self.config)
+        self.config = config;
+        Ok(())
+    }
+    fn start_recording(&mut self) -> AppResult<()> {
+        if self.recording_since.is_some() {
+            return Ok(());
+        }
+        if self.busy != "none" {
+            return Err("請等目前操作完成後再錄製快捷鍵。".into());
+        }
+        selection::unregister(self.window);
+        self.recording_since = Some(Instant::now());
+        self.view.set_recording(true);
+        self.view
+            .post(&json!({"type":"hotkey_recording","active":true}))
+    }
+    /// 結束錄製立即恢復舊快捷鍵。新組合只有按「套用」且註冊成功才生效。
+    fn stop_recording(&mut self) -> AppResult<()> {
+        self.view.set_recording(false);
+        if self.recording_since.take().is_none() {
+            return Ok(());
+        }
+        self.suppress_hotkey = true;
+        let _ = self
+            .view
+            .post(&json!({"type":"hotkey_recording","active":false}));
+        if let Some(old) = self.hotkey {
+            if let Err(e) = selection::register(self.window, old) {
+                self.hotkey = None;
+                return Err(format!("錄製已結束，但原快捷鍵無法恢復：{e}"));
+            }
+        }
+        Ok(())
     }
     fn refresh_services(&mut self) {
         if self.services_loading || self.smoke {
@@ -435,6 +486,30 @@ impl App {
     }
     fn command(&mut self, command: Command) -> AppResult<()> {
         match command {
+            Command::StartHotkeyRecording => {
+                if let Err(message) = self.start_recording() {
+                    // 設定對話框會遮住主畫面的狀態列，錯誤須直接顯示在錄製欄位旁。
+                    self.view
+                        .post(&json!({"type":"hotkey_error","message":message}))?;
+                    return Err(message);
+                }
+            }
+            Command::CancelHotkeyRecording => self.stop_recording()?,
+            Command::RecordedHotkey { modifiers, key } => {
+                if self.recording_since.is_some() {
+                    let hotkey = match Hotkey::from_keys(modifiers, key) {
+                        Ok(value) => value,
+                        Err(message) => {
+                            self.view
+                                .post(&json!({"type":"hotkey_error","message":message}))?;
+                            return Ok(());
+                        }
+                    };
+                    self.stop_recording()?;
+                    self.view
+                        .post(&json!({"type":"hotkey_recorded","value":hotkey.label()}))?;
+                }
+            }
             Command::Ready => {
                 self.ready = true;
                 self.publish();
@@ -469,7 +544,13 @@ impl App {
                 storage::save_config(&self.root, &self.config)?;
             }
             Command::Hotkey { value } => {
-                self.apply_hotkey(value)?;
+                if let Err(message) = self.apply_hotkey(value) {
+                    self.view
+                        .post(&json!({"type":"hotkey_error","message":message}))?;
+                    return Err(message);
+                }
+                self.view
+                    .post(&json!({"type":"hotkey_saved","value":self.config.hotkey}))?;
                 self.toast("快捷鍵已更新");
             }
             Command::Refresh => self.refresh_services(),
@@ -711,8 +792,14 @@ impl App {
                 }
                 self.set_draft(joined);
                 self.focus_draft = true;
-                self.status = "選取文字已帶入，確認後再送出".into();
-                show_window(self.window);
+                self.status = "剪貼簿文字已帶入，確認後再送出".into();
+                // 先將草稿送到介面，前景切換成功與否都不影響已讀取的文字。
+                self.publish();
+                if show_window(self.window) {
+                    self.view.focus();
+                } else {
+                    self.status = "文字已帶入；請點工作列的 LM_AI 查看草稿".into();
+                }
             }
             Event::Mail(generation, result) if generation == self.generation => {
                 self.mail_busy = false;
@@ -768,6 +855,19 @@ impl App {
     }
     fn tick(&mut self) {
         let mut changed = false;
+        if self.suppress_hotkey && crate::hotkey::pressed_modifiers() == 0 {
+            self.suppress_hotkey = false;
+        }
+        if self
+            .recording_since
+            .is_some_and(|start| start.elapsed() > Duration::from_secs(15))
+        {
+            if let Err(e) = self.stop_recording() {
+                self.fail(e);
+            }
+            self.toast("錄製已逾時，原快捷鍵維持不變");
+            changed = true;
+        }
         while let Ok(message) = self.commands.try_recv() {
             changed = true;
             match serde_json::from_str::<Command>(&message) {
@@ -807,6 +907,9 @@ impl App {
         }
     }
     fn capture(&mut self) {
+        if self.recording_since.is_some() || self.suppress_hotkey {
+            return;
+        }
         if self.busy != "none" {
             self.toast("請等待目前操作完成後再擷取");
             return;
@@ -847,10 +950,21 @@ fn open_browser(value: &str) -> AppResult<()> {
         Ok(())
     }
 }
-fn show_window(window: HWND) {
+fn show_window(window: HWND) -> bool {
     unsafe {
-        ShowWindow(window, SW_RESTORE);
-        SetForegroundWindow(window);
+        ShowWindow(window, SW_SHOWNOACTIVATE);
+        let activated = SetForegroundWindow(window) != 0;
+        if !activated {
+            let info = FLASHWINFO {
+                cbSize: std::mem::size_of::<FLASHWINFO>() as u32,
+                hwnd: window,
+                dwFlags: FLASHW_TRAY | FLASHW_TIMERNOFG,
+                uCount: 3,
+                dwTimeout: 0,
+            };
+            FlashWindowEx(&info);
+        }
+        activated
     }
 }
 /// 原生通知不搶焦點，點擊後才顯示主視窗；Windows 可自行停用彈出提示。
@@ -898,6 +1012,12 @@ unsafe extern "system" fn window_proc(
         // COM 可能重入視窗程序，try_borrow_mut 避免重疊的可變參照。
         if let Ok(mut app) = unsafe { &*pointer }.try_borrow_mut() {
             match message {
+                WM_ACTIVATEAPP if wparam == 0 => {
+                    if let Err(e) = app.stop_recording() {
+                        app.fail(e);
+                    }
+                    return 0;
+                }
                 WM_TIMER => {
                     app.tick();
                     return 0;
@@ -1062,6 +1182,8 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
             mail: None,
             mail_busy: false,
             hotkey: None,
+            recording_since: None,
+            suppress_hotkey: false,
             tx,
             rx,
             commands,

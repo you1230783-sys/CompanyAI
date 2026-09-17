@@ -1,5 +1,5 @@
 ﻿{
-    "generated_at":  "2026-09-17T13:06:50.6790561+08:00",
+    "generated_at":  "2026-09-17T13:49:05.6122876+08:00",
     "rust":  "1.98.1",
     "target":  "x86_64-pc-windows-msvc",
     "msvc":  "14.29.30133",
@@ -12,7 +12,7 @@
                   },
                   {
                       "path":  "src/config.rs",
-                      "sha256":  "e6af238f49e282a0743c2216d6641caf02dd9d0df5a24b64405f266cd6a11964"
+                      "sha256":  "33ac4343e45d7a4073ad1c3918774aea5b80dd4b77de9c9894423444ed73ee7f"
                   },
                   {
                       "path":  "src/demo.rs",
@@ -23,8 +23,12 @@
                       "sha256":  "5584d3b87159de33a5105b9210abc700cdd3856f7337a282b3973cd3162fe440"
                   },
                   {
+                      "path":  "src/hotkey.rs",
+                      "sha256":  "a0325147d6c18704600df2cc27665165fb8e59d141905e01e93c179229938e1c"
+                  },
+                  {
                       "path":  "src/lib.rs",
-                      "sha256":  "f028fea92a5d66a6d9ff0e687c35fc8a9095cfa681a1b21ad8d113d6bfb9300e"
+                      "sha256":  "0aa9fa6a6e2806427a622543a3d866d0b4bd60f47c6c4d13404e0b7090d6f45e"
                   },
                   {
                       "path":  "src/main.rs",
@@ -44,7 +48,7 @@
                   },
                   {
                       "path":  "src/selection.rs",
-                      "sha256":  "8dfddcee1a99257228bcd6d006e69cee90c30a1364383e82ca0bf808bb0066b6"
+                      "sha256":  "782c4c1f26d8b5f08e460a55574f020384cf48a0b2ac28ac12eb78e937e35d9e"
                   },
                   {
                       "path":  "src/service.rs",
@@ -60,15 +64,15 @@
                   },
                   {
                       "path":  "src/ui.rs",
-                      "sha256":  "3f7e09e3ba67f724173a7978e73a98e44b45beba3e06251483b00b66aad02c97"
+                      "sha256":  "17a8dce47ae23121c418ceeff95a8ae1028f68945ab958a5fdc578388f2b589c"
                   },
                   {
                       "path":  "src/webview.rs",
-                      "sha256":  "d5e29c7b7a5d5b04c14f7fbe8ca14034df0e8f164fae2f339c7e76b02925ea37"
+                      "sha256":  "0a0e26d8567879b18e17cf28d9d8471810914231a0c307134982675bd4575654"
                   },
                   {
                       "path":  "ui/app.js",
-                      "sha256":  "8e9d8df6bd483a62cb467712b1808907166011886483633a213a979ab213e38e"
+                      "sha256":  "e51e337611434a1a503575e96207d6f66c6b7521c83af34e2a5c04981bdb3dfb"
                   },
                   {
                       "path":  "ui/icons.js",
@@ -76,15 +80,15 @@
                   },
                   {
                       "path":  "ui/index.html",
-                      "sha256":  "7796928b7419701d08238f7e32d62f66857970a96ab1cadafe67c9137db03500"
+                      "sha256":  "6103f22de649ff644f99472387520ef26bd7ea07dcf61c550c7e5de02c41c706"
                   },
                   {
                       "path":  "ui/self-test.js",
-                      "sha256":  "51b57c37e23fd5ec6eff874b2befebe1363a9089aeef4b778de6593828817a7a"
+                      "sha256":  "158fb49157dbcaa8020c01fbf02f4f6823e6af8cbe23290a6975ac82cbfe495e"
                   },
                   {
                       "path":  "ui/style.css",
-                      "sha256":  "73a46dd5b6bc499e44d565bd09ed81998909088b8854e85320e002aec2a71699"
+                      "sha256":  "a52975b69b1012d933caf0de464624c39546f08eb79ae12ec24354308c9360f1"
                   },
                   {
                       "path":  "ui/vendor/dompurify.LICENSE",
@@ -299,6 +303,10 @@
                       "sha256":  "9c1247232a0f8607984715e24de6f9d1ec6abf60437709c94220e3d565d21b1b"
                   },
                   {
+                      "path":  "examples/hotkey_probe.rs",
+                      "sha256":  "e043a3c964c1893a6ca29370a99b8557c74e3cec2af021219ca28b377a3c8091"
+                  },
+                  {
                       "path":  "scripts/Build.ps1",
                       "sha256":  "1daa943a4cc563dec235ac86d7c82d97fb701d69961070073a491e13dc07679f"
                   },
@@ -327,6 +335,10 @@
                       "sha256":  "659ba521bb7ab973ab45ba82c248c4ec001af2e81b42dc92af010834570ba50d"
                   },
                   {
+                      "path":  "docs/HOTKEY_0_4_1.md",
+                      "sha256":  "2c0644a64b55fc01afca3ce475b69065c20c7a7fe0f3346b4199d6b0e7d21ef9"
+                  },
+                  {
                       "path":  "docs/NOTIFICATIONS_AND_OUTLOOK.md",
                       "sha256":  "78568361d73e1a91295b693fde670c2c3cf87acdaf43813e2d1d612de5a7fa6b"
                   },
@@ -344,7 +356,7 @@
                   },
                   {
                       "path":  "docs/WEB_INTEGRATION.md",
-                      "sha256":  "bdd65a6418d95470f8fcfc8b4bc284ff7ea8f2e61f8e9599fccbe72a7a3beb1c"
+                      "sha256":  "4b710fff5d940c91374a747f86d3040813b672d5ad8b6e121d0e037888efff12"
                   },
                   {
                       "path":  ".cargo/config.toml",
@@ -352,11 +364,11 @@
                   },
                   {
                       "path":  "dist/CompanyAI.exe",
-                      "sha256":  "120528c65f64a3171eaaba936e95d235dc9d156b8454ee4345b470e305b3e0e7"
+                      "sha256":  "bf06da6518211d887a167fae87d7309db51c9416d48c2a60336ec19ef5b0bfb6"
                   },
                   {
                       "path":  "dist/LM_AI.exe",
-                      "sha256":  "120528c65f64a3171eaaba936e95d235dc9d156b8454ee4345b470e305b3e0e7"
+                      "sha256":  "bf06da6518211d887a167fae87d7309db51c9416d48c2a60336ec19ef5b0bfb6"
                   },
                   {
                       "path":  "dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe",
@@ -372,11 +384,11 @@
                   },
                   {
                       "path":  "Cargo.toml",
-                      "sha256":  "6cbd17be6392a56250913718a75922741abceb95d532fcf4efe525dc088f5bcb"
+                      "sha256":  "8859338f56c31aaa020fca6fa831f90746859ac538284722407980cfff974347"
                   },
                   {
                       "path":  "Cargo.lock",
-                      "sha256":  "60e3e256274d0b675d43cd029cff759f3c444fb6aa0f704639cac4f40659d2ac"
+                      "sha256":  "22abb88894f33592afcc04aa81709710cc1d499305d79bed47742f6c0da357b4"
                   },
                   {
                       "path":  "rust-toolchain.toml",
@@ -384,11 +396,11 @@
                   },
                   {
                       "path":  "README.md",
-                      "sha256":  "db5b80a3b6e2f6c5fbee57041ab8f06694c06674e409ad6bb960b0dececb9580"
+                      "sha256":  "7cac0a7b303f817ea2be2e33bc1f5fb31379f6f5951675829829ef239da7a5d0"
                   },
                   {
                       "path":  "AGENTS.md",
-                      "sha256":  "26436af1d2e9f366c419a2ff7de5386bc035673a03bd124e9202d6591b8e531c"
+                      "sha256":  "f2dc257c625e57c5c9b47d6cfd3b5a7dbb2b99363aae626951abd3bc43be461f"
                   },
                   {
                       "path":  ".gitignore",

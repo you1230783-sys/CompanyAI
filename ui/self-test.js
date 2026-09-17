@@ -100,6 +100,61 @@ window.runSelfTest = async () => {
         ?.textContent === "AI",
       "assistant label",
     );
+    // 經過真正的 Rust 訊息橋錄製組合；測試不送出系統按鍵，也不改使用者的設定。
+    const binding = LMUI.keyBindingFromEvent({ code: "Escape", metaKey: true });
+    check(binding.modifiers === 8 && binding.key === 27, "Win+Esc key mapping");
+    check(
+      LMUI.keyBindingFromEvent({
+        code: "Digit8",
+        ctrlKey: true,
+        shiftKey: true,
+      }).key === 56,
+      "number key mapping",
+    );
+    check(
+      LMUI.keyBindingFromEvent({ code: "Numpad3", altKey: true }).key === 99,
+      "numpad key mapping",
+    );
+    document.getElementById("settings-button").click();
+    document.getElementById("record-hotkey").click();
+    await frame();
+    await frame();
+    check(
+      document.getElementById("hotkey").classList.contains("recording"),
+      "recording started through Rust bridge",
+    );
+    document
+      .getElementById("hotkey")
+      .dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Escape",
+          code: "Escape",
+          metaKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    await frame();
+    await frame();
+    check(
+      document.getElementById("hotkey").value === "Win+Esc",
+      "recorded shortcut canonical name",
+    );
+    check(
+      !document.getElementById("save-hotkey").disabled,
+      "recording waits for explicit apply",
+    );
+    document.getElementById("record-hotkey").click();
+    await frame();
+    await frame();
+    document.getElementById("cancel-hotkey").click();
+    await frame();
+    await frame();
+    check(
+      !document.getElementById("hotkey").classList.contains("recording"),
+      "recording cancel restores normal mode",
+    );
+    document.getElementById("settings-dialog").close();
     window.chrome?.webview?.postMessage({
       type: "self_test_result",
       ok: true,

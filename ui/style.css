@@ -12,6 +12,14 @@
   color: var(--ink);
   color-scheme: light;
 }
+/* 錄製中的欄位仍可取得焦點，但不接受使用者手動輸入鍵名。 */
+#hotkey.recording {
+  outline: 2px solid #69a991;
+  background: #eff6f2;
+}
+#hotkey {
+  cursor: pointer;
+}
 * {
   box-sizing: border-box;
 }

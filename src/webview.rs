@@ -1,7 +1,7 @@
 //! WebView2 只顯示內嵌的本機介面，所有公司 API 與憑證仍由 Rust 管理。
 //! 自訂來源攔截所有資源，不需要本機 HTTP 伺服器，也不依賴 CDN。
 use crate::{wide, AppResult};
-use std::{path::Path, sync::mpsc};
+use std::{cell::Cell, path::Path, rc::Rc, sync::mpsc};
 use webview2_com::{Microsoft::Web::WebView2::Win32::*, *};
 use windows::{
     core::{Interface, PCWSTR, PWSTR},
@@ -17,6 +17,7 @@ const PAGE: &str = "https://lm-ai.local/index.html";
 pub struct WebView {
     controller: ICoreWebView2Controller,
     view: ICoreWebView2,
+    recording: Rc<Cell<bool>>,
 }
 impl Drop for WebView {
     fn drop(&mut self) {
@@ -75,6 +76,7 @@ impl WebView {
             }),
         )?;
         let controller = rx.recv().map_err(|_| webview2_com::Error::SendError)??;
+        let recording = Rc::new(Cell::new(false));
         unsafe {
             let view = controller.CoreWebView2()?;
             let settings = view.Settings()?;
@@ -86,6 +88,45 @@ impl WebView {
                 settings.SetIsGeneralAutofillEnabled(false)?;
             }
             let mut token = 0;
+            let recording_keys = recording.clone();
+            let key_messages = messages.clone();
+            // WebView2 的原生加速鍵事件比網頁 keydown 更早收到 Esc／功能鍵。
+            // 只在使用者明確開啟錄製時攔截，且只作用於本程式的 WebView2。
+            controller.add_AcceleratorKeyPressed(
+                &AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {
+                    if !recording_keys.get() {
+                        return Ok(());
+                    }
+                    if let Some(args) = args {
+                        args.SetHandled(true)?;
+                        let mut kind = COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN;
+                        args.KeyEventKind(&mut kind)?;
+                        if kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
+                            && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN
+                        {
+                            return Ok(());
+                        }
+                        let mut key = 0;
+                        args.VirtualKey(&mut key)?;
+                        if crate::hotkey::is_modifier(key) {
+                            return Ok(());
+                        }
+                        let modifiers = crate::hotkey::pressed_modifiers();
+                        let command = if key == 27 && modifiers == 0 {
+                            serde_json::json!({"type": "cancel_hotkey_recording"})
+                        } else {
+                            serde_json::json!({
+                                "type": "recorded_hotkey",
+                                "modifiers": modifiers,
+                                "key": key
+                            })
+                        };
+                        let _ = key_messages.send(command.to_string());
+                    }
+                    Ok(())
+                })),
+                &mut token,
+            )?;
             view.add_PermissionRequested(
                 &PermissionRequestedEventHandler::create(Box::new(|_, args| {
                     if let Some(args) = args {
@@ -154,7 +195,11 @@ impl WebView {
             })), &mut token)?;
             controller.SetIsVisible(true)?;
             view.Navigate(PCWSTR(wide(PAGE).as_ptr()))?;
-            Ok(Self { controller, view })
+            Ok(Self {
+                controller,
+                view,
+                recording,
+            })
         }
     }
     pub fn resize(&self, width: i32, height: i32) {
@@ -165,6 +210,17 @@ impl WebView {
                 right: width,
                 bottom: height,
             });
+        }
+    }
+    pub fn set_recording(&self, active: bool) {
+        self.recording.set(active);
+    }
+    /// 把已獲前景權限的主視窗焦點交給 WebView2，不用模擬貼上或附加其他程序輸入。
+    pub fn focus(&self) {
+        unsafe {
+            let _ = self
+                .controller
+                .MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
         }
     }
     pub fn post(&self, value: &serde_json::Value) -> AppResult<()> {

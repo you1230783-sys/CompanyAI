@@ -1,4 +1,8 @@
-# LM_AI 0.4.0：網站／API 串接契約
+# LM_AI 0.4.1：網站／API 串接契約
+
+0.4.1 僅更新桌面端的快捷鍵錄製與剪貼簿擷取，既有 API 契約不變，不需新增路由。
+網站下載頁可提供新版 EXE，並依部署政策更新 latest_version／minimum_version；不要只因版本不同就強制更新。
+桌面操作與公司實機驗收方式見 [快捷鍵錄製與 PDF 選字](HOTKEY_0_4_1.md)。
 
 ## 1. 本次必須修改的內容
 
@@ -21,7 +25,7 @@
 **建議實作順序：固定路由 → models → version／download → 完整驗收。**
 選取文字、快捷鍵與翻譯／摘要／潤飾在桌面端完成，不需要新增選字 API；按下按鈕後仍送相同 Chat Completions JSON。
 
-所有桌面 API 請求會帶 `X-Client-Version: 0.4.0` 與 `Accept: application/json`。
+所有桌面 API 請求會帶 `X-Client-Version: 0.4.1` 與 `Accept: application/json`。
 此 Header 是相容性提示，不是驗證憑證；伺服器仍須自行檢查 Token、權限、模型白名單及配額。
 `client_id` 固定為 `company-ai-desktop`，是公開客戶端識別，不配置 client_secret。
 API 回應用 UTF-8 JSON，禁止 API redirect／HTML 登入頁；建議 `Cache-Control: no-store`。
@@ -219,7 +223,7 @@ EXE 不自動重送聊天請求，避免逾時後重複計費／執行。網站�
 ```http
 GET /lm_server/api/desktop/version HTTP/1.1
 Accept: application/json
-X-Client-Version: 0.4.0
+X-Client-Version: 0.4.1
 ```
 
 HTTP 200：
@@ -252,7 +256,7 @@ HTTP 200：
 ```http
 GET /lm_server/api/desktop/models HTTP/1.1
 Accept: application/json
-X-Client-Version: 0.4.0
+X-Client-Version: 0.4.1
 Authorization: Bearer desktop_xxxxxxxxx
 ```
 
