@@ -1,4 +1,4 @@
-# Company AI 0.3.0：網站／API 串接契約
+# LM_AI 0.4.0：網站／API 串接契約
 
 ## 1. 本次必須修改的內容
 
@@ -21,7 +21,7 @@
 **建議實作順序：固定路由 → models → version／download → 完整驗收。**
 選取文字、快捷鍵與翻譯／摘要／潤飾在桌面端完成，不需要新增選字 API；按下按鈕後仍送相同 Chat Completions JSON。
 
-所有桌面 API 請求會帶 `X-Client-Version: 0.3.0` 與 `Accept: application/json`。
+所有桌面 API 請求會帶 `X-Client-Version: 0.4.0` 與 `Accept: application/json`。
 此 Header 是相容性提示，不是驗證憑證；伺服器仍須自行檢查 Token、權限、模型白名單及配額。
 `client_id` 固定為 `company-ai-desktop`，是公開客戶端識別，不配置 client_secret。
 API 回應用 UTF-8 JSON，禁止 API redirect／HTML 登入頁；建議 `Cache-Control: no-store`。
@@ -76,11 +76,11 @@ client_id=company-ai-desktop&scope=chat%3Awrite
 使用者從 EXE 開啟頁面後：
 
 1. 若尚未登入，導向既有公司登入／SSO，完成後回到此頁。
-2. 顯示使用者帳號、應用程式名稱 Company AI、授權用途「傳送 AI 聊天請求」、期限 30 天。
+2. 顯示使用者帳號、應用程式名稱 LM_AI、授權用途「傳送 AI 聊天請求」、期限 30 天。
 3. **顯示 user_code，要求使用者確認與桌面程式相同**。帶 query string 不能視為已同意。
 4. 提供「允許登入」與「拒絕」按鈕；使用 POST + 既有 CSRF 保護提交。
 5. 伺服器驗證登入碼、期限、目前使用者權限後，原子地把 pending 更新為 approved 或 denied。
-6. 網頁顯示「已完成操作，請回到 Company AI」，不把 access_token 或 device_code 放進網址、HTML 或剪貼簿。
+6. 網頁顯示「已完成操作，請回到 LM_AI」，不把 access_token 或 device_code 放進網址、HTML 或剪貼簿。
 
 短碼已過期、已處理或不存在時，顯示「請回 EXE 重新登入」。
 不要因為 GET 到確認頁就自動授權，以免瀏覽器預先載入或誤點造成登入。
@@ -219,15 +219,15 @@ EXE 不自動重送聊天請求，避免逾時後重複計費／執行。網站�
 ```http
 GET /lm_server/api/desktop/version HTTP/1.1
 Accept: application/json
-X-Client-Version: 0.3.0
+X-Client-Version: 0.4.0
 ```
 
 HTTP 200：
 
 ```json
 {
-  "latest_version": "0.3.0",
-  "minimum_version": "0.3.0",
+  "latest_version": "0.4.0",
+  "minimum_version": "0.4.0",
   "message": ""
 }
 ```
@@ -237,7 +237,7 @@ HTTP 200：
 - 目前桌面版本小於 minimum_version：顯示更新提示，停止新的登入及聊天，下載按鈕仍可用。
 - 只小於 latest_version：顯示可更新，允許繼續使用。
 - 連線失敗、非 200、JSON 不合法：依使用者指定暫時允許使用；同次執行內已知的強制更新不因後續失敗而解除。
-- 啟動、每 15 分鐘與手動重新整理時查詢。首次查詢尚未完成時沒有已知門檻；當次已送出的聊天不會自動撤回。
+- 啟動、每 5 分鐘與手動重新整理時查詢。首次查詢尚未完成時沒有已知門檻；當次已送出的聊天不會自動撤回。
 - 版本門檻沒有持久化至磁碟。後端若需強制限制舊客戶端，應在登入與聊天端點同步檢查版本，不能只依賴客戶端介面。
 - 登入／聊天拒絕舊版本時可回 HTTP 426 的標準 error JSON，並保持 version 路由可匿名取得。桌面不會自動重試聊天。
 
@@ -252,7 +252,7 @@ HTTP 200：
 ```http
 GET /lm_server/api/desktop/models HTTP/1.1
 Accept: application/json
-X-Client-Version: 0.3.0
+X-Client-Version: 0.4.0
 Authorization: Bearer desktop_xxxxxxxxx
 ```
 
@@ -306,9 +306,9 @@ HTTP 200：
 
 ## 10. 儲存與連線邊界
 
-- 偏好檔只保存 model 與 hotkey；固定連線資訊來自程式，忽略舊 settings.json 裡的 server_url、路由與 Header。
+- 偏好檔只保存 model、hotkey、font_size、sidebar_collapsed 與 notification_popups；固定連線資訊來自程式，忽略舊 settings.json 裡的 server_url、路由與 Header。
 - Token 由 Windows DPAPI 加密，綁定目前 Windows 使用者及實際端點。換端點需重新登入；只換模型不必。
-- 對話與選字草稿只留在記憶體。登出清除本機 Token，不代表伺服器端撤銷。
+- 對話成功回覆後以 Windows 使用者 DPAPI 加密保存；未送出草稿只在記憶體。登出清除本機 Token，不代表伺服器端撤銷。
 - 目前明確採指定內網 HTTP；HTTP 會明文傳輸 Token 和內容。若日後啟用 HTTPS，使用 Windows 信任庫，不略過憑證錯誤。
 - 使用 WinHTTP 自動代理；登入／metadata 讀取逾時 15 秒，聊天讀取逾時 120 秒，屬各階段逾時而非整次硬性總時限。
 - 無自訂代理帳密／用戶端憑證選取；不需要 CORS。SSO、Cookie 和 CSRF 由瀏覽器授權頁處理。
@@ -316,19 +316,19 @@ HTTP 200：
 
 ## 11. 網站驗收順序
 
-1. version 回 0.3.0／0.3.0，models 回 fast／quality；桌面顯示對應名稱。
+1. version 回 0.4.0／0.4.0，models 回 fast／quality；桌面顯示對應名稱。
 2. 完成瀏覽器授權，核對短碼，取得 Bearer 個人 Token。
 3. 送出繁體中文，伺服器收到 alias、完整 messages、stream=false 與 X-Client-Version。
 4. 伺服器映射到真正模型並回覆，桌面顯示內容、可追問和複製。
 5. models 新增 ultra，按重新整理後出現 Ultra，不更新 EXE。
-6. version 回 latest=0.4.0、minimum=0.3.0，允許使用；minimum=0.4.0，提示更新、禁止新登入與聊天。
+6. version 回 latest=0.5.0、minimum=0.4.0，允許使用；minimum=0.5.0，提示更新、禁止新登入與聊天。
 7. 全新啟動時只有 version 回 503，models／登入／聊天正常：可使用；已知強制更新後 version 再斷線：同次執行仍阻擋。
 8. models 先回 401，完成登入後可取到清單；空清單、重複 id、錯誤 default 不可默默送出未知模型。
 9. 選取文字按快捷鍵，確認伺服器沒有收到聊天；再按摘要才收到一次請求。
 10. 驗證到期、拒絕、一次性碼重複及並行兌換、401 撤銷、429 限流、HTML／redirect 等錯誤。
 
 公司 SSO、DNS、實際模型服務與跨應用選字仍需實機驗收；本機模擬測試不能取代這些檢查。
-後續通知與 Outlook 整合見 [BACKEND_ROADMAP.md](BACKEND_ROADMAP.md)，不屬於 0.3.0 已實作功能。
+本版新增通知與 Classic Outlook 契約見 [NOTIFICATIONS_AND_OUTLOOK.md](NOTIFICATIONS_AND_OUTLOOK.md)。
 
 ## 格式參考
 

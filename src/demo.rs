@@ -33,6 +33,7 @@ struct Grant {
 struct State {
     grants: HashMap<String, Grant>,
     tokens: Vec<String>,
+    notification_read: bool,
     /// 測試時可只開放指定的三條路由，確認客戶端真的使用自訂路徑。
     #[cfg(test)]
     custom_routes: Option<[String; 3]>,
@@ -188,7 +189,40 @@ fn serve(mut stream: TcpStream, origin: &str, state: &Mutex<State>) -> AppResult
     };
     let mut status = 200;
     let mut content_type = "application/json; charset=utf-8";
+    // 示範通知使用與正式版相同的個人 Bearer 驗證，沒有匿名通知通道。
+    let authorized = headers
+        .get("authorization")
+        .and_then(|s| s.strip_prefix("Bearer "))
+        .is_some_and(|token| state.tokens.iter().any(|known| known == token));
+    if method == "GET" && route == crate::notifications::SOCKET_PATH && authorized {
+        let key = headers
+            .get("sec-websocket-key")
+            .ok_or("缺少 WebSocket Key。")?;
+        let accept = websocket_accept(key)?;
+        drop(state);
+        stream.write_all(format!("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n").as_bytes()).map_err(|e|e.to_string())?;
+        let payload = b"{\"type\":\"events_available\"}";
+        stream
+            .write_all(&[0x81, payload.len() as u8])
+            .and_then(|()| stream.write_all(payload))
+            .map_err(|e| e.to_string())?;
+        // 維持連線直到客戶端關閉；測試會確認取消可中斷等待。
+        stream
+            .set_read_timeout(Some(Duration::from_secs(60)))
+            .map_err(|e| e.to_string())?;
+        let mut buffer = [0u8; 128];
+        let _ = stream.read(&mut buffer);
+        return Ok(());
+    }
     let reply = match (method, route) {
+        ("GET",crate::notifications::EVENTS_PATH) if authorized=>{
+            let cursor=if state.notification_read{"demo-2"}else{"demo-1"};
+            let after=url.query_pairs().find(|(key,_)|key=="after").map(|(_,value)|value.into_owned());
+            let events=if after.as_deref()==Some(cursor){vec![]}else{vec![json!({"id":"demo_notice","type":"notice","title":"歡迎使用 LM_AI","summary":"這是一則本機示範通知，可測試補查與標記已讀。","created_at":crate::notifications::now_text(),"expires_at":null,"resource_id":null,"read_at":if state.notification_read{Some(crate::notifications::now_text())}else{None}})]};
+            json!({"events":events,"next_cursor":cursor,"has_more":false}).to_string()
+        },
+        ("POST","/lm_server/api/desktop/events/demo_notice/read") if authorized=>{state.notification_read=true;json!({"ok":true}).to_string()},
+        (_,route) if route.starts_with(crate::notifications::EVENTS_PATH)&&!authorized=>{status=401;json!({"error":{"message":"Please log in."}}).to_string()},
         ("GET", VERSION_PATH) => json!({"latest_version":env!("CARGO_PKG_VERSION"),"minimum_version":"0.3.0","message":""}).to_string(),
         ("GET", MODELS_PATH) => json!({"models":[{"id":"fast","label":"快速"},{"id":"quality","label":"品質"},{"id":"ultra","label":"Ultra"}],"default_model":"fast"}).to_string(),
         ("GET", DOWNLOAD_PATH) => {content_type="text/plain; charset=utf-8";"這是本機示範，不提供真實更新檔案。".into()},
@@ -215,7 +249,7 @@ fn serve(mut stream: TcpStream, origin: &str, state: &Mutex<State>) -> AppResult
                 .map(|(_, value)| value.into_owned())
                 .unwrap_or_default();
             if let Some(grant) = state.grants.values().find(|grant| grant.user_code == code) {
-                format!("<!doctype html><html lang=zh-Hant><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Company AI 本機示範授權</title><style>body{{font:18px 'Segoe UI',sans-serif;background:#f1f5f9;color:#172554;max-width:620px;margin:10vh auto;padding:32px}}main{{background:white;padding:40px;border-radius:18px}}button{{font:inherit;padding:12px 20px;margin:8px;border:0;border-radius:8px;background:#1d4ed8;color:white}}code{{font-size:32px;letter-spacing:4px}}</style><main><h1>允許這次桌面登入？</h1><p>這是本機示範，不會登入公司帳號或呼叫真實 AI。</p><p>請確認 EXE 顯示相同代碼：</p><p><code>{}</code></p><form method=post action=/demo/approve><input type=hidden name=user_code value='{}'><input type=hidden name=csrf value='{}'><button name=decision value=allow>允許登入 · 30 天</button><button name=decision value=deny>拒絕</button></form></main></html>", grant.user_code, grant.user_code, grant.csrf)
+                format!("<!doctype html><html lang=zh-Hant><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>LM_AI 本機示範授權</title><style>body{{font:18px 'Segoe UI',sans-serif;background:#f1f5f9;color:#172554;max-width:620px;margin:10vh auto;padding:32px}}main{{background:white;padding:40px;border-radius:18px}}button{{font:inherit;padding:12px 20px;margin:8px;border:0;border-radius:8px;background:#1d4ed8;color:white}}code{{font-size:32px;letter-spacing:4px}}</style><main><h1>允許這次桌面登入？</h1><p>這是本機示範，不會登入公司帳號或呼叫真實 AI。</p><p>請確認 EXE 顯示相同代碼：</p><p><code>{}</code></p><form method=post action=/demo/approve><input type=hidden name=user_code value='{}'><input type=hidden name=csrf value='{}'><button name=decision value=allow>允許登入 · 30 天</button><button name=decision value=deny>拒絕</button></form></main></html>", grant.user_code, grant.user_code, grant.csrf)
             } else {
                 status = 400;
                 "找不到登入碼，請回 EXE 重新登入。".into()
@@ -232,7 +266,7 @@ fn serve(mut stream: TcpStream, origin: &str, state: &Mutex<State>) -> AppResult
                 valid_origin && grant.created.elapsed().as_secs() < 300 && grant.decision.is_none()
             }) {
                 grant.decision = Some(fields.get("decision").map(String::as_str) == Some("allow"));
-                "<!doctype html><meta charset=utf-8><title>已完成授權操作</title><h1>已完成操作，請回到 Company AI 視窗。</h1><p>這是本機示範，不是真實公司登入。</p>".into()
+                "<!doctype html><meta charset=utf-8><title>已完成授權操作</title><h1>已完成操作，請回到 LM_AI 視窗。</h1><p>這是本機示範，不是真實公司登入。</p>".into()
             } else {
                 status = 400;
                 "登入碼無效、已使用或已過期。".into()
@@ -307,8 +341,102 @@ fn serve(mut stream: TcpStream, origin: &str, state: &Mutex<State>) -> AppResult
         .map_err(|error| error.to_string())
 }
 
+/// RFC 6455 握手：Windows 內建 SHA-1 僅用於協定校驗，不用來保存憑證。
+fn websocket_accept(key: &str) -> AppResult<String> {
+    use windows_sys::Win32::Security::Cryptography::*;
+    let input = format!("{key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+    let mut digest = [0u8; 20];
+    let mut encoded = [0u8; 64];
+    let mut length = encoded.len() as u32;
+    unsafe {
+        if BCryptHash(
+            BCRYPT_SHA1_ALG_HANDLE,
+            std::ptr::null(),
+            0,
+            input.as_ptr(),
+            input.len() as u32,
+            digest.as_mut_ptr(),
+            20,
+        ) < 0
+        {
+            return Err("WebSocket 校驗失敗。".into());
+        }
+        if CryptBinaryToStringA(
+            digest.as_ptr(),
+            20,
+            CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF,
+            encoded.as_mut_ptr(),
+            &mut length,
+        ) == 0
+        {
+            return Err("WebSocket 編碼失敗。".into());
+        }
+    }
+    String::from_utf8(encoded[..length as usize].to_vec())
+        .map(|s| s.trim_end_matches('\0').to_owned())
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn notification_replay_read_and_websocket_cancel() {
+        use crate::{notifications, protocol::TokenResponse, storage::Session};
+        use std::sync::mpsc;
+        assert_eq!(
+            super::websocket_accept("dGhlIHNhbXBsZSBub25jZQ==").unwrap(),
+            "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
+        );
+        let server = super::DemoServer::start().unwrap();
+        let config = server.config();
+        server
+            .state
+            .lock()
+            .unwrap()
+            .tokens
+            .push("notification-test-token".into());
+        let session = Session::from_token(
+            TokenResponse {
+                access_token: "notification-test-token".into(),
+                token_type: "Bearer".into(),
+                expires_in: 3600,
+            },
+            &config,
+        )
+        .unwrap();
+        let page = notifications::fetch_page(&config, &session, None).unwrap();
+        assert_eq!(page.events.len(), 1);
+        let cursor = page.next_cursor.unwrap();
+        assert!(notifications::fetch_page(&config, &session, Some(&cursor))
+            .unwrap()
+            .events
+            .is_empty());
+        notifications::mark_read(&config, &session, "demo_notice").unwrap();
+        assert!(notifications::fetch_page(&config, &session, Some(&cursor))
+            .unwrap()
+            .events[0]
+            .read_at
+            .is_some());
+        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let worker_cancel = cancel.clone();
+        let (tx, rx) = mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            crate::transport::watch_notifications(
+                &config.endpoint(notifications::SOCKET_PATH).unwrap(),
+                &session.access_token,
+                &worker_cancel,
+                |connected| {
+                    let _ = tx.send(connected);
+                },
+            )
+        });
+        assert!(rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap());
+        assert!(!rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap());
+        let start = std::time::Instant::now();
+        cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        let _ = worker.join();
+        assert!(start.elapsed() < std::time::Duration::from_secs(3));
+    }
     #[test]
     fn desktop_metadata_and_model_alias_complete_a_chat() {
         let server = super::DemoServer::start().unwrap();

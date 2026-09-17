@@ -1,10 +1,10 @@
 ﻿{
-    "verified_at":  "2026-09-17T11:24:01.7558416+08:00",
-    "archive_sha256":  "8fa0eaab59f125dfdc78d5cda45d1f0936a65f590b250395dca662a681479ba7",
+    "verified_at":  "2026-09-17T13:09:57.3431434+08:00",
+    "archive_sha256":  "a6a8529bac5d141d7a6be36f7f998c427a580ca15ffca07a1aa5bb8c3ad92a6b",
     "result":  "PASS",
     "rust_source":  "bundled toolchain",
     "cargo_cache":  "empty at start",
-    "network":  "Cargo --frozen; local HTTP tests only",
-    "checks":  "fmt, clippy, workspace tests, release build, native UI startup",
-    "prerequisite":  "Installed MSVC v142 (14.29) and Windows SDK 10.0.19041.0"
+    "network":  "Cargo --frozen; local HTTP/WebSocket tests; embedded UI without CDN",
+    "checks":  "fmt, clippy, workspace tests, release build, WebView2 Markdown and scrolling self-check",
+    "prerequisite":  "Installed MSVC v142 (14.29), Windows SDK 10.0.19041.0 and WebView2 Runtime (offline installer included)"
 }

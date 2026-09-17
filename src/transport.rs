@@ -58,6 +58,179 @@ pub fn get(url: &Url, auth: Option<(&str, &str)>) -> AppResult<HttpResponse> {
     request_method(url, "GET", "application/json", "", auth, 15_000)
 }
 
+/// 通知專用 WebSocket。只接收喚醒訊號，事件內容仍經 REST 補查、去重及落盤。
+/// 取消時由小型守護執行緒關閉 handle，讓阻塞中的 Receive 立即返回。
+pub fn watch_notifications(
+    url: &Url,
+    token: &str,
+    cancelled: &std::sync::Arc<std::sync::atomic::AtomicBool>,
+    mut changed: impl FnMut(bool),
+) -> AppResult<()> {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    use std::{thread, time::Duration};
+    struct Socket(Arc<AtomicUsize>);
+    impl Drop for Socket {
+        fn drop(&mut self) {
+            let raw = self.0.swap(0, Ordering::SeqCst);
+            if raw != 0 {
+                unsafe {
+                    WinHttpCloseHandle(raw as *mut c_void);
+                }
+            }
+        }
+    }
+    if token.is_empty() || !token.bytes().all(|b| b.is_ascii_graphic()) {
+        return Err("通知驗證資料不正確。".into());
+    }
+    let host = wide(url.host_str().ok_or("通知主機無效。")?);
+    let local = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
+    unsafe {
+        let session = Handle::checked(WinHttpOpen(
+            wide("LM_AI/notifications").as_ptr(),
+            if local {
+                WINHTTP_ACCESS_TYPE_NO_PROXY
+            } else {
+                WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY
+            },
+            ptr::null(),
+            ptr::null(),
+            0,
+        ))?;
+        if WinHttpSetTimeouts(session.0, 10_000, 10_000, 15_000, 15_000) == 0 {
+            return Err(network_error());
+        }
+        let connection = Handle::checked(WinHttpConnect(
+            session.0,
+            host.as_ptr(),
+            url.port_or_known_default().ok_or("通知埠號無效。")?,
+            0,
+        ))?;
+        let request = Handle::checked(WinHttpOpenRequest(
+            connection.0,
+            wide("GET").as_ptr(),
+            wide(url.path()).as_ptr(),
+            ptr::null(),
+            ptr::null(),
+            ptr::null(),
+            if url.scheme() == "https" {
+                WINHTTP_FLAG_SECURE
+            } else {
+                0
+            },
+        ))?;
+        let disable =
+            WINHTTP_DISABLE_REDIRECTS | WINHTTP_DISABLE_COOKIES | WINHTTP_DISABLE_AUTHENTICATION;
+        if WinHttpSetOption(
+            request.0,
+            WINHTTP_OPTION_DISABLE_FEATURE,
+            &disable as *const u32 as *const c_void,
+            4,
+        ) == 0
+            || WinHttpSetOption(
+                request.0,
+                WINHTTP_OPTION_UPGRADE_TO_WEB_SOCKET,
+                ptr::null(),
+                0,
+            ) == 0
+        {
+            return Err(network_error());
+        }
+        let headers = wide(&format!(
+            "Authorization: Bearer {token}\r\nAccept: application/json\r\nX-Client-Version: {}\r\n",
+            env!("CARGO_PKG_VERSION")
+        ));
+        if WinHttpSendRequest(
+            request.0,
+            headers.as_ptr(),
+            (headers.len() - 1) as u32,
+            ptr::null(),
+            0,
+            0,
+            0,
+        ) == 0
+            || WinHttpReceiveResponse(request.0, ptr::null_mut()) == 0
+        {
+            return Err(network_error());
+        }
+        let mut status = 0u32;
+        let mut length = 4;
+        if WinHttpQueryHeaders(
+            request.0,
+            WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+            ptr::null(),
+            &mut status as *mut u32 as *mut c_void,
+            &mut length,
+            ptr::null_mut(),
+        ) == 0
+            || status != 101
+        {
+            return Err("即時通知尚未連線，先使用定時補查。".into());
+        }
+        let raw = WinHttpWebSocketCompleteUpgrade(request.0, 0);
+        if raw.is_null() {
+            return Err(network_error());
+        }
+        let socket = Socket(Arc::new(AtomicUsize::new(raw as usize)));
+        let shared = socket.0.clone();
+        let cancel = cancelled.clone();
+        thread::spawn(move || {
+            while shared.load(Ordering::SeqCst) != 0 {
+                if cancel.load(Ordering::Relaxed) {
+                    let raw = shared.swap(0, Ordering::SeqCst);
+                    if raw != 0 {
+                        WinHttpCloseHandle(raw as *mut c_void);
+                    }
+                    break;
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+        });
+        changed(true);
+        let mut message = Vec::new();
+        let mut buffer = [0u8; 4096];
+        while !cancelled.load(Ordering::Relaxed) {
+            let mut count = 0;
+            let mut kind = 0;
+            let result = WinHttpWebSocketReceive(
+                raw,
+                buffer.as_mut_ptr().cast(),
+                buffer.len() as u32,
+                &mut count,
+                &mut kind,
+            );
+            if result != 0 {
+                return Err("即時通知已中斷，將自動重連。".into());
+            }
+            if kind == WINHTTP_WEB_SOCKET_CLOSE_BUFFER_TYPE {
+                return Err("通知連線已結束，將自動重連。".into());
+            }
+            if !matches!(
+                kind,
+                WINHTTP_WEB_SOCKET_UTF8_FRAGMENT_BUFFER_TYPE
+                    | WINHTTP_WEB_SOCKET_UTF8_MESSAGE_BUFFER_TYPE
+            ) {
+                return Err("通知服務應傳送文字 JSON。".into());
+            }
+            message.extend_from_slice(&buffer[..count as usize]);
+            if message.len() > 65_536 {
+                return Err("通知訊號過大。".into());
+            }
+            if kind == WINHTTP_WEB_SOCKET_UTF8_MESSAGE_BUFFER_TYPE {
+                if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&message) {
+                    if value.get("type").and_then(|v| v.as_str()) != Some("ping") {
+                        changed(false);
+                    }
+                }
+                message.clear();
+            }
+        }
+    }
+    Ok(())
+}
+
 fn request_method(
     url: &Url,
     method: &str,

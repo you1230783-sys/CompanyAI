@@ -33,6 +33,9 @@ pub struct Config {
     pub auth_header: AuthHeader,
     pub allow_http: bool,
     pub hotkey: String,
+    pub font_size: u8,
+    pub sidebar_collapsed: bool,
+    pub notification_popups: bool,
 }
 
 /// 只有個人偏好能落盤；舊版檔案中的網址、路由、Header 和 HTTP 欄位會被忽略。
@@ -41,6 +44,9 @@ pub struct Config {
 struct Preferences {
     model: String,
     hotkey: Option<String>,
+    font_size: Option<u8>,
+    sidebar_collapsed: bool,
+    notification_popups: Option<bool>,
 }
 
 impl Serialize for Config {
@@ -48,6 +54,9 @@ impl Serialize for Config {
         Preferences {
             model: self.model.clone(),
             hotkey: Some(self.hotkey.clone()),
+            font_size: Some(self.font_size),
+            sidebar_collapsed: self.sidebar_collapsed,
+            notification_popups: Some(self.notification_popups),
         }
         .serialize(serializer)
     }
@@ -58,6 +67,9 @@ impl<'de> Deserialize<'de> for Config {
         Ok(Self {
             model: saved.model,
             hotkey: saved.hotkey.unwrap_or_else(|| "Ctrl+Alt+Q".into()),
+            font_size: saved.font_size.unwrap_or(14).clamp(12, 20),
+            sidebar_collapsed: saved.sidebar_collapsed,
+            notification_popups: saved.notification_popups.unwrap_or(true),
             ..Self::default()
         })
     }
@@ -74,6 +86,9 @@ impl Default for Config {
             auth_header: AuthHeader::Bearer,
             allow_http: true,
             hotkey: "Ctrl+Alt+Q".into(),
+            font_size: 14,
+            sidebar_collapsed: false,
+            notification_popups: true,
         }
     }
 }
@@ -209,7 +224,7 @@ mod tests {
         assert_eq!(config.model, "quality");
         assert_eq!(config.hotkey, "Ctrl+Shift+F8");
         let saved = serde_json::to_value(&config).unwrap();
-        assert_eq!(saved.as_object().unwrap().len(), 2);
+        assert_eq!(saved.as_object().unwrap().len(), 5);
         assert!(saved.get("server_url").is_none());
         assert!(Config::default().validate().is_ok());
     }

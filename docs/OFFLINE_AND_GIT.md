@@ -7,12 +7,15 @@
 ```text
 CompanyAI/
   src/、examples/           Rust 程式碼與開發範例
+  ui/、build.rs             離線前端與資源嵌入；不需要 npm 建置
   Cargo.toml、Cargo.lock    專案與固定依賴
   rust-toolchain.toml       固定 Rust 版本
   .cargo/config.toml       目標平台、靜態 CRT、vendor 設定
   scripts/                 環境、編譯、交付腳本
   docs/                    網站串接及離線操作文件
   dist/CompanyAI.exe       已編譯的 Windows 程式
+  dist/LM_AI.exe            相同程式的新版產品檔名
+  dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe  WebView2 離線安裝包
   offline/
     CompanyAI-offline.zip 完整離線包（Git LFS）
     CompanyAI-offline.zip.sha256
@@ -30,7 +33,7 @@ ZIP 不包含自身、Git 歷史、target、個人登入資料或其他專案的
 
 ## 拿到公司使用
 
-僅使用程式：複製 `dist\CompanyAI.exe`，在 Windows 11 x64 開啟即可。真實服務需要先按照 `docs/WEB_INTEGRATION.md` 完成網頁端路由。
+僅使用程式：複製 `dist\LM_AI.exe`，在 Windows 11 x64 開啟。若缺少 WebView2，先執行 dist 隨附的 x64 離線安裝包，詳見 `dist/WEBVIEW2-OFFLINE.md`。真實服務需要依 `docs/WEB_INTEGRATION.md` 與 `docs/NOTIFICATIONS_AND_OUTLOOK.md` 完成網頁端路由。
 
 需要修改及離線編譯時：
 

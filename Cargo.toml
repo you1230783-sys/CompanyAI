@@ -1,6 +1,6 @@
 [package]
 name = "company-ai"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.98"
 
@@ -15,6 +15,10 @@ strip = "debuginfo"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 url = "2.5"
+webview2-com = "=0.39.1"
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Ole", "Win32_System_Variant", "Win32_UI_Shell"] }
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+sha2 = "0.10"
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",

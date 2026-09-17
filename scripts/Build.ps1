@@ -69,5 +69,6 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     $dist = Join-Path $projectRoot 'dist'
     New-Item -ItemType Directory -Path $dist -Force | Out-Null
     Copy-Item -LiteralPath $exe -Destination (Join-Path $dist 'CompanyAI.exe') -Force
+    Copy-Item -LiteralPath $exe -Destination (Join-Path $dist 'LM_AI.exe') -Force
     Write-Host "Ready: $dist\CompanyAI.exe"
 } finally { Pop-Location }

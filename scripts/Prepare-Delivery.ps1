@@ -41,7 +41,7 @@ try {
     & (Join-Path $PSScriptRoot 'Build.ps1')
 
     # 明確列舉交付內容；不帶入 .git、快取、登入資料或另一個專案的資源。
-    $projectItems = @('src','examples','scripts','docs','.cargo','dist','Cargo.toml','Cargo.lock','rust-toolchain.toml','README.md','AGENTS.md','.gitignore','.gitattributes')
+    $projectItems = @('src','ui','examples','scripts','docs','.cargo','dist','build.rs','Cargo.toml','Cargo.lock','rust-toolchain.toml','README.md','AGENTS.md','.gitignore','.gitattributes')
     foreach ($item in $projectItems) { Copy-Item -LiteralPath (Join-Path $deliveryRoot $item) -Destination $stage -Recurse -Force }
     Copy-Tree $vendorPath (Join-Path $stage 'vendor')
     $portableToolchain = Join-Path $stage 'toolchain'
@@ -77,7 +77,7 @@ try {
         target = 'x86_64-pc-windows-msvc'
         msvc = $env:VCToolsVersion
         windows_sdk = $env:WindowsSDKVersion.TrimEnd('\')
-        prerequisite = 'Installed MSVC v142 (14.29) and Windows SDK 10.0.19041.0'
+        prerequisite = 'Installed MSVC v142 (14.29), Windows SDK 10.0.19041.0 and WebView2 Runtime (offline installer included)'
         files = $files
     }
     $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $stage 'offline\manifest.json') -Encoding UTF8
@@ -105,7 +105,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $stage 'offline\manifest.json') -Destination 'offline\manifest.json' -Force
     $checksum = (Get-FileHash -LiteralPath 'offline\CompanyAI-offline.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
     "$checksum  CompanyAI-offline.zip" | Set-Content -LiteralPath 'offline\CompanyAI-offline.zip.sha256' -Encoding ASCII
-    [ordered]@{ verified_at = (Get-Date -Format o); archive_sha256 = $checksum; result = 'PASS'; rust_source = 'bundled toolchain'; cargo_cache = 'empty at start'; network = 'Cargo --frozen; local HTTP tests only'; checks = 'fmt, clippy, workspace tests, release build, native UI startup'; prerequisite = $manifest.prerequisite } |
+    [ordered]@{ verified_at = (Get-Date -Format o); archive_sha256 = $checksum; result = 'PASS'; rust_source = 'bundled toolchain'; cargo_cache = 'empty at start'; network = 'Cargo --frozen; local HTTP/WebSocket tests; embedded UI without CDN'; checks = 'fmt, clippy, workspace tests, release build, WebView2 Markdown and scrolling self-check'; prerequisite = $manifest.prerequisite } |
         ConvertTo-Json | Set-Content -LiteralPath 'offline\verification.json' -Encoding UTF8
     Write-Host "Ready for Git: $deliveryRoot\offline\CompanyAI-offline.zip"
 

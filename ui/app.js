@@ -1,0 +1,589 @@
+/* 前端只負責畫面與使用者操作。憑證、網路、磁碟及 Outlook 均由 Rust 管理。 */
+"use strict";
+const $ = (id) => document.getElementById(id);
+let state = {
+  messages: [],
+  conversations: [],
+  models: [],
+  notifications: [],
+  config: {
+    font_size: 14,
+    hotkey: "Ctrl+Alt+Q",
+    sidebar_collapsed: false,
+    notification_popups: true,
+  },
+  busy: "none",
+  logged_in: false,
+  can_send: false,
+};
+let activeView = "chat",
+  lastConversation,
+  messageSignature = "",
+  lastDraftRevision = -1,
+  stickToBottom = true,
+  confirmAction = null;
+let draftTimer, toastTimer;
+const bridge = window.chrome?.webview;
+function send(command) {
+  if (bridge) bridge.postMessage(command);
+  else if (window.previewHost) window.previewHost(command);
+}
+function toast(text) {
+  $("toast").textContent = text;
+  $("toast").hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    $("toast").hidden = true;
+  }, 2600);
+}
+function ask(title, message, action) {
+  $("confirm-title").textContent = title;
+  $("confirm-message").textContent = message;
+  confirmAction = action;
+  $("confirm-dialog").showModal();
+}
+$("confirm-ok").onclick = () => {
+  const action = confirmAction;
+  confirmAction = null;
+  $("confirm-dialog").close();
+  action?.();
+};
+$("confirm-cancel").onclick = () => {
+  $("confirm-dialog").close();
+  confirmAction = null;
+};
+const md = window.markdownit({
+  html: false,
+  linkify: true,
+  typographer: false,
+  breaks: false,
+});
+md.use(window.markdownitFootnote).use(window.markdownitTaskLists, {
+  enabled: false,
+});
+md.use(texmath, {
+  engine: katex,
+  delimiters: ["dollars", "brackets"],
+  katexOptions: {
+    trust: false,
+    throwOnError: false,
+    strict: "warn",
+    maxExpand: 500,
+    maxSize: 20,
+    output: "htmlAndMathml",
+  },
+});
+md.renderer.rules.fence = (tokens, index) => {
+  const token = tokens[index],
+    language = (token.info.trim().split(/\s+/)[0] || "text").toLowerCase();
+  let content = md.utils.escapeHtml(token.content);
+  if (hljs.getLanguage(language)) {
+    try {
+      content = hljs.highlight(token.content, {
+        language,
+        ignoreIllegals: true,
+      }).value;
+    } catch {
+      /* 保留可讀的原始程式碼。 */
+    }
+  }
+  return `<div class="code-block"><div class="code-heading"><span>${md.utils.escapeHtml(language)}</span><button type="button" class="copy-code">${icon("copy")}複製</button></div><pre><code class="hljs">${content}</code></pre></div>`;
+};
+// 遠端圖片不自動載入，避免將內網閱讀行為或識別資料傳到圖片主機。
+md.renderer.rules.image = (tokens, index) =>
+  `<span class="external-image">[圖片：${md.utils.escapeHtml(tokens[index].content || "未命名圖片")}]</span>`;
+function renderMarkdown(text) {
+  try {
+    return DOMPurify.sanitize(md.render(text), {
+      USE_PROFILES: { html: true, svg: true, mathMl: true },
+      ADD_TAGS: ["eq", "eqn"],
+      FORBID_TAGS: ["style", "iframe", "form"],
+      FORBID_ATTR: ["srcset"],
+    });
+  } catch {
+    return `<p>${md.utils.escapeHtml(text)}</p>`;
+  }
+}
+function node(tag, className, text) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+function atBottom() {
+  const box = $("transcript");
+  return box.scrollHeight - box.clientHeight - box.scrollTop < 70;
+}
+function bottom() {
+  const box = $("transcript");
+  box.scrollTop = box.scrollHeight;
+  stickToBottom = true;
+  $("jump-bottom").hidden = true;
+}
+$("transcript").addEventListener(
+  "scroll",
+  () => {
+    stickToBottom = atBottom();
+    $("jump-bottom").hidden = stickToBottom || state.messages.length === 0;
+  },
+  { passive: true },
+);
+$("jump-bottom").onclick = bottom;
+new ResizeObserver(() => {
+  if (stickToBottom) bottom();
+}).observe($("messages"));
+document.fonts?.ready.then(() => {
+  if (stickToBottom) bottom();
+});
+
+function showView(view) {
+  activeView = view;
+  for (const name of ["chat", "notifications", "outlook"])
+    $(name + "-view").hidden = name !== view;
+  $("show-notifications").classList.toggle("active", view === "notifications");
+  $("show-outlook").classList.toggle("active", view === "outlook");
+  const conversation = state.conversations.find(
+    (c) => c.id === state.active_id,
+  );
+  $("page-title").textContent =
+    view === "chat"
+      ? conversation?.title || "新對話"
+      : view === "notifications"
+        ? "通知"
+        : "Outlook 助理";
+  $("delete-chat").hidden = view !== "chat" || !state.active_id;
+  $("save-label").hidden = view !== "chat";
+}
+function renderMessages() {
+  const signature = JSON.stringify([
+    state.active_id,
+    state.messages,
+    state.busy === "chat",
+  ]);
+  if (signature === messageSignature) return;
+  const changed = lastConversation !== state.active_id;
+  const shouldFollow = changed || stickToBottom || atBottom();
+  const oldTop = $("transcript").scrollTop;
+  lastConversation = state.active_id;
+  messageSignature = signature;
+  const container = $("messages");
+  container.replaceChildren();
+  if (!state.messages.length && state.busy !== "chat") {
+    const welcome = node("div", "welcome");
+    welcome.innerHTML = `<span class="welcome-mark">${icon("sparkles")}</span><h2>讓想法，往前一步。</h2><p>從一個問題開始，或帶入正在處理的文字。<br>你的工作空間，隨時準備好。</p><div class="starter-grid"><button class="starter" data-starter="請幫我整理以下內容的重點：\n\n">${icon("list")}整理一段內容</button><button class="starter" data-starter="請幫我潤飾以下文字：\n\n">${icon("languages")}讓文字更清楚</button></div>`;
+    container.append(welcome);
+  }
+  state.messages.forEach((message, index) => {
+    const article = node("article", "message " + message.role);
+    article.dataset.index = index;
+    const avatar = node("div", "avatar");
+    avatar.innerHTML = icon(message.role === "user" ? "user" : "chat");
+    const content = node("div", "message-content");
+    content.append(
+      node("div", "message-meta", message.role === "user" ? "你" : "AI"),
+    );
+    const bubble = node(
+      "div",
+      "bubble" + (message.role === "assistant" ? " markdown" : ""),
+    );
+    if (message.role === "assistant") {
+      bubble.innerHTML = renderMarkdown(message.content);
+      bubble.querySelectorAll("table").forEach((table) => {
+        const wrapper = node("div", "table-wrap");
+        table.replaceWith(wrapper);
+        wrapper.append(table);
+      });
+    } else bubble.textContent = message.content;
+    content.append(bubble);
+    const tools = node("div", "message-tools");
+    const copy = node("button", "copy-message");
+    copy.dataset.index = index;
+    copy.innerHTML = icon("copy") + "複製";
+    copy.title = "複製原文";
+    tools.append(copy);
+    content.append(tools);
+    article.append(avatar, content);
+    container.append(article);
+  });
+  if (state.busy === "chat") {
+    const item = node("div", "message assistant");
+    item.innerHTML = `<div class="avatar">${icon("chat")}</div><div class="thinking">AI 正在整理回覆</div>`;
+    container.append(item);
+  }
+  stickToBottom = shouldFollow;
+  if (shouldFollow) bottom();
+  else {
+    $("transcript").scrollTop = oldTop;
+    $("jump-bottom").hidden = false;
+  }
+}
+function renderHistory() {
+  const list = $("history-list");
+  list.replaceChildren();
+  const conversations = [...state.conversations].sort(
+    (a, b) => b.updated_at - a.updated_at,
+  );
+  for (const c of conversations) {
+    const button = node(
+      "button",
+      "history-item" + (c.id === state.active_id ? " selected" : ""),
+      c.title,
+    );
+    button.title = c.title;
+    button.dataset.id = c.id;
+    button.disabled = state.busy !== "none";
+    list.append(button);
+  }
+  if (!conversations.length)
+    list.append(node("p", "empty-small", "開始對話後會自動保存"));
+}
+function renderModels() {
+  const selected = state.models.find((m) => m.id === state.config.model);
+  $("model-label").textContent = selected?.label || "尚無可用模型";
+  $("model-button").disabled = state.busy !== "none" || !state.models.length;
+  const menu = $("model-menu");
+  menu.replaceChildren();
+  for (const model of state.models) {
+    const button = node("button");
+    button.setAttribute("role", "option");
+    button.setAttribute(
+      "aria-selected",
+      String(model.id === state.config.model),
+    );
+    button.dataset.model = model.id;
+    const text = node("span", "", model.label);
+    if (model.description)
+      text.append(node("span", "model-description", model.description));
+    button.append(text);
+    menu.append(button);
+  }
+}
+function renderNotifications() {
+  $("notification-status").textContent =
+    state.notification_status || "登入後同步網站通知";
+  $("unread-badge").textContent = state.unread_count || 0;
+  $("unread-badge").hidden = !state.unread_count;
+  const list = $("notification-list");
+  list.replaceChildren();
+  for (const event of state.notifications) {
+    const card = node(
+      "article",
+      "notification-card" + (!event.read_at ? " unread" : ""),
+    );
+    const symbol = node("div", "avatar");
+    symbol.innerHTML = icon("bell");
+    const content = node("div", "event-content");
+    content.append(
+      node("h3", "", event.title),
+      node("p", "", event.summary),
+      node("time", "", new Date(event.created_at).toLocaleString("zh-TW")),
+    );
+    card.append(symbol, content);
+    if (!event.read_at) {
+      const read = node("button", "secondary-button", "標為已讀");
+      read.dataset.event = event.id;
+      card.append(read);
+    }
+    list.append(card);
+  }
+  if (!state.notifications.length)
+    list.append(
+      node(
+        "div",
+        "empty-small",
+        state.logged_in ? "目前沒有通知" : "登入後即可查看網站通知",
+      ),
+    );
+  $("refresh-notifications").disabled =
+    !state.logged_in || state.notifications_loading;
+}
+function renderMail() {
+  const mail = state.mail;
+  $("read-mail").disabled = state.mail_busy;
+  $("include-body").disabled = state.mail_busy;
+  $("analyze-mail").disabled = !mail || state.mail_busy || !state.can_send;
+  $("mail-actions").hidden = !mail;
+  if (!mail) {
+    $("mail-preview").replaceChildren(
+      node(
+        "p",
+        "empty-small",
+        "請在 Classic Outlook 選取一封郵件，再讀取預覽。",
+      ),
+    );
+    return;
+  }
+  $("include-body").checked = mail.body !== null && mail.body !== undefined;
+  const card = node("article", "mail-card");
+  card.append(node("h3", "", mail.subject || "（無主旨）"));
+  const fields = node("dl", "mail-fields");
+  for (const [label, value] of [
+    ["寄件者", mail.sender],
+    ["收件者", mail.to],
+    ["副本", mail.cc],
+    ["收件時間", mail.received_at],
+    ["狀態", mail.unread ? "未讀" : "已讀"],
+  ]) {
+    fields.append(node("dt", "", label), node("dd", "", value || "—"));
+  }
+  card.append(fields);
+  if (mail.body !== null && mail.body !== undefined)
+    card.append(node("pre", "mail-body", mail.body || "（內文空白）"));
+  $("mail-preview").replaceChildren(card);
+}
+function receive(next) {
+  state = next;
+  document.documentElement.style.setProperty(
+    "--font-size",
+    state.config.font_size + "px",
+  );
+  document.body.classList.toggle("collapsed", state.config.sidebar_collapsed);
+  $("collapse").title = state.config.sidebar_collapsed
+    ? "展開側欄"
+    : "收合側欄";
+  $("collapse").setAttribute("aria-label", $("collapse").title);
+  $("status").textContent = state.status || "";
+  $("status").classList.toggle("error", !!state.error);
+  $("account-label").textContent = state.logged_in ? "已登入" : "尚未登入";
+  $("settings-account").textContent = state.logged_in
+    ? "登入授權有效"
+    : "使用瀏覽器取得公司服務授權";
+  $("account-dot").classList.toggle("online", state.logged_in);
+  $("send").disabled = !state.can_send;
+  document
+    .querySelectorAll("[data-action]")
+    .forEach((button) => (button.disabled = !state.can_send));
+  $("new-chat").disabled = state.busy !== "none";
+  $("delete-chat").disabled = state.busy !== "none";
+  $("prompt").disabled = state.busy === "chat";
+  $("login").disabled = state.busy !== "none" || state.update_required;
+  $("logout").disabled = state.busy !== "none" || !state.logged_in;
+  $("cancel-login").hidden = state.busy !== "login";
+  $("reopen-login").hidden = state.busy !== "login" || !state.login_code;
+  $("login-code").textContent = state.login_code
+    ? "請核對登入碼：" + state.login_code
+    : "";
+  $("font-size").value = state.config.font_size;
+  $("font-value").textContent = state.config.font_size + " px";
+  if (document.activeElement !== $("hotkey"))
+    $("hotkey").value = state.config.hotkey;
+  $("hotkey-hint").textContent = state.config.hotkey + " 選字帶入";
+  $("version-label").textContent =
+    `LM_AI ${state.version} · ${state.version_status}`;
+  $("notification-popups").checked = state.config.notification_popups;
+  $("save-label").textContent = state.history_error
+    ? "尚未保存"
+    : state.busy === "chat"
+      ? "回覆後自動保存"
+      : "對話加密保存在本機";
+  if (next.draft_revision !== lastDraftRevision) {
+    lastDraftRevision = next.draft_revision;
+    $("prompt").value = next.draft || "";
+    resizePrompt();
+  }
+  renderHistory();
+  renderModels();
+  renderMessages();
+  renderNotifications();
+  renderMail();
+  showView(activeView);
+  if (next.focus_draft) {
+    showView("chat");
+    $("prompt").focus();
+    $("prompt").setSelectionRange(
+      $("prompt").value.length,
+      $("prompt").value.length,
+    );
+  }
+}
+function resizePrompt() {
+  const input = $("prompt");
+  input.style.height = "48px";
+  input.style.height = Math.min(160, Math.max(48, input.scrollHeight)) + "px";
+}
+function submit(action = "send") {
+  if (!state.can_send) return;
+  const text = $("prompt").value;
+  if (!text.trim()) {
+    toast("請先輸入文字");
+    return;
+  }
+  clearTimeout(draftTimer);
+  stickToBottom = true;
+  send({ type: "chat", text, action });
+}
+$("prompt").addEventListener("input", () => {
+  resizePrompt();
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(
+    () => send({ type: "draft", text: $("prompt").value }),
+    250,
+  );
+});
+$("prompt").addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && event.ctrlKey && !event.isComposing) {
+    event.preventDefault();
+    submit();
+  }
+});
+$("send").onclick = () => submit();
+document
+  .querySelectorAll("[data-action]")
+  .forEach((button) => (button.onclick = () => submit(button.dataset.action)));
+$("new-chat").onclick = () => {
+  showView("chat");
+  send({ type: "new_chat" });
+};
+$("collapse").onclick = () =>
+  send({
+    type: "preferences",
+    font_size: state.config.font_size,
+    sidebar_collapsed: !state.config.sidebar_collapsed,
+    notification_popups: state.config.notification_popups,
+  });
+$("settings-button").onclick = () => {
+  $("settings-dialog").showModal();
+};
+document.querySelector(".close-dialog").onclick = () => {
+  $("settings-dialog").close();
+};
+$("font-size").addEventListener("input", () => {
+  document.documentElement.style.setProperty(
+    "--font-size",
+    $("font-size").value + "px",
+  );
+  $("font-value").textContent = $("font-size").value + " px";
+});
+$("font-size").addEventListener("change", () =>
+  send({
+    type: "preferences",
+    font_size: Number($("font-size").value),
+    sidebar_collapsed: state.config.sidebar_collapsed,
+    notification_popups: state.config.notification_popups,
+  }),
+);
+$("notification-popups").onchange = () =>
+  send({
+    type: "preferences",
+    font_size: state.config.font_size,
+    sidebar_collapsed: state.config.sidebar_collapsed,
+    notification_popups: $("notification-popups").checked,
+  });
+$("save-hotkey").onclick = () =>
+  send({ type: "hotkey", value: $("hotkey").value });
+for (const id of ["login", "logout", "refresh", "download"])
+  $(id).onclick = () => send({ type: id });
+$("cancel-login").onclick = () => send({ type: "cancel_login" });
+$("reopen-login").onclick = () => send({ type: "reopen_login" });
+$("model-button").onclick = () => {
+  const open = $("model-menu").hidden;
+  $("model-menu").hidden = !open;
+  $("model-button").setAttribute("aria-expanded", String(open));
+};
+document.addEventListener("click", (event) => {
+  const model = event.target.closest("[data-model]");
+  if (model) {
+    send({ type: "model", id: model.dataset.model });
+    $("model-menu").hidden = true;
+    $("model-button").setAttribute("aria-expanded", "false");
+  }
+  if (!event.target.closest(".model-picker")) {
+    $("model-menu").hidden = true;
+    $("model-button").setAttribute("aria-expanded", "false");
+  }
+  const history = event.target.closest(".history-item");
+  if (history) {
+    showView("chat");
+    send({ type: "select_chat", id: history.dataset.id });
+  }
+  const copy = event.target.closest(".copy-message");
+  if (copy) {
+    send({
+      type: "copy",
+      text: state.messages[Number(copy.dataset.index)].content,
+    });
+  }
+  const code = event.target.closest(".copy-code");
+  if (code) {
+    send({
+      type: "copy",
+      text: code.closest(".code-block").querySelector("code").textContent,
+    });
+  }
+  const starter = event.target.closest("[data-starter]");
+  if (starter) {
+    $("prompt").value = starter.dataset.starter;
+    resizePrompt();
+    $("prompt").focus();
+    send({ type: "draft", text: $("prompt").value });
+  }
+  const read = event.target.closest("[data-event]");
+  if (read) send({ type: "read_event", id: read.dataset.event });
+  const link = event.target.closest(".markdown a");
+  if (link) {
+    event.preventDefault();
+    const href = link.getAttribute("href") || "";
+    if (href.startsWith("#")) {
+      const target = document.getElementById(href.slice(1));
+      target?.scrollIntoView();
+    } else if (/^https?:\/\//i.test(href)) {
+      ask("開啟連結", `使用預設瀏覽器開啟：\n${href}`, () =>
+        send({ type: "open_link", url: href }),
+      );
+    } else toast("此連結類型不支援");
+  }
+});
+$("delete-chat").onclick = () =>
+  ask(
+    "刪除此對話？",
+    "這會刪除此 Windows 使用者保存的整段對話，無法復原。",
+    () => send({ type: "delete_chat", id: state.active_id }),
+  );
+$("show-notifications").onclick = () => showView("notifications");
+$("show-outlook").onclick = () => showView("outlook");
+$("refresh-notifications").onclick = () => send({ type: "refresh_events" });
+$("read-mail").onclick = () => send({ type: "read_mail" });
+$("include-body").onchange = () => {
+  if ($("include-body").checked) {
+    $("include-body").checked = false;
+    ask(
+      "讀取郵件內文？",
+      "將讀取剛才選定郵件的純文字內文供你預覽，不包含附件；確認分析後才會傳給公司 AI。",
+      () => send({ type: "read_mail_body" }),
+    );
+  } else send({ type: "omit_mail_body" });
+};
+$("analyze-mail").onclick = () =>
+  ask(
+    "將郵件資料送交 AI 分析？",
+    state.mail?.body != null
+      ? "將送出預覽中的郵件欄位與內文，分析結果會保存於本機。"
+      : "只送出預覽中的主旨、寄件者、收件者、副本、時間與未讀狀態，不包含內文或附件。",
+    () => {
+      showView("chat");
+      send({ type: "analyze_mail" });
+    },
+  );
+if (bridge) {
+  bridge.addEventListener("message", (event) => {
+    if (event.data.type === "state") receive(event.data.state);
+    else if (event.data.type === "show_notifications")
+      showView("notifications");
+    else if (event.data.type === "toast") toast(event.data.text);
+    else if (event.data.type === "self_test") window.runSelfTest?.();
+  });
+  send({ type: "ready" });
+}
+// 本機 UI 預覽使用與桌面完全相同的 DOM／CSS；不載入憑證，也不呼叫公司 API。
+window.LMUI = {
+  receive,
+  showView,
+  renderMarkdown,
+  bottom,
+  atBottom,
+  getState: () => state,
+  getFollow: () => stickToBottom,
+  setFollow: (value) => {
+    stickToBottom = value;
+  },
+};

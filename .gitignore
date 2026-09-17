@@ -10,4 +10,6 @@
 .env.*
 !*.example
 session.dpapi
+history.dpapi
+notifications.dpapi
 settings.json

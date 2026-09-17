@@ -1,14 +1,17 @@
-//! Company AI 測試版：將通訊、登入、儲存與 Windows 介面分開，方便逐步擴充。
-mod appearance;
+//! LM_AI：將通訊、登入、儲存與 Windows 介面分開，方便逐步擴充。
 pub mod auth;
 pub mod config;
 pub mod demo;
+pub mod history;
+pub mod notifications;
+pub mod outlook;
 pub mod protocol;
 pub mod selection;
 pub mod service;
 pub mod storage;
 pub mod transport;
 pub mod ui;
+mod webview;
 
 /// 統一使用可直接顯示給使用者的錯誤訊息，不把 Token 或 HTTP Header 印到記錄。
 pub type AppResult<T> = Result<T, String>;

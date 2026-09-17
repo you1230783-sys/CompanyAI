@@ -61,7 +61,7 @@ pub fn load_config(root: &Path) -> AppResult<Config> {
 }
 
 /// 先寫暫存檔再替換，避免程式中途關閉時留下半份 JSON 或憑證。
-fn atomic_write(path: &Path, bytes: &[u8]) -> AppResult<()> {
+pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> AppResult<()> {
     let parent = path.parent().ok_or("設定路徑無效。")?;
     fs::create_dir_all(parent).map_err(|error| format!("無法建立設定資料夾：{error}"))?;
     let temp = path.with_extension(format!("{}.tmp", std::process::id()));
