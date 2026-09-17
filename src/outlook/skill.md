@@ -7,4 +7,4 @@
 工具會把完整 MSG（正文、圖片及附件）交给公司網站轉檔；不能寄信、修改郵件或存取其他郵件。
 只回覆下列 JSON，不加 Markdown 或其他文字：
 {"schema_version":1,"summary":"繁體中文初篩結果，清楚區分已知資訊與待確認內容","requests":[{"tool":"outlook.export_msg","mail_id":"本批代號","reason":"需要補充內容的原因"}]}
-不需要補充時 requests 為空陣列。完成補充後的最終整理不再要求任何工具。
+不需要補充時 requests 為空陣列。完成補充後的最終整理由網站技能讀取轉檔文件，不再要求 Outlook 匯出工具。

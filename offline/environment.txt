@@ -1,4 +1,4 @@
-﻿Recorded: 2026-09-17T19:23:07.2359073+08:00
+﻿Recorded: 2026-09-17T20:15:09.3808293+08:00
 Host OS: Microsoft Windows NT 10.0.26200.0
 Visual Studio: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools
 MSVC: 14.29.30133
@@ -10,7 +10,7 @@ Target: x86_64-pc-windows-msvc
 CRT: static
 Rust binaries: Y:\Rust\.tools\rustup\toolchains\1.98.1-x86_64-pc-windows-msvc\bin
 Cargo home: Y:\Rust\.tools\cargo
-EXE SHA256: C4F18139E31D0AE6058FEDF577F757012B6222111E367CFCEF3B9572DBB049C2
+EXE SHA256: FE6653FB75589E4F86B22F2A8D514CA6F67D0BAA11DAA395908C6E8261E6C836
 
 rustc 1.98.1 (48a229cea 2026-09-01)
 binary: rustc
@@ -32,10 +32,10 @@ File Type: EXECUTABLE IMAGE
   Image has the following dependencies:
 
     kernel32.dll
-    user32.dll
-    shell32.dll
     ole32.dll
     oleaut32.dll
+    user32.dll
+    shell32.dll
     shlwapi.dll
     combase.dll
     propsys.dll
@@ -54,8 +54,8 @@ File Type: EXECUTABLE IMAGE
 
         3000 .data
        16000 .pdata
-      196000 .rdata
+      197000 .rdata
         2000 .reloc
        33000 .rsrc
-      1EF000 .text
+      1F2000 .text
         1000 _RDATA

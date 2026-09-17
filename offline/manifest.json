@@ -1,5 +1,5 @@
 ﻿{
-    "generated_at":  "2026-09-17T19:23:13.9477368+08:00",
+    "generated_at":  "2026-09-17T20:15:16.1276154+08:00",
     "rust":  "1.98.1",
     "target":  "x86_64-pc-windows-msvc",
     "msvc":  "14.29.30133",
@@ -92,11 +92,11 @@
                   },
                   {
                       "path":  "src/outlook/batch.rs",
-                      "sha256":  "5f00500e8fe53b990ebc7b1248c87010398f31a3a9eb3568b8732ac44614f07b"
+                      "sha256":  "c424480ef3d310ffa986a27b1df1df18d4ab265094209b061b6a0c800f63343b"
                   },
                   {
                       "path":  "src/outlook/skill.md",
-                      "sha256":  "0b12f30a6664f21ff85084e671c585205092ca995094734970a5ca0f3fa11dc3"
+                      "sha256":  "e927388a95953faafaf49283bc53a7b9421b263695eb31f926a2bcbfd8b23fa6"
                   },
                   {
                       "path":  "src/outlook/batch/query.rs",
@@ -112,7 +112,7 @@
                   },
                   {
                       "path":  "src/ui/mail_batch.rs",
-                      "sha256":  "2320d0e789e6d14b40974a74f5b486cce561c5f794720e83ab0389eeeb2c5531"
+                      "sha256":  "91fc2a911c1bd7a81a9f739b075e2af196c0c7e06677151202520f055d8a6b18"
                   },
                   {
                       "path":  "src/ui/site.rs",
@@ -120,7 +120,7 @@
                   },
                   {
                       "path":  "src/ui/work.rs",
-                      "sha256":  "de6e337adf828eac2b1b64a2eb4875a4aca19c130406b3f3585b759f980c7034"
+                      "sha256":  "0e8c6f6e4612713331284516f204271ab9f056d9fd217688de526070bf269520"
                   },
                   {
                       "path":  "ui/app.js",
@@ -136,7 +136,7 @@
                   },
                   {
                       "path":  "ui/mail.js",
-                      "sha256":  "c7337f21d95d509cf183412ee460619c85d8f1f066d2e1dfd0b986b91fc4200b"
+                      "sha256":  "d2790d1dc17700b105451905ea54fa5c645fb3a9a4a9772d6b3fc5c98cd3a5be"
                   },
                   {
                       "path":  "ui/self-test.js",
@@ -416,7 +416,7 @@
                   },
                   {
                       "path":  "docs/DESKTOP_0_6_CONTRACT.md",
-                      "sha256":  "9c6c83b7aeeb042f1565f7dcaa8c3c52b25df16c7bed1db6cf2bb52a74aa82c3"
+                      "sha256":  "96c22ea1c7fb2788081ab89076f6f2a88de6cdd39f270b044d087295834c1aa1"
                   },
                   {
                       "path":  "docs/HOTKEY_0_4_1.md",
@@ -452,11 +452,11 @@
                   },
                   {
                       "path":  "docs/VALIDATION_0_6.md",
-                      "sha256":  "f1dbab276824ef641c23d9a1afb3d59b56f2cf1a65129ecd42e93ea60c9440e3"
+                      "sha256":  "0821931c788e882b050919154fa4b563d82f2eea66d718180ad709da277867ef"
                   },
                   {
                       "path":  "docs/WEB_INTEGRATION.md",
-                      "sha256":  "475b0d5da66b373dd545a11bc321119e408e0cd7f9dbb082ba6904df8adedf77"
+                      "sha256":  "60f7f3b84ebd5a561c9667f7b9bb2beef19c96a9ccad6a03ef29f5212814c054"
                   },
                   {
                       "path":  ".cargo/config.toml",
@@ -464,11 +464,11 @@
                   },
                   {
                       "path":  "dist/CompanyAI.exe",
-                      "sha256":  "c4f18139e31d0ae6058fedf577f757012b6222111e367cfcef3b9572dbb049c2"
+                      "sha256":  "fe6653fb75589e4f86b22f2a8d514ca6f67d0baa11daa395908c6e8261e6c836"
                   },
                   {
                       "path":  "dist/LM_AI.exe",
-                      "sha256":  "c4f18139e31d0ae6058fedf577f757012b6222111e367cfcef3b9572dbb049c2"
+                      "sha256":  "fe6653fb75589e4f86b22f2a8d514ca6f67d0baa11daa395908c6e8261e6c836"
                   },
                   {
                       "path":  "dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe",

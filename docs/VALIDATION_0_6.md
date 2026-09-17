@@ -4,6 +4,8 @@
 
 ## 本機測試範圍
 
+- Outlook 第二輪回歸：多份 MSG 的完整檔名轉成 `.md`（包含中文、多個句點及大寫 MSG）、保留原始上傳名稱、拒絕非 MSG／路徑／超量名稱；驗證首次初篩標記保留、第二輪無初篩 Skill，且品質模型請求包含附件 token、基本資訊、摘要與完整 Markdown 檔名。
+
 - 本次介面、工具狀態與斷線保存的操作及測試範圍見 [UI_AND_STREAMING.md](UI_AND_STREAMING.md)。完整交付通過時間以 offline/verification.json 為準。
 
 - Rust 單元與 loopback HTTP 測試：模型 query 對附件副檔名的影響、404 任務停止後解除等待並保存、晚到狀態不復活、通知本機清除防重播。
@@ -16,6 +18,8 @@
 - 完整交付流程仍須使用 v142 x64 探針、fmt、Clippy、Rust 測試、release 與 WebView2 自我檢查；並以 ZIP 內工具鏈、空 Cargo 快取及 `--frozen` 重建。
 
 ## 公司仍需實測
+
+- 選「快速」執行初篩並匯出至少兩封郵件，核對第一輪以初篩標記分流、第二輪為 `quality` 且走網站正常提示詞／技能路由；實際文件名稱須與 `.msg` → `.md` 清單一致。檢查文件工具能逐一讀取、品質模型權限／附件能力失敗時不改用其他模型，以及一般聊天模型偏好維持原值。
 
 日期查詢修正的範圍、記憶體 COM／介面回歸測試及 Outlook 2024 實機檢查步驟見 [OUTLOOK_SEARCH.md](OUTLOOK_SEARCH.md)。本機測試不等同 Exchange／PST 實機驗收。
 

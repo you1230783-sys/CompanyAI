@@ -210,14 +210,18 @@ impl App {
         if files.is_empty() {
             return Ok(());
         }
-        if self.work.capability_model != self.config.model {
-            return Err("正在確認目前模型可用的附件格式。".into());
+        // Outlook 自動分析使用獨立的品質模型能力，提示也應與實際送出的模型一致。
+        let cap = if self.mail_flow.phase == "uploading"
+            && self.mail_flow.conversation == self.active_id
+        {
+            self.mail_flow.analysis_caps.as_ref()
+        } else {
+            if self.work.capability_model != self.config.model {
+                return Err("正在確認目前模型可用的附件格式。".into());
+            }
+            self.work.caps.as_ref()
         }
-        let cap = self
-            .work
-            .caps
-            .as_ref()
-            .ok_or("請重新整理網站能力後再送出附件。")?;
+        .ok_or("請重新整理網站能力後再送出附件。")?;
         let mut total = 0;
         for (index, file) in files.iter().enumerate() {
             cap.attachments.check(&file.name, file.size, index, total)?;

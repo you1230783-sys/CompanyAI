@@ -346,6 +346,8 @@ HTTP 200：
 
 Outlook 日期查詢已擴充至已載入 Exchange／本機資料檔及分類子資料夾，詳見 [Outlook 查詢說明](OUTLOOK_SEARCH.md)。這是桌面 COM 查詢修正，不新增網站 API；批次基本資訊增加 `folder` 顯示來源資料夾，仍不提供 EntryID／StoreID 或磁碟路徑。
 
+Outlook 第一輪維持以 `# Outlook 郵件初篩 outlook-triage` 開頭，供網站分流至不額外附帶提示詞／技能的初篩路由。第二輪保留資料與摘要，固定送 `model: "quality"`，列出每份上傳 MSG 對應的完整 `.md` 名稱並允許網站文件工具；不重送初篩 Skill，由網站使用正常提示詞與技能。詳見 [0.6 分流與附件名稱契約](DESKTOP_0_6_CONTRACT.md#初篩與附件分析的分流)。
+
 - [OAuth Device Authorization Grant — RFC 8628](https://www.rfc-editor.org/rfc/rfc8628.html)
 - [Windows WinHTTP](https://learn.microsoft.com/en-us/windows/win32/api/winhttp/nf-winhttp-winhttpopen)
 - [Windows DPAPI](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata)
