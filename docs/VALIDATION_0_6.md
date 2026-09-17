@@ -4,6 +4,8 @@
 
 ## 本機測試範圍
 
+- 本次介面、工具狀態與斷線保存的操作及測試範圍見 [UI_AND_STREAMING.md](UI_AND_STREAMING.md)。完整交付通過時間以 offline/verification.json 為準。
+
 - Rust 單元與 loopback HTTP 測試：模型 query 對附件副檔名的影響、404 任務停止後解除等待並保存、晚到狀態不復活、通知本機清除防重播。
 - 全站鈴鐺 mapping、opaque ID 路徑編碼、Authorization／X-Client-Version、分頁、已讀更新、deleted_ids、游標 410 後完整同步、失敗保留快取、第一份快照靜默、重播去重、401／403／404／429／500 與連線失敗。
 - 通知 URL 的部署前綴與跨站／危險 scheme 拒絕；伺服器錯誤本文不回顯 Token。
@@ -14,6 +16,8 @@
 - 完整交付流程仍須使用 v142 x64 探針、fmt、Clippy、Rust 測試、release 與 WebView2 自我檢查；並以 ZIP 內工具鏈、空 Cargo 快取及 `--frozen` 重建。
 
 ## 公司仍需實測
+
+日期查詢修正的範圍、記憶體 COM／介面回歸測試及 Outlook 2024 實機檢查步驟見 [OUTLOOK_SEARCH.md](OUTLOOK_SEARCH.md)。本機測試不等同 Exchange／PST 實機驗收。
 
 1. 網站部署 Token 鈴鐺 API 後，桌面與網站互相標記已讀／全部刪除，驗證同一資料庫與使用者權限；包含刪除 tombstone 及游標到期。
 2. 真實 WebSocket 喚醒、斷線重連、恢復前景同步；429 退避與 401／403 停止重試。氣泡失敗不影響通知中心。

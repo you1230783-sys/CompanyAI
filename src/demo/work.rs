@@ -215,15 +215,30 @@ pub(super) fn serve_work(
                 chat.state = "completed".into();
                 let final_status = task(&id, chat);
                 let mut sse = format!("event: task\ndata: {initial}\n\n: heartbeat\n\n");
-                for chunk in chat.answer.chars().collect::<Vec<_>>().chunks(5) {
+                sse.push_str("event: start\ndata: {}\n\nevent: tool_status\ndata: {\"event\":\"tool_status\",\"tool_name\":\"search_session_documents\",\"status\":\"started\",\"arguments\":{\"query\":\"demo\"}}\n\n");
+                for (index, chunk) in chat
+                    .answer
+                    .chars()
+                    .collect::<Vec<_>>()
+                    .chunks(5)
+                    .enumerate()
+                {
                     let text: String = chunk.iter().collect();
-                    sse.push_str(&format!(
-                        "data: {}\n\n",
-                        json!({"choices":[{"index":0,"delta":{"content":text}}]})
-                    ));
+                    if index % 2 == 0 {
+                        sse.push_str(&format!(
+                            "event: delta\ndata: {}\n\n",
+                            json!({"event":"delta","text":text})
+                        ));
+                    } else {
+                        sse.push_str(&format!(
+                            "data: {}\n\n",
+                            json!({"choices":[{"index":0,"delta":{"content":text}}]})
+                        ));
+                    }
                 }
+                sse.push_str("event: tool_status\ndata: {\"tool_name\":\"search_session_documents\",\"status\":\"completed\",\"result\":{\"matches\":[]}}\n\n");
                 sse.push_str(&format!(
-                    "event: status\ndata: {final_status}\n\ndata: [DONE]\n\n"
+                    "event: status\ndata: {final_status}\n\nevent: done\n\n"
                 ));
                 if chat.request["messages"][0]["content"]
                     .as_str()

@@ -28,6 +28,7 @@ function renderMailBatch() {
       const details = node("div");
       details.append(
         node("strong", "", mail.subject || "（無主旨）"),
+        node("p", "subtle", mail.folder || ""),
         node("p", "subtle", `${mail.sender} → ${mail.to}`),
         node(
           "span",
@@ -44,6 +45,7 @@ function renderMailBatch() {
   $("batch-selected-count").textContent =
     `已勾選 ${selectedMails.size} / ${mails.length} 封`;
   $("batch-selected").disabled = !!batch.busy;
+  $("batch-scope").disabled = !!batch.busy;
   document
     .querySelectorAll("[data-mail-period],#batch-mail-list input")
     .forEach((button) => (button.disabled = !!batch.busy));
@@ -63,6 +65,7 @@ document.querySelectorAll("[data-mail-period]").forEach(
         action: "list",
         period: button.dataset.mailPeriod,
         unread: button.dataset.unread === "true",
+        scope: $("batch-scope").value,
       })),
 );
 $("batch-select-all").onclick = () => {

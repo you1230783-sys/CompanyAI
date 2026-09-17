@@ -12,6 +12,8 @@ use std::{
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
 };
+mod query;
+pub use query::SearchScope;
 
 pub const MAX_MAILS: usize = 50;
 pub const SKILL: &str = include_str!("skill.md");
@@ -19,6 +21,8 @@ pub const SKILL: &str = include_str!("skill.md");
 #[derive(Clone, Serialize)]
 pub struct Mail {
     pub id: String,
+    /// Outlook 資料夾顯示路徑；不是 PST／OST 的磁碟路徑。
+    pub folder: String,
     #[serde(flatten)]
     pub preview: MailPreview,
     #[serde(skip)]
@@ -29,6 +33,7 @@ pub struct MailList {
     pub mails: Vec<Mail>,
     pub scope: String,
     pub truncated: bool,
+    pub notice: String,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -109,7 +114,8 @@ fn today() -> AppResult<NaiveDate> {
     NaiveDate::from_ymd_opt(time.wYear as i32, time.wMonth as u32, time.wDay as u32)
         .ok_or("無法讀取本機日期。".into())
 }
-fn received_day(mail: &IDispatch) -> AppResult<NaiveDate> {
+/// 保留 OLE DATE 的小數時間，跨資料夾合併時才能依真正的收件時間排序。
+fn received_time(mail: &IDispatch) -> AppResult<f64> {
     let value = get(mail, "ReceivedTime", &mut [])?;
     let mut date = VARIANT::default();
     unsafe { VariantChangeType(&mut date, &value, VAR_CHANGE_FLAGS(0), VT_DATE) }
@@ -118,6 +124,9 @@ fn received_day(mail: &IDispatch) -> AppResult<NaiveDate> {
     if !days.is_finite() || !(0.0..3_000_000.0).contains(&days) {
         return Err("郵件日期不正確。".into());
     }
+    Ok(days)
+}
+fn received_date(days: f64) -> AppResult<NaiveDate> {
     NaiveDate::from_ymd_opt(1899, 12, 30)
         .ok_or("日期基準錯誤。")?
         .checked_add_signed(Duration::days(days.floor() as i64))
@@ -142,6 +151,7 @@ fn snapshot(item: &IDispatch) -> AppResult<Mail> {
     let parent = object(&get(item, "Parent", &mut [])?)?;
     Ok(Mail {
         id: jobs::new_id()?,
+        folder: text(&parent, "FolderPath", 4096)?,
         store_id: text(&parent, "StoreID", 4096)?,
         preview: MailPreview {
             subject: text(item, "Subject", 3000)?,
@@ -156,57 +166,32 @@ fn snapshot(item: &IDispatch) -> AppResult<Mail> {
         },
     })
 }
-/// 日期使用本機日曆日；三天內含今天，本週從週一開始，範圍限定預設收件匣。
-pub fn list(period: &str, unread: bool, cancel: &AtomicBool) -> AppResult<MailList> {
+/// 日期使用本機日曆日；跨信箱／資料檔查詢交由 query，選取郵件維持直接快照。
+pub fn list(
+    period: &str,
+    unread: bool,
+    scope: SearchScope,
+    cancel: &AtomicBool,
+) -> AppResult<MailList> {
     let (_apartment, app) = connect()?;
-    let selected = period == "selected";
-    let start = if selected {
-        None
-    } else {
-        Some(cutoff(today()?, period)?)
-    };
+    if period != "selected" {
+        return query::list(&app, period, unread, scope, cancel);
+    }
     let mut list = MailList {
-        scope: if selected {
-            "Outlook 目前選取"
-        } else {
-            "預設帳號收件匣"
-        }
-        .into(),
+        scope: "Outlook 目前選取".into(),
         ..Default::default()
     };
-    let collection = if selected {
-        let window = object(&get(&app, "ActiveWindow", &mut [])?)?;
-        if i32::try_from(&get(&window, "Class", &mut [])?).ok() == Some(35) {
-            let item = object(&get(&window, "CurrentItem", &mut [])?)?;
-            if i32::try_from(&get(&item, "Class", &mut [])?).ok() != Some(43) {
-                return Err("目前項目不是郵件。".into());
-            }
-            list.mails.push(snapshot(&item)?);
-            return Ok(list);
+    check_cancel(cancel)?;
+    let window = object(&get(&app, "ActiveWindow", &mut [])?)?;
+    if i32::try_from(&get(&window, "Class", &mut [])?).ok() == Some(35) {
+        let item = object(&get(&window, "CurrentItem", &mut [])?)?;
+        if i32::try_from(&get(&item, "Class", &mut [])?).ok() != Some(43) {
+            return Err("目前項目不是郵件。".into());
         }
-        object(&get(&window, "Selection", &mut [])?)?
-    } else {
-        let namespace = object(&get(&app, "GetNamespace", &mut [VARIANT::from("MAPI")])?)?;
-        let folder = object(&get(
-            &namespace,
-            "GetDefaultFolder",
-            &mut [VARIANT::from(6i32)],
-        )?)?;
-        let mut items = object(&get(&folder, "Items", &mut [])?)?;
-        if unread {
-            items = object(&get(
-                &items,
-                "Restrict",
-                &mut [VARIANT::from("[UnRead] = True")],
-            )?)?;
-        }
-        get(
-            &items,
-            "Sort",
-            &mut [VARIANT::from(true), VARIANT::from("[ReceivedTime]")],
-        )?;
-        items
-    };
+        list.mails.push(snapshot(&item)?);
+        return Ok(list);
+    }
+    let collection = object(&get(&window, "Selection", &mut [])?)?;
     let count =
         i32::try_from(&get(&collection, "Count", &mut [])?).map_err(|_| "無法取得郵件數量。")?;
     for index in 1..=count.min(10_000) {
@@ -214,11 +199,6 @@ pub fn list(period: &str, unread: bool, cancel: &AtomicBool) -> AppResult<MailLi
         let item = object(&get(&collection, "Item", &mut [VARIANT::from(index)])?)?;
         if i32::try_from(&get(&item, "Class", &mut [])?).ok() != Some(43) {
             continue;
-        }
-        if let Some(start) = start {
-            if received_day(&item)? < start {
-                break;
-            }
         }
         if list.mails.len() == MAX_MAILS {
             list.truncated = true;
@@ -331,6 +311,7 @@ mod tests {
         assert_eq!(cutoff(today, "today").unwrap(), today);
         let mails = vec![Mail {
             id: "m1".into(),
+            folder: "測試收件匣".into(),
             preview: demo_mail(false),
             store_id: "private-store".into(),
         }];

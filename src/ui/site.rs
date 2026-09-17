@@ -17,6 +17,7 @@ pub(super) struct SiteRuntime {
     pub pending: bool,
     pub not_before: Option<Instant>,
     pub foreground: bool,
+    pub read_all_pending: bool,
 }
 impl Default for SiteRuntime {
     fn default() -> Self {
@@ -32,6 +33,7 @@ impl Default for SiteRuntime {
             pending: false,
             not_before: None,
             foreground: false,
+            read_all_pending: false,
         }
     }
 }
@@ -207,6 +209,22 @@ impl App {
         let foreground = self.is_foreground();
         let resumed = foreground && !self.site.foreground;
         self.site.foreground = foreground;
+        if self.site.read_all_pending
+            && self.logged_in()
+            && !self.site.loading
+            && !self.site.mutating
+            && !self.site.blocked
+            && self
+                .site
+                .not_before
+                .is_none_or(|time| Instant::now() >= time)
+        {
+            self.site.read_all_pending = false;
+            if let Err(error) = self.site_action(Action::ReadAll) {
+                self.site.status = error;
+            }
+            return true;
+        }
         let before = self.site.loading;
         self.fetch_site(resumed);
         before != self.site.loading

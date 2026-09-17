@@ -51,6 +51,7 @@ pub(super) enum WorkCommand {
         id: String,
     },
     Refresh,
+    ClearCompleted,
 }
 pub(super) enum WorkEvent {
     Capabilities(String, AppResult<Capabilities>),
@@ -82,6 +83,8 @@ pub(super) struct WorkRuntime {
     pub capability_loading: bool,
     pub storage_error: bool,
     pub task_balloon: bool,
+    /// 僅在本次執行保存最新工具進度，不寫入對話或加密任務檔。
+    pub tool_status: std::collections::HashMap<String, jobs::ToolStatus>,
 }
 impl Default for WorkRuntime {
     fn default() -> Self {
@@ -103,6 +106,7 @@ impl Default for WorkRuntime {
             capability_loading: false,
             storage_error: false,
             task_balloon: false,
+            tool_status: Default::default(),
         }
     }
 }
@@ -119,7 +123,8 @@ impl App {
             "state":if t.applied && !t.remote.as_ref().is_some_and(TaskStatus::terminal){"stopped"}else{t.remote.as_ref().map(|r|r.state.as_str()).unwrap_or("submitting")},"active":t.active(),"message":t.message,
             "progress":t.remote.as_ref().and_then(|r|r.progress),"queue_position":t.remote.as_ref().and_then(|r|r.queue_position),
             "timing":t.remote.as_ref().map(|r|&r.timing),"partial":if Some(&t.conversation_id)==self.active_id.as_ref(){t.partial.as_str()}else{""},
-            "can_retry":t.active()&&t.remote.is_none()&&!self.work.streams.contains(&t.request_id)
+            "can_retry":t.active()&&t.remote.is_none()&&!self.work.streams.contains(&t.request_id),
+            "tool_status":if t.active(){self.work.tool_status.get(&t.request_id)}else{None}
         })).collect();
         // 身分代號、附件 Token 與完整請求不傳入 WebView2。
         json!({"attachments":attachments,"tasks":tasks,"rules":self.work.caps.as_ref().filter(|_|self.work.capability_model == self.config.model && !self.work.capability_loading).map(|c|&c.attachments),
@@ -137,6 +142,24 @@ impl App {
         }
         Ok(())
     }
+    fn preserve_partial_reply(&mut self, task: &Task) -> AppResult<()> {
+        let mut archive = self.archive.clone();
+        if jobs::retain_partial(&mut archive, task)? {
+            history::save(&self.root, &archive)?;
+            self.archive = archive;
+            if self.active_id.as_ref() == Some(&task.conversation_id) {
+                if let Some(conversation) = self
+                    .archive
+                    .conversations
+                    .iter()
+                    .find(|c| c.id == task.conversation_id)
+                {
+                    self.messages = conversation.messages.clone();
+                }
+            }
+        }
+        Ok(())
+    }
     /// 本機停止不依賴取消 API 成功；404／離線也能解除對話鎖定。
     fn stop_local_task(&mut self, id: &str, remove: bool) -> AppResult<()> {
         let task = self
@@ -148,6 +171,7 @@ impl App {
             .cloned()
             .ok_or("找不到任務。")?;
         let mut next = self.work.store.clone();
+        self.preserve_partial_reply(&task)?;
         if remove {
             next.tasks.retain(|t| t.request_id != id);
         } else if let Some(saved) = next.tasks.iter_mut().find(|t| t.request_id == id) {
@@ -159,6 +183,7 @@ impl App {
             cancel.store(true, Ordering::Relaxed);
         }
         self.work.streams.remove(id);
+        self.work.tool_status.remove(id);
         if task.active() {
             if let Some(session) = self.session.clone() {
                 let config = self.config.clone();
@@ -481,6 +506,17 @@ impl App {
                 self.refresh_work_capabilities();
                 self.poll_work(true);
             }
+            WorkCommand::ClearCompleted => {
+                // 先保存再套用，磁碟失敗時保留原卡片；不呼叫 server 刪除或取消 API。
+                if self.work.storage_error {
+                    return Err("任務紀錄無法保存，暫不自動清除。".into());
+                }
+                let mut next = self.work.store.clone();
+                if next.remove_completed() > 0 {
+                    next.save(&self.root, &self.config)?;
+                    self.work.store = next;
+                }
+            }
         }
         Ok(())
     }
@@ -770,7 +806,7 @@ impl App {
                         }
                         self.work.capability_model = model;
                         self.work.caps = Some(cap);
-                        self.work.status = "附件與執行模式由網站提供".into();
+                        self.work.status.clear();
                         self.work_save()?;
                         self.finish_tasks()?;
                         self.poll_work(true);
@@ -965,11 +1001,20 @@ impl App {
                             task.partial.push_str(&text);
                         }
                     }
+                    jobs::StreamUpdate::Started if task.active() => {
+                        task.message = "伺服器已開始處理".into();
+                        self.work.tool_status.remove(&id);
+                    }
+                    jobs::StreamUpdate::Tool(status) if task.active() => {
+                        self.work.tool_status.insert(id, status);
+                    }
+                    jobs::StreamUpdate::Started | jobs::StreamUpdate::Tool(_) => {}
                 }
             }
             WorkEvent::Submitted(id, result) => {
                 self.work.streams.remove(&id);
                 self.work.cancellations.remove(&id);
+                let interrupted = result.is_err();
                 if let Some(task) = self
                     .work
                     .store
@@ -979,9 +1024,21 @@ impl App {
                 {
                     task.message = match result {
                         Ok(()) => "正在確認伺服器保存的結果".into(),
-                        Err(e) => format!("{e} 將查詢任務，請勿另建重複請求。"),
+                        Err(e) => format!("AI 異常斷線，後續回覆未收到；已保留收到的內容。{e} 正在查詢伺服器結果。"),
                     };
                     self.work_save()?;
+                }
+                if interrupted {
+                    if let Some(task) = self
+                        .work
+                        .store
+                        .tasks
+                        .iter()
+                        .find(|t| t.request_id == id)
+                        .cloned()
+                    {
+                        self.preserve_partial_reply(&task)?;
+                    }
                 }
                 self.poll_work(true);
             }
@@ -1051,6 +1108,8 @@ impl App {
                         self.messages = c.messages.clone();
                     }
                 }
+            } else {
+                self.preserve_partial_reply(&task)?;
             }
             if let Some(saved) = self
                 .work
@@ -1063,6 +1122,7 @@ impl App {
                 saved.partial.clear();
                 saved.request = json!({});
             }
+            self.work.tool_status.remove(&task.request_id);
             self.work_save()?;
             let label = if remote.state == "completed" {
                 "回覆完成"

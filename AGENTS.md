@@ -39,7 +39,7 @@
 
 ## 0.6.0 產品約定
 
-- 正式主機、聊天、device、token、version、models 與 download 路由固定於 `src/config.rs`，不提供 UI 編輯；偏好檔只保存模型代號、快捷鍵、字體大小、側欄收合及通知提示偏好。舊設定不得覆寫固定路由。
+- 正式主機、聊天、device、token、version、models 與 download 路由固定於 `src/config.rs`，不提供 UI 編輯；偏好檔只保存模型代號、快捷鍵、字體大小、側欄收合、通知提示及深色模式偏好。舊設定不得覆寫固定路由。
 - 正式請求固定 Bearer 個人 Token，Chat Completions 一般／背景模式為 `stream: false`，串流為 `stream: true`；模型選單從後端取得，UI 顯示 label、JSON 傳 id，真實模型由後端映射。
 - 使用者指定：版本檢查失敗暫時允許使用；同次執行中已知的強制更新不得被後續網路失敗解除。這個政策不能略過登入驗證或模型權限。
 - 全新設定快捷鍵預設 Win+Esc，既有偏好保留；支援直接按鍵錄製，套用成功才生效；必須在顯示主視窗之前取得來源選字。只放入草稿，不自動送出、不覆蓋舊草稿、不背景監控剪貼簿。
@@ -53,7 +53,7 @@
 - 0.6 全站鈴鐺 API 與 AI events 各有游標／快取；網站已讀與刪除成功才更改本機，deleted_ids／410 完整同步契約見 docs/DESKTOP_0_6_CONTRACT.md。
 - 模型切換必須重新查 capabilities?model=alias；不能以舊模型的附件規則放行新模型。網站仍須驗證轉檔後的圖片是否可交給模型。
 - 0.6 Outlook 批次 Skill 於 src/outlook/skill.md；只有本批已勾選、經使用者確認的郵件可依 AI JSON 請求匯出 MSG。允許的工具只有 outlook.export_msg，EntryID／StoreID 與磁碟路徑不提供 AI。
-- 多封日期預設只查預設收件匣，每批最多 50 封，自動 MSG 補充最多 20 封並受 backend 規則限制。退出不恢復 COM 授權；最終聊天使用持久任務。
+- 多封日期查詢預設涵蓋 Outlook 已載入的信箱／本機資料檔與子資料夾，也可選目前資料夾或預設收件匣及其子資料夾。全部範圍略過 Outlook 預設寄件備份／草稿／寄件匣／刪除／垃圾郵件／同步問題及搜尋資料夾；不掃描磁碟或自動開啟資料檔。每批取最新 50 封，500 個資料夾／10,000 個項目／30 秒上限與讀取失敗須提示結果不完整；自動 MSG 補充最多 20 封並受 backend 規則限制。退出不恢復 COM 授權；最終聊天使用持久任務。
 - RAG、UNC 知識庫、任意檔案工具及其他自動化尚未實作，不自行擴張本次範圍。
 - 前端程式位於 ui/，build.rs 將資源嵌入 EXE；第三方資源及授權位於 ui/vendor，不使用 CDN，也不要求公司安裝 Node。
 - 使用者同意附 WebView2 x64 離線安裝包，放在 dist/ 並納入 ZIP；更新時核對 Microsoft 簽章及 SHA256。

@@ -64,7 +64,6 @@
       <main>
         <header class="topbar">
           <div>
-            <span class="eyebrow">WORKSPACE</span>
             <h1 id="page-title">新對話</h1>
           </div>
           <div class="topbar-actions">
@@ -162,7 +161,7 @@
               </button>
             </div>
             <p id="timing-estimate" class="subtle work-hint"></p>
-            <details class="attachment-help">
+            <details class="attachment-help" hidden>
               <summary>附件規則</summary>
               <p id="attachment-rules"></p>
               <p>
@@ -226,8 +225,18 @@
           <section class="mail-batch-panel">
             <h3>多封郵件整理</h3>
             <p class="subtle">
-              日期範圍使用本機時間與預設帳號收件匣；三天內含今天，本週從週一開始。每批最多
-              50 封。
+              三天內含今天，本週從週一開始，使用本機日期。跨資料夾取最新
+              50 封；查詢只讀基本資訊，尚未傳給 AI。
+            </p>
+            <label for="batch-scope">日期查詢範圍</label>
+            <select id="batch-scope">
+              <option value="all_stores">所有已載入信箱與本機資料檔（含子資料夾）</option>
+              <option value="current_folder">Outlook 目前資料夾及子資料夾</option>
+              <option value="inbox">預設收件匣及子資料夾</option>
+            </select>
+            <p class="subtle">
+              全部範圍略過 Outlook 預設的寄件備份、草稿、寄件匣、刪除的郵件、垃圾郵件、同步問題及搜尋資料夾。
+              本機資料檔須先在 Outlook 開啟；規則複製的不同副本會分別列出。若結果過多，可改查目前資料夾。
             </p>
             <div class="button-row">
               <button id="batch-selected" class="secondary-button">
@@ -319,6 +328,8 @@
         </section>
         <section>
           <h3>外觀</h3>
+          <label class="check-row"><input id="dark-mode" type="checkbox" />深色模式</label>
+          <p class="subtle">使用柔和的深灰藍背景，設定會保留。</p>
           <label for="font-size"
             >文字大小 <output id="font-value">14 px</output></label
           ><input
@@ -384,6 +395,7 @@
           <p class="subtle">
             對話在此 Windows
             使用者下加密保存。登出會保留歷史；開啟舊對話後，只有再按送出才會傳給目前登入的帳號。刪除功能位於對話右上角。
+            伺服器端仍會儲存已送出的對話、附件及任務資料；刪除本機資料或移除任務卡片不會刪除伺服器端的紀錄。
           </p>
         </section>
       </div>
@@ -408,9 +420,9 @@
     <script src="vendor/languages/latex.min.js"></script>
     <script src="vendor/purify.min.js"></script>
     <script src="icons.js"></script>
+    <script src="self-test.js"></script>
     <script src="app.js"></script>
     <script src="work.js"></script>
     <script src="mail.js"></script>
-    <script src="self-test.js"></script>
   </body>
 </html>

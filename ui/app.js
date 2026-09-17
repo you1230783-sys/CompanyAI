@@ -106,6 +106,55 @@ function renderMarkdown(text) {
     return `<p>${md.utils.escapeHtml(text)}</p>`;
   }
 }
+/** 僅折疊明確的 Answer → Key points → Sources 格式；保留原文與完整 Markdown 渲染。 */
+function renderAssistantReply(text) {
+  const root = document.createElement("div");
+  root.innerHTML = renderMarkdown(text);
+  const sections = [];
+  function sectionName(element) {
+    // 只辨識最外層標題／段落／清單項，不把程式碼、引用或巢狀條列當成制式章節。
+    const first = element.tagName === "LI" ? [...element.childNodes].find((node) => node.textContent.trim()) : element;
+    const line = (first?.textContent || "").trim().split("\n")[0]
+      .replace(/^\s*[1-5][.)、]\s*/, "").replace(/[：:]\s*$/, "").trim().toLowerCase();
+    return ["answer", "key points", "sources", "confidence", "limitations"].includes(line) ? line : null;
+  }
+  for (const child of root.children) {
+    const elements = child.tagName === "OL" ? [...child.children] :
+      /^(H[1-6]|P)$/.test(child.tagName) ? [child] : [];
+    for (const element of elements) {
+      const name = sectionName(element);
+      if (name) sections.push({ name, element });
+    }
+  }
+  if (sections[0]?.name !== "answer" || sections[1]?.name !== "key points" || sections[2]?.name !== "sources") {
+    return root.innerHTML;
+  }
+  const details = document.createElement("details");
+  details.className = "answer-details";
+  const summary = document.createElement("summary");
+  summary.textContent = "來源、信心與限制";
+  details.append(summary);
+  const content = document.createElement("div");
+  content.className = "answer-details-content";
+  details.append(content);
+  const source = sections[2].element;
+  let following;
+  if (source.tagName === "LI") {
+    const originalList = source.parentElement;
+    const tail = originalList.cloneNode(false);
+    tail.start = (Number(originalList.getAttribute("start")) || 1) + [...originalList.children].indexOf(source);
+    following = originalList.nextSibling;
+    let next = source;
+    while (next) { const after = next.nextSibling; tail.append(next); next = after; }
+    content.append(tail);
+    if (!originalList.children.length) originalList.remove();
+  } else {
+    following = source;
+  }
+  while (following) { const after = following.nextSibling; content.append(following); following = after; }
+  root.append(details);
+  return root.innerHTML;
+}
 function node(tag, className, text) {
   const el = document.createElement(tag);
   if (className) el.className = className;
@@ -139,11 +188,20 @@ document.fonts?.ready.then(() => {
 });
 
 function showView(view) {
+  // receive() 會重繪目前頁面，只有真正跨頁才觸發一次離開操作。
+  const previous = activeView;
   activeView = view;
+  if (previous !== view) {
+    if (previous === "tasks") send({ type: "work", command: { action: "clear_completed" } });
+    if (previous === "notifications" && state.logged_in) {
+      send({ type: "notifications_left" });
+    }
+  }
   for (const name of ["chat", "notifications", "outlook", "tasks"])
     $(name + "-view").hidden = name !== view;
   $("show-notifications").classList.toggle("active", view === "notifications");
   $("show-outlook").classList.toggle("active", view === "outlook");
+  $("show-tasks").classList.toggle("active", view === "tasks");
   const conversation = state.conversations.find(
     (c) => c.id === state.active_id,
   );
@@ -171,6 +229,7 @@ function renderMessages() {
   lastConversation = state.active_id;
   messageSignature = signature;
   const container = $("messages");
+  const expanded = new Set(changed ? [] : [...container.querySelectorAll(".answer-details[open]")].map((details) => details.closest("article").dataset.index));
   container.replaceChildren();
   if (!state.messages.length && state.busy !== "chat") {
     const welcome = node("div", "welcome");
@@ -191,7 +250,8 @@ function renderMessages() {
       "bubble" + (message.role === "assistant" ? " markdown" : ""),
     );
     if (message.role === "assistant") {
-      bubble.innerHTML = renderMarkdown(message.content);
+      bubble.innerHTML = renderAssistantReply(message.content);
+      if (expanded.has(String(index))) bubble.querySelector(".answer-details")?.setAttribute("open", "");
       bubble.querySelectorAll("table").forEach((table) => {
         const wrapper = node("div", "table-wrap");
         table.replaceWith(wrapper);
@@ -209,6 +269,7 @@ function renderMessages() {
         );
     }
     content.append(bubble);
+    if (message.incomplete) content.append(node("p", "incomplete-warning", "回覆中斷，後續內容未收到；這裡保留已收到的部分。"));
     const tools = node("div", "message-tools");
     const copy = node("button", "copy-message");
     copy.dataset.index = index;
@@ -372,6 +433,8 @@ function renderMail() {
 }
 function receive(next) {
   state = next;
+  document.documentElement.dataset.theme = state.config.dark_mode ? "dark" : "light";
+  $("dark-mode").checked = !!state.config.dark_mode;
   document.documentElement.style.setProperty(
     "--font-size",
     state.config.font_size + "px",
@@ -509,6 +572,13 @@ $("notification-popups").onchange = () =>
     sidebar_collapsed: state.config.sidebar_collapsed,
     notification_popups: $("notification-popups").checked,
   });
+$("dark-mode").onchange = () => {
+  document.documentElement.dataset.theme = $("dark-mode").checked ? "dark" : "light";
+  send({ type: "preferences", font_size: state.config.font_size,
+    sidebar_collapsed: state.config.sidebar_collapsed,
+    notification_popups: state.config.notification_popups,
+    dark_mode: $("dark-mode").checked });
+};
 $("save-hotkey").onclick = () =>
   send({ type: "hotkey", value: $("hotkey").value });
 // 錄製期間暫停舊全域快捷鍵，避免它攔截正在錄製的同一組按鍵。
@@ -736,6 +806,7 @@ window.LMUI = {
   receive,
   showView,
   renderMarkdown,
+  renderAssistantReply,
   bottom,
   atBottom,
   getState: () => state,

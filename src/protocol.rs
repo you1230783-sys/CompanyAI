@@ -10,6 +10,9 @@ pub struct Message {
     pub request_id: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attachments: Vec<String>,
+    /// 本機串流中斷標記；不加入對外 Chat Completions 的訊息欄位。
+    #[serde(default)]
+    pub incomplete: bool,
 }
 
 impl Message {
@@ -19,6 +22,7 @@ impl Message {
             content: content.into(),
             request_id: None,
             attachments: Vec::new(),
+            incomplete: false,
         }
     }
     pub fn assistant(content: String) -> Self {
@@ -27,6 +31,7 @@ impl Message {
             content,
             request_id: None,
             attachments: Vec::new(),
+            incomplete: false,
         }
     }
 }

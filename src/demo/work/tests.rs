@@ -183,6 +183,8 @@ fn attachments_background_stream_recovery_cancel_and_ownership() {
     );
     let mut stream_task = make_task("stream");
     let mut text = String::new();
+    let mut started = false;
+    let mut tool_states = Vec::new();
     jobs::submit(
         &config,
         &session,
@@ -190,10 +192,17 @@ fn attachments_background_stream_recovery_cancel_and_ownership() {
         |event| match event {
             StreamUpdate::Status(status) => stream_task.apply_status(*status).unwrap(),
             StreamUpdate::Delta(delta) => text.push_str(&delta),
+            StreamUpdate::Started => started = true,
+            StreamUpdate::Tool(status) => {
+                assert_eq!(status.tool_name, "search_session_documents");
+                tool_states.push(status.status);
+            }
         },
     )
     .unwrap();
     assert!(text.contains("附件測試"));
+    assert!(started);
+    assert_eq!(tool_states, ["started", "completed"]);
     let result = jobs::task_status(&config, &session, &stream_task).unwrap();
     assert_eq!(result.state, "completed");
     assert_eq!(
@@ -210,6 +219,7 @@ fn attachments_background_stream_recovery_cancel_and_ownership() {
         |event| match event {
             StreamUpdate::Status(status) => interrupted.apply_status(*status).unwrap(),
             StreamUpdate::Delta(delta) => partial.push_str(&delta),
+            StreamUpdate::Started | StreamUpdate::Tool(_) => (),
         }
     )
     .is_err());

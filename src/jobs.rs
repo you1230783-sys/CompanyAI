@@ -132,7 +132,7 @@ pub struct Task {
     pub message: String,
     #[serde(default)]
     pub mail_analysis: bool,
-    #[serde(skip)]
+    #[serde(default)]
     pub partial: String,
 }
 impl Task {
@@ -175,6 +175,18 @@ pub struct WorkStore {
     pub tasks: Vec<Task>,
 }
 impl WorkStore {
+    /// 僅清除已成功完成且已寫入對話的本機任務卡；失敗、取消及尚未套用回覆者保留。
+    pub fn remove_completed(&mut self) -> usize {
+        let before = self.tasks.len();
+        self.tasks.retain(|task| {
+            !(task.applied
+                && task
+                    .remote
+                    .as_ref()
+                    .is_some_and(|status| status.state == "completed"))
+        });
+        before - self.tasks.len()
+    }
     pub fn pending(&self, id: Option<&str>) -> bool {
         id.is_some_and(|id| {
             self.tasks
@@ -250,7 +262,40 @@ impl WorkStore {
     }
 }
 
-/// 將權威完成結果投影到本機歷史；request_id 保證重新啟動／重播時只加入一次。
+/// 中斷時保存已收到的文字。與正式回答使用同一 request_id，之後可原位換成完整結果。
+pub fn retain_partial(archive: &mut crate::history::Archive, task: &Task) -> AppResult<bool> {
+    if task.partial.trim().is_empty() {
+        return Ok(false);
+    }
+    let conversation = archive
+        .conversations
+        .iter_mut()
+        .find(|c| c.id == task.conversation_id)
+        .ok_or("找不到部分回覆對應的對話；收到的文字仍保留在任務。")?;
+    let user_index = conversation
+        .messages
+        .iter()
+        .position(|m| m.role == "user" && m.request_id.as_deref() == Some(&task.request_id))
+        .ok_or("部分回覆缺少對應的使用者訊息。")?;
+    let mut message = Message::assistant(task.partial.clone());
+    message.request_id = Some(task.request_id.clone());
+    message.incomplete = true;
+    if let Some(existing) = conversation
+        .messages
+        .iter_mut()
+        .find(|m| m.role == "assistant" && m.request_id.as_deref() == Some(&task.request_id))
+    {
+        if !existing.incomplete || existing.content.len() >= message.content.len() {
+            return Ok(false);
+        }
+        *existing = message;
+    } else {
+        conversation.messages.insert(user_index + 1, message);
+    }
+    conversation.updated_at = crate::unix_now();
+    Ok(true)
+}
+/// 將權威完成結果投影到本機歷史；request_id 保證重播不重複，並取代先前的部分回覆。
 pub fn apply_reply(archive: &mut crate::history::Archive, task: &Task) -> AppResult<bool> {
     let remote = task.remote.as_ref().ok_or("缺少任務結果。")?;
     remote.validate()?;
@@ -262,11 +307,9 @@ pub fn apply_reply(archive: &mut crate::history::Archive, task: &Task) -> AppRes
         .iter_mut()
         .find(|c| c.id == task.conversation_id)
         .ok_or("任務對應的本機對話不存在，結果仍留在任務紀錄。")?;
-    if conversation
-        .messages
-        .iter()
-        .any(|m| m.role == "assistant" && m.request_id.as_deref() == Some(&task.request_id))
-    {
+    if conversation.messages.iter().any(|m| {
+        m.role == "assistant" && !m.incomplete && m.request_id.as_deref() == Some(&task.request_id)
+    }) {
         return Ok(false);
     }
     if !conversation
@@ -283,7 +326,15 @@ pub fn apply_reply(archive: &mut crate::history::Archive, task: &Task) -> AppRes
     }
     let mut message = Message::assistant(reply);
     message.request_id = Some(task.request_id.clone());
-    conversation.messages.push(message);
+    if let Some(existing) = conversation
+        .messages
+        .iter_mut()
+        .find(|m| m.role == "assistant" && m.request_id.as_deref() == Some(&task.request_id))
+    {
+        *existing = message;
+    } else {
+        conversation.messages.push(message);
+    }
     conversation.updated_at = crate::unix_now();
     Ok(true)
 }
@@ -465,7 +516,12 @@ impl SseDecoder {
             let line = String::from_utf8(std::mem::take(&mut self.pending))
                 .map_err(|_| "串流必須為 UTF-8。")?;
             if line.is_empty() {
-                if !self.data.is_empty() {
+                // 網站具名 done 可以沒有 data；與 OpenAI [DONE] 都是正常結束。
+                if self.event == "done" {
+                    self.done = true;
+                } else if self.event == "start" && self.data.is_empty() {
+                    emit("start", "{}")?;
+                } else if !self.data.is_empty() {
                     let data = self.data.join("\n");
                     if data == "[DONE]" {
                         self.done = true;
@@ -493,9 +549,30 @@ impl SseDecoder {
         Ok(())
     }
 }
+/// 工具狀態僅用來呈現進度，忽略 arguments／result，不把事件轉成本機工具指令。
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ToolStatus {
+    pub tool_name: String,
+    pub status: String,
+}
+impl ToolStatus {
+    fn from_event(value: Value) -> Option<Self> {
+        let result: Self = serde_json::from_value(value).ok()?;
+        if result.tool_name.trim().is_empty()
+            || result.tool_name.len() > 200
+            || result.status.trim().is_empty()
+            || result.status.len() > 80
+        {
+            return None;
+        }
+        Some(result)
+    }
+}
 pub enum StreamUpdate {
     Status(Box<TaskStatus>),
     Delta(String),
+    Started,
+    Tool(ToolStatus),
 }
 pub fn submit(
     config: &Config,
@@ -540,6 +617,12 @@ pub fn submit_cancellable(
         parser.push(bytes, |event, data| {
             let value: Value = serde_json::from_str(data).map_err(|_| "串流 JSON 格式不正確。")?;
             match event {
+                "start" => update(StreamUpdate::Started),
+                "tool_status" => {
+                    if let Some(status) = ToolStatus::from_event(value) {
+                        update(StreamUpdate::Tool(status));
+                    }
+                }
                 "task" | "status" => {
                     let mut status: TaskStatus =
                         serde_json::from_value(value).map_err(|_| "串流任務格式不正確。")?;
@@ -553,7 +636,14 @@ pub fn submit_cancellable(
                 }
                 "error" => return Err("串流服務回報錯誤，將查詢任務狀態。".into()),
                 _ => {
-                    if let Some(text) = value["choices"][0]["delta"]["content"].as_str() {
+                    // 網站的具名 delta 使用 text；也保留 OpenAI 相容 delta.content。
+                    let text = if event == "delta" {
+                        value["text"].as_str()
+                    } else {
+                        None
+                    }
+                    .or_else(|| value["choices"][0]["delta"]["content"].as_str());
+                    if let Some(text) = text {
                         total += text.len();
                         if total > 1_048_576 {
                             return Err("串流文字超過 1 MB。".into());
@@ -596,6 +686,80 @@ pub fn submit_cancellable(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn named_start_and_done_need_no_data_and_ignore_trailing_bytes() {
+        let mut parser = SseDecoder::default();
+        let mut found = Vec::new();
+        parser.push(b"event: start\n\nevent: delta\ndata: {\"text\":\"hello\"}\n\nevent: done\n\ndata: invalid\n\n", |kind, data| {
+            found.push((kind.to_string(), data.to_string()));
+            Ok(())
+        }).unwrap();
+        assert!(parser.done);
+        assert_eq!(
+            found,
+            [
+                ("start".into(), "{}".into()),
+                ("delta".into(), r#"{"text":"hello"}"#.into())
+            ]
+        );
+    }
+
+    #[test]
+    fn interrupted_reply_survives_reload_and_full_result_replaces_it_once() {
+        let mut archive = crate::history::Archive::default();
+        let mut user = Message::user("question");
+        user.request_id = Some("request1".into());
+        let conversation_id = archive.insert(vec![user]).unwrap();
+        let mut task = Task {
+            request_id: "request1".into(),
+            conversation_id,
+            request: json!({}),
+            mode: "stream".into(),
+            title: "question".into(),
+            created_at: 0,
+            remote: None,
+            applied: false,
+            message: String::new(),
+            mail_analysis: false,
+            partial: "已收到的部分".into(),
+        };
+        assert!(retain_partial(&mut archive, &task).unwrap());
+        assert!(!retain_partial(&mut archive, &task).unwrap());
+        task.partial.push_str("，更多文字");
+        assert!(retain_partial(&mut archive, &task).unwrap());
+        // 模擬重新讀取加密保存前的 JSON，部分文字與不完整旗標必須一起保留。
+        let mut archive: crate::history::Archive =
+            serde_json::from_str(&serde_json::to_string(&archive).unwrap()).unwrap();
+        let restored_task: Task =
+            serde_json::from_str(&serde_json::to_string(&task).unwrap()).unwrap();
+        assert_eq!(restored_task.partial, task.partial);
+        assert!(archive.conversations[0].messages[1].incomplete);
+        assert_eq!(archive.conversations[0].messages[1].content, task.partial);
+        let mut wrong = task.clone();
+        wrong.request_id = "another_request".into();
+        assert!(retain_partial(&mut archive, &wrong).is_err());
+        task.remote = Some(TaskStatus {
+            task_id: "task1".into(),
+            client_request_id: task.request_id.clone(),
+            state: "completed".into(),
+            progress: None,
+            queue_position: None,
+            timing: Timing::default(),
+            result: Some(
+                json!({"choices":[{"message":{"role":"assistant","content":"完整答案"}}]}),
+            ),
+            error_message: String::new(),
+        });
+        assert!(apply_reply(&mut archive, &task).unwrap());
+        assert!(!apply_reply(&mut archive, &task).unwrap());
+        assert!(!retain_partial(&mut archive, &task).unwrap());
+        assert_eq!(archive.conversations[0].messages.len(), 2);
+        assert_eq!(archive.conversations[0].messages[1].content, "完整答案");
+        assert!(!archive.conversations[0].messages[1].incomplete);
+        let old_message: Message =
+            serde_json::from_value(json!({"role":"assistant","content":"舊答案"})).unwrap();
+        assert!(!old_message.incomplete);
+    }
     #[test]
     fn sse_handles_utf8_boundaries_heartbeats_multiline_and_done() {
         let source=": heartbeat\r\nevent: status\r\ndata: {\r\ndata: \"state\":\"中文\"}\r\n\r\ndata: [DONE]\n\n";
@@ -647,5 +811,66 @@ mod tests {
         old.state = "queued".into();
         task.apply_status(old).unwrap();
         assert_eq!(task.remote.unwrap().state, "failed");
+    }
+
+    #[test]
+    fn tool_status_keeps_dynamic_names_and_ignores_arguments_and_results() {
+        let status = ToolStatus::from_event(json!({"event":"tool_status","tool_name":"future_tool_v2","status":"started","arguments":{"query":"private"},"result":{"session_id":"private"}})).unwrap();
+        let rendered = serde_json::to_string(&status).unwrap();
+        assert!(rendered.contains("future_tool_v2"));
+        assert!(!rendered.contains("private"));
+        assert!(ToolStatus::from_event(json!({"tool_name":[],"status":"started"})).is_none());
+        assert!(
+            ToolStatus::from_event(json!({"tool_name":"t".repeat(201),"status":"started"}))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn clearing_cards_requires_completed_reply_already_applied() {
+        let mut store = WorkStore::default();
+        for (index, (state, applied)) in [
+            ("completed", true),
+            ("completed", false),
+            ("failed", true),
+            ("cancelled", true),
+            ("running", false),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            store.tasks.push(Task {
+                request_id: index.to_string(),
+                conversation_id: "chat".into(),
+                request: json!({}),
+                mode: "stream".into(),
+                title: "t".into(),
+                created_at: 0,
+                applied,
+                message: String::new(),
+                mail_analysis: false,
+                partial: String::new(),
+                remote: Some(TaskStatus {
+                    task_id: index.to_string(),
+                    client_request_id: index.to_string(),
+                    state: state.into(),
+                    progress: None,
+                    queue_position: None,
+                    timing: Timing::default(),
+                    result: None,
+                    error_message: String::new(),
+                }),
+            });
+        }
+        assert_eq!(store.remove_completed(), 1);
+        assert_eq!(
+            store
+                .tasks
+                .iter()
+                .map(|task| task.request_id.as_str())
+                .collect::<Vec<_>>(),
+            ["1", "2", "3", "4"]
+        );
+        assert_eq!(store.remove_completed(), 0);
     }
 }

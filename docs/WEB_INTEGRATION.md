@@ -314,7 +314,7 @@ HTTP 200：
 
 ## 10. 儲存與連線邊界
 
-- 偏好檔只保存 model、hotkey、font_size、sidebar_collapsed 與 notification_popups；固定連線資訊來自程式，忽略舊 settings.json 裡的 server_url、路由與 Header。
+- 偏好檔只保存 model、hotkey、font_size、sidebar_collapsed、notification_popups 與 dark_mode；固定連線資訊來自程式，忽略舊 settings.json 裡的 server_url、路由與 Header。
 - Token 由 Windows DPAPI 加密，綁定目前 Windows 使用者及實際端點。換端點需重新登入；只換模型不必。
 - 對話成功回覆後以 Windows 使用者 DPAPI 加密保存；未送出草稿只在記憶體。登出清除本機 Token，不代表伺服器端撤銷。
 - 目前明確採指定內網 HTTP；HTTP 會明文傳輸 Token 和內容。若日後啟用 HTTPS，使用 Windows 信任庫，不略過憑證錯誤。
@@ -341,6 +341,10 @@ HTTP 200：
 桌面圖示已統一採用使用者提供的貓咪圖案，隨 EXE 內嵌，涵蓋視窗、工作列及系統托盤；不需網站提供圖檔，也不變更 API 契約。圖示維護方式見 [assets/README.md](../assets/README.md)。
 
 ## 格式參考
+
+介面與串流修正見 [UI_AND_STREAMING.md](UI_AND_STREAMING.md)：支援網站的 `start` → `tool_status` → `delta.text` → `done`，保留 OpenAI 相容格式；斷線保存部分回答並提示不完整，REST 完整結果可原位取代。工具名稱及狀態以原文顯示，不顯示 arguments／result。此修正不新增網站路由。
+
+Outlook 日期查詢已擴充至已載入 Exchange／本機資料檔及分類子資料夾，詳見 [Outlook 查詢說明](OUTLOOK_SEARCH.md)。這是桌面 COM 查詢修正，不新增網站 API；批次基本資訊增加 `folder` 顯示來源資料夾，仍不提供 EntryID／StoreID 或磁碟路徑。
 
 - [OAuth Device Authorization Grant — RFC 8628](https://www.rfc-editor.org/rfc/rfc8628.html)
 - [Windows WinHTTP](https://learn.microsoft.com/en-us/windows/win32/api/winhttp/nf-winhttp-winhttpopen)

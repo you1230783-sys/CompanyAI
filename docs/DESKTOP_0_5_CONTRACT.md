@@ -306,11 +306,11 @@ data: [DONE]
 ```
 
 - task／status 使用 TaskStatus 欄位。SSE 的 completed 可以省略 result，因為桌面會 GET task 取權威結果；REST completed **不能省略 result**。
-- delta 沿用 OpenAI `choices[0].delta.content`，不包成自訂文字事件。可送 role／finish_reason／usage，但桌面目前只顯示 content。
+- 支援網站的 `event: start`、`event: tool_status`（JSON 的 tool_name／status）、`event: delta`（JSON 的 text）及無 data 的 `event: done`；每個事件仍須以空行結束。tool_name／status 保留原文，arguments／result 不顯示。也保留上述 OpenAI `choices[0].delta.content`／`[DONE]` 相容格式。
 - 等待／執行時每 15–20 秒至少 heartbeat 一次；桌面接收 idle timeout 為 60 秒。
-- `[DONE]` 前必須先保存完整結果。桌面不以 `[DONE]` 或部分 delta 當作已保存的完整回覆。
+- `done`／`[DONE]` 前必須先保存完整結果。桌面不以結束事件或部分 delta 當作已保存的完整回覆。
 - 可以送 `event: error` + JSON；同時將持久 task 設為 failed，讓斷線後查詢仍能得到錯誤。
-- 缺少 `[DONE]`、HTTP 中斷、格式錯誤或串流持續超過約 10 分鐘，桌面保留目前文字並轉 REST 查詢，**不自行重跑 AI**。
+- 缺少 `done`／`[DONE]`、HTTP 中斷、格式錯誤或串流持續超過約 10 分鐘，桌面保留目前文字、顯示中斷警示並轉 REST 查詢，**不自行重跑 AI**。部分回答以 incomplete 旗標保存到本機加密歷史；REST 取得完整結果後以相同 client_request_id 原位取代，不重複加入。任務失敗或停止追蹤仍保留已保存的部分回答。
 - stream disconnect 不取消 worker；server 必須把生成與 SSE 訂閱的生命週期分開。使用者想取消時需呼叫 cancel API。
 - 此版不要求 SSE Last-Event-ID／delta replay。重新開啟 App 後可以只顯示任務進度，完成後取得全文。
 

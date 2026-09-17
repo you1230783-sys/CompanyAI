@@ -33,8 +33,8 @@ impl Drop for ComApartment {
 
 /// 統一限制為讀取屬性或呼叫無副作用的方法；參數依 COM 規則反向排列。
 fn get(object: &IDispatch, name: &str, arguments: &mut [VARIANT]) -> AppResult<VARIANT> {
-    let name = wide(name);
-    let name_pointer = PCWSTR(name.as_ptr());
+    let wide_name = wide(name);
+    let name_pointer = PCWSTR(wide_name.as_ptr());
     let mut id = 0;
     let mut result = VARIANT::default();
     let params = DISPPARAMS {
@@ -59,7 +59,7 @@ fn get(object: &IDispatch, name: &str, arguments: &mut [VARIANT]) -> AppResult<V
             })
             .map_err(|e| {
                 format!(
-                    "Classic Outlook 無法讀取此欄位（{}）；請確認沒有等待回應的 Outlook 對話框。",
+                    "Classic Outlook 無法讀取 {name}（{}）；請確認沒有等待回應的 Outlook 對話框。",
                     e.code()
                 )
             })?;

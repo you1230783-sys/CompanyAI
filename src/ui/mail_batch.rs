@@ -13,6 +13,8 @@ pub(super) enum MailCommand {
     List {
         period: String,
         unread: bool,
+        #[serde(default)]
+        scope: batch::SearchScope,
     },
     Analyze {
         ids: Vec<String>,
@@ -58,7 +60,7 @@ impl Default for MailRuntime {
             operation: 0,
             cancel: Arc::new(AtomicBool::new(false)),
             phase: "idle",
-            status: "選取多封郵件，或依日期讀取預設收件匣。".into(),
+            status: "選取多封郵件，或選擇查詢範圍後依日期讀取。".into(),
             conversation: None,
             file_ids: vec![],
             summary: String::new(),
@@ -88,7 +90,11 @@ impl App {
                     self.work_command(work::WorkCommand::RemoveAttachment { id })?;
                 }
             }
-            MailCommand::List { period, unread } => {
+            MailCommand::List {
+                period,
+                unread,
+                scope,
+            } => {
                 if self.mail_flow.phase != "idle" {
                     return Err("請先停止目前郵件流程。".into());
                 }
@@ -110,15 +116,17 @@ impl App {
                             mails: (0..3)
                                 .map(|i| Mail {
                                     id: format!("demo_mail_{i}"),
+                                    folder: "本機模擬／分類郵件".into(),
                                     preview: outlook::demo_mail(false),
                                     store_id: "demo-store".into(),
                                 })
                                 .collect(),
                             scope: "本機模擬郵件".into(),
                             truncated: false,
+                            notice: String::new(),
                         })
                     } else {
-                        batch::list(&period, unread, &cancel)
+                        batch::list(&period, unread, scope, &cancel)
                     };
                     let _ = tx.send(Event::MailBatch(
                         generation,
@@ -262,9 +270,11 @@ impl App {
                 match result {
                     Ok(list) => {
                         self.mail_flow.status = format!(
-                            "已讀取 {} 封基本資訊；勾選後再分析。{}",
+                            "{}。已讀取 {} 封基本資訊；勾選後再分析。{}{}",
+                            list.scope,
                             list.mails.len(),
-                            if list.truncated {
+                            list.notice,
+                            if list.truncated && list.notice.is_empty() {
                                 "清單已截斷，請縮小範圍或在 Outlook 選取其他郵件。"
                             } else {
                                 ""

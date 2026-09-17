@@ -161,6 +161,12 @@ function actionButton(label, action) {
   button.onclick = action;
   return button;
 }
+function toolStatusNode(status) {
+  if (!status?.tool_name || !status?.status) return null;
+  const row = node("div", "tool-status", `${status.tool_name} · ${status.status}`);
+  row.setAttribute("role", "status");
+  return row;
+}
 function renderWork() {
   const work = state.work || {},
     files = work.attachments || [],
@@ -189,6 +195,7 @@ function renderWork() {
     (work.estimate
       ? timingLabel(work.estimate) + "（僅供參考）"
       : work.status || "");
+  $("timing-estimate").hidden = !$("timing-estimate").textContent;
   $("attachment-list").replaceChildren();
   for (const file of files) {
     const card = node("div", "attachment-card");
@@ -268,6 +275,8 @@ function renderWork() {
         card.append(progress);
       }
       if (task.message) card.append(node("p", "subtle", task.message));
+      const tool = toolStatusNode(task.tool_status);
+      if (tool) card.append(tool);
       const actions = node("div", "task-actions");
       actions.append(
         actionButton("開啟對話", () => {
@@ -316,14 +325,18 @@ function renderWork() {
     (t) => t.active && t.conversation_id === state.active_id,
   );
   const live = $("live-task");
-  const partial = current?.partial || "";
+  const savedPartial = current && state.messages.some((message) => message.request_id === current.id && message.role === "assistant" && message.incomplete);
+  const partial = savedPartial ? "" : current?.partial || "";
   const liveSignature = JSON.stringify([
     current?.id,
     current?.state,
     partial,
     current?.queue_position,
+    current?.tool_status,
+    current?.message,
   ]);
   if (live.dataset.signature !== liveSignature) {
+    const detailsOpen = live.querySelector(".answer-details")?.open;
     live.dataset.signature = liveSignature;
     live.replaceChildren();
     live.hidden = !current;
@@ -336,11 +349,14 @@ function renderWork() {
         ),
       );
       const bubble = node("div", "bubble markdown");
-      if (partial) bubble.innerHTML = renderMarkdown(partial);
+      const tool = toolStatusNode(current.tool_status);
+      if (tool) live.append(tool);
+      if (partial) bubble.innerHTML = renderAssistantReply(partial);
       else
         bubble.textContent = current.queue_position
           ? `正在排隊，順位 ${current.queue_position}。可切換對話，完成後會通知。`
-          : "正在等待伺服器，可切換對話或縮小到系統托盤。";
+          : current.message || "正在等待伺服器，可切換對話或縮小到系統托盤。";
+      if (detailsOpen) bubble.querySelector(".answer-details")?.setAttribute("open", "");
       live.append(bubble);
       if (stickToBottom) requestAnimationFrame(bottom);
     }

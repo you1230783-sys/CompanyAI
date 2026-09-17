@@ -1,5 +1,11 @@
 /* 只由 EXE --self-check 明確觸發；測試使用虛構資料，不讀帳號或 Outlook。 */
 "use strict";
+// 先於 app.js 載入，讓啟動錯誤能使自我檢查立即失敗，而不是只得到逾時。
+// 正常執行時 Rust 會忽略 self_test_result，不顯示或保存診斷內容。
+window.addEventListener("error", (event) => {
+  window.chrome?.webview?.postMessage({type: "self_test_result", ok: false,
+    detail: `UI script error: ${event.message} (${event.filename}:${event.lineno})`});
+});
 window.runSelfTest = async () => {
   const checks = [];
   function check(condition, name) {
@@ -275,6 +281,7 @@ window.runSelfTest = async () => {
           {
             id: "m1",
             subject: "測試一",
+            folder: "本機資料檔/<分類>",
             sender: "甲",
             to: "乙",
             received_at: "今天",
@@ -297,6 +304,38 @@ window.runSelfTest = async () => {
     check(
       document.querySelectorAll("[data-mail-period]").length === 6,
       "six Outlook date/unread presets",
+    );
+    check(
+      document.getElementById("batch-scope").value === "all_stores",
+      "Outlook defaults to loaded stores and subfolders",
+    );
+    // 攔截前端命令，驗證三個範圍的六種按鈕都帶對參數，不觸發真實 Outlook。
+    const originalMailSend = send;
+    const mailCommands = [];
+    try {
+      send = (command) => mailCommands.push(command);
+      for (const scope of ["all_stores", "current_folder", "inbox"]) {
+        document.getElementById("batch-scope").value = scope;
+        for (const button of document.querySelectorAll("[data-mail-period]")) {
+          button.click();
+          const command = mailCommands[mailCommands.length - 1].command;
+          check(
+            command.scope === scope &&
+              command.period === button.dataset.mailPeriod &&
+              command.unread === (button.dataset.unread === "true"),
+            "Outlook date command includes scope and unread filter",
+          );
+        }
+      }
+      check(mailCommands.length === 18, "all scope and date combinations dispatched");
+    } finally {
+      send = originalMailSend;
+      document.getElementById("batch-scope").value = "all_stores";
+    }
+    check(
+      document.getElementById("batch-mail-list").textContent.includes("本機資料檔/<分類>") &&
+        !document.querySelector("#batch-mail-list 分類"),
+      "Outlook source folder displayed as text",
     );
     check(
       document.querySelectorAll("#batch-mail-list input:checked").length === 2,
@@ -335,6 +374,57 @@ window.runSelfTest = async () => {
       }),
     );
     check(!settings.open, "settings backdrop dismiss");
+    for (const answer of [
+      "1. Answer\n主要回答。\n\n2. Key points\n重點。\n\n3. Sources\n來源內容。\n\n4. Confidence\nHigh\n\n5. Limitations\n限制內容。",
+      "## 1. Answer\n主要回答。\n\n## 2. Key points\n重點。\n\n## 3. Sources\n來源內容。\n\n## 4. Confidence\nHigh\n\n## 5. Limitations\n限制內容。",
+      "**Answer**\n\n主要回答。\n\n**Key points**\n\n重點。\n\n**Sources**\n\n來源內容。\n\n**Confidence**\n\nHigh\n\n**Limitations**\n\n限制內容。",
+    ]) {
+      const reply = document.createElement("div");
+      reply.innerHTML = LMUI.renderAssistantReply(answer);
+      const details = reply.querySelector("details.answer-details");
+      check(details && !details.open && details.textContent.includes("限制內容"), "structured answer secondary sections collapsed");
+      details.remove();
+      check(reply.textContent.includes("主要回答") && reply.textContent.includes("重點") && !reply.textContent.includes("來源內容"), "Answer and Key points stay visible");
+    }
+    check(!LMUI.renderAssistantReply("```text\n1. Answer\n2. Key points\n3. Sources\n```\n\n一般回覆。").includes("answer-details"), "code and ordinary replies are not folded");
+    check(document.querySelector(".attachment-help").hidden, "attachment help hidden while validation remains active");
+    check(document.querySelector(".topbar").getBoundingClientRect().height <= 50, "compact app header");
+
+    const originalSend = send;
+    const navigationCommands = [];
+    try {
+      send = (command) => navigationCommands.push(command);
+      LMUI.showView("chat");
+      navigationCommands.length = 0;
+      LMUI.showView("tasks");
+      LMUI.showView("tasks");
+      check(navigationCommands.length === 0, "entering or redrawing tasks does not clear");
+      LMUI.showView("notifications");
+      LMUI.showView("notifications");
+      check(navigationCommands.length === 1 && navigationCommands[0].command.action === "clear_completed", "leaving tasks clears completed cards once");
+      LMUI.showView("chat");
+      check(navigationCommands.length === 2 && navigationCommands[1].type === "notifications_left", "leaving notifications requests mark all read once");
+      document.getElementById("dark-mode").checked = true;
+      document.getElementById("dark-mode").dispatchEvent(new Event("change"));
+      check(navigationCommands[2].dark_mode === true, "dark preference sent for persistence");
+    } finally { send = originalSend; }
+    fixture.config.dark_mode = true;
+    LMUI.receive(fixture);
+    check(getComputedStyle(document.body).backgroundColor === "rgb(29, 37, 48)", "dark mode uses grey blue instead of black");
+    // 前面的附件測試已清空任務，這裡建立獨立的工具串流案例。
+    fixture.work.tasks = [{ id: "tool-task", conversation_id: fixture.active_id,
+      title: "工具測試", mode: "stream", state: "running", active: true, partial: "" }];
+    fixture.work.tasks[0].tool_status = { tool_name: "search_session_documents", status: "started" };
+    LMUI.receive(fixture);
+    check(document.querySelector("#live-task .tool-status")?.textContent === "search_session_documents · started", "tool status visible before first answer delta");
+    fixture.work.tasks[0].tool_status.status = "completed";
+    LMUI.receive(fixture);
+    check(document.querySelector("#live-task .tool-status")?.textContent.endsWith("completed"), "tool completion redraws without text delta");
+    fixture.messages.push({role: "assistant", content: "這是斷線前已收到的內容", incomplete: true});
+    LMUI.receive(fixture);
+    check(document.querySelector(".incomplete-warning")?.textContent.includes("回覆中斷") && document.getElementById("messages").textContent.includes("這是斷線前已收到的內容"), "interrupted answer and warning remain together");
+    fixture.config.dark_mode = false;
+    LMUI.receive(fixture);
     window.chrome?.webview?.postMessage({
       type: "self_test_result",
       ok: true,

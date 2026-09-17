@@ -11,6 +11,10 @@ resolver = "2"
 [profile.release]
 strip = "debuginfo"
 
+[dev-dependencies]
+# 記憶體 COM 回歸測試的 implement 巨集需要直接引用；與 windows 既有版本一致。
+windows-core = "=0.62.2"
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -22,6 +26,7 @@ sha2 = "0.10"
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    "Win32_Graphics_Dwm",
     "Win32_Networking_WinHttp",
     "Win32_Security_Cryptography",
     "Win32_System_LibraryLoader",

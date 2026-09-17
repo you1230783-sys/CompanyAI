@@ -36,6 +36,7 @@ pub struct Config {
     pub font_size: u8,
     pub sidebar_collapsed: bool,
     pub notification_popups: bool,
+    pub dark_mode: bool,
 }
 
 /// 只有個人偏好能落盤；舊版檔案中的網址、路由、Header 和 HTTP 欄位會被忽略。
@@ -47,6 +48,7 @@ struct Preferences {
     font_size: Option<u8>,
     sidebar_collapsed: bool,
     notification_popups: Option<bool>,
+    dark_mode: bool,
 }
 
 impl Serialize for Config {
@@ -57,6 +59,7 @@ impl Serialize for Config {
             font_size: Some(self.font_size),
             sidebar_collapsed: self.sidebar_collapsed,
             notification_popups: Some(self.notification_popups),
+            dark_mode: self.dark_mode,
         }
         .serialize(serializer)
     }
@@ -70,6 +73,7 @@ impl<'de> Deserialize<'de> for Config {
             font_size: saved.font_size.unwrap_or(14).clamp(12, 20),
             sidebar_collapsed: saved.sidebar_collapsed,
             notification_popups: saved.notification_popups.unwrap_or(true),
+            dark_mode: saved.dark_mode,
             ..Self::default()
         })
     }
@@ -89,6 +93,7 @@ impl Default for Config {
             font_size: 14,
             sidebar_collapsed: false,
             notification_popups: true,
+            dark_mode: false,
         }
     }
 }
@@ -224,7 +229,7 @@ mod tests {
         assert_eq!(config.model, "quality");
         assert_eq!(config.hotkey, "Ctrl+Shift+F8");
         let saved = serde_json::to_value(&config).unwrap();
-        assert_eq!(saved.as_object().unwrap().len(), 5);
+        assert_eq!(saved.as_object().unwrap().len(), 6);
         assert!(saved.get("server_url").is_none());
         assert!(Config::default().validate().is_ok());
     }
@@ -402,5 +407,17 @@ mod tests {
         assert_eq!(config.device_path, DEVICE_PATH);
         assert_eq!(config.token_path, TOKEN_PATH);
         config.validate().unwrap();
+    }
+
+    #[test]
+    fn dark_mode_round_trips_and_old_preferences_stay_light() {
+        assert!(!serde_json::from_str::<Config>("{}").unwrap().dark_mode);
+        let config = Config {
+            dark_mode: true,
+            ..Config::default()
+        };
+        let saved = serde_json::to_string(&config).unwrap();
+        assert!(serde_json::from_str::<Config>(&saved).unwrap().dark_mode);
+        assert!(!saved.contains(SERVER_URL));
     }
 }

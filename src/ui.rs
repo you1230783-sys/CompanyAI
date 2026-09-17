@@ -69,6 +69,8 @@ enum Command {
         font_size: u8,
         sidebar_collapsed: bool,
         notification_popups: bool,
+        #[serde(default)]
+        dark_mode: Option<bool>,
     },
     Hotkey {
         value: String,
@@ -98,6 +100,7 @@ enum Command {
     AllEvents {
         dismiss: bool,
     },
+    NotificationsLeft,
     ReadMail,
     ReadMailBody,
     OmitMailBody,
@@ -598,11 +601,16 @@ impl App {
                 font_size,
                 sidebar_collapsed,
                 notification_popups,
+                dark_mode,
             } => {
                 self.config.font_size = font_size.clamp(12, 20);
                 self.config.sidebar_collapsed = sidebar_collapsed;
                 self.config.notification_popups = notification_popups;
+                if let Some(dark_mode) = dark_mode {
+                    self.config.dark_mode = dark_mode;
+                }
                 storage::save_config(&self.root, &self.config)?;
+                apply_window_theme(self.window, self.config.dark_mode);
             }
             Command::Hotkey { value } => {
                 if let Err(message) = self.apply_hotkey(value) {
@@ -753,6 +761,14 @@ impl App {
                         }
                         let _ = tx.send(Event::AllRead(generation, failures));
                     });
+                }
+            }
+            Command::NotificationsLeft => {
+                if self.logged_in() {
+                    self.command(Command::AllEvents { dismiss: false })?;
+                    // 全站若正在讀取／標記單則通知，排隊到該操作完成後才送 ReadAll。
+                    self.site.read_all_pending = true;
+                    self.site_tick();
                 }
             }
             Command::RefreshEvents => {
@@ -1409,6 +1425,7 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
         if window.is_null() {
             return Err("無法建立視窗。".into());
         }
+        apply_window_theme(window, config.dark_mode);
         let view = WebView::create(window, &root.join("webview"), command_tx)?;
         let mut rect = RECT::default();
         GetClientRect(window, &mut rect);
@@ -1510,6 +1527,30 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
         }
         UnregisterClassW(name.as_ptr(), instance);
         result
+    }
+}
+/// Windows 11 標題列同步使用灰藍色；切回淺色時還原系統預設。
+fn apply_window_theme(window: HWND, dark: bool) {
+    use windows_sys::Win32::Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR,
+    };
+    // COLORREF 是 0x00BBGGRR，而不是 CSS 的 RGB 順序。
+    let background: u32 = if dark { 0x0030251d } else { 0xffffffff };
+    let foreground: u32 = if dark { 0x00efe9e3 } else { 0xffffffff };
+    unsafe {
+        // 外觀設定失敗不應阻止使用者聊天；WebView2 仍會套用自己的完整色票。
+        DwmSetWindowAttribute(
+            window,
+            DWMWA_CAPTION_COLOR as u32,
+            (&background as *const u32).cast(),
+            4,
+        );
+        DwmSetWindowAttribute(
+            window,
+            DWMWA_TEXT_COLOR as u32,
+            (&foreground as *const u32).cast(),
+            4,
+        );
     }
 }
 pub fn show_fatal_error(error: &str) {
