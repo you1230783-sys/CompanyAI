@@ -197,6 +197,13 @@
               <span data-icon="refresh"></span>重新整理
             </button>
           </div>
+          <div class="button-row">
+            <button id="read-all-events" class="secondary-button">
+              全部已讀</button
+            ><button id="clear-all-events" class="secondary-button">
+              全部刪除
+            </button>
+          </div>
           <div id="notification-list"></div>
         </section>
         <section id="outlook-view" class="view secondary-view" hidden>
@@ -213,9 +220,57 @@
             <span data-icon="shield"></span>
             <div>
               適用 Classic
-              Outlook。只讀取，不寄送、刪除、移動或變更已讀狀態。郵件內容不會自動傳送。
+              Outlook。只讀取，不寄送、刪除、移動或變更已讀狀態。確認前不傳送郵件；啟用自動補充後，僅依本批授權匯出及上傳。
             </div>
           </div>
+          <section class="mail-batch-panel">
+            <h3>多封郵件整理</h3>
+            <p class="subtle">
+              日期範圍使用本機時間與預設帳號收件匣；三天內含今天，本週從週一開始。每批最多
+              50 封。
+            </p>
+            <div class="button-row">
+              <button id="batch-selected" class="secondary-button">
+                讀取目前選取（可多封）
+              </button>
+            </div>
+            <div class="mail-presets">
+              <span>所有郵件</span
+              ><button data-mail-period="today" data-unread="false">今天</button
+              ><button data-mail-period="three_days" data-unread="false">
+                三天內</button
+              ><button data-mail-period="week" data-unread="false">本週</button>
+            </div>
+            <div class="mail-presets">
+              <span>只限未讀</span
+              ><button data-mail-period="today" data-unread="true">今天</button
+              ><button data-mail-period="three_days" data-unread="true">
+                三天內</button
+              ><button data-mail-period="week" data-unread="true">本週</button>
+            </div>
+            <p id="batch-status" role="status"></p>
+            <div class="button-row">
+              <button id="batch-select-all" class="text-button">
+                全選／全不選</button
+              ><span id="batch-selected-count"></span>
+            </div>
+            <div id="batch-mail-list"></div>
+            <label class="check-row"
+              ><input id="batch-auto-export" type="checkbox" checked />允許 AI
+              從本批勾選郵件要求 MSG，自動上傳正文、圖片及附件（最多 20
+              封，依模型規則）</label
+            >
+            <div class="button-row">
+              <button id="batch-analyze" class="primary-button">
+                確認範圍並分析</button
+              ><button id="batch-stop" class="secondary-button" disabled>
+                停止郵件流程</button
+              ><button id="batch-open" class="secondary-button" disabled>
+                開啟分析對話
+              </button>
+            </div>
+          </section>
+          <h3>單封手動預覽</h3>
           <div id="mail-preview" class="mail-preview">
             <div class="empty-small">
               先在 Outlook 選取一封郵件，再按「讀取選定郵件」。
@@ -315,7 +370,7 @@
         </section>
         <section>
           <h3>版本與服務</h3>
-          <p id="version-label">LM_AI 0.5.0</p>
+          <p id="version-label">LM_AI 0.6.0</p>
           <div class="button-row">
             <button id="refresh" class="secondary-button">
               <span data-icon="refresh"></span>重新整理服務</button
@@ -355,6 +410,7 @@
     <script src="icons.js"></script>
     <script src="app.js"></script>
     <script src="work.js"></script>
+    <script src="mail.js"></script>
     <script src="self-test.js"></script>
   </body>
 </html>

@@ -274,26 +274,49 @@ function renderModels() {
 }
 function renderNotifications() {
   $("notification-status").textContent =
-    state.notification_status || "登入後同步網站通知";
+    `網站：${state.site_status || "等待同步"} · AI：${state.notification_status || "等待同步"}`;
   $("unread-badge").textContent = state.unread_count || 0;
   $("unread-badge").hidden = !state.unread_count;
   const list = $("notification-list");
   list.replaceChildren();
   for (const event of state.notifications) {
+    const isRead = event.source === "site" ? event.is_read : !!event.read_at;
     const card = node(
       "article",
-      "notification-card" + (!event.read_at ? " unread" : ""),
+      "notification-card" + (!isRead ? " unread" : ""),
     );
     const symbol = node("div", "avatar");
     symbol.innerHTML = icon("bell");
     const content = node("div", "event-content");
     content.append(
+      node(
+        "span",
+        "subtle",
+        event.source === "site" ? `網站 · ${event.origin || "全站"}` : "AI",
+      ),
       node("h3", "", event.title),
       node("p", "", event.summary),
-      node("time", "", new Date(event.created_at).toLocaleString("zh-TW")),
+      node(
+        "time",
+        "subtle",
+        new Date(event.created_at).toLocaleString("zh-TW"),
+      ),
     );
     card.append(symbol, content);
-    if (!event.read_at) {
+    if (event.source === "site") {
+      const button = node(
+        "button",
+        "secondary-button",
+        event.url ? "開啟通知" : isRead ? "已讀" : "標為已讀",
+      );
+      button.disabled = !!state.site_mutating || (isRead && !event.url);
+      button.onclick = () =>
+        send({
+          type: "site_action",
+          command: { action: "read", id: event.id, open: !!event.url },
+        });
+      card.append(button);
+    } else if (!isRead) {
       const read = node("button", "secondary-button", "標為已讀");
       read.dataset.event = event.id;
       card.append(read);
@@ -309,7 +332,9 @@ function renderNotifications() {
       ),
     );
   $("refresh-notifications").disabled =
-    !state.logged_in || state.notifications_loading;
+    !state.logged_in || state.notifications_loading || state.site_loading;
+  $("read-all-events").disabled = !state.logged_in || state.site_mutating;
+  $("clear-all-events").disabled = !state.logged_in || state.site_mutating;
 }
 function renderMail() {
   const mail = state.mail;
@@ -401,6 +426,7 @@ function receive(next) {
   renderMail();
   showView(activeView);
   window.WorkUI?.render();
+  window.MailUI?.render();
   if (next.focus_draft) {
     showView("chat");
     $("prompt").focus();
@@ -718,3 +744,39 @@ window.LMUI = {
     stickToBottom = value;
   },
 };
+
+// 只處理真正的背景點擊，點內容留白或從內容拖到外面不誤關閉。
+let settingsBackdropDown = false;
+function outsideSettings(event) {
+  const dialog = $("settings-dialog"),
+    box = dialog.getBoundingClientRect();
+  return (
+    event.target === dialog &&
+    (event.clientX < box.left ||
+      event.clientX > box.right ||
+      event.clientY < box.top ||
+      event.clientY > box.bottom)
+  );
+}
+$("settings-dialog").addEventListener("pointerdown", (event) => {
+  settingsBackdropDown = outsideSettings(event);
+});
+$("settings-dialog").addEventListener("click", (event) => {
+  if (settingsBackdropDown && outsideSettings(event))
+    $("settings-dialog").close();
+  settingsBackdropDown = false;
+});
+
+$("read-all-events").onclick = () => {
+  send({ type: "all_events", dismiss: false });
+  send({ type: "site_action", command: { action: "read_all" } });
+};
+$("clear-all-events").onclick = () =>
+  ask(
+    "刪除全站通知並清除 AI 通知？",
+    "會透過網站 API 刪除你目前的全站鈴鐺通知，網站也會同步移除；AI 通知僅從本機清除，對話與任務保留。網站操作失敗時會保留全站通知。",
+    () => {
+      send({ type: "all_events", dismiss: true });
+      send({ type: "site_action", command: { action: "delete_all" } });
+    },
+  );

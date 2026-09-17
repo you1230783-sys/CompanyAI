@@ -28,6 +28,8 @@ pub struct Notification {
     pub resource_id: Option<String>,
     #[serde(default)]
     pub read_at: Option<String>,
+    #[serde(default)]
+    pub dismissed: bool,
 }
 fn timestamp(value: &str) -> AppResult<i64> {
     DateTime::parse_from_rfc3339(value)
@@ -58,6 +60,18 @@ impl Notification {
         }
         Ok(())
     }
+    /// AI 只呈現成功回覆／失敗；其他事件仍合併游標供工作喚醒使用。
+    pub fn visible_ai(&self) -> bool {
+        matches!(
+            self.kind.as_str(),
+            "chat.completed"
+                | "chat.failed"
+                | "task.completed"
+                | "task.failed"
+                | "ai.completed"
+                | "ai.failed"
+        )
+    }
     pub fn expired(&self) -> bool {
         self.expires_at
             .as_deref()
@@ -86,10 +100,23 @@ impl Inbox {
             ..Self::default()
         }
     }
+    /// 僅隱藏本機通知，不刪除網站資料。保留 ID 以攔住延遲重播。
+    pub fn mark_all(&mut self, dismiss: bool) -> Vec<String> {
+        let now = now_text();
+        let mut ids = Vec::new();
+        for event in &mut self.events {
+            if !event.dismissed && !event.expired() {
+                ids.push(event.id.clone());
+                event.read_at = Some(now.clone());
+                event.dismissed |= dismiss;
+            }
+        }
+        ids
+    }
     pub fn unread_count(&self) -> usize {
         self.events
             .iter()
-            .filter(|e| e.read_at.is_none() && !e.expired())
+            .filter(|e| e.read_at.is_none() && !e.dismissed && !e.expired() && e.visible_ai())
             .count()
     }
     /// 合併完成並成功落盤後，呼叫端才採用游標；重複補查不會產生第二份通知。
@@ -110,6 +137,7 @@ impl Inbox {
                 if event.read_at.is_none() {
                     event.read_at = existing.read_at.clone();
                 }
+                event.dismissed |= existing.dismissed;
                 *existing = event;
             } else {
                 if !event.expired() && event.read_at.is_none() {
@@ -222,6 +250,7 @@ mod tests {
             expires_at: None,
             resource_id: None,
             read_at: None,
+            dismissed: false,
         }
     }
     #[test]
@@ -250,6 +279,18 @@ mod tests {
             0
         );
         assert_eq!(inbox.events.len(), 1);
+        assert_eq!(inbox.unread_count(), 0);
+        inbox.mark_all(true);
+        let mut replay = event();
+        replay.kind = "chat.completed".into();
+        inbox
+            .merge(EventPage {
+                events: vec![replay],
+                next_cursor: Some("c2".into()),
+                has_more: false,
+            })
+            .unwrap();
+        assert!(inbox.events[0].dismissed);
         assert_eq!(inbox.unread_count(), 0);
         assert!(inbox
             .merge(EventPage {

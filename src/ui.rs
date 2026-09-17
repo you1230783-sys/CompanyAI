@@ -32,6 +32,8 @@ use windows_sys::Win32::{
     System::LibraryLoader::GetModuleHandleW,
     UI::{HiDpi::*, Shell::*, WindowsAndMessaging::*},
 };
+mod mail_batch;
+mod site;
 mod work;
 const TRAY_MESSAGE: u32 = WM_APP + 4;
 
@@ -39,6 +41,12 @@ const TRAY_MESSAGE: u32 = WM_APP + 4;
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Command {
+    SiteAction {
+        command: crate::site_notifications::Action,
+    },
+    MailBatch {
+        command: mail_batch::MailCommand,
+    },
     Work {
         command: work::WorkCommand,
     },
@@ -87,6 +95,9 @@ enum Command {
     ReadEvent {
         id: String,
     },
+    AllEvents {
+        dismiss: bool,
+    },
     ReadMail,
     ReadMailBody,
     OmitMailBody,
@@ -100,6 +111,8 @@ enum Command {
     },
 }
 enum Event {
+    Site(u64, site::SiteEvent),
+    MailBatch(u64, u64, mail_batch::MailEvent),
     Work(u64, work::WorkEvent),
     Services(
         u64,
@@ -114,8 +127,11 @@ enum Event {
     Events(u64, AppResult<notifications::EventPage>),
     Read(u64, String, AppResult<()>),
     Socket(u64, bool),
+    AllRead(u64, usize),
 }
 struct App {
+    site: site::SiteRuntime,
+    mail_flow: mail_batch::MailRuntime,
     work: work::WorkRuntime,
     window: HWND,
     view: WebView,
@@ -162,6 +178,7 @@ struct App {
 }
 impl Drop for App {
     fn drop(&mut self) {
+        self.mail_flow.cancel.store(true, Ordering::Relaxed);
         self.cancelled.store(true, Ordering::Relaxed);
         self.socket_cancel.store(true, Ordering::Relaxed);
         selection::unregister(self.window);
@@ -169,6 +186,10 @@ impl Drop for App {
     }
 }
 impl App {
+    /// WebView 子視窗與主視窗視為同一個前景 App。
+    fn is_foreground(&self) -> bool {
+        unsafe { GetAncestor(GetForegroundWindow(), GA_ROOT) == self.window }
+    }
     fn logged_in(&self) -> bool {
         self.session
             .as_ref()
@@ -204,14 +225,27 @@ impl App {
             .iter()
             .map(|c| json!({"id":c.id,"title":c.title,"updated_at":c.updated_at}))
             .collect();
-        let events: Vec<_> = self.inbox.events.iter().filter(|e| !e.expired()).collect();
+        let mut events:Vec<serde_json::Value>=self.inbox.events.iter().filter(|e|!e.expired()&&!e.dismissed&&e.visible_ai()).map(|e|json!({
+            "id":e.id,"source":"ai","type":e.kind,"title":e.title,"summary":e.summary,"created_at":e.created_at,"read_at":e.read_at,"notification_key":format!("ai:{}",e.id)
+        })).collect();
+        events.extend(self.site.cache.items.iter().map(|e|json!({"id":e.id,"source":"site","origin":e.source,"type":e.kind,"title":e.title,"summary":e.body,"created_at":e.created_at,"read_at":if e.is_read{Some(e.read_at.clone().unwrap_or_default())}else{None},"is_read":e.is_read,"url":e.url,"resource_id":e.resource_id,"received_at":e.received_at,"notification_key":format!("site:{}",e.id)})));
+        events.sort_by(|a, b| {
+            b["created_at"]
+                .as_str()
+                .cmp(&a["created_at"].as_str())
+                .then_with(|| {
+                    a["notification_key"]
+                        .as_str()
+                        .cmp(&b["notification_key"].as_str())
+                })
+        });
         let _=self.view.post(&json!({"type":"state","state":{
             "version":service::CURRENT_VERSION,"config":self.config,"status":self.status,"error":self.error,
             "busy":self.busy,"logged_in":self.logged_in(),"can_send":self.can_send(),"update_required":self.versions.blocked(),
             "models":models,"conversations":conversations,"active_id":self.active_id,"messages":self.messages,
             "draft":self.draft,"draft_revision":self.draft_revision,"focus_draft":self.focus_draft,
-            "notifications":events,"notification_status":self.notification_status,"unread_count":self.inbox.unread_count(),"notifications_loading":self.notifications_loading,
-            "mail":self.mail,"mail_busy":self.mail_busy,"history_error":self.history_error,
+            "notifications":events,"notification_status":self.notification_status,"unread_count":self.inbox.unread_count()+self.site.cache.unread_count,"site_status":self.site.status,"site_loading":self.site.loading,"site_mutating":self.site.mutating,"notifications_loading":self.notifications_loading,
+            "mail":self.mail,"mail_busy":self.mail_busy,"mail_batch":self.mail_batch_state(),"history_error":self.history_error,
             "work":self.work_state(),"version_status":self.version_status,"login_code":self.grant.as_ref().map(|g|&g.user_code)
         }}));
         self.focus_draft = false;
@@ -328,6 +362,7 @@ impl App {
         });
     }
     fn start_notifications(&mut self) {
+        self.start_site();
         self.socket_cancel.store(true, Ordering::Relaxed);
         self.socket_cancel = Arc::new(AtomicBool::new(false));
         let Some(session) = self.session.clone().filter(|s| s.valid_for(&self.config)) else {
@@ -395,6 +430,8 @@ impl App {
         }
     }
     fn logout(&mut self) -> AppResult<()> {
+        self.site = site::SiteRuntime::default();
+        self.mail_flow = mail_batch::MailRuntime::default();
         self.cancelled.store(true, Ordering::Relaxed);
         self.socket_cancel.store(true, Ordering::Relaxed);
         self.generation += 1;
@@ -505,6 +542,8 @@ impl App {
     }
     fn command(&mut self, command: Command) -> AppResult<()> {
         match command {
+            Command::SiteAction { command } => self.site_action(command)?,
+            Command::MailBatch { command } => self.mail_batch_command(command)?,
             Command::Work { command } => self.work_command(command)?,
             Command::StartHotkeyRecording => {
                 if let Err(message) = self.start_recording() {
@@ -592,7 +631,12 @@ impl App {
                         .as_ref()
                         .is_some_and(|c| c.models.iter().any(|m| m.id == id))
                 {
+                    if self.mail_flow.phase != "idle" {
+                        return Err("請先停止郵件流程再切換模型。".into());
+                    }
                     self.config.model = id;
+                    self.work.status = "正在重新確認此模型的附件規則…".into();
+                    self.refresh_work_capabilities();
                     self.work.estimate = None;
                     self.work.estimate_revision += 1;
                     storage::save_config(&self.root, &self.config)?;
@@ -612,6 +656,11 @@ impl App {
                 }
             }
             Command::DeleteChat { id } => {
+                if self.mail_flow.phase != "idle"
+                    && self.mail_flow.conversation.as_ref() == Some(&id)
+                {
+                    return Err("請先停止郵件流程，再刪除對話。".into());
+                }
                 if self.work.store.pending(Some(&id))
                     || self.work.incoming.is_some()
                     || self
@@ -681,7 +730,35 @@ impl App {
                     self.refresh_services();
                 }
             }
-            Command::RefreshEvents => self.fetch_events(),
+            Command::AllEvents { dismiss } => {
+                let mut inbox = self.inbox.clone();
+                let ids = inbox.mark_all(dismiss);
+                notifications::save(&self.root, &inbox)?;
+                self.inbox = inbox;
+                self.notification_status = if dismiss {
+                    "已清除本機通知"
+                } else {
+                    "已在本機全部標為已讀"
+                }
+                .into();
+                if let Some(session) = self.session.clone() {
+                    let (config, tx, generation) =
+                        (self.config.clone(), self.tx.clone(), self.generation);
+                    thread::spawn(move || {
+                        let mut failures = 0;
+                        for id in ids {
+                            if notifications::mark_read(&config, &session, &id).is_err() {
+                                failures += 1;
+                            }
+                        }
+                        let _ = tx.send(Event::AllRead(generation, failures));
+                    });
+                }
+            }
+            Command::RefreshEvents => {
+                self.fetch_events();
+                self.fetch_site(true);
+            }
             Command::ReadEvent { id } => {
                 if !self.inbox.events.iter().any(|e| e.id == id) {
                     return Err("找不到通知。".into());
@@ -717,6 +794,14 @@ impl App {
     }
     fn event(&mut self, event: Event) -> AppResult<()> {
         match event {
+            Event::Site(generation, event) if generation == self.generation => {
+                self.site_event(event)?
+            }
+            Event::MailBatch(generation, operation, event)
+                if generation == self.generation && operation == self.mail_flow.operation =>
+            {
+                self.mail_batch_event(event)?
+            }
             Event::Work(generation, event) if generation == self.generation => {
                 self.work_event(event)?
             }
@@ -746,6 +831,9 @@ impl App {
                         self.config.model =
                             c.models[c.selected_index(&self.config.model)].id.clone();
                         self.models = Some(c);
+                        if self.work.capability_model != self.config.model {
+                            self.refresh_work_capabilities();
+                        }
                     }
                     Err(e) => {
                         self.models = None;
@@ -810,6 +898,8 @@ impl App {
                             self.set_draft(last.content);
                         }
                         if outcome.unauthorized {
+                            self.mail_flow = mail_batch::MailRuntime::default();
+                            self.site = site::SiteRuntime::default();
                             self.session = None;
                             self.work = work::WorkRuntime::default();
                             self.generation += 1;
@@ -859,15 +949,29 @@ impl App {
             }
             Event::Socket(generation, connected) if generation == self.generation => {
                 self.poll_work(true);
+                self.fetch_site(true);
                 if connected {
                     self.notification_status = "即時通知已連線".into();
                 }
                 self.fetch_events();
             }
+            Event::AllRead(generation, failures) if generation == self.generation => {
+                self.notification_status = if failures == 0 {
+                    "本機已讀／清除完成，已同步網站已讀狀態".into()
+                } else {
+                    format!("本機操作已完成；{failures} 則網站已讀同步失敗，可再次按全部已讀重試。")
+                };
+            }
             Event::Events(generation, result) if generation == self.generation => {
                 self.notifications_loading = false;
                 match result {
-                    Ok(page) => {
+                    Ok(mut page) => {
+                        // 使用者正在 App 時靜默接收，不加未讀標示或系統氣泡。
+                        if self.is_foreground() {
+                            for event in &mut page.events {
+                                event.read_at = Some(notifications::now_text());
+                            }
+                        }
                         let more = page.has_more;
                         let mut inbox = self.inbox.clone();
                         // 任務完成提示由結果落盤後統一發出，避免 REST 事件與任務輪詢各提示一次。
@@ -875,7 +979,8 @@ impl App {
                             .events
                             .iter()
                             .filter(|e| {
-                                !e.kind.starts_with("chat.")
+                                e.visible_ai()
+                                    && !e.kind.starts_with("chat.")
                                     && !e.kind.starts_with("attachment.")
                                     && !self.inbox.events.iter().any(|old| old.id == e.id)
                                     && e.read_at.is_none()
@@ -886,7 +991,7 @@ impl App {
                         notifications::save(&self.root, &inbox)?;
                         self.inbox = inbox;
                         self.notification_status = "通知已同步；即時通道與定期補查並行".into();
-                        if added > 0 && self.config.notification_popups {
+                        if added > 0 && self.config.notification_popups && !self.is_foreground() {
                             self.work.task_balloon = false;
                             tray(
                                 self.window,
@@ -919,7 +1024,15 @@ impl App {
         Ok(())
     }
     fn tick(&mut self) {
-        let mut changed = false;
+        let mut changed = self.site_tick();
+        match self.mail_batch_tick() {
+            Ok(updated) => changed |= updated,
+            Err(e) => {
+                self.mail_flow.phase = "idle";
+                self.mail_flow.status = format!("自動流程已暫停：{e} 附件保留，可在對話手動送出。");
+                changed = true;
+            }
+        }
         if self.suppress_hotkey && crate::hotkey::pressed_modifiers() == 0 {
             self.suppress_hotkey = false;
         }
@@ -1285,6 +1398,8 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
         GetClientRect(window, &mut rect);
         view.resize(rect.right, rect.bottom);
         let mut app = App {
+            site: site::SiteRuntime::default(),
+            mail_flow: mail_batch::MailRuntime::default(),
             work: work::WorkRuntime::default(),
             window,
             view,

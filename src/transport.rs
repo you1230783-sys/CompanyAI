@@ -231,7 +231,7 @@ pub fn watch_notifications(
     Ok(())
 }
 
-fn request_method(
+pub(crate) fn request_method(
     url: &Url,
     method: &str,
     content_type: &str,

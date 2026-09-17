@@ -57,6 +57,7 @@ const workLabels = {
   completed: "已完成",
   failed: "失敗",
   cancelled: "已取消",
+  stopped: "已停止追蹤",
 };
 async function addFiles(files) {
   if (fileBatchBusy) {
@@ -288,6 +289,25 @@ function renderWork() {
             workCommand({ action: "retry_task", id: task.id }),
           ),
         );
+      if (task.active)
+        actions.append(
+          actionButton("停止追蹤", () =>
+            ask(
+              "停止追蹤這個任務？",
+              "立即解除本機等待並嘗試取消伺服器工作。404 或離線也能停止；無法保證伺服器已停止執行。",
+              () => workCommand({ action: "stop_task", id: task.id }),
+            ),
+          ),
+        );
+      actions.append(
+        actionButton("移除任務", () =>
+          ask(
+            "移除本機任務？",
+            "保留對話內容，停止追蹤並移除任務卡片。若工作尚未完成，會嘗試取消；這不會刪除伺服器資料。",
+            () => workCommand({ action: "remove_task", id: task.id }),
+          ),
+        ),
+      );
       card.append(actions);
       $("task-list").append(card);
     }

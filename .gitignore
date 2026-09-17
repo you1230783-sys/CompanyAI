@@ -15,3 +15,6 @@ notifications.dpapi
 settings.json
 jobs-*.dpapi
 /uploads/
+
+site-notifications.dpapi
+/outlook-exports/

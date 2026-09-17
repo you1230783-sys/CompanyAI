@@ -44,6 +44,7 @@ pub(super) fn serve_work(
     body: &[u8],
     owner: Option<&str>,
     state: &mut DemoWork,
+    model: &str,
 ) -> AppResult<bool> {
     let prefix = crate::jobs::PREFIX;
     let json_body: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
@@ -68,7 +69,15 @@ pub(super) fn serve_work(
     };
     let mut code = 200;
     let result = if method == "GET" && route == format!("{prefix}/capabilities") {
-        json!({"contract_version":1,"principal_id":format!("demo_{owner}"),"execution_modes":["sync","stream","background"],"timing_estimates":true,"attachments":{"enabled":true,"max_count":20,"max_file_bytes":10485760,"max_total_bytes":52428800,"allowed_extensions":[".pdf",".docx",".xlsx",".pptx",".txt",".md",".csv",".png",".jpg",".jpeg",".webp"],"allowed_mime_types":[]}})
+        let extensions = if model == "text_only" {
+            vec![".pdf", ".docx", ".txt", ".md", ".msg"]
+        } else {
+            vec![
+                ".pdf", ".docx", ".xlsx", ".pptx", ".txt", ".md", ".csv", ".png", ".jpg", ".jpeg",
+                ".webp", ".msg",
+            ]
+        };
+        json!({"contract_version":1,"principal_id":format!("demo_{owner}"),"execution_modes":["sync","stream","background"],"timing_estimates":true,"attachments":{"enabled":true,"max_count":20,"max_file_bytes":10485760,"max_total_bytes":52428800,"allowed_extensions":extensions,"allowed_mime_types":[]}})
     } else if method == "POST" && route == format!("{prefix}/conversations") {
         let local = json_body["client_conversation_id"]
             .as_str()

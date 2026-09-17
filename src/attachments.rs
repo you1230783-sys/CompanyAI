@@ -205,10 +205,17 @@ impl Incoming {
             return Err("附件區塊順序不正確。".into());
         }
         let bytes = decode_chunk(encoded)?;
-        if bytes.is_empty() || self.received + bytes.len() as u64 > self.expected {
+        self.append_bytes(&bytes)
+    }
+    /// 原生 Outlook 匯出走同樣的有界加密區塊，不經 WebView 傳本機路徑。
+    pub fn append_bytes(&mut self, bytes: &[u8]) -> AppResult<()> {
+        if bytes.is_empty()
+            || bytes.len() > CHUNK_BYTES
+            || self.received + bytes.len() as u64 > self.expected
+        {
             return Err("附件區塊大小不正確。".into());
         }
-        let encrypted = storage::protect(&bytes, true)?;
+        let encrypted = storage::protect(bytes, true)?;
         self.file
             .write_all(&(encrypted.len() as u32).to_le_bytes())
             .and_then(|()| self.file.write_all(&encrypted))

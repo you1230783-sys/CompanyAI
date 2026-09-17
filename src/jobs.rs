@@ -139,7 +139,16 @@ impl Task {
     pub fn active(&self) -> bool {
         !self.applied
     }
+    pub fn stop_tracking(&mut self) {
+        self.applied = true;
+        self.partial.clear();
+        self.request = json!({});
+        self.message = "已停止本機追蹤；不保證伺服器工作已取消。".into();
+    }
     pub fn apply_status(&mut self, status: TaskStatus) -> AppResult<()> {
+        if !self.active() {
+            return Ok(());
+        }
         status.validate()?;
         if status.client_request_id != self.request_id
             || self
@@ -352,7 +361,18 @@ pub fn post<T: DeserializeOwned>(
     )
 }
 pub fn capabilities(config: &Config, session: &Session) -> AppResult<Capabilities> {
-    let cap: Capabilities = get(config, session, &format!("{PREFIX}/capabilities"))?;
+    if !session.valid_for(config) {
+        return Err("請先登入。".into());
+    }
+    let mut url = config.endpoint(&format!("{PREFIX}/capabilities"))?;
+    url.query_pairs_mut().append_pair("model", &config.model);
+    let cap: Capabilities = decode(
+        transport::get(
+            &url,
+            Some(("Authorization", &format!("Bearer {}", session.access_token))),
+        )?,
+        session,
+    )?;
     cap.validate()?;
     Ok(cap)
 }
@@ -481,8 +501,27 @@ pub fn submit(
     config: &Config,
     session: &Session,
     task: &Task,
+    update: impl FnMut(StreamUpdate),
+) -> AppResult<()> {
+    submit_cancellable(
+        config,
+        session,
+        task,
+        &std::sync::atomic::AtomicBool::new(false),
+        update,
+    )
+}
+/// 停止本機串流時在下一個資料／heartbeat 邊界結束；不宣稱取消 server 工作。
+pub fn submit_cancellable(
+    config: &Config,
+    session: &Session,
+    task: &Task,
+    cancel: &std::sync::atomic::AtomicBool,
     mut update: impl FnMut(StreamUpdate),
 ) -> AppResult<()> {
+    if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+        return Err("已停止本機接收。".into());
+    }
     if !session.valid_for(config) {
         return Err("請重新登入後接續任務。".into());
     }
@@ -495,6 +534,9 @@ pub fn submit(
     let mut parser = SseDecoder::default();
     let mut total = 0;
     let mut callback = |bytes: &[u8]| {
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err("已停止本機接收。".into());
+        }
         parser.push(bytes, |event, data| {
             let value: Value = serde_json::from_str(data).map_err(|_| "串流 JSON 格式不正確。")?;
             match event {

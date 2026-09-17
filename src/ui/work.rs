@@ -41,13 +41,19 @@ pub(super) enum WorkCommand {
     CancelTask {
         id: String,
     },
+    StopTask {
+        id: String,
+    },
+    RemoveTask {
+        id: String,
+    },
     RetryTask {
         id: String,
     },
     Refresh,
 }
 pub(super) enum WorkEvent {
-    Capabilities(AppResult<Capabilities>),
+    Capabilities(String, AppResult<Capabilities>),
     Reserved(String, AppResult<(String, AttachmentStatus)>),
     Uploaded(String, AppResult<AttachmentStatus>),
     Attachment(String, AppResult<AttachmentStatus>),
@@ -60,6 +66,7 @@ pub(super) enum WorkEvent {
 }
 pub(super) struct WorkRuntime {
     pub caps: Option<Capabilities>,
+    pub capability_model: String,
     pub store: WorkStore,
     pub incoming: Option<Incoming>,
     pub mode: String,
@@ -68,6 +75,7 @@ pub(super) struct WorkRuntime {
     pub estimate_revision: u64,
     pub uploads: HashSet<String>,
     pub streams: HashSet<String>,
+    pub cancellations: std::collections::HashMap<String, Arc<AtomicBool>>,
     pub polling: bool,
     pub last_poll: Instant,
     pub poll_delay: u64,
@@ -79,6 +87,7 @@ impl Default for WorkRuntime {
     fn default() -> Self {
         Self {
             caps: None,
+            capability_model: String::new(),
             store: WorkStore::default(),
             incoming: None,
             mode: "sync".into(),
@@ -87,6 +96,7 @@ impl Default for WorkRuntime {
             estimate_revision: 0,
             uploads: HashSet::new(),
             streams: HashSet::new(),
+            cancellations: Default::default(),
             polling: false,
             last_poll: Instant::now(),
             poll_delay: 5,
@@ -106,13 +116,13 @@ impl App {
         })).collect();
         let tasks:Vec<_>=self.work.store.tasks.iter().rev().map(|t|json!({
             "id":t.request_id,"conversation_id":t.conversation_id,"title":t.title,"mode":t.mode,"created_at":t.created_at,
-            "state":t.remote.as_ref().map(|r|r.state.as_str()).unwrap_or("submitting"),"active":t.active(),"message":t.message,
+            "state":if t.applied && !t.remote.as_ref().is_some_and(TaskStatus::terminal){"stopped"}else{t.remote.as_ref().map(|r|r.state.as_str()).unwrap_or("submitting")},"active":t.active(),"message":t.message,
             "progress":t.remote.as_ref().and_then(|r|r.progress),"queue_position":t.remote.as_ref().and_then(|r|r.queue_position),
             "timing":t.remote.as_ref().map(|r|&r.timing),"partial":if Some(&t.conversation_id)==self.active_id.as_ref(){t.partial.as_str()}else{""},
-            "can_retry":t.remote.is_none()&&!self.work.streams.contains(&t.request_id)
+            "can_retry":t.active()&&t.remote.is_none()&&!self.work.streams.contains(&t.request_id)
         })).collect();
         // 身分代號、附件 Token 與完整請求不傳入 WebView2。
-        json!({"attachments":attachments,"tasks":tasks,"rules":self.work.caps.as_ref().map(|c|&c.attachments),
+        json!({"attachments":attachments,"tasks":tasks,"rules":self.work.caps.as_ref().filter(|_|self.work.capability_model == self.config.model && !self.work.capability_loading).map(|c|&c.attachments),
             "modes":self.work.caps.as_ref().map(|c|&c.execution_modes),"mode":self.work.mode,"status":self.work.status,
             "draft_error":self.check_draft_files().err(),"estimate":self.work.estimate,"can_estimate":self.work.caps.as_ref().is_some_and(|c|c.timing_estimates),
             "pending":self.work.store.pending(self.active_id.as_deref()),"transferring":self.work.incoming.is_some()})
@@ -127,10 +137,56 @@ impl App {
         }
         Ok(())
     }
+    /// 本機停止不依賴取消 API 成功；404／離線也能解除對話鎖定。
+    fn stop_local_task(&mut self, id: &str, remove: bool) -> AppResult<()> {
+        let task = self
+            .work
+            .store
+            .tasks
+            .iter()
+            .find(|t| t.request_id == id)
+            .cloned()
+            .ok_or("找不到任務。")?;
+        let mut next = self.work.store.clone();
+        if remove {
+            next.tasks.retain(|t| t.request_id != id);
+        } else if let Some(saved) = next.tasks.iter_mut().find(|t| t.request_id == id) {
+            saved.stop_tracking();
+        }
+        next.save(&self.root, &self.config)?;
+        self.work.store = next;
+        if let Some(cancel) = self.work.cancellations.remove(id) {
+            cancel.store(true, Ordering::Relaxed);
+        }
+        self.work.streams.remove(id);
+        if task.active() {
+            if let Some(session) = self.session.clone() {
+                let config = self.config.clone();
+                thread::spawn(move || {
+                    // 回應遺失時先用原 request_id 找回；失敗不影響本機移除。
+                    if let Ok(remote) = jobs::task_status(&config, &session, &task) {
+                        if !remote.terminal() {
+                            let _: AppResult<TaskStatus> = jobs::post(
+                                &config,
+                                &session,
+                                &format!("{}/tasks/{}/cancel", jobs::PREFIX, remote.task_id),
+                                &json!({}),
+                            );
+                        }
+                    }
+                });
+            }
+        }
+        self.status = "已停止本機追蹤；伺服器取消會另行嘗試，對話內容保留。".into();
+        Ok(())
+    }
     fn check_draft_files(&self) -> AppResult<()> {
         let files = self.work.store.drafts(self.active_id.as_deref());
         if files.is_empty() {
             return Ok(());
+        }
+        if self.work.capability_model != self.config.model {
+            return Err("正在確認目前模型可用的附件格式。".into());
         }
         let cap = self
             .work
@@ -148,7 +204,14 @@ impl App {
         Ok(())
     }
     pub(super) fn work_ready(&self) -> bool {
-        !self.work.storage_error
+        if self.mail_flow.phase != "idle"
+            && self.mail_flow.conversation == self.active_id
+            && self.active_id.is_some()
+        {
+            return false;
+        }
+        !self.work.capability_loading
+            && !self.work.storage_error
             && self.work.incoming.is_none()
             && !self.work.store.pending(self.active_id.as_deref())
             && self.check_draft_files().is_ok()
@@ -174,7 +237,10 @@ impl App {
             thread::spawn(move || {
                 let _ = tx.send(Event::Work(
                     generation,
-                    WorkEvent::Capabilities(jobs::capabilities(&config, &session)),
+                    WorkEvent::Capabilities(
+                        config.model.clone(),
+                        jobs::capabilities(&config, &session),
+                    ),
                 ));
             });
         }
@@ -187,7 +253,11 @@ impl App {
                 mime_type,
             } => {
                 let result = (|| {
-                    if !self.logged_in()
+                    if (self.mail_flow.phase != "idle"
+                        && self.mail_flow.conversation == self.active_id)
+                        || self.work.capability_loading
+                        || self.work.capability_model != self.config.model
+                        || !self.logged_in()
                         || self.versions.blocked()
                         || self.busy != "none"
                         || self.work.incoming.is_some()
@@ -389,6 +459,8 @@ impl App {
                     let _ = tx.send(Event::Work(generation, WorkEvent::Polled(id, result)));
                 });
             }
+            WorkCommand::StopTask { id } => self.stop_local_task(&id, false)?,
+            WorkCommand::RemoveTask { id } => self.stop_local_task(&id, true)?,
             WorkCommand::RetryTask { id } => {
                 if self.versions.blocked() {
                     return Err("請先更新版本。".into());
@@ -475,7 +547,7 @@ impl App {
         self.status = "工作已保存，正在交給伺服器；可切換到其他對話".into();
         self.submit_work(task)
     }
-    fn submit_work(&mut self, task: Task) -> AppResult<()> {
+    pub(super) fn submit_work(&mut self, task: Task) -> AppResult<()> {
         let (config, session, tx, generation) = (
             self.config.clone(),
             self.session
@@ -486,13 +558,17 @@ impl App {
             self.generation,
         );
         self.work.streams.insert(task.request_id.clone());
+        let cancel = Arc::new(AtomicBool::new(false));
+        self.work
+            .cancellations
+            .insert(task.request_id.clone(), cancel.clone());
         thread::spawn(move || {
             let id = task.request_id.clone();
             let result = (|| {
                 let mut task = task;
                 let remote = jobs::conversation(&config, &session, &task.conversation_id)?;
                 task.request["conversation_id"] = json!(remote);
-                jobs::submit(&config, &session, &task, |update| {
+                jobs::submit_cancellable(&config, &session, &task, &cancel, |update| {
                     let _ = tx.send(Event::Work(
                         generation,
                         WorkEvent::Update(id.clone(), update),
@@ -661,8 +737,12 @@ impl App {
     }
     pub(super) fn work_event(&mut self, event: WorkEvent) -> AppResult<()> {
         match event {
-            WorkEvent::Capabilities(result) => {
+            WorkEvent::Capabilities(model, result) => {
                 self.work.capability_loading = false;
+                if model != self.config.model {
+                    self.refresh_work_capabilities();
+                    return Ok(());
+                }
                 match result {
                     Ok(cap) => {
                         if self.work.store.principal_id != cap.principal_id {
@@ -688,6 +768,7 @@ impl App {
                             }
                             .into();
                         }
+                        self.work.capability_model = model;
                         self.work.caps = Some(cap);
                         self.work.status = "附件與執行模式由網站提供".into();
                         self.work_save()?;
@@ -695,6 +776,10 @@ impl App {
                         self.poll_work(true);
                     }
                     Err(_) => {
+                        if self.work.capability_model != model {
+                            self.work.caps = None;
+                            self.work.mode = "sync".into();
+                        }
                         self.work.status = "網站能力暫不可用；未啟用時仍可純文字對話".into();
                     }
                 }
@@ -859,13 +944,16 @@ impl App {
                 }
             }
             WorkEvent::Update(id, update) => {
-                let task = self
+                // 停止／移除後，晚到的 SSE 不得復活任務或寫回對話。
+                let Some(task) = self
                     .work
                     .store
                     .tasks
                     .iter_mut()
-                    .find(|t| t.request_id == id)
-                    .ok_or("找不到聊天工作。")?;
+                    .find(|t| t.request_id == id && t.active())
+                else {
+                    return Ok(());
+                };
                 match update {
                     jobs::StreamUpdate::Status(status) => {
                         task.apply_status(*status)?;
@@ -881,6 +969,7 @@ impl App {
             }
             WorkEvent::Submitted(id, result) => {
                 self.work.streams.remove(&id);
+                self.work.cancellations.remove(&id);
                 if let Some(task) = self
                     .work
                     .store
@@ -982,12 +1071,25 @@ impl App {
             } else {
                 "工作失敗，請查看任務"
             };
-            self.toast(label);
-            if self.config.notification_popups {
+            if remote.state != "cancelled" && !self.is_foreground() {
+                self.toast(label);
+            }
+            if remote.state != "cancelled"
+                && self.config.notification_popups
+                && !self.is_foreground()
+            {
                 self.work.task_balloon = true;
                 tray(self.window, NIM_MODIFY, Some(label));
             }
         }
         Ok(())
+    }
+}
+
+impl Drop for WorkRuntime {
+    fn drop(&mut self) {
+        for cancel in self.cancellations.values() {
+            cancel.store(true, Ordering::Relaxed);
+        }
     }
 }

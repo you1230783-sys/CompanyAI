@@ -211,6 +211,11 @@ fn serve(mut stream: TcpStream, origin: &str, state: &Mutex<State>) -> AppResult
         &bytes[header_end..header_end + length],
         owner,
         &mut state.work,
+        url.query_pairs()
+            .find(|(key, _)| key == "model")
+            .map(|(_, value)| value.into_owned())
+            .as_deref()
+            .unwrap_or(""),
     )? {
         return Ok(());
     }

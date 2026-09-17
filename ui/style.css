@@ -1132,3 +1132,48 @@ output {
   font-size: 0.85em;
   opacity: 0.75;
 }
+.mail-batch-panel {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  margin: 18px 0;
+}
+.mail-presets {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0;
+  flex-wrap: wrap;
+}
+.mail-presets span {
+  min-width: 78px;
+  color: var(--muted);
+}
+.mail-presets button {
+  border: 1px solid var(--line);
+  background: var(--canvas);
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: inherit;
+}
+#batch-mail-list {
+  max-height: 360px;
+  overflow: auto;
+  margin: 12px 0;
+}
+.batch-mail-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.batch-mail-row div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.batch-mail-row p {
+  margin: 4px 0;
+}

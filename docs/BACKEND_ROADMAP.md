@@ -26,3 +26,7 @@
 ## 0.5 更新
 
 附件／圖片貼上、server 能力規則、串流、背景任務、估時及托盤已列入本版實作。以 [DESKTOP_0_5_CONTRACT.md](DESKTOP_0_5_CONTRACT.md) 為網站端實作準據；驗證範圍見 [VALIDATION_0_5.md](VALIDATION_0_5.md)。本文較早列為未實作的相同項目以本節為準；UNC／RAG／skills 仍未納入。
+
+## 0.6 桌面新增
+
+全站鈴鐺、模型附件規則與 Outlook 受限 MSG 補充，見 [0.6 契約](DESKTOP_0_6_CONTRACT.md)。既有較早的尚未實作清單以此更新為準；UNC／RAG 仍未實作。

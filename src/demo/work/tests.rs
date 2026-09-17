@@ -37,6 +37,14 @@ fn attachments_background_stream_recovery_cancel_and_ownership() {
     .unwrap();
     let caps = jobs::capabilities(&config, &session).unwrap();
     assert!(caps.supports("stream"));
+    let mut text_config = config.clone();
+    text_config.model = "text_only".into();
+    let text_caps = jobs::capabilities(&text_config, &session).unwrap();
+    assert!(!text_caps
+        .attachments
+        .allowed_extensions
+        .contains(&".png".into()));
+    assert!(caps.attachments.allowed_extensions.contains(&".png".into()));
     assert_eq!(caps.attachments.max_count, 20);
     let local = jobs::new_id().unwrap();
     let remote = jobs::conversation(&config, &session, &local).unwrap();
@@ -244,5 +252,21 @@ fn attachments_background_stream_recovery_cancel_and_ownership() {
     )
     .unwrap();
     assert_eq!(result.state, "cancelled");
+    // 404 的未知任務也能在本機停止；晚到回應不可再把它設為 active。
+    let mut stuck = make_task("background");
+    assert!(jobs::task_status(&config, &session, &stuck).is_err());
+    stuck.stop_tracking();
+    let store = WorkStore {
+        principal_id: "stopped_test".into(),
+        tasks: vec![stuck.clone()],
+        ..Default::default()
+    };
+    store.save(&root, &config).unwrap();
+    let loaded = WorkStore::load(&root, &config, "stopped_test").unwrap();
+    assert!(!loaded.pending(Some(&stuck.conversation_id)));
+    assert!(!loaded.tasks[0].active());
+    let remote = jobs::task_status(&config, &session, &stream_task).unwrap();
+    stuck.apply_status(remote).unwrap();
+    assert!(stuck.remote.is_none());
     std::fs::remove_dir_all(root).unwrap();
 }

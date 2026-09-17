@@ -254,6 +254,87 @@ window.runSelfTest = async () => {
       "recording cancel restores normal mode",
     );
     document.getElementById("settings-dialog").close();
+    fixture.notifications = [
+      {
+        id: "kanban:123",
+        source: "site",
+        origin: "kanban",
+        title: "<script>通知</script>",
+        summary: "網站內容",
+        created_at: "2026-09-17T00:00:00Z",
+        is_read: false,
+        url: "/lm_server/kanban/1",
+      },
+    ];
+    fixture.site_status = "全站同步測試";
+    fixture.mail_batch = {
+      phase: "idle",
+      busy: false,
+      list: {
+        mails: [
+          {
+            id: "m1",
+            subject: "測試一",
+            sender: "甲",
+            to: "乙",
+            received_at: "今天",
+            unread: true,
+          },
+          {
+            id: "m2",
+            subject: "測試二",
+            sender: "丙",
+            to: "丁",
+            received_at: "今天",
+            unread: false,
+          },
+        ],
+      },
+      status: "基本資訊",
+    };
+    LMUI.receive(fixture);
+    await frame();
+    check(
+      document.querySelectorAll("[data-mail-period]").length === 6,
+      "six Outlook date/unread presets",
+    );
+    check(
+      document.querySelectorAll("#batch-mail-list input:checked").length === 2,
+      "batch mail selection",
+    );
+    document.getElementById("batch-select-all").click();
+    check(
+      document.querySelectorAll("#batch-mail-list input:checked").length === 0,
+      "batch deselect all",
+    );
+    check(
+      !document.querySelector("#notification-list script"),
+      "site notice escaped",
+    );
+    check(
+      document
+        .getElementById("notification-list")
+        .textContent.includes("開啟通知"),
+      "site mark-read then open action",
+    );
+    document.getElementById("settings-button").click();
+    const settings = document.getElementById("settings-dialog"),
+      box = settings.getBoundingClientRect();
+    settings.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        clientX: box.left - 2,
+        clientY: box.top - 2,
+        bubbles: true,
+      }),
+    );
+    settings.dispatchEvent(
+      new MouseEvent("click", {
+        clientX: box.left - 2,
+        clientY: box.top - 2,
+        bubbles: true,
+      }),
+    );
+    check(!settings.open, "settings backdrop dismiss");
     window.chrome?.webview?.postMessage({
       type: "self_test_result",
       ok: true,

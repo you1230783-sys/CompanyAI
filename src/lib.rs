@@ -11,6 +11,7 @@ pub mod outlook;
 pub mod protocol;
 pub mod selection;
 pub mod service;
+pub mod site_notifications;
 pub mod storage;
 pub mod transport;
 pub mod ui;

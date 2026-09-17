@@ -9,6 +9,7 @@
 - 通知 URL 的部署前綴與跨站／危險 scheme 拒絕；伺服器錯誤本文不回顯 Token。
 - Outlook 本機日期範圍、JSON 工具白名單、授權邊界、批次外郵件 ID／未知工具拒絕；提示詞不含 EntryID／StoreID。
 - 既有 WebSocket 連線、喚醒、關閉／取消測試保留；全站來源在相同喚醒事件中另做 REST 同步。
+- 已檢視本機瀏覽器的多封 Outlook 介面與通知合併面板；這是同份 UI 的預覽，不等同公司 Outlook COM 實機驗收。
 - WebView2 自我檢查包含多封清單／全選、六種日期按鈕、通知來源／escaping、設定外部點擊關閉，以及既有 Markdown、串流、附件上限、快捷鍵。
 - 完整交付流程仍須使用 v142 x64 探針、fmt、Clippy、Rust 測試、release 與 WebView2 自我檢查；並以 ZIP 內工具鏈、空 Cargo 快取及 `--frozen` 重建。
 
