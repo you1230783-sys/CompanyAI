@@ -1146,14 +1146,27 @@ fn show_window(window: HWND) -> bool {
         activated
     }
 }
-/// 原生通知不搶焦點，點擊後才顯示主視窗；Windows 可自行停用彈出提示。
-/// 共用 EXE 的 icon 資源；使用者尚未提供圖檔時才使用 Windows 預設圖案。
-fn app_icon() -> HICON {
+/// 從 EXE 的多尺寸圖示選取大／小圖案，避免托盤直接縮小視窗的大圖示。
+/// LR_SHARED 讓 Windows 管理圖示生命週期，重複更新托盤時不需自行釋放。
+fn app_icon(small: bool) -> HICON {
     unsafe {
+        let (width, height) = if small {
+            (GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON))
+        } else {
+            (GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON))
+        };
         // Win32 MAKEINTRESOURCEW(1)：低位數值代表資源 ID，API 不會將它解參考。
         let resource_id = ptr::without_provenance::<u16>(1);
-        let icon = LoadIconW(GetModuleHandleW(ptr::null()), resource_id);
+        let icon = LoadImageW(
+            GetModuleHandleW(ptr::null()),
+            resource_id,
+            IMAGE_ICON,
+            width,
+            height,
+            LR_SHARED,
+        ) as HICON;
         if icon.is_null() {
+            // 資源載入失敗時仍保留可辨識的系統圖示，讓托盤還原操作繼續可用。
             LoadIconW(ptr::null_mut(), IDI_APPLICATION)
         } else {
             icon
@@ -1164,6 +1177,7 @@ fn taskbar_created_message() -> u32 {
     static MESSAGE: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
     *MESSAGE.get_or_init(|| unsafe { RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()) })
 }
+/// 原生通知不搶焦點，點擊後才顯示主視窗；Windows 可自行停用彈出提示。
 fn tray(window: HWND, operation: u32, message: Option<&str>) {
     let mut data = NOTIFYICONDATAW {
         cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
@@ -1173,7 +1187,7 @@ fn tray(window: HWND, operation: u32, message: Option<&str>) {
         uCallbackMessage: TRAY_MESSAGE,
         ..Default::default()
     };
-    data.hIcon = app_icon();
+    data.hIcon = app_icon(true);
     for (dest, source) in data.szTip.iter_mut().zip(wide("LM_AI")) {
         *dest = source;
     }
@@ -1365,15 +1379,17 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         let instance = GetModuleHandleW(ptr::null());
         let name = wide("LM_AI_Window");
-        let class = WNDCLASSW {
+        let class = WNDCLASSEXW {
+            cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
             lpfnWndProc: Some(window_proc),
             hInstance: instance,
             lpszClassName: name.as_ptr(),
             hCursor: LoadCursorW(ptr::null_mut(), IDC_ARROW),
-            hIcon: app_icon(),
+            hIcon: app_icon(false),
+            hIconSm: app_icon(true),
             ..Default::default()
         };
-        if RegisterClassW(&class) == 0 {
+        if RegisterClassExW(&class) == 0 {
             return Err("無法註冊視窗。".into());
         }
         let window = CreateWindowExW(

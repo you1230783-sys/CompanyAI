@@ -14,12 +14,16 @@ fn collect(root: &Path, directory: &Path, files: &mut Vec<PathBuf>) {
     }
 }
 fn main() {
-    // 本版尚未提供使用者指定圖案，缺少 assets/app.ico 時保留 Windows fallback。
-    // 日後放入多尺寸 ICO 即會嵌入 EXE，視窗／工作列／托盤共用資源 ID 1。
+    // 多尺寸 ICO 嵌入 EXE，檔案總管／視窗／工作列／托盤共用資源 ID 1。
+    // 圖示由 scripts/Convert-AppIcon.ps1 產生，離線編譯直接使用已交付的 ICO。
     let icon = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("Cargo manifest directory"))
         .join("assets/app.ico");
     println!("cargo:rerun-if-changed=assets");
-    if icon.is_file() {
+    assert!(
+        icon.is_file(),
+        "Required application icon assets/app.ico is missing"
+    );
+    {
         let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo output directory"));
         let source = output.join("app-icon.rc");
         let resource = output.join("app-icon.res");

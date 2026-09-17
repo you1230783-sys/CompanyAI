@@ -338,6 +338,8 @@ HTTP 200：
 公司 SSO、DNS、實際模型服務與跨應用選字仍需實機驗收；本機模擬測試不能取代這些檢查。
 本版新增通知與 Classic Outlook 契約見 [NOTIFICATIONS_AND_OUTLOOK.md](NOTIFICATIONS_AND_OUTLOOK.md)。
 
+桌面圖示已統一採用使用者提供的貓咪圖案，隨 EXE 內嵌，涵蓋視窗、工作列及系統托盤；不需網站提供圖檔，也不變更 API 契約。圖示維護方式見 [assets/README.md](../assets/README.md)。
+
 ## 格式參考
 
 - [OAuth Device Authorization Grant — RFC 8628](https://www.rfc-editor.org/rfc/rfc8628.html)
