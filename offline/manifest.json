@@ -1,5 +1,5 @@
 ﻿{
-    "generated_at":  "2026-09-17T09:22:23.3574075+08:00",
+    "generated_at":  "2026-09-17T11:22:21.4318905+08:00",
     "rust":  "1.98.1",
     "target":  "x86_64-pc-windows-msvc",
     "msvc":  "14.29.30133",
@@ -7,20 +7,24 @@
     "prerequisite":  "Installed MSVC v142 (14.29) and Windows SDK 10.0.19041.0",
     "files":  [
                   {
+                      "path":  "src/appearance.rs",
+                      "sha256":  "e20cbab23580518bd2e010dd66e5b0019094ceadf8b09e0cf6aef8cde018935f"
+                  },
+                  {
                       "path":  "src/auth.rs",
                       "sha256":  "6f4dfbf7f3b26d7fe579080dbc68b1a0128639a4b4d71ce4c95fb16766807b84"
                   },
                   {
                       "path":  "src/config.rs",
-                      "sha256":  "06000bb10ff8f2c598ebc1293ee22189b70f2ce4a24a6be4723622877b39118d"
+                      "sha256":  "333c53d338600dcb7556b94e07b14bfad955907d1d6b81f65e37564e86b1f080"
                   },
                   {
                       "path":  "src/demo.rs",
-                      "sha256":  "5a5750b57bd706156e55b484e564506e2b768bd2ddbb5c704c5a67a2c2f499b4"
+                      "sha256":  "72d238683049634a19fe38ae82c958ec7c513233c168caf79d07aca57ffaaec7"
                   },
                   {
                       "path":  "src/lib.rs",
-                      "sha256":  "584102057b2059e817885f55cbbf7d39d0c1b962ca1dcc7a03034ae7547c79fa"
+                      "sha256":  "f5fba51c7bea725c9e7909323ca2808a8424ab948ee77e464096673e700f34f5"
                   },
                   {
                       "path":  "src/main.rs",
@@ -28,7 +32,15 @@
                   },
                   {
                       "path":  "src/protocol.rs",
-                      "sha256":  "38268db508ef652f6d576149071f84a91a6cfd7cfd10e92b8dc3a0b965bb7778"
+                      "sha256":  "8bb091a4a48917959c53ae79b229c1200422339d80d85076113a63681fbb7f5e"
+                  },
+                  {
+                      "path":  "src/selection.rs",
+                      "sha256":  "8dfddcee1a99257228bcd6d006e69cee90c30a1364383e82ca0bf808bb0066b6"
+                  },
+                  {
+                      "path":  "src/service.rs",
+                      "sha256":  "947cae658e411d03b2d75e7c65b6466bcd3e652dde236c3432edf2bc29431d49"
                   },
                   {
                       "path":  "src/storage.rs",
@@ -36,11 +48,11 @@
                   },
                   {
                       "path":  "src/transport.rs",
-                      "sha256":  "228c54f9d81a3ba0f965ceb86765161ea452ff169f61852b65958d6f68bbd999"
+                      "sha256":  "ad084be21564a10328ece91e755c0c32cd96737b749673ceb075dbec3feaf76a"
                   },
                   {
                       "path":  "src/ui.rs",
-                      "sha256":  "b03841ab6a72805e170a6eb2e7f15d9a1b639a6296c00bcf648904787be3f7df"
+                      "sha256":  "d6ff509a1231fa2328cc7ffdd26e3ed71c90ef131d328e6ea8dd67e45df5c0bb"
                   },
                   {
                       "path":  "examples/browser_smoke.rs",
@@ -48,7 +60,7 @@
                   },
                   {
                       "path":  "scripts/Build.ps1",
-                      "sha256":  "1870095b5d706743f256d4ec363c6692d5dbad29b4553845da14887703d9f3b2"
+                      "sha256":  "7462e0c605ecde9a5793480379cbfe88535629893428420f39fe564f5fd38cfc"
                   },
                   {
                       "path":  "scripts/Configure-VSCode.ps1",
@@ -68,15 +80,23 @@
                   },
                   {
                       "path":  "scripts/vs-env.cmd",
-                      "sha256":  "fad72e6f155b672f3d3921a7a208f29fe61a250f533854f474c4f017d5297302"
+                      "sha256":  "85b6dd72597553ae6f27eafe6526a1807687117eaa555a941cce9dbd4232547b"
+                  },
+                  {
+                      "path":  "docs/BACKEND_ROADMAP.md",
+                      "sha256":  "6c6f4ad9bbff53b719c04a991472c6c36928aa5b8cd661f3d9b6d995f98c8824"
                   },
                   {
                       "path":  "docs/OFFLINE_AND_GIT.md",
                       "sha256":  "bd669c6d1f2d97e81bb547d0a055b93d15496b022e7bc2fb3a3add10110f9cbd"
                   },
                   {
+                      "path":  "docs/VALIDATION_0_3.md",
+                      "sha256":  "32590c8070067ed449da0b13dc55db8f3940e2020a991b944db42b14154973dd"
+                  },
+                  {
                       "path":  "docs/WEB_INTEGRATION.md",
-                      "sha256":  "06edea4350aab10d4b15a857be8d3e5a128a1d4ff208be49c1795d43312f7814"
+                      "sha256":  "68d07ac23c7cd9d267aee39fda95a2184a6093e428071c4ca03ea1ed44067d7c"
                   },
                   {
                       "path":  ".cargo/config.toml",
@@ -84,15 +104,15 @@
                   },
                   {
                       "path":  "dist/CompanyAI.exe",
-                      "sha256":  "9deea8458c25eafccb47c36edfcec720a1737be413b89eb9b880f02be515befa"
+                      "sha256":  "c9992979b99db1ea236a1c32ef0a524d9a1976eda8168952ad40a23be21348c9"
                   },
                   {
                       "path":  "Cargo.toml",
-                      "sha256":  "23f2cfeca1b2588295cc3c2fc3e143fafe40c3ad62fec0f360c933b7daa972d5"
+                      "sha256":  "2da816e393ae7f9de479600a48cc121cc5a7f3e7a3c6c89a018ad7949178294e"
                   },
                   {
                       "path":  "Cargo.lock",
-                      "sha256":  "751886e79bf3550bd312fd2ab071d8af1478b5d0a3563e9e5ce5564ae3022cda"
+                      "sha256":  "f665cbe30f75d4d9defe4dc48b0d872367e10f51c2fd51086fd2ef4ab87a713c"
                   },
                   {
                       "path":  "rust-toolchain.toml",
@@ -100,11 +120,11 @@
                   },
                   {
                       "path":  "README.md",
-                      "sha256":  "ae5024823df423801b3c182bcd9a9b83841bd8e06ed62e47e24040e508da2ae2"
+                      "sha256":  "a227d8e6eda7f93ea3cf1e6e89937c8e75d3dcb3617a0812a52ee964d6a8b12f"
                   },
                   {
                       "path":  "AGENTS.md",
-                      "sha256":  "bbbec422412e9fcaad27fc53d4e59c8d30488ce34bf9930a421faafd6da97e83"
+                      "sha256":  "caf54f8277a4000d9682b08c1c00813acb9cfe43df618aa84cfc04ea6b7631d3"
                   },
                   {
                       "path":  ".gitignore",

@@ -5,6 +5,28 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Enter-DevShell.ps1')
 Push-Location $projectRoot
 try {
+    # 不只相信環境變數：以指定 cl.exe 編譯小型探針，確認真正的 _MSC_VER 與 x64。
+    # 此檔僅供建置驗證，不連入 Rust EXE，也不加入交付包。
+    $probeRoot = Join-Path $projectRoot '.build\compiler-check'
+    New-Item -ItemType Directory -Path $probeRoot -Force | Out-Null
+    $probeSource = Join-Path $probeRoot 'v142.c'
+    $probeObject = Join-Path $probeRoot 'v142.obj'
+    @'
+#if !defined(_MSC_VER) || _MSC_VER < 1920 || _MSC_VER > 1929
+#error CompanyAI requires MSVC v142 (_MSC_VER 1920-1929).
+#endif
+#ifndef _M_X64
+#error CompanyAI requires the x64 compiler.
+#endif
+#define PROBE_STRING_INNER(value) #value
+#define PROBE_STRING(value) PROBE_STRING_INNER(value)
+#pragma message("Verified _MSC_FULL_VER=" PROBE_STRING(_MSC_FULL_VER) " x64")
+int company_ai_toolset_probe(void) { return _MSC_VER; }
+'@ | Set-Content -LiteralPath $probeSource -Encoding ASCII
+    $compiler = Join-Path $env:VCToolsInstallDir 'bin\Hostx64\x64\cl.exe'
+    $compilerReport = & $compiler /nologo /c /WX "/Fo$probeObject" $probeSource
+    if ($LASTEXITCODE -ne 0) { throw 'Actual compiler is not a working MSVC v142 x64 toolset.' }
+    $compilerReport | ForEach-Object { Write-Host $_ }
     # 先檢查格式及常見錯誤；任一步失敗就停止，避免回報過期的編譯結果。
     & cargo fmt --all -- --check
     if ($LASTEXITCODE -ne 0) { throw 'Formatting check failed.' }
@@ -27,6 +49,8 @@ try {
         "Host OS: $([Environment]::OSVersion.VersionString)"
         "Visual Studio: $VisualStudioPath"
         "MSVC: $env:VCToolsVersion"
+        "Compiler: $compiler"
+        $compilerReport
         "Windows SDK: $env:WindowsSDKVersion"
         "Target: x86_64-pc-windows-msvc"
         "CRT: static"

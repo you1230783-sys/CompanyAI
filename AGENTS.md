@@ -37,6 +37,15 @@
 - 本專案目前開發 Company AI Windows 測試版：瀏覽器授權登入、30 天登入保存、OpenAI 相容 Chat Completions 請求與回覆顯示；網頁端串接規格記錄在 docs/WEB_INTEGRATION.md。
 - 網頁控制介面及共用套件編譯管理由另一個 Codex 任務處理。本專案只維護自己的 EXE、原始碼與離線交付包。
 
+## 0.3.0 產品約定
+
+- 正式主機、聊天、device、token、version、models 與 download 路由固定於 `src/config.rs`，不提供 UI 編輯；偏好檔只保存模型代號與快捷鍵。舊設定不得覆寫固定路由。
+- 正式請求固定 Bearer 個人 Token，Chat Completions 維持 `stream: false`；模型選單從後端取得，UI 顯示 label、JSON 傳 id，真實模型由後端映射。
+- 使用者指定：版本檢查失敗暫時允許使用；同次執行中已知的強制更新不得被後續網路失敗解除。這個政策不能略過登入驗證或模型權限。
+- 全域快捷鍵預設 Ctrl+Alt+Q，可自訂；必須在顯示主視窗之前取得來源選字。只放入草稿，不自動送出、不覆蓋舊草稿、不背景監控剪貼簿。
+- 本次只實作分享對話的選字／快捷鍵第一階段；通知、Outlook、附件與 RAG 均未實作，未來規劃見 docs/BACKEND_ROADMAP.md。
+- 修改功能時同步更新 docs/WEB_INTEGRATION.md 與相應驗收說明。沒有實際操作 Word／Outlook 或取得外觀截圖時，不能宣稱這些驗收通過。
+
 ## 修改後的交付與 Git 規則
 
 - 使用者要求專案包含原始碼、已編譯 EXE、Rust 離線編譯包及附屬文件，這些產物必須保持同一版本。

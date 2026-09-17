@@ -1,13 +1,16 @@
-﻿Recorded: 2026-09-17T09:22:20.1523711+08:00
+﻿Recorded: 2026-09-17T11:22:17.8013878+08:00
 Host OS: Microsoft Windows NT 10.0.26200.0
 Visual Studio: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools
 MSVC: 14.29.30133
+Compiler: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\cl.exe
+v142.c
+Verified _MSC_FULL_VER=192930159 x64
 Windows SDK: 10.0.19041.0\
 Target: x86_64-pc-windows-msvc
 CRT: static
 Rust binaries: Y:\Rust\.tools\rustup\toolchains\1.98.1-x86_64-pc-windows-msvc\bin
 Cargo home: Y:\Rust\.tools\cargo
-EXE SHA256: 9DEEA8458C25EAFCCB47C36EDFCEC720A1737BE413B89EB9B880F02BE515BEFA
+EXE SHA256: C9992979B99DB1EA236A1C32EF0A524D9A1976EDA8168952AD40A23BE21348C9
 
 rustc 1.98.1 (48a229cea 2026-09-01)
 binary: rustc
@@ -31,10 +34,10 @@ File Type: EXECUTABLE IMAGE
     kernel32.dll
     bcrypt.dll
     user32.dll
-    shell32.dll
     gdi32.dll
-    crypt32.dll
+    shell32.dll
     winhttp.dll
+    crypt32.dll
     api-ms-win-core-synch-l1-2-0.dll
     bcryptprimitives.dll
     KERNEL32.dll
@@ -45,7 +48,7 @@ File Type: EXECUTABLE IMAGE
 
         2000 .data
         7000 .pdata
-       4A000 .rdata
+       4E000 .rdata
         1000 .reloc
-       98000 .text
+       A4000 .text
         1000 _RDATA

@@ -1,7 +1,10 @@
 //! 僅供 --demo 使用的本機模擬網站：不會呼叫真實 AI，也不接受外部網卡連線。
 //! 讓網站尚未完成時，仍可手動測試瀏覽器授權與 API 往返；不可拿來當正式授權服務。
 use crate::{
-    config::{Config, CLIENT_ID, DEVICE_PATH, MAX_SESSION_SECONDS, TOKEN_PATH},
+    config::{
+        Config, CHAT_PATH, CLIENT_ID, DEVICE_PATH, DOWNLOAD_PATH, MAX_SESSION_SECONDS, MODELS_PATH,
+        TOKEN_PATH, VERSION_PATH,
+    },
     AppResult,
 };
 use serde_json::json;
@@ -179,13 +182,16 @@ fn serve(mut stream: TcpStream, origin: &str, state: &Mutex<State>) -> AppResult
         Some(routes) => routes
             .iter()
             .position(|path| path == route)
-            .map(|index| [DEVICE_PATH, TOKEN_PATH, "/v1/chat/completions"][index])
+            .map(|index| [DEVICE_PATH, TOKEN_PATH, CHAT_PATH][index])
             .unwrap_or(""),
         None => route,
     };
     let mut status = 200;
     let mut content_type = "application/json; charset=utf-8";
     let reply = match (method, route) {
+        ("GET", VERSION_PATH) => json!({"latest_version":env!("CARGO_PKG_VERSION"),"minimum_version":"0.3.0","message":""}).to_string(),
+        ("GET", MODELS_PATH) => json!({"models":[{"id":"fast","label":"快速"},{"id":"quality","label":"品質"},{"id":"ultra","label":"Ultra"}],"default_model":"fast"}).to_string(),
+        ("GET", DOWNLOAD_PATH) => {content_type="text/plain; charset=utf-8";"這是本機示範，不提供真實更新檔案。".into()},
         ("POST", DEVICE_PATH) if fields.get("client_id").map(String::as_str) == Some(CLIENT_ID) => {
             let device = random_code()?;
             let user_code = random_code()?[..8].to_ascii_uppercase();
@@ -264,7 +270,7 @@ fn serve(mut stream: TcpStream, origin: &str, state: &Mutex<State>) -> AppResult
                 }
             }
         }
-        ("POST", "/v1/chat/completions") => {
+        ("POST", CHAT_PATH) => {
             let token = headers
                 .get("authorization")
                 .and_then(|value| value.strip_prefix("Bearer "))
@@ -275,9 +281,10 @@ fn serve(mut stream: TcpStream, origin: &str, state: &Mutex<State>) -> AppResult
             } else {
                 let request: serde_json::Value =
                     serde_json::from_str(&body).map_err(|_| "JSON 錯誤。")?;
-                if request["stream"] != false || request["model"] != "demo-echo" {
+                if request["stream"] != false || !matches!(request["model"].as_str(), Some("demo-echo"|"fast"|"quality"|"ultra"))
+                    || headers.get("x-client-version").map(String::as_str) != Some(env!("CARGO_PKG_VERSION")) {
                     status = 400;
-                    json!({"error":{"message":"Use demo-echo and stream=false."}}).to_string()
+                    json!({"error":{"message":"Use an available model, stream=false and X-Client-Version."}}).to_string()
                 } else {
                     let input = request["messages"]
                         .as_array()
@@ -302,6 +309,39 @@ fn serve(mut stream: TcpStream, origin: &str, state: &Mutex<State>) -> AppResult
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn desktop_metadata_and_model_alias_complete_a_chat() {
+        let server = super::DemoServer::start().unwrap();
+        let mut config = server.config();
+        let version = crate::service::fetch_version(&config).unwrap();
+        assert!(!version.required());
+        let catalog = crate::service::fetch_models(&config, None).unwrap();
+        assert_eq!(catalog.models[0].label, "快速");
+        config.model = catalog.models[0].id.clone();
+        let grant = crate::auth::request_device(&config).unwrap();
+        server
+            .state
+            .lock()
+            .unwrap()
+            .grants
+            .get_mut(&grant.device_code)
+            .unwrap()
+            .decision = Some(true);
+        let crate::auth::PollResult::Granted(session) =
+            crate::auth::poll_once(&config, &grant).unwrap()
+        else {
+            panic!("grant expected")
+        };
+        let body = crate::protocol::chat_json(
+            &config.model,
+            &[crate::protocol::Message::user("模型代號測試")],
+        )
+        .unwrap();
+        assert!(crate::auth::send_chat(&config, &session, &body)
+            .reply
+            .unwrap()
+            .contains("模型代號測試"));
+    }
     use super::*;
     use crate::{
         auth::{self, PollResult},

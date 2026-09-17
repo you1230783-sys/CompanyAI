@@ -144,7 +144,8 @@ pub fn api_error(status: u32, body: &str, secret: &str) -> String {
     let hint = match status {
         401 => "登入已到期或 API Key 無效，請重新登入。",
         403 => "此帳號沒有呼叫此 API 或模型的權限。",
-        404 => "找不到 API 路由，請確認 /v1/chat/completions 路徑。",
+        404 => "找不到服務，請聯絡管理者確認部署。",
+        426 => "此版本已停止支援，請按「下載更新」取得新版。",
         429 => "請求過多，請稍後再試。",
         _ => "API 請求失敗，請檢查網站服務。",
     };

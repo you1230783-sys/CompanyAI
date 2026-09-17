@@ -1,11 +1,17 @@
-//! 可調整的網站與模型設定。網址先驗證，再交給 WinHTTP，避免錯送憑證。
+//! 固定公司端點與可保存的個人偏好。測試可用記憶體設定指定 loopback。
 use crate::AppResult;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 pub const CLIENT_ID: &str = "company-ai-desktop";
-pub const DEVICE_PATH: &str = "/api/desktop/oauth/device";
-pub const TOKEN_PATH: &str = "/api/desktop/oauth/token";
+// 公司部署位置集中於此；正式介面與設定檔都不提供覆寫入口。
+pub const SERVER_URL: &str = "http://lp2-en-server";
+pub const CHAT_PATH: &str = "/lm_server/v1/chat/completions";
+pub const DEVICE_PATH: &str = "/lm_server/api/desktop/oauth/device";
+pub const TOKEN_PATH: &str = "/lm_server/api/desktop/oauth/token";
+pub const VERSION_PATH: &str = "/lm_server/api/desktop/version";
+pub const MODELS_PATH: &str = "/lm_server/api/desktop/models";
+pub const DOWNLOAD_PATH: &str = "/lm_server/desktop/download";
 pub const MAX_SESSION_SECONDS: u64 = 30 * 24 * 60 * 60;
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -16,29 +22,58 @@ pub enum AuthHeader {
     XApiKey,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(default)]
+#[derive(Clone, Debug)]
 pub struct Config {
     pub server_url: String,
     pub chat_path: String,
-    /// 保留舊版預設路由，讓既有 settings.json 不必手動補欄位。
+    /// 正式值由 Default 指定，反序列化不接受舊設定檔覆寫。
     pub device_path: String,
     pub token_path: String,
     pub model: String,
     pub auth_header: AuthHeader,
     pub allow_http: bool,
+    pub hotkey: String,
+}
+
+/// 只有個人偏好能落盤；舊版檔案中的網址、路由、Header 和 HTTP 欄位會被忽略。
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+struct Preferences {
+    model: String,
+    hotkey: Option<String>,
+}
+
+impl Serialize for Config {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Preferences {
+            model: self.model.clone(),
+            hotkey: Some(self.hotkey.clone()),
+        }
+        .serialize(serializer)
+    }
+}
+impl<'de> Deserialize<'de> for Config {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let saved = Preferences::deserialize(deserializer)?;
+        Ok(Self {
+            model: saved.model,
+            hotkey: saved.hotkey.unwrap_or_else(|| "Ctrl+Alt+Q".into()),
+            ..Self::default()
+        })
+    }
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            server_url: String::new(),
-            chat_path: "/v1/chat/completions".into(),
+            server_url: SERVER_URL.into(),
+            chat_path: CHAT_PATH.into(),
             device_path: DEVICE_PATH.into(),
             token_path: TOKEN_PATH.into(),
             model: String::new(),
             auth_header: AuthHeader::Bearer,
-            allow_http: false,
+            allow_http: true,
+            hotkey: "Ctrl+Alt+Q".into(),
         }
     }
 }
@@ -77,8 +112,9 @@ impl Config {
             self.endpoint(path)
                 .map_err(|error| format!("{label}：{error}"))?;
         }
-        if self.model.trim().is_empty() || self.model.len() > 200 {
-            return Err("請填寫公司 API 支援的模型名稱（最多 200 bytes）。".into());
+        // 登入及版本查詢必須能在尚未取得模型清單時執行。
+        if self.model.len() > 200 {
+            return Err("模型選項格式錯誤，請重新整理服務。".into());
         }
         Ok(())
     }
@@ -139,7 +175,7 @@ fn reject_ambiguous_characters(value: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// HTTPS 使用 Windows 憑證信任庫。HTTP 僅允許本機測試或使用者明確勾選。
+/// HTTPS 使用 Windows 憑證信任庫。正式內網 HTTP 由程式預設值明確允許。
 pub fn validate_url(url: &Url, allow_http: bool) -> AppResult<()> {
     let loopback = matches!(url.host_str(), Some("127.0.0.1" | "[::1]" | "localhost"));
     if url.host_str().is_none()
@@ -152,7 +188,7 @@ pub fn validate_url(url: &Url, allow_http: bool) -> AppResult<()> {
     match url.scheme() {
         "https" => Ok(()),
         "http" if allow_http || loopback => Ok(()),
-        _ => Err("請使用 HTTPS；僅內網 HTTP 測試時，明確勾選允許 HTTP。".into()),
+        _ => Err("此服務未允許目前的 HTTP(S) 連線協定，請聯絡管理者。".into()),
     }
 }
 
@@ -161,10 +197,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn saved_preferences_cannot_override_company_routes() {
+        let config: Config = serde_json::from_str(r#"{"server_url":"https://other-host","chat_path":"/wrong","device_path":"/wrong","token_path":"/wrong","allow_http":false,"auth_header":"x_api_key","model":"quality","hotkey":"Ctrl+Shift+F8"}"#).unwrap();
+        assert_eq!(
+            config.endpoint(&config.chat_path).unwrap().as_str(),
+            "http://lp2-en-server/lm_server/v1/chat/completions"
+        );
+        assert_eq!(config.device_path, DEVICE_PATH);
+        assert_eq!(config.token_path, TOKEN_PATH);
+        assert_eq!(config.auth_header, AuthHeader::Bearer);
+        assert_eq!(config.model, "quality");
+        assert_eq!(config.hotkey, "Ctrl+Shift+F8");
+        let saved = serde_json::to_value(&config).unwrap();
+        assert_eq!(saved.as_object().unwrap().len(), 2);
+        assert!(saved.get("server_url").is_none());
+        assert!(Config::default().validate().is_ok());
+    }
+
+    #[test]
     fn rejects_cross_origin_and_insecure_endpoints() {
         let config = Config {
             server_url: "https://company.example".into(),
             model: "test".into(),
+            allow_http: false,
             ..Config::default()
         };
         assert!(config.validate().is_ok());

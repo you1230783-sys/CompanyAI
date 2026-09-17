@@ -1,8 +1,11 @@
 //! Company AI 測試版：將通訊、登入、儲存與 Windows 介面分開，方便逐步擴充。
+mod appearance;
 pub mod auth;
 pub mod config;
 pub mod demo;
 pub mod protocol;
+pub mod selection;
+pub mod service;
 pub mod storage;
 pub mod transport;
 pub mod ui;

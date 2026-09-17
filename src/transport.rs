@@ -50,12 +50,31 @@ pub fn request(
     auth: Option<(&str, &str)>,
     timeout_ms: i32,
 ) -> AppResult<HttpResponse> {
+    request_method(url, "POST", content_type, body, auth, timeout_ms)
+}
+
+/// 查詢版本與模型清單只發送 GET，沒有聊天本文。
+pub fn get(url: &Url, auth: Option<(&str, &str)>) -> AppResult<HttpResponse> {
+    request_method(url, "GET", "application/json", "", auth, 15_000)
+}
+
+fn request_method(
+    url: &Url,
+    method: &str,
+    content_type: &str,
+    body: &str,
+    auth: Option<(&str, &str)>,
+    timeout_ms: i32,
+) -> AppResult<HttpResponse> {
     let host = wide(url.host_str().ok_or("網址缺少主機名稱。")?);
     let path = match url.query() {
         Some(query) => format!("{}?{query}", url.path()),
         None => url.path().to_string(),
     };
-    let mut headers = format!("Content-Type: {content_type}\r\nAccept: application/json\r\n");
+    let mut headers = format!(
+        "Content-Type: {content_type}\r\nAccept: application/json\r\nX-Client-Version: {}\r\n",
+        env!("CARGO_PKG_VERSION")
+    );
     if let Some((name, value)) = auth {
         if !matches!(name, "Authorization" | "X-API-Key") || value.contains(['\r', '\n', '\0']) {
             return Err("驗證 Header 無效。".into());
@@ -93,7 +112,7 @@ pub fn request(
         };
         let request = Handle::checked(WinHttpOpenRequest(
             connection.0,
-            wide("POST").as_ptr(),
+            wide(method).as_ptr(),
             wide(&path).as_ptr(),
             ptr::null(),
             ptr::null(),

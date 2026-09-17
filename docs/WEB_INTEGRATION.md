@@ -1,32 +1,31 @@
-# Company AI 測試版：網頁／API 串接規格 v1
+# Company AI 0.3.0：網站／API 串接契約
 
-## 1. 明天需要實作的最小範圍
+## 1. 本次必須修改的內容
 
-桌面測試版已完成原生 Windows 介面。網站端需要提供下列路由：
+本版使用固定主機 **`http://lp2-en-server`**，下列完整路徑已寫在 `src/config.rs`，一般使用者不能查看或更改連線設定。
+這是產品操作限制，不是保密機制；原始碼與 EXE 本身仍可被檢視。變更主機或路由時，需重新建置並發佈桌面版。
 
-| 方法 | 路徑 | 用途 |
+| 方法 | 固定路徑 | 驗證／用途 |
 | --- | --- | --- |
-| POST | `/api/desktop/oauth/device` | 申請短效的一次性登入碼 |
-| GET | `/desktop/activate?user_code=...` | 使用既有網頁登入／SSO，讓使用者確認授權 |
-| POST | `/desktop/activate` | 接受或拒絕授權；這是網站內部表單，可用既有路由 |
-| POST | `/api/desktop/oauth/token` | EXE 輪詢，取得 30 天使用憑證 |
-| POST | `/v1/chat/completions` | 驗證憑證後，處理或轉送 OpenAI 相容聊天請求 |
+| POST | `/lm_server/api/desktop/oauth/device` | 匿名申請一次性登入碼 |
+| POST | `/lm_server/api/desktop/oauth/token` | 以 device_code 輪詢與兌換個人 Token |
+| POST | `/lm_server/v1/chat/completions` | Bearer Token；模型代號替換後轉送 |
+| GET | `/lm_server/api/desktop/version` | 匿名查詢最低／最新版本 |
+| GET | `/lm_server/api/desktop/models` | 可匿名或依 Bearer Token 回傳有權使用的模型選單 |
+| GET | `/lm_server/desktop/download` | 瀏覽器下載頁；提供新版 EXE 與版本資訊 |
 
-以上為預設路由。從桌面端 0.2.1 起，聊天、登入碼與 Token 路徑都能在 EXE 設定；JSON 與表單契約維持不變。
-網站網址支援內網單段主機、IP、埠號及子目錄，不要求 `.com` 等網域後綴。
+另外需提供瀏覽器授權頁，例如 `/lm_server/desktop/activate`（GET 顯示、POST 允許／拒絕）。
+這個頁面的 URL 由 device 回應決定，不必固定上述例子，但入口必須與公司主機同來源。
+它可沿用網頁登入／SSO，完成後讓使用者核對登入碼並明確允許。
 
-- 主機根路徑：網站 `http://intranet-host`，聊天 `/gateway/api/v1/desktop/v1/chat/completions`。
-- 完整網址：同一網站下可直接在聊天欄位填 `http://intranet-host/gateway/api/v1/desktop/v1/chat/completions`。
-- 相對路徑：網站 `http://intranet-host/gateway/api/v1/desktop`，聊天 `v1/chat/completions`（此處不要加開頭 `/`）。
+**建議實作順序：固定路由 → models → version／download → 完整驗收。**
+選取文字、快捷鍵與翻譯／摘要／潤飾在桌面端完成，不需要新增選字 API；按下按鈕後仍送相同 Chat Completions JSON。
 
-三種填法會解析為同一個聊天端點。相對路徑接在網站子目錄下；以 `/` 開頭從主機根目錄開始。
-這與 [url::Url::join 的路徑規則](https://docs.rs/url/latest/url/struct.Url.html#method.join) 一致；應用程式會先將網站欄位正規化為目錄。
-登入碼與 Token 欄位也採相同規則。若它們部署在不同子目錄，請分別指定完整根路徑，不要從聊天路由猜測。
-所有端點必須同來源，不接受 URL 帳密、查詢字串、反斜線或片段；HTTP 需由使用者勾選允許。
-憑證會綁定三個實際端點及驗證 Header，端點變更需重新登入。0.2.0 的舊設定可讀取，但舊登入需重新取得。
-
-登入流程採 OAuth 2.0 Device Authorization Grant（RFC 8628）。EXE 不開啟本機回呼 port，使用者以瀏覽器登入，EXE 向網站輪詢結果。
-`client_id` 固定為 `company-ai-desktop`，屬於公開客戶端，**不是密碼，不配置 client_secret**。
+所有桌面 API 請求會帶 `X-Client-Version: 0.3.0` 與 `Accept: application/json`。
+此 Header 是相容性提示，不是驗證憑證；伺服器仍須自行檢查 Token、權限、模型白名單及配額。
+`client_id` 固定為 `company-ai-desktop`，是公開客戶端識別，不配置 client_secret。
+API 回應用 UTF-8 JSON，禁止 API redirect／HTML 登入頁；建議 `Cache-Control: no-store`。
+瀏覽器授權頁及下載頁可以使用正常網頁流程。
 
 ## 2. 「一次性」與「30 天」是兩種不同的期限
 
@@ -44,7 +43,7 @@
 EXE 請求：
 
 ```http
-POST /api/desktop/oauth/device HTTP/1.1
+POST /lm_server/api/desktop/oauth/device HTTP/1.1
 Content-Type: application/x-www-form-urlencoded
 Accept: application/json
 
@@ -57,8 +56,8 @@ client_id=company-ai-desktop&scope=chat%3Awrite
 {
   "device_code": "由伺服器產生的高熵隨機秘密字串",
   "user_code": "ABCD-EFGH",
-  "verification_uri": "https://ai.company.example/desktop/activate",
-  "verification_uri_complete": "https://ai.company.example/desktop/activate?user_code=ABCD-EFGH",
+  "verification_uri": "http://lp2-en-server/lm_server/desktop/activate",
+  "verification_uri_complete": "http://lp2-en-server/lm_server/desktop/activate?user_code=ABCD-EFGH",
   "expires_in": 300,
   "interval": 5
 }
@@ -91,7 +90,7 @@ client_id=company-ai-desktop&scope=chat%3Awrite
 EXE 會在每次請求前等待 interval 秒：
 
 ```http
-POST /api/desktop/oauth/token HTTP/1.1
+POST /lm_server/api/desktop/oauth/token HTTP/1.1
 Content-Type: application/x-www-form-urlencoded
 Accept: application/json
 
@@ -119,7 +118,7 @@ grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code&device_code=..
 ```
 
 `access_token` 應為 URL-safe / ASCII 可見字元，不含空白、換行；例如 `desktop_` 加 base64url 亂數。
-本版支援最多 8192 bytes；JWT 或隨機 opaque Token 都可。`token_type` 必須為 Bearer，這也適用 EXE 選擇 X-API-Key Header 的情形。
+本版支援最多 8192 bytes；JWT 或隨機 opaque Token 都可。`token_type` 必須為 Bearer。
 
 Token 兌換必須在資料庫交易中：
 
@@ -136,20 +135,19 @@ EXE 遇到 slow_down 會將之後的輪詢間隔增加 5 秒。取消或逾期�
 預設 Header：
 
 ```http
-POST /v1/chat/completions HTTP/1.1
+POST /lm_server/v1/chat/completions HTTP/1.1
 Authorization: Bearer desktop_xxxxxxxxx
 Content-Type: application/json; charset=utf-8
 Accept: application/json
 ```
 
-EXE 也可選擇 `X-API-Key: desktop_xxxxxxxxx`，此時不加 Bearer 前綴。
-憑證只放在選定的 Header，**JSON 本文與預覽區不會出現 Key**。
+正式 EXE 固定使用 Bearer Header，沒有 Header 切換或 JSON 預覽欄位。憑證不放入 JSON 本文。
 
 實際 JSON 格式：
 
 ```json
 {
-  "model": "公司實際提供的模型名称",
+  "model": "fast",
   "messages": [
     { "role": "user", "content": "你好，請回覆連線測試成功。" }
   ],
@@ -157,7 +155,7 @@ EXE 也可選擇 `X-API-Key: desktop_xxxxxxxxx`，此時不加 Bearer 前綴。
 }
 ```
 
-連續對話會依序帶入先前的 user / assistant 訊息。此版最多 20 輪；按「清除對話」開始新對話。
+連續對話會依序帶入先前的 user / assistant 訊息。此版最多 20 輪；按「新對話」開始新對話。
 使用者輸入最多 16,000 個 UTF-16 code units，每則訊息（含歷史回覆）上限 64 KB，HTTP 回應上限 1 MB。
 
 網站驗證個人憑證後，可直接呼叫模型，也可代理至既有的 OpenAI 相容服務：
@@ -179,7 +177,7 @@ EXE 也可選擇 `X-API-Key: desktop_xxxxxxxxx`，此時不加 Bearer 前綴。
   "id": "chatcmpl-example",
   "object": "chat.completion",
   "created": 1789560000,
-  "model": "公司實際提供的模型名称",
+  "model": "fast",
   "choices": [
     {
       "index": 0,
@@ -209,42 +207,131 @@ EXE 讀取 `choices[0].message.content` 的字串；其他欄位可保留但不�
 - 401：缺少／無效／過期／已撤銷 Key；EXE 清除本機憑證，要求重新登入。
 - 403：無權限；保留登入，顯示錯誤。
 - 404：路由錯誤。
+- 426：版本不再支援，顯示下載更新提示；版本端點需同時提供新的 minimum_version，桌面才能套用明確門檻。
 - 429：限流；由使用者稍後重試。
 - 5xx：服務問題。
 
 登入與聊天 API 不可回傳 HTML 登入頁或 301/302；EXE 不會跟隨 API redirect。
 EXE 不自動重送聊天請求，避免逾時後重複計費／執行。網站錯誤本文不得回顯 Token、Header 或上游密鑰。
 
-## 7. 保存、連線與第一版限制
+## 7. 版本檢查與下載頁
 
-- EXE 設定：`%LOCALAPPDATA%\CompanyAI\settings.json`。
-- EXE 憑證：`%LOCALAPPDATA%\CompanyAI\session.dpapi`，使用 Windows DPAPI 的目前使用者範圍加密。
-- 修改網站、聊天路徑或 Header 類型會清除舊登入，防止 Key 被送到新目的地；只改模型不必重新登入。
-- 對話僅在視窗記憶體，關閉即清除；不自動讀取剪貼簿、檔案或其他視窗。
-- 「清除本機登入」刪除本機憑證，不代表伺服器撤銷。網站應提供個人裝置／憑證撤銷能力，並在聊天 API 即時檢查。
-- 使用 WinHTTP／Windows 信任庫與自動代理設定；沒有實作自訂代理帳密或用戶端憑證選取。
-- 預設 HTTPS，憑證錯誤不略過。公司私有 CA 應由 IT 安裝至 Windows 信任庫。
-- HTTP 只允許本機 loopback，或使用者勾選「允許內網 HTTP」。HTTP 會明文傳送 Key 與訊息，僅限環境確實需要的測試。
-- 登入 HTTP 回應讀取逾時 15 秒，聊天讀取逾時 120 秒（為 WinHTTP 各階段／讀取逾時，非整次請求硬性總時限）。
-- EXE 直接發 HTTP，不需要 CORS；瀏覽器授權頁仍使用既有網站的 Cookie、CSRF 與登入規則。
-- 主程式不開啟本機 HTTP port；僅 `--demo` 模式會在 127.0.0.1 的隨機埠啟動模擬服務。
+```http
+GET /lm_server/api/desktop/version HTTP/1.1
+Accept: application/json
+X-Client-Version: 0.3.0
+```
 
-## 8. 網頁端驗收清單
+HTTP 200：
 
-1. EXE 儲存正確網址、路由、模型；點登入能開啟網站。
-2. 網站登入後顯示相同短碼；允許後 EXE 顯示已登入。
-3. EXE 送出繁體中文訊息，網站收到預期 Header 與 JSON，EXE 顯示真正模型回覆。
-4. 關閉並重新打開 EXE，可在 30 天內沿用登入。
-5. 拒絕、短碼過期、重複兌換與同時兌換均正確拒絕。
-6. 撤銷／讓 Token 過期後，聊天路由回 401，EXE 要求重新登入。
-7. 限流回 429，伺服器錯誤回 5xx，EXE 顯示可理解的訊息。
-8. 無效憑證、跨站 verification_uri、API redirect 均停止，不洩漏 Key。
+```json
+{
+  "latest_version": "0.3.0",
+  "minimum_version": "0.3.0",
+  "message": ""
+}
+```
 
-本機 `--demo` 已可模擬以上核心成功流程，但不代表公司 SSO、網路、憑證與實際模型路由已完成驗證。
+- 版本使用 `major.minor.patch` 三段非負整數，不使用 v 前綴、beta 或日期字串。每段最多 u32。
+- `minimum_version` 不得大於 `latest_version`；message 可省略，最多 2,000 UTF-8 bytes。
+- 目前桌面版本小於 minimum_version：顯示更新提示，停止新的登入及聊天，下載按鈕仍可用。
+- 只小於 latest_version：顯示可更新，允許繼續使用。
+- 連線失敗、非 200、JSON 不合法：依使用者指定暫時允許使用；同次執行內已知的強制更新不因後續失敗而解除。
+- 啟動、每 15 分鐘與手動重新整理時查詢。首次查詢尚未完成時沒有已知門檻；當次已送出的聊天不會自動撤回。
+- 版本門檻沒有持久化至磁碟。後端若需強制限制舊客戶端，應在登入與聊天端點同步檢查版本，不能只依賴客戶端介面。
+- 登入／聊天拒絕舊版本時可回 HTTP 426 的標準 error JSON，並保持 version 路由可匿名取得。桌面不會自動重試聊天。
 
-## 9. 官方格式參考
+固定下載頁：`http://lp2-en-server/lm_server/desktop/download`。
+頁面需顯示最新版本、更新說明、Win11 x64 EXE 下載連結（可另設二進位檔路由）及 SHA256。
+版本 JSON 不接受外部 download_url；桌面只會開啟固定下載頁，不執行安裝器或背景覆寫。
+使用者下載新版後關閉舊版、替換 EXE，個人設定與 DPAPI 憑證不在 EXE 旁，因此可保留。
+請先讓新版檔案可下載，再提高 minimum_version，避免使用者被阻擋卻拿不到新版。
+
+## 8. 動態模型選單
+
+```http
+GET /lm_server/api/desktop/models HTTP/1.1
+Accept: application/json
+X-Client-Version: 0.3.0
+Authorization: Bearer desktop_xxxxxxxxx
+```
+
+未登入時沒有 Authorization。若清單需權限，回 401 即可；桌面仍允許登入，取得 Token 後會再查一次。
+HTTP 200：
+
+```json
+{
+  "models": [
+    {"id": "fast", "label": "快速", "description": "日常翻譯與短文整理"},
+    {"id": "quality", "label": "品質", "description": "較仔細的分析"},
+    {"id": "ultra", "label": "Ultra"}
+  ],
+  "default_model": "fast"
+}
+```
+
+| 欄位 | 契約 |
+| --- | --- |
+| models | 1–40 個選項；空清單代表目前無可用項目，桌面會停用送出並提示 |
+| id | 穩定、唯一、不透明的代號；1–64 bytes，只能英數、點、底線、連字號 |
+| label | 使用者看到的名稱；1–40 個字元，不能全空白或含控制字元 |
+| description | 可省略，最多 1,000 UTF-8 bytes；此版保留解析但不顯示 |
+| default_model | 可省略；如提供，必須在 models 清單內 |
+
+桌面顯示 label，送出 JSON 的 `model` 是 id。優先選上次偏好，再選 default_model，最後才是第一項。
+禁止只回傳 `["快速","品質"]` 或 OpenAI 原始 `/v1/models` 格式；本版使用上述桌面選單契約。
+後端負責把 `fast`／`quality` 替換成實際模型名稱，轉送後可將回應 `model` 改回 alias，避免暴露內部名稱。
+新增 Ultra 只需修改清單和後端映射，不必更新 EXE；不要把 alias 當 URL 或任意上游參數使用。
+
+建議清單只列出該帳號有權限的選項，每次聊天仍再次驗證 alias、權限與配額。
+未知 alias 回 400、有此選項但無權限回 403；錯誤提示可請使用者重新整理選單。
+此版無模型快取離線兜底；查詢失敗會提示，需登入或重新整理取得清單後才可聊天。
+
+## 9. 選取文字的後端行為
+
+一般送出：messages 末尾是使用者草稿。翻譯／摘要／潤飾：末尾 user.content 為桌面動作指示、空行、使用者文字。
+例如摘要：
+
+```json
+{
+  "model": "fast",
+  "messages": [{"role": "user", "content": "請以繁體中文摘要以下文字，列出主要重點，不補充未提供的事實。\n\n這裡是使用者選取並確認送出的文字。"}],
+  "stream": false
+}
+```
+
+這些動作只需要現有聊天路由，不另傳剪貼簿來源、視窗標題、程式名稱或郵件識別碼。
+按快捷鍵只帶入草稿，不產生聊天 API 請求；使用者明確按處理／送出後才會傳送。
+後端將文字視為一般使用者輸入，不能因選字含有指令就執行網站管理、任意工具或未授權工作。
+
+## 10. 儲存與連線邊界
+
+- 偏好檔只保存 model 與 hotkey；固定連線資訊來自程式，忽略舊 settings.json 裡的 server_url、路由與 Header。
+- Token 由 Windows DPAPI 加密，綁定目前 Windows 使用者及實際端點。換端點需重新登入；只換模型不必。
+- 對話與選字草稿只留在記憶體。登出清除本機 Token，不代表伺服器端撤銷。
+- 目前明確採指定內網 HTTP；HTTP 會明文傳輸 Token 和內容。若日後啟用 HTTPS，使用 Windows 信任庫，不略過憑證錯誤。
+- 使用 WinHTTP 自動代理；登入／metadata 讀取逾時 15 秒，聊天讀取逾時 120 秒，屬各階段逾時而非整次硬性總時限。
+- 無自訂代理帳密／用戶端憑證選取；不需要 CORS。SSO、Cookie 和 CSRF 由瀏覽器授權頁處理。
+- 正式模式不開本機 HTTP port，只有 --demo 會在 127.0.0.1 隨機埠啟動模擬服務。
+
+## 11. 網站驗收順序
+
+1. version 回 0.3.0／0.3.0，models 回 fast／quality；桌面顯示對應名稱。
+2. 完成瀏覽器授權，核對短碼，取得 Bearer 個人 Token。
+3. 送出繁體中文，伺服器收到 alias、完整 messages、stream=false 與 X-Client-Version。
+4. 伺服器映射到真正模型並回覆，桌面顯示內容、可追問和複製。
+5. models 新增 ultra，按重新整理後出現 Ultra，不更新 EXE。
+6. version 回 latest=0.4.0、minimum=0.3.0，允許使用；minimum=0.4.0，提示更新、禁止新登入與聊天。
+7. 全新啟動時只有 version 回 503，models／登入／聊天正常：可使用；已知強制更新後 version 再斷線：同次執行仍阻擋。
+8. models 先回 401，完成登入後可取到清單；空清單、重複 id、錯誤 default 不可默默送出未知模型。
+9. 選取文字按快捷鍵，確認伺服器沒有收到聊天；再按摘要才收到一次請求。
+10. 驗證到期、拒絕、一次性碼重複及並行兌換、401 撤銷、429 限流、HTML／redirect 等錯誤。
+
+公司 SSO、DNS、實際模型服務與跨應用選字仍需實機驗收；本機模擬測試不能取代這些檢查。
+後續通知與 Outlook 整合見 [BACKEND_ROADMAP.md](BACKEND_ROADMAP.md)，不屬於 0.3.0 已實作功能。
+
+## 格式參考
 
 - [OAuth Device Authorization Grant — RFC 8628](https://www.rfc-editor.org/rfc/rfc8628.html)
-- [OpenAI Chat Completions 格式](https://platform.openai.com/docs/api-reference/chat/create)
 - [Windows WinHTTP](https://learn.microsoft.com/en-us/windows/win32/api/winhttp/nf-winhttp-winhttpopen)
-- [Windows DPAPI CryptProtectData](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata)
+- [Windows DPAPI](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata)

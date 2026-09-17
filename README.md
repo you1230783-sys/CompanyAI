@@ -1,76 +1,69 @@
-# Company AI — Windows 連線測試版
+# Company AI 0.3.0 — Windows 工作助理
 
-以 Rust 製作的原生 Windows 小工具，先驗證「網頁登入授權 → 帶 API Key 送出訊息 → 顯示 AI 回覆」。
-編譯使用 VS2019 / MSVC v142，成品不需要安裝 Rust、Visual Studio、Node 或 WebView2。
+Rust 原生 Windows 桌面程式，提供瀏覽器登入、模型選單、文字對話，以及選取文字後的快捷處理。
+採深色側欄、淺色對話區與底部輸入卡片，保留原生程式的快速啟動。一般使用不需要 Rust、Visual Studio、Node 或 WebView2。
 
-## 直接使用 EXE
+## 直接使用
 
-完成建置的程式位於 **`dist\CompanyAI.exe`**。複製這個 EXE 到公司 Win11 x64 後即可開啟。
+1. 將 `dist/CompanyAI.exe` 複製到公司 Windows 11 x64，雙擊開啟。
+2. 按「瀏覽器登入」，核對網頁與程式的短碼並允許授權。登入最長保存 30 天。
+3. 選取後端提供的「快速／品質」等選項，輸入文字後按「送出」。Enter 換行、Ctrl+Enter 送出。
+4. 可接著追問，或按「複製回覆」。按「新對話」清除歷史，保留未送出的草稿。
 
-1. 填入公司的網站網址，例如 `https://ai.company.example`；也支援 `http://intranet-host` 或含子目錄的網址。
-2. 「聊天 API」預設 `/v1/chat/completions`；也能填同網站的完整 URL、完整路徑或相對路徑，詳見下方範例。
-3. 模型名稱填公司服務實際支援的名稱。
-4. Header 預設 `Authorization: Bearer`；若公司使用 `X-API-Key`，改選該項。
-5. 確認「登入碼路徑」和「Token 路徑」與網站實際部署相符。使用 HTTP 時須勾選「允許內網 HTTP」。儲存後核對顯示的實際聊天 API 網址，再按「瀏覽器登入」，在網站核對登入碼並授權。
-6. 回到 EXE，輸入訊息、確認右側 JSON 預覽，再按「送出訊息」。
+本版已固定公司網址、聊天、登入碼、Token、版本與模型路由，介面不再提供網址或 Header 編輯。
+更新前的設定檔只保留模型偏好；其中的舊網址不再採用。若舊憑證綁定不同路由，升級後請重新登入。
+正式 API 使用 `Authorization: Bearer <個人 access_token>`，JSON 維持 Chat Completions、`stream: false`。
 
-**網站需要先實作登入與驗證路由，EXE 才能連接真正公司服務。**
-明天修改網站時，直接依照 [WEB_INTEGRATION.md](docs/WEB_INTEGRATION.md)；該文件包含請求、回應、Header、期限、錯誤與驗收流程。
-如果公司目前只有固定 API Key 的模型路由，需要讓網站發出的個人 Key 可以被該入口驗證，或加一層代理閘道。
+## 選取文字與快捷鍵
 
-## 內網主機與多層 API 路徑（0.2.1）
+1. 保持 Company AI 開啟，可最小化到工作列。
+2. 在瀏覽器、Word 或其他支援 Ctrl+C 的一般權限程式選取文字。
+3. 按 **Ctrl+Alt+Q** 並放開按鍵，Company AI 會嘗試複製選字並帶入草稿。
+4. 確認內容後，按「翻譯」「摘要」「潤飾」或「送出」。**快捷鍵本身不會傳送內容。**
 
-內網主機不需要 `.com` 或 `.com.tw`。例如下列三種填法都會連到
-`http://intranet-host/gateway/api/v1/desktop/v1/chat/completions`：
+側欄可改為例如 `Ctrl+Shift+F8`，再按「套用快捷鍵」。若組合已被占用會提示；不使用 Windows 保留快捷鍵。
+翻譯預設外語轉繁體中文、中文轉英文；摘要使用繁體中文；潤飾保留原語言。
 
-| 網站網址 | 聊天 API |
-| --- | --- |
-| `http://intranet-host` | `/gateway/api/v1/desktop/v1/chat/completions` |
-| `http://intranet-host` | `http://intranet-host/gateway/api/v1/desktop/v1/chat/completions` |
-| `http://intranet-host/gateway/api/v1/desktop` | `v1/chat/completions` |
+- 有舊草稿時，擷取內容接在後面，不直接覆蓋；超過 16,000 個 UTF-16 code units 時保留原稿。
+- 擷取採一般 Ctrl+C，會改變系統剪貼簿，不保留原本圖片或富文字格式。
+- 實際複製內容依來源程式的 Ctrl+C 行為；某些編輯器未選字也會複製整行，因此送出前仍需核對草稿。
+- 沒有新複製結果、來源切換、其他程式改寫剪貼簿或權限不同時，不把舊剪貼簿當成這次選字。
+- 不會背景監聽一般按鍵、持續讀取剪貼簿、掃描檔案或讀取郵件。擷取失敗可手動貼上。
+- 關閉程式即停止全域快捷鍵；此版沒有系統列常駐。
 
-規則：以 `/` 開頭代表從主機根目錄開始；沒有 `/` 開頭則接在網站的子目錄後面。網站子目錄最後的 `/` 可以省略。
-完整 API 網址必須與網站使用同一協定、主機與埠號；不接受把 Key 放入查詢字串。
-按「儲存設定」後，狀態區會顯示最終聊天網址，便於確認沒有少接或重複接上路徑。
+## 版本與模型清單
 
-登入碼和 Token 路徑使用相同規則，預設仍為 `/api/desktop/oauth/device`、`/api/desktop/oauth/token`。
-聊天 API 的網址不能推導出網站的登入路由，請依網站實際設定填寫。
-舊設定檔會自動補上這兩個預設欄位；**從 0.2.0 升級後需要重新登入一次**，以重新綁定實際端點。
+啟動時與每 15 分鐘查詢服務，也能手動按「重新整理服務」。登入完成會重新取得有權使用的模型。
+版本檢查連不上、回應錯誤或格式不正確時，**暫時允許使用**；已取得的最低版本門檻不會因同次執行中稍後斷線而解除。
+低於最低版本時，停止新的登入與聊天，提示開啟固定下載頁。僅有較新版本但未低於最低版本時，仍可使用。
+更新方式是下載新版、關閉舊程式並替換 EXE，沒有背景安裝或自動覆寫。
 
-## 網站尚未完成時：本機示範
+模型清單由網站提供，不把實際模型名稱寫死在桌面程式。若模型服務尚未完成、無可用模型或需要登入，會顯示原因；完成登入後可重新整理。
+版本失敗的暫用政策不會略過登入驗證或憑空猜測模型。
 
-在此資料夾開啟 PowerShell：
+## 後端文件
+
+- **[WEB_INTEGRATION.md](docs/WEB_INTEGRATION.md)**：本次固定路由、登入、版本與模型 JSON、聊天 Header、錯誤及驗收順序。
+- **[BACKEND_ROADMAP.md](docs/BACKEND_ROADMAP.md)**：依分享對話整理通知、Outlook、RAG 等後續項目；清楚區分本版與尚未實作範圍。
+- **[VALIDATION_0_3.md](docs/VALIDATION_0_3.md)**：自動驗證範圍與公司實機測試表。
+
+網站需實作上述契約才能使用真正公司服務。本版沒有串流、附件、Outlook 存取、通知推播、永久 Token 或 refresh_token。
+
+## 本機示範
 
 ```powershell
 .\dist\CompanyAI.exe --demo
 ```
 
-程式會自動填入 127.0.0.1 的臨時網站與 `demo-echo` 模型。按「瀏覽器登入」，在本機網頁核對代碼並允許，
-再回 EXE 輸入文字送出，會收到明確標示「本機模擬回覆」的內容。**這不是真實 AI，也不會連線到公司。**
-示範服務只監聽 loopback；隨 EXE 結束而停止，示範 Token 也隨之失效。它與正式設定使用不同資料夾。
+按「瀏覽器登入」，在本機頁面核對短碼並允許；可用「快速／品質／Ultra」測試訊息往返。
+回覆會標示「本機模擬回覆，非真實 AI」，不連公司服務。示範只監聽 loopback，程式結束即停止。
 
-## 已實作的範圍
+## 個人資料與連線
 
-- 可調整網站、聊天／登入碼／Token 路徑、模型與兩種驗證 Header；支援內網單段主機、子目錄和完整 API URL。
-- 一次性登入碼、瀏覽器核准／拒絕、可取消的背景輪詢。
-- 網站核發最長 30 天的使用憑證，以 Windows DPAPI 加密保存。
-- 關閉後重開，可沿用尚未到期的正式登入；修改網站／路由／Header 時會清除舊登入。
-- Chat Completions 文字 JSON 預覽、非串流送出、最多 20 輪記憶體內對話。
-- 中文錯誤提示、401 清除登入、網路逾時與重新導向處理。
-- 本機示範及自動化協定／加密／保存測試。
-
-本版不包含串流、附件、剪貼簿監控、系統列、快捷鍵、選取文字、永久登入、refresh_token 或安裝包。
-本專案提供自己的離線交付 ZIP；共用的網頁套件編譯控制仍由另一個 Codex 任務處理。
-
-## 憑證與設定位置
-
-正式設定位於 `%LOCALAPPDATA%\CompanyAI\settings.json`，不含 API Key。
-加密憑證位於同資料夾的 `session.dpapi`，綁定目前 Windows 使用者。
-對話不寫入磁碟；關閉視窗、清除對話、切換網站或完成新的登入後會清除。
-「清除本機登入」不等於伺服器撤銷，伺服器端管理方式見串接文件。
-
-預設使用 HTTPS，沿用 Windows 信任庫；不會略過公司憑證錯誤。
-僅在公司確實需要 HTTP 測試時，勾選「允許內網 HTTP」，此模式會明文傳送憑證與訊息。
+偏好存於 `%LOCALAPPDATA%\CompanyAI\settings.json`，只包含模型代號與快捷鍵。
+憑證以目前 Windows 使用者的 DPAPI 加密存於同資料夾 `session.dpapi`；對話僅留在記憶體。
+「登出」刪除本機憑證，不等於在伺服器撤銷；伺服器仍需檢查到期、權限與撤銷狀態。
+目前依公司指定使用內網 HTTP，訊息與 Token 在傳輸中沒有 TLS 加密；若改成 HTTPS，需更新程式固定網址，憑證驗證使用 Windows 信任庫。
 
 ## 使用 VS Code 編輯
 
@@ -153,13 +146,16 @@ cargo run --example browser_smoke --frozen
 
 | 檔案 | 責任 |
 | --- | --- |
-| `src/main.rs` | EXE 入口及 --demo / --self-check |
-| `ui.rs` | 原生 Windows 控制項與背景工作結果 |
-| `config.rs` | 網址、路由、Header 設定與驗證 |
-| `auth.rs` | 登入輪詢與帶 Key 的聊天請求 |
-| `protocol.rs` | JSON 契約、解析與錯誤提示 |
-| `transport.rs` | WinHTTP、TLS、代理、逾時與回應大小限制 |
-| `storage.rs` | 設定保存與 DPAPI 憑證加密 |
-| `demo.rs` | 明確標示的本機模擬伺服器 |
+| `src/main.rs` | EXE 入口、--demo、--self-check |
+| `src/ui.rs` | 控制項、草稿、使用狀態與背景結果 |
+| `src/appearance.rs` | 原生介面配色、字型與卡片繪製 |
+| `src/config.rs` | 固定路由、偏好序列化、同來源驗證 |
+| `src/service.rs` | 版本門檻、失敗政策、模型清單 |
+| `src/selection.rs` | 全域快捷鍵、明確觸發的複製、剪貼簿邊界 |
+| `src/auth.rs` | 登入輪詢、帶 Token 的聊天請求 |
+| `src/protocol.rs` | Chat Completions、登入 JSON 與錯誤提示 |
+| `src/transport.rs` | WinHTTP、TLS、代理與逾時 |
+| `src/storage.rs` | 偏好保存與 DPAPI |
+| `src/demo.rs` | 本機模擬網站及往返測試 |
 
-維護時遵循 [AGENTS.md](AGENTS.md)：簡單易懂、註解充足、方便接手修改。
+維護時遵循 [AGENTS.md](AGENTS.md)：簡單易懂、繁體中文註解充足、方便接手修改。
