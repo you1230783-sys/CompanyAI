@@ -1,4 +1,6 @@
-# LM_AI 0.4.1：網站／API 串接契約
+# LM_AI：網站／API 串接契約
+
+> **0.6 新功能請見 [DESKTOP_0_6_CONTRACT.md](DESKTOP_0_6_CONTRACT.md)**：依模型的附件規則、全站鈴鐺同步／已讀／刪除及 Outlook MSG 自動補充。本頁以下保留既有相容契約。
 
 > **0.5 新功能請先實作 [DESKTOP_0_5_CONTRACT.md](DESKTOP_0_5_CONTRACT.md)**：附件規則路由、文件／圖片上傳、串流、持久背景任務、估時與通知。此處保留既有登入／版本／模型／通知基礎；0.5 契約先行提供網站端同步開發；驗證範圍見 [VALIDATION_0_5.md](VALIDATION_0_5.md)。
 
