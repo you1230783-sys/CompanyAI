@@ -30,6 +30,9 @@ struct Grant {
 struct State {
     grants: HashMap<String, Grant>,
     tokens: Vec<String>,
+    /// 測試時可只開放指定的三條路由，確認客戶端真的使用自訂路徑。
+    #[cfg(test)]
+    custom_routes: Option<[String; 3]>,
 }
 
 pub struct DemoServer {
@@ -170,9 +173,19 @@ fn serve(mut stream: TcpStream, origin: &str, state: &Mutex<State>) -> AppResult
     let url = url::Url::parse(&format!("{origin}{target}")).map_err(|error| error.to_string())?;
     let fields = form(&body);
     let mut state = state.lock().map_err(|_| "示範服務狀態錯誤。".to_string())?;
+    let route = url.path();
+    #[cfg(test)]
+    let route = match &state.custom_routes {
+        Some(routes) => routes
+            .iter()
+            .position(|path| path == route)
+            .map(|index| [DEVICE_PATH, TOKEN_PATH, "/v1/chat/completions"][index])
+            .unwrap_or(""),
+        None => route,
+    };
     let mut status = 200;
     let mut content_type = "application/json; charset=utf-8";
-    let reply = match (method, url.path()) {
+    let reply = match (method, route) {
         ("POST", DEVICE_PATH) if fields.get("client_id").map(String::as_str) == Some(CLIENT_ID) => {
             let device = random_code()?;
             let user_code = random_code()?[..8].to_ascii_uppercase();
@@ -336,6 +349,45 @@ mod tests {
         assert!(auth::send_chat(&config, &session, &body).reply.is_ok());
         session.access_token = "wrong-token".into();
         assert!(auth::send_chat(&config, &session, &body).unauthorized);
+    }
+
+    #[test]
+    fn custom_nested_routes_complete_login_and_nonstream_chat() {
+        let server = DemoServer::start().unwrap();
+        let mut config = Config {
+            server_url: format!("{}/gateway/api/v1/desktop", server.origin),
+            chat_path: "v1/chat/completions".into(),
+            device_path: "oauth/device".into(),
+            token_path: "oauth/token".into(),
+            ..server.config()
+        };
+        // 舊的根目錄路由不再開放；若 auth 模組仍使用固定路徑，登入就會失敗。
+        server.state.lock().unwrap().custom_routes = Some([
+            "/gateway/api/v1/desktop/oauth/device".into(),
+            "/gateway/api/v1/desktop/oauth/token".into(),
+            "/gateway/api/v1/desktop/v1/chat/completions".into(),
+        ]);
+        let grant = auth::request_device(&config).unwrap();
+        server
+            .state
+            .lock()
+            .unwrap()
+            .grants
+            .get_mut(&grant.device_code)
+            .unwrap()
+            .decision = Some(true);
+        let PollResult::Granted(session) = auth::poll_once(&config, &grant).unwrap() else {
+            panic!("expected granted");
+        };
+        // 改用相同端點的完整網址，應仍能使用剛才取得的憑證。
+        config.chat_path = format!(
+            "{}/gateway/api/v1/desktop/v1/chat/completions",
+            server.origin
+        );
+        let body = chat_json("demo-echo", &[Message::user("多層路徑連線測試")]).unwrap();
+        let result = auth::send_chat(&config, &session, &body);
+        assert!(!result.unauthorized);
+        assert!(result.reply.unwrap().contains("多層路徑連線測試"));
     }
 
     #[test]

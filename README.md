@@ -7,16 +7,35 @@
 
 完成建置的程式位於 **`dist\CompanyAI.exe`**。複製這個 EXE 到公司 Win11 x64 後即可開啟。
 
-1. 填入公司的網站網址，例如 `https://ai.company.example`（不用帶 `/v1`）。
-2. API 路徑預設 `/v1/chat/completions`；如果公司用別的路由，可直接修改。
+1. 填入公司的網站網址，例如 `https://ai.company.example`；也支援 `http://intranet-host` 或含子目錄的網址。
+2. 「聊天 API」預設 `/v1/chat/completions`；也能填同網站的完整 URL、完整路徑或相對路徑，詳見下方範例。
 3. 模型名稱填公司服務實際支援的名稱。
 4. Header 預設 `Authorization: Bearer`；若公司使用 `X-API-Key`，改選該項。
-5. 儲存設定，按「瀏覽器登入」，在網站核對登入碼並授權。
+5. 確認「登入碼路徑」和「Token 路徑」與網站實際部署相符。使用 HTTP 時須勾選「允許內網 HTTP」。儲存後核對顯示的實際聊天 API 網址，再按「瀏覽器登入」，在網站核對登入碼並授權。
 6. 回到 EXE，輸入訊息、確認右側 JSON 預覽，再按「送出訊息」。
 
 **網站需要先實作登入與驗證路由，EXE 才能連接真正公司服務。**
 明天修改網站時，直接依照 [WEB_INTEGRATION.md](docs/WEB_INTEGRATION.md)；該文件包含請求、回應、Header、期限、錯誤與驗收流程。
 如果公司目前只有固定 API Key 的模型路由，需要讓網站發出的個人 Key 可以被該入口驗證，或加一層代理閘道。
+
+## 內網主機與多層 API 路徑（0.2.1）
+
+內網主機不需要 `.com` 或 `.com.tw`。例如下列三種填法都會連到
+`http://intranet-host/gateway/api/v1/desktop/v1/chat/completions`：
+
+| 網站網址 | 聊天 API |
+| --- | --- |
+| `http://intranet-host` | `/gateway/api/v1/desktop/v1/chat/completions` |
+| `http://intranet-host` | `http://intranet-host/gateway/api/v1/desktop/v1/chat/completions` |
+| `http://intranet-host/gateway/api/v1/desktop` | `v1/chat/completions` |
+
+規則：以 `/` 開頭代表從主機根目錄開始；沒有 `/` 開頭則接在網站的子目錄後面。網站子目錄最後的 `/` 可以省略。
+完整 API 網址必須與網站使用同一協定、主機與埠號；不接受把 Key 放入查詢字串。
+按「儲存設定」後，狀態區會顯示最終聊天網址，便於確認沒有少接或重複接上路徑。
+
+登入碼和 Token 路徑使用相同規則，預設仍為 `/api/desktop/oauth/device`、`/api/desktop/oauth/token`。
+聊天 API 的網址不能推導出網站的登入路由，請依網站實際設定填寫。
+舊設定檔會自動補上這兩個預設欄位；**從 0.2.0 升級後需要重新登入一次**，以重新綁定實際端點。
 
 ## 網站尚未完成時：本機示範
 
@@ -32,7 +51,7 @@
 
 ## 已實作的範圍
 
-- 可調整網站、API 路徑、模型與兩種驗證 Header。
+- 可調整網站、聊天／登入碼／Token 路徑、模型與兩種驗證 Header；支援內網單段主機、子目錄和完整 API URL。
 - 一次性登入碼、瀏覽器核准／拒絕、可取消的背景輪詢。
 - 網站核發最長 30 天的使用憑證，以 Windows DPAPI 加密保存。
 - 關閉後重開，可沿用尚未到期的正式登入；修改網站／路由／Header 時會清除舊登入。

@@ -1,6 +1,6 @@
 //! 登入與聊天的工作流程，與介面分離，方便用本機測試伺服器驗證。
 use crate::{
-    config::{AuthHeader, Config, CLIENT_ID, DEVICE_PATH, TOKEN_PATH},
+    config::{AuthHeader, Config, CLIENT_ID},
     protocol::{self, DeviceGrant, OAuthError, TokenResponse},
     storage::Session,
     transport, AppResult,
@@ -14,7 +14,7 @@ use std::{
 pub fn request_device(config: &Config) -> AppResult<DeviceGrant> {
     config.validate()?;
     let response = transport::post_form(
-        &config.endpoint(DEVICE_PATH)?,
+        &config.endpoint(&config.device_path)?,
         &[("client_id", CLIENT_ID), ("scope", "chat:write")],
     )?;
     if response.status != 200 {
@@ -37,7 +37,7 @@ pub enum PollResult {
 
 pub fn poll_once(config: &Config, grant: &DeviceGrant) -> AppResult<PollResult> {
     let response = transport::post_form(
-        &config.endpoint(TOKEN_PATH)?,
+        &config.endpoint(&config.token_path)?,
         &[
             ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
             ("device_code", &grant.device_code),

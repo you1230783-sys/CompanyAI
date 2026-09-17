@@ -48,6 +48,8 @@ const SEND: usize = 114;
 const CLEAR: usize = 115;
 const REPLY: usize = 116;
 const REOPEN: usize = 117;
+const DEVICE_ROUTE: usize = 118;
+const TOKEN_ROUTE: usize = 119;
 
 enum Event {
     Device(DeviceGrant),
@@ -160,17 +162,19 @@ impl App {
         for (id, text) in [
             (201, title),
             (202, "網站網址"),
-            (203, "API 路徑"),
+            (203, "聊天 API"),
             (204, "模型"),
             (205, "驗證 Header"),
             (206, "登入碼／網址"),
             (207, "訊息"),
             (208, "將送出的 JSON（不含 API Key）"),
             (209, "對話回覆（僅存於本次視窗）"),
+            (210, "登入碼路徑"),
+            (211, "Token 路徑"),
         ] {
             self.create_control(id, "STATIC", text, 0)?;
         }
-        for id in [SERVER, ROUTE, MODEL, CODE] {
+        for id in [SERVER, ROUTE, MODEL, CODE, DEVICE_ROUTE, TOKEN_ROUTE] {
             let read_only = if id == CODE { ES_READONLY } else { 0 };
             self.create_control(
                 id,
@@ -250,6 +254,8 @@ impl App {
         }
         self.set(SERVER, &self.config.server_url);
         self.set(ROUTE, &self.config.chat_path);
+        self.set(DEVICE_ROUTE, &self.config.device_path);
+        self.set(TOKEN_ROUTE, &self.config.token_path);
         self.set(MODEL, &self.config.model);
         self.set(REPLY, "在上方輸入訊息，按「送出訊息」測試 API。\n\n程式不會自動讀取剪貼簿、檔案或其他視窗內容。");
         unsafe {
@@ -269,7 +275,13 @@ impl App {
                 self.control(SERVER),
                 EM_SETCUEBANNER,
                 0,
-                wide("https://ai.company.example").as_ptr() as isize,
+                wide("https://ai.company.example 或 http://intranet-host/子目錄").as_ptr() as isize,
+            );
+            SendMessageW(
+                self.control(ROUTE),
+                EM_SETCUEBANNER,
+                0,
+                wide("完整網址、/完整路徑 或 相對路徑").as_ptr() as isize,
             );
             SendMessageW(
                 self.control(MODEL),
@@ -306,32 +318,38 @@ impl App {
         self.place(ROUTE, 140, 89, width - 465, 30);
         self.place(204, width - 305, 95, 50, 24);
         self.place(MODEL, width - 250, 89, 230, 30);
-        self.place(205, 20, 134, 110, 24);
-        self.place(HEADER, 140, 128, 205, 150);
-        self.place(HTTP, 360, 129, width - 505, 30);
-        self.place(SAVE, width - 130, 128, 110, 32);
-        self.place(LOGIN, 20, 173, 125, 34);
-        self.place(CANCEL, 155, 173, 110, 34);
-        self.place(LOGOUT, 275, 173, 140, 34);
-        self.place(REOPEN, 425, 173, 140, 34);
-        self.place(206, 20, 224, 110, 24);
-        self.place(CODE, 140, 216, width - 160, 30);
-        self.place(STATUS, 20, 257, width - 40, 44);
         let column = (width - 55) / 2;
-        self.place(207, 20, 307, column, 24);
-        self.place(208, column + 35, 307, column, 24);
-        self.place(PROMPT, 20, 335, column, 136);
-        self.place(PREVIEW, column + 35, 335, column, 136);
-        self.place(SEND, 20, 481, 125, 34);
-        self.place(CLEAR, 155, 481, 125, 34);
-        self.place(209, 20, 531, width - 40, 24);
-        self.place(REPLY, 20, 559, width - 40, (height - 579).max(80));
+        self.place(210, 20, 134, 110, 24);
+        self.place(DEVICE_ROUTE, 140, 128, column - 120, 30);
+        self.place(211, column + 35, 134, 105, 24);
+        self.place(TOKEN_ROUTE, column + 145, 128, column - 110, 30);
+        self.place(205, 20, 174, 110, 24);
+        self.place(HEADER, 140, 168, 205, 150);
+        self.place(HTTP, 360, 169, width - 505, 30);
+        self.place(SAVE, width - 130, 168, 110, 32);
+        self.place(LOGIN, 20, 213, 125, 34);
+        self.place(CANCEL, 155, 213, 110, 34);
+        self.place(LOGOUT, 275, 213, 140, 34);
+        self.place(REOPEN, 425, 213, 140, 34);
+        self.place(206, 20, 264, 110, 24);
+        self.place(CODE, 140, 256, width - 160, 30);
+        self.place(STATUS, 20, 297, width - 40, 44);
+        self.place(207, 20, 347, column, 24);
+        self.place(208, column + 35, 347, column, 24);
+        self.place(PROMPT, 20, 375, column, 116);
+        self.place(PREVIEW, column + 35, 375, column, 116);
+        self.place(SEND, 20, 501, 125, 34);
+        self.place(CLEAR, 155, 501, 125, 34);
+        self.place(209, 20, 551, width - 40, 24);
+        self.place(REPLY, 20, 579, width - 40, (height - 599).max(80));
     }
 
     fn read_config(&self) -> Config {
         Config {
             server_url: self.text(SERVER).trim().trim_end_matches('/').into(),
             chat_path: self.text(ROUTE).trim().into(),
+            device_path: self.text(DEVICE_ROUTE).trim().into(),
+            token_path: self.text(TOKEN_ROUTE).trim().into(),
             model: self.text(MODEL).trim().into(),
             auth_header: if unsafe { SendMessageW(self.control(HEADER), CB_GETCURSEL, 0, 0) } == 1 {
                 AuthHeader::XApiKey
@@ -398,7 +416,18 @@ impl App {
     fn update_enabled(&self) {
         let idle = self.busy == Busy::None;
         for id in [
-            SERVER, ROUTE, MODEL, HEADER, HTTP, SAVE, LOGIN, LOGOUT, CLEAR, PROMPT,
+            SERVER,
+            ROUTE,
+            DEVICE_ROUTE,
+            TOKEN_ROUTE,
+            MODEL,
+            HEADER,
+            HTTP,
+            SAVE,
+            LOGIN,
+            LOGOUT,
+            CLEAR,
+            PROMPT,
         ] {
             unsafe {
                 EnableWindow(self.control(id), i32::from(idle));
@@ -486,7 +515,10 @@ impl App {
         match id {
             SAVE => {
                 self.save_settings()?;
-                self.status("設定已儲存。變更網站、路由或 Header 類型後，請重新登入。");
+                self.status(&format!(
+                    "設定已儲存。實際聊天 API：\n{}",
+                    self.config.endpoint(&self.config.chat_path)?
+                ));
             }
             LOGIN => self.begin_login()?,
             CANCEL => {
@@ -726,7 +758,12 @@ pub fn run(demo: Option<&DemoServer>, smoke_check: bool) -> AppResult<()> {
         let window = CreateWindowExW(
             WS_EX_CONTROLPARENT,
             class_name.as_ptr(),
-            wide("Company AI · 連線測試版").as_ptr(),
+            wide(concat!(
+                "Company AI ",
+                env!("CARGO_PKG_VERSION"),
+                " · 連線測試版"
+            ))
+            .as_ptr(),
             WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
@@ -792,8 +829,29 @@ pub fn run(demo: Option<&DemoServer>, smoke_check: bool) -> AppResult<()> {
         );
         if smoke_check {
             let app = state.borrow();
-            if app.controls.len() != 26 || app.text(ROUTE) != "/v1/chat/completions" {
+            if app.controls.len() != 30
+                || app.text(ROUTE) != "/v1/chat/completions"
+                || app.text(DEVICE_ROUTE) != app.config.device_path
+                || app.text(TOKEN_ROUTE) != app.config.token_path
+            {
                 return Err("介面控制項自我檢查失敗。".into());
+            }
+            // 直接經過 Win32 輸入框與 checkbox 讀值，避免只測 Config 卻漏掉 UI 接線。
+            // 自我檢查只驗證解析，不保存設定或連到這個示意主機。
+            app.set(SERVER, "http://intranet-host/gateway/api/v1/desktop");
+            app.set(ROUTE, "v1/chat/completions");
+            app.set(DEVICE_ROUTE, "oauth/device");
+            app.set(TOKEN_ROUTE, "oauth/token");
+            app.set(MODEL, "test");
+            SendMessageW(app.control(HTTP), BM_SETCHECK, BST_CHECKED as usize, 0);
+            let entered = app.read_config();
+            entered.validate()?;
+            if entered.endpoint(&entered.chat_path)?.as_str()
+                != "http://intranet-host/gateway/api/v1/desktop/v1/chat/completions"
+                || entered.device_path != "oauth/device"
+                || entered.token_path != "oauth/token"
+            {
+                return Err("介面網址設定自我檢查失敗。".into());
             }
         } else {
             SetTimer(window, 1, 100, None);

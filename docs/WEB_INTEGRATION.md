@@ -12,9 +12,18 @@
 | POST | `/api/desktop/oauth/token` | EXE 輪詢，取得 30 天使用憑證 |
 | POST | `/v1/chat/completions` | 驗證憑證後，處理或轉送 OpenAI 相容聊天請求 |
 
-前兩個 `/api/desktop/oauth/...` API 路徑在本版固定。聊天路徑、網站網址、模型名稱與 Header 類型由 EXE 設定。
-例如網站填 `https://ai.company.example`，路徑填 `/v1/chat/completions`；**不要把 `/v1` 重複填進網站欄位**。
-如果實際路由是 `/api/v1/chat/completions`，只要修改 EXE 的 API 路徑即可。
+以上為預設路由。從桌面端 0.2.1 起，聊天、登入碼與 Token 路徑都能在 EXE 設定；JSON 與表單契約維持不變。
+網站網址支援內網單段主機、IP、埠號及子目錄，不要求 `.com` 等網域後綴。
+
+- 主機根路徑：網站 `http://intranet-host`，聊天 `/gateway/api/v1/desktop/v1/chat/completions`。
+- 完整網址：同一網站下可直接在聊天欄位填 `http://intranet-host/gateway/api/v1/desktop/v1/chat/completions`。
+- 相對路徑：網站 `http://intranet-host/gateway/api/v1/desktop`，聊天 `v1/chat/completions`（此處不要加開頭 `/`）。
+
+三種填法會解析為同一個聊天端點。相對路徑接在網站子目錄下；以 `/` 開頭從主機根目錄開始。
+這與 [url::Url::join 的路徑規則](https://docs.rs/url/latest/url/struct.Url.html#method.join) 一致；應用程式會先將網站欄位正規化為目錄。
+登入碼與 Token 欄位也採相同規則。若它們部署在不同子目錄，請分別指定完整根路徑，不要從聊天路由猜測。
+所有端點必須同來源，不接受 URL 帳密、查詢字串、反斜線或片段；HTTP 需由使用者勾選允許。
+憑證會綁定三個實際端點及驗證 Header，端點變更需重新登入。0.2.0 的舊設定可讀取，但舊登入需重新取得。
 
 登入流程採 OAuth 2.0 Device Authorization Grant（RFC 8628）。EXE 不開啟本機回呼 port，使用者以瀏覽器登入，EXE 向網站輪詢結果。
 `client_id` 固定為 `company-ai-desktop`，屬於公開客戶端，**不是密碼，不配置 client_secret**。

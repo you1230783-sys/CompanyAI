@@ -1,4 +1,4 @@
-﻿Recorded: 2026-09-16T22:41:57.8480737+08:00
+﻿Recorded: 2026-09-17T09:22:20.1523711+08:00
 Host OS: Microsoft Windows NT 10.0.26200.0
 Visual Studio: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools
 MSVC: 14.29.30133
@@ -7,7 +7,7 @@ Target: x86_64-pc-windows-msvc
 CRT: static
 Rust binaries: Y:\Rust\.tools\rustup\toolchains\1.98.1-x86_64-pc-windows-msvc\bin
 Cargo home: Y:\Rust\.tools\cargo
-EXE SHA256: 03C81B766A6CCB2A8A584AB3955099AA51A9F4C5DBAB8A125B7E9E71C9353F77
+EXE SHA256: 9DEEA8458C25EAFCCB47C36EDFCEC720A1737BE413B89EB9B880F02BE515BEFA
 
 rustc 1.98.1 (48a229cea 2026-09-01)
 binary: rustc
@@ -47,5 +47,5 @@ File Type: EXECUTABLE IMAGE
         7000 .pdata
        4A000 .rdata
         1000 .reloc
-       96000 .text
+       98000 .text
         1000 _RDATA

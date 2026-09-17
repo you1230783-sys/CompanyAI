@@ -71,7 +71,7 @@ pub fn request(
     // SAFETY: 傳入的 UTF-16 字串與 body 在整次同步請求期間有效；所有輸出緩衝區有明確長度。
     unsafe {
         let session = Handle::checked(WinHttpOpen(
-            wide("CompanyAI/0.2").as_ptr(),
+            wide(concat!("CompanyAI/", env!("CARGO_PKG_VERSION"))).as_ptr(),
             proxy_mode,
             ptr::null(),
             ptr::null(),
