@@ -13,3 +13,5 @@ session.dpapi
 history.dpapi
 notifications.dpapi
 settings.json
+jobs-*.dpapi
+/uploads/

@@ -6,6 +6,10 @@ use serde::{Deserialize, Serialize};
 pub struct Message {
     pub role: String,
     pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<String>,
 }
 
 impl Message {
@@ -13,12 +17,16 @@ impl Message {
         Self {
             role: "user".into(),
             content: content.into(),
+            request_id: None,
+            attachments: Vec::new(),
         }
     }
     pub fn assistant(content: String) -> Self {
         Self {
             role: "assistant".into(),
             content,
+            request_id: None,
+            attachments: Vec::new(),
         }
     }
 }
@@ -27,7 +35,7 @@ impl Message {
 #[derive(Serialize)]
 pub struct ChatRequest<'a> {
     pub model: &'a str,
-    pub messages: &'a [Message],
+    pub messages: Vec<serde_json::Value>,
     pub stream: bool,
 }
 
@@ -43,7 +51,10 @@ pub fn chat_json(model: &str, messages: &[Message]) -> AppResult<String> {
     }
     serde_json::to_string_pretty(&ChatRequest {
         model,
-        messages,
+        messages: messages
+            .iter()
+            .map(|m| serde_json::json!({"role":m.role,"content":m.content}))
+            .collect(),
         stream: false,
     })
     .map_err(|error| error.to_string())

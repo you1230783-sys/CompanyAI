@@ -167,7 +167,7 @@ impl WebView {
                             let mut message = PWSTR::null();
                             args.WebMessageAsJson(&mut message)?;
                             let message = CoTaskMemPWSTR::from(message).to_string();
-                            if message.len() <= 100_000 {
+                            if message.len() <= 300_000 {
                                 let _ = messages.send(message);
                             }
                         }

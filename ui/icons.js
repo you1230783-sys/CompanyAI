@@ -1,5 +1,7 @@
 // 簡單線條圖示由此集中管理，不依賴網路字型或平台符號字形。
 const icons = {
+  paperclip:
+    '<path d="m8 13 6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l9-9a2 2 0 0 1 3 3l-9 9"/>',
   panel: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>',

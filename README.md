@@ -1,6 +1,6 @@
-# LM_AI 0.4.1 — Windows 工作助理
+# LM_AI 0.5.0 — Windows 工作助理
 
-Rust 桌面程式，提供公司瀏覽器登入、文字對話、選字快捷鍵、網站通知及 Classic Outlook 唯讀助理。
+Rust 桌面程式，提供公司瀏覽器登入、文字／附件對話、串流、持久背景任務、選字快捷鍵、網站通知及 Classic Outlook 唯讀助理。
 介面使用 WebView2、內嵌 HTML/CSS 與離線 Markdown 套件；不需 Node、Python 或外部 CDN。
 
 ## 直接使用
@@ -16,6 +16,19 @@ Rust 桌面程式，提供公司瀏覽器登入、文字對話、選字快捷鍵
 公式使用 KaTeX 支援的 TeX 語法，包括 `$...$`、`$$...$$`、`\(...\)`、`\[...\]`；不是完整 LaTeX 文件編譯器。
 原始 HTML 不執行，遠端圖片只顯示替代文字；外部 HTTP(S) 連結經確認後用瀏覽器開啟。
 
+## 附件、串流與背景任務
+
+網站部署 [0.5 契約](docs/DESKTOP_0_5_CONTRACT.md) 後，登入會取得支援模式與附件規則。未部署時仍保留一般純文字聊天。
+選「串流回覆」逐段閱讀，或「背景處理」先取得任務，完成後收到提示。按迴紋針選檔，也可直接在輸入框貼上圖片。
+文件與圖片合計最多 20 個；副檔名、單檔及合計大小由後端提供，不需為一般規則調整更新 EXE。
+附件先上傳網站轉換，卡片顯示排隊／转檔／可送出／失敗；全部就緒後才可送出 AI 分析。桌面不處理 MD 轉換或 OCR。
+可按「估算時間」查看排隊、處理與總時間；未知顯示未知，估算不是完成保證。
+
+任務面板可查看狀態、回到對話或取消。可同時處理不同對話，同一對話先等當前工作結束；最多追蹤 8 個未完成聊天工作。
+串流斷線保留片段、改查原任務；退出後重開並登入同帳號，也會查回結果。重試沿用 request_id，不直接新建重複工作。
+最小化自動進入系統托盤，右鍵可還原或離開。離開 App 不會取消伺服器已接受的任務；退出期間沒有桌面即時通知。
+詳見 [0.5 使用與驗收說明](docs/VALIDATION_0_5.md)。Icon 暫用 fallback，待提供圖片後可經 assets/app.ico 嵌入。
+
 ## 選取文字
 
 保持 LM_AI 開啟，在一般權限的來源程式選取文字，按 **Win+Esc** 並放開按鍵；文字會接到草稿後面，確認後再按送出、翻譯、摘要或潤飾。
@@ -27,7 +40,7 @@ Rust 桌面程式，提供公司瀏覽器登入、文字對話、選字快捷鍵
 ## 通知與 Classic Outlook
 
 - 通知中心顯示網站事件；使用 WebSocket 喚醒及每 60 秒 REST 補查，支援已讀、去重、期限與加密快取。
-- Windows 提示不搶焦點，點擊才開通知中心。程式需保持開啟或最小化；關閉即退出，不另裝背景服務。
+- Windows 提示不搶焦點，點擊可開啟通知／任務面板。最小化後保留在系統托盤；關閉或選離開才退出，不另裝背景服務。
 - Classic Outlook：選取一封信，按「讀取選取郵件」先預覽基本資訊；確認分析才送給 AI。
 - 正文需另外勾選並確認，讀取前比對同一封郵件。沒有附件、全信箱掃描、寄信、刪信、移動或修改未讀狀態。
 - 郵件分析會開新對話，避免帶入舊聊天；AI 要求更多資訊不會自動取得正文。
@@ -41,19 +54,21 @@ Token、對話與通知分別為 `session.dpapi`、`history.dpapi`、`notificati
 右上刪除可移除目前對話。登出只清除本機 Token，不等於伺服器撤銷。
 
 公司主機、聊天、登入、版本、模型、下載與通知路由固定且不提供 UI 編輯。
-聊天維持 `Authorization: Bearer <個人 Token>`、model alias 與 `stream: false`。
+聊天維持 `Authorization: Bearer <個人 Token>` 與 model alias。一般／背景使用 stream=false，串流使用 stream=true。
 版本及模型啟動時、登入後、每 5 分鐘與手動重新整理時查詢。低於 minimum_version 才強制更新；僅低於 latest_version 可繼續使用。
 版本檢查失敗暫時允許使用，但同次執行已確認的強制更新不因斷線解除。模型或登入失敗仍需處理，不能藉版本暫用政策略過。
 更新由使用者下載並替換 EXE。依公司指定目前採內網 HTTP，沒有 TLS 傳輸加密；將來切 HTTPS 需同步更新固定設定。
 
 ## 後端契約與驗證
 
+- [DESKTOP_0_5_CONTRACT.md](docs/DESKTOP_0_5_CONTRACT.md)：附件、模式、持久任務、估時與新通知契約。
+- [VALIDATION_0_5.md](docs/VALIDATION_0_5.md)：新版操作、本機測試與公司驗收。
 - [WEB_INTEGRATION.md](docs/WEB_INTEGRATION.md)：既有登入、聊天、版本與模型契約。
 - [NOTIFICATIONS_AND_OUTLOOK.md](docs/NOTIFICATIONS_AND_OUTLOOK.md)：本次網站需新增的通知 API、WebSocket 與 Outlook 分析格式。
 - [VALIDATION_0_4.md](docs/VALIDATION_0_4.md)：本機驗證範圍與公司驗收步驟。
 - [BACKEND_ROADMAP.md](docs/BACKEND_ROADMAP.md)：已完成與後續範圍。
 
-本次未加入 UNC 知識庫、skills 工具呼叫、RAG、附件、OCR、長任務或寄信。
+本次未加入 UNC 知識庫、skills 工具呼叫、RAG、桌面 OCR 或寄信。
 
 ## 本機示範
 
@@ -61,7 +76,7 @@ Token、對話與通知分別為 `session.dpapi`、`history.dpapi`、`notificati
 .\dist\LM_AI.exe --demo
 ```
 
-齒輪 → 登入，在本機頁面允許授權後可測聊天、通知與已讀。Outlook 助理會使用虛構郵件，不讀真實信箱。
+齒輪 → 登入，在本機頁面允許授權後可測附件狀態、串流、背景任務、估時、通知與已讀。模擬後端不做真實轉檔，狀態僅保存在記憶體。Outlook 助理會使用虛構郵件，不讀真實信箱。
 只監聽 loopback，所有回覆明示本機模擬；不連公司服務。一般使用不需要 Rust 或 Visual Studio。
 
 ## 使用 VS Code 編輯

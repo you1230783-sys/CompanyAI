@@ -1,9 +1,11 @@
 //! LM_AI：將通訊、登入、儲存與 Windows 介面分開，方便逐步擴充。
+pub mod attachments;
 pub mod auth;
 pub mod config;
 pub mod demo;
 pub mod history;
 pub mod hotkey;
+pub mod jobs;
 pub mod notifications;
 pub mod outlook;
 pub mod protocol;

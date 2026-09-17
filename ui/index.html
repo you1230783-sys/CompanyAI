@@ -34,6 +34,10 @@
           <span data-icon="bell"></span><span class="nav-label">通知</span
           ><span id="unread-badge" class="badge" hidden>0</span>
         </button>
+        <button id="show-tasks" class="nav-button" title="工作任務">
+          <span data-icon="list"></span><span class="nav-label">任務</span
+          ><span id="task-count" class="badge"></span>
+        </button>
         <button id="show-outlook" class="nav-button">
           <span data-icon="mail"></span
           ><span class="nav-label">Outlook 助理</span>
@@ -79,6 +83,12 @@
         <section id="chat-view" class="view">
           <div id="transcript" tabindex="0" aria-label="聊天內容">
             <div id="messages"></div>
+            <div
+              id="live-task"
+              class="live-task"
+              aria-live="polite"
+              hidden
+            ></div>
           </div>
           <button id="jump-bottom" class="jump-button" hidden>
             <span data-icon="arrow-down"></span>查看最新回覆
@@ -93,6 +103,7 @@
                 <span data-icon="sparkles"></span>潤飾
               </button>
             </div>
+            <div id="attachment-list" class="attachment-list"></div>
             <div class="composer">
               <textarea
                 id="prompt"
@@ -103,6 +114,15 @@
                 spellcheck="false"
               ></textarea>
               <div class="composer-bottom">
+                <button
+                  id="add-attachment"
+                  class="icon-button"
+                  title="加入附件或在輸入框貼上圖片"
+                  aria-label="加入附件"
+                  data-icon="paperclip"
+                  disabled
+                ></button>
+                <input id="attachment-input" type="file" multiple hidden />
                 <div class="model-picker">
                   <button
                     id="model-button"
@@ -131,11 +151,41 @@
                 ></button>
               </div>
             </div>
+            <div class="execution-controls">
+              <div class="execution-switch" aria-label="執行模式">
+                <button id="execution-sync" hidden>一般回覆</button>
+                <button id="execution-stream" hidden>串流回覆</button
+                ><button id="execution-background" hidden>背景處理</button>
+              </div>
+              <button id="estimate-time" class="secondary-button" hidden>
+                估算時間
+              </button>
+            </div>
+            <p id="timing-estimate" class="subtle work-hint"></p>
+            <details class="attachment-help">
+              <summary>附件規則</summary>
+              <p id="attachment-rules"></p>
+              <p>
+                檔案上傳到公司網站處理。圖片可直接貼到輸入框；轉檔完成後再送出訊息。
+              </p>
+            </details>
             <div class="compose-hint">
               <span>Enter 換行 · Ctrl+Enter 送出</span
               ><span id="hotkey-hint">Win+Esc 選字帶入</span>
             </div>
           </div>
+        </section>
+        <section id="tasks-view" class="view secondary-view" hidden>
+          <div class="section-heading">
+            <div>
+              <h2>工作任務</h2>
+              <p>關閉視窗後由伺服器繼續執行，重新開啟會恢復查詢。</p>
+            </div>
+            <button id="refresh-tasks" class="secondary-button">
+              重新整理
+            </button>
+          </div>
+          <div id="task-list"></div>
         </section>
         <section id="notifications-view" class="view secondary-view" hidden>
           <div class="section-heading">
@@ -265,7 +315,7 @@
         </section>
         <section>
           <h3>版本與服務</h3>
-          <p id="version-label">LM_AI 0.4.1</p>
+          <p id="version-label">LM_AI 0.5.0</p>
           <div class="button-row">
             <button id="refresh" class="secondary-button">
               <span data-icon="refresh"></span>重新整理服務</button
@@ -304,6 +354,7 @@
     <script src="vendor/purify.min.js"></script>
     <script src="icons.js"></script>
     <script src="app.js"></script>
+    <script src="work.js"></script>
     <script src="self-test.js"></script>
   </body>
 </html>

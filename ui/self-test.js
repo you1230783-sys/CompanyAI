@@ -100,6 +100,107 @@ window.runSelfTest = async () => {
         ?.textContent === "AI",
       "assistant label",
     );
+    // 長任務 UI：伺服器規則、檔名安全顯示、Markdown 串流與閱讀位置。
+    fixture.work = {
+      rules: {
+        enabled: true,
+        max_count: 20,
+        max_file_bytes: 10485760,
+        max_total_bytes: 52428800,
+        allowed_extensions: [".pdf", ".png"],
+      },
+      modes: ["stream", "background"],
+      mode: "stream",
+      can_estimate: true,
+      attachments: [
+        {
+          id: "file1",
+          name: "<script>file.pdf",
+          size: 2048,
+          state: "processing",
+          progress: 42,
+          queue_position: 2,
+        },
+      ],
+      tasks: [
+        {
+          id: "task1",
+          conversation_id: fixture.active_id,
+          title: "長任務",
+          state: "running",
+          mode: "stream",
+          active: true,
+          partial: "**串流內容**",
+          progress: 25,
+        },
+      ],
+    };
+    LMUI.receive(fixture);
+    await frame();
+    check(
+      document.querySelectorAll(".attachment-card").length === 1,
+      "attachment processing card",
+    );
+    check(
+      !document.querySelector(".attachment-card script"),
+      "attachment filename is text",
+    );
+    check(
+      document.querySelector("#live-task strong")?.textContent === "串流內容",
+      "stream Markdown",
+    );
+    check(
+      document.getElementById("attachment-rules").textContent.includes("20"),
+      "server attachment rules",
+    );
+    transcript.scrollTop = 50;
+    transcript.dispatchEvent(new Event("scroll"));
+    await frame();
+    const streamTop = transcript.scrollTop;
+    fixture.work.tasks[0].partial += "\n\n新的串流段落。";
+    LMUI.receive(fixture);
+    await frame();
+    check(
+      Math.abs(transcript.scrollTop - streamTop) < 5,
+      "stream preserves reading position",
+    );
+    LMUI.bottom();
+    fixture.work.tasks[0].partial += "\n\n回覆完成。";
+    LMUI.receive(fixture);
+    await frame();
+    check(LMUI.atBottom(), "stream follows bottom");
+    check(
+      WorkUI.durationLabel(null) === "未知",
+      "unknown estimate is not zero",
+    );
+    fixture.work.attachments = Array.from({ length: 20 }, (_, i) => ({
+      id: "limit" + i,
+      name: "existing.png",
+      size: 10,
+      state: "ready",
+    }));
+    LMUI.receive(fixture);
+    const clipboard = new DataTransfer();
+    clipboard.items.add(
+      new File([new Uint8Array([137, 80, 78, 71])], "paste.png", {
+        type: "image/png",
+      }),
+    );
+    const pasteImage = new ClipboardEvent("paste", {
+      clipboardData: clipboard,
+      bubbles: true,
+      cancelable: true,
+    });
+    document.getElementById("prompt").dispatchEvent(pasteImage);
+    await frame();
+    check(pasteImage.defaultPrevented, "image paste is routed to attachments");
+    check(
+      document.getElementById("toast").textContent.includes("20"),
+      "paste image shares the 20-file limit",
+    );
+    fixture.work.tasks = [];
+    fixture.work.attachments = [];
+    LMUI.receive(fixture);
     // 經過真正的 Rust 訊息橋錄製組合；測試不送出系統按鍵，也不改使用者的設定。
     const binding = LMUI.keyBindingFromEvent({ code: "Escape", metaKey: true });
     check(binding.modifiers === 8 && binding.key === 27, "Win+Esc key mapping");
@@ -123,17 +224,15 @@ window.runSelfTest = async () => {
       document.getElementById("hotkey").classList.contains("recording"),
       "recording started through Rust bridge",
     );
-    document
-      .getElementById("hotkey")
-      .dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: "Escape",
-          code: "Escape",
-          metaKey: true,
-          bubbles: true,
-          cancelable: true,
-        }),
-      );
+    document.getElementById("hotkey").dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Escape",
+        code: "Escape",
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
     await frame();
     await frame();
     check(

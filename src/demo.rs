@@ -23,6 +23,8 @@ use windows_sys::Win32::Security::Cryptography::{
     BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG,
 };
 
+mod work;
+
 struct Grant {
     user_code: String,
     csrf: String,
@@ -34,6 +36,7 @@ struct State {
     grants: HashMap<String, Grant>,
     tokens: Vec<String>,
     notification_read: bool,
+    work: work::DemoWork,
     /// 測試時可只開放指定的三條路由，確認客戶端真的使用自訂路徑。
     #[cfg(test)]
     custom_routes: Option<[String; 3]>,
@@ -162,7 +165,7 @@ fn serve(mut stream: TcpStream, origin: &str, state: &Mutex<State>) -> AppResult
         .get("content-length")
         .and_then(|value| value.parse().ok())
         .unwrap_or(0);
-    if length > 65_536 {
+    if length > 10 * 1024 * 1024 {
         return Err("示範請求過大。".into());
     }
     while bytes.len() < header_end + length {
@@ -194,6 +197,23 @@ fn serve(mut stream: TcpStream, origin: &str, state: &Mutex<State>) -> AppResult
         .get("authorization")
         .and_then(|s| s.strip_prefix("Bearer "))
         .is_some_and(|token| state.tokens.iter().any(|known| known == token));
+    let owner = if authorized {
+        headers
+            .get("authorization")
+            .and_then(|s| s.strip_prefix("Bearer "))
+    } else {
+        None
+    };
+    if work::serve_work(
+        &mut stream,
+        method,
+        route,
+        &bytes[header_end..header_end + length],
+        owner,
+        &mut state.work,
+    )? {
+        return Ok(());
+    }
     if method == "GET" && route == crate::notifications::SOCKET_PATH && authorized {
         let key = headers
             .get("sec-websocket-key")

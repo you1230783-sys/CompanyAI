@@ -7,6 +7,7 @@
 ```text
 CompanyAI/
   src/、examples/           Rust 程式碼與開發範例
+  assets/                  可選的 app.ico 與 fallback 說明
   ui/、build.rs             離線前端與資源嵌入；不需要 npm 建置
   Cargo.toml、Cargo.lock    專案與固定依賴
   rust-toolchain.toml       固定 Rust 版本

@@ -41,7 +41,7 @@ try {
     & (Join-Path $PSScriptRoot 'Build.ps1')
 
     # 明確列舉交付內容；不帶入 .git、快取、登入資料或另一個專案的資源。
-    $projectItems = @('src','ui','examples','scripts','docs','.cargo','dist','build.rs','Cargo.toml','Cargo.lock','rust-toolchain.toml','README.md','AGENTS.md','.gitignore','.gitattributes')
+    $projectItems = @('src','ui','assets','examples','scripts','docs','.cargo','dist','build.rs','Cargo.toml','Cargo.lock','rust-toolchain.toml','README.md','AGENTS.md','.gitignore','.gitattributes')
     foreach ($item in $projectItems) { Copy-Item -LiteralPath (Join-Path $deliveryRoot $item) -Destination $stage -Recurse -Force }
     Copy-Tree $vendorPath (Join-Path $stage 'vendor')
     $portableToolchain = Join-Path $stage 'toolchain'

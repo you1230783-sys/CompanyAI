@@ -32,12 +32,16 @@ use windows_sys::Win32::{
     System::LibraryLoader::GetModuleHandleW,
     UI::{HiDpi::*, Shell::*, WindowsAndMessaging::*},
 };
+mod work;
 const TRAY_MESSAGE: u32 = WM_APP + 4;
 
 /// 明確列舉介面命令，不提供任意檔案、程式或任意 API 執行入口。
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Command {
+    Work {
+        command: work::WorkCommand,
+    },
     StartHotkeyRecording,
     CancelHotkeyRecording,
     RecordedHotkey {
@@ -96,6 +100,7 @@ enum Command {
     },
 }
 enum Event {
+    Work(u64, work::WorkEvent),
     Services(
         u64,
         AppResult<service::VersionInfo>,
@@ -111,6 +116,7 @@ enum Event {
     Socket(u64, bool),
 }
 struct App {
+    work: work::WorkRuntime,
     window: HWND,
     view: WebView,
     root: PathBuf,
@@ -171,6 +177,7 @@ impl App {
     fn can_send(&self) -> bool {
         self.logged_in()
             && self.busy == "none"
+            && self.work_ready()
             && !self.versions.blocked()
             && self
                 .models
@@ -205,7 +212,7 @@ impl App {
             "draft":self.draft,"draft_revision":self.draft_revision,"focus_draft":self.focus_draft,
             "notifications":events,"notification_status":self.notification_status,"unread_count":self.inbox.unread_count(),"notifications_loading":self.notifications_loading,
             "mail":self.mail,"mail_busy":self.mail_busy,"history_error":self.history_error,
-            "version_status":self.version_status,"login_code":self.grant.as_ref().map(|g|&g.user_code)
+            "work":self.work_state(),"version_status":self.version_status,"login_code":self.grant.as_ref().map(|g|&g.user_code)
         }}));
         self.focus_draft = false;
     }
@@ -219,6 +226,8 @@ impl App {
     fn set_draft(&mut self, text: String) {
         self.draft = text;
         self.draft_revision += 1;
+        self.work.estimate = None;
+        self.work.estimate_revision += 1;
     }
     fn new_chat(&mut self) {
         self.active_id = None;
@@ -300,6 +309,7 @@ impl App {
         Ok(())
     }
     fn refresh_services(&mut self) {
+        self.refresh_work_capabilities();
         if self.services_loading || self.smoke {
             return;
         }
@@ -390,6 +400,7 @@ impl App {
         self.generation += 1;
         self.login_operation += 1;
         self.session = None;
+        self.work = work::WorkRuntime::default();
         self.models = None;
         self.grant = None;
         self.services_loading = false;
@@ -411,9 +422,14 @@ impl App {
         if !self.can_send() {
             return Err("請確認登入、可用模型與版本狀態後再送出。".into());
         }
-        if text.trim().is_empty() {
-            return Err("請輸入文字。".into());
+        if text.trim().is_empty() && self.work.store.drafts(self.active_id.as_deref()).is_empty() {
+            return Err("請輸入文字或加入附件。".into());
         }
+        let text = if text.trim().is_empty() {
+            "請分析附件內容。".to_string()
+        } else {
+            text
+        };
         let content = match action {
             "send" | "mail" => text.clone(),
             "translate" => {
@@ -427,6 +443,9 @@ impl App {
         messages.push(Message::user(&content));
         if messages.len() >= 40 {
             return Err("此對話已達 20 輪，請新增對話。".into());
+        }
+        if self.work.caps.is_some() && self.work.mode != "sync" {
+            return self.begin_work_chat(messages, action);
         }
         let body = protocol::chat_json(&self.config.model, &messages)?;
         // 送出時就分配穩定的對話 ID；回覆完成時不換 ID，避免誤判切換對話而跳到底。
@@ -486,6 +505,7 @@ impl App {
     }
     fn command(&mut self, command: Command) -> AppResult<()> {
         match command {
+            Command::Work { command } => self.work_command(command)?,
             Command::StartHotkeyRecording => {
                 if let Err(message) = self.start_recording() {
                     // 設定對話框會遮住主畫面的狀態列，錯誤須直接顯示在錄製欄位旁。
@@ -525,11 +545,13 @@ impl App {
             Command::Draft { text } => {
                 if self.busy != "chat" && text.encode_utf16().count() <= 16_000 {
                     self.draft = text;
+                    self.work.estimate = None;
+                    self.work.estimate_revision += 1;
                 }
             }
             Command::Chat { text, action } => self.begin_chat(text, &action)?,
             Command::NewChat => {
-                if self.busy == "none" {
+                if self.busy == "none" && self.work.incoming.is_none() {
                     self.new_chat();
                 }
             }
@@ -571,11 +593,13 @@ impl App {
                         .is_some_and(|c| c.models.iter().any(|m| m.id == id))
                 {
                     self.config.model = id;
+                    self.work.estimate = None;
+                    self.work.estimate_revision += 1;
                     storage::save_config(&self.root, &self.config)?;
                 }
             }
             Command::SelectChat { id } => {
-                if self.busy == "none" {
+                if self.busy == "none" && self.work.incoming.is_none() {
                     let c = self
                         .archive
                         .conversations
@@ -588,11 +612,33 @@ impl App {
                 }
             }
             Command::DeleteChat { id } => {
+                if self.work.store.pending(Some(&id))
+                    || self.work.incoming.is_some()
+                    || self
+                        .work
+                        .store
+                        .attachments
+                        .iter()
+                        .any(|a| a.conversation_id == id && !a.sent && !a.removed)
+                {
+                    return Err(
+                        "此對話仍有工作或草稿附件，請先完成／取消工作並移除草稿附件。".into(),
+                    );
+                }
                 if self.busy == "none" {
                     let mut archive = self.archive.clone();
                     archive.remove(&id)?;
                     history::save(&self.root, &archive)?;
                     self.archive = archive;
+                    self.work.store.tasks.retain(|t| t.conversation_id != id);
+                    self.work
+                        .store
+                        .attachments
+                        .retain(|a| a.conversation_id != id);
+                    self.work.store.conversations.remove(&id);
+                    if !self.work.store.principal_id.is_empty() {
+                        self.work.store.save(&self.root, &self.config)?;
+                    }
                     if self.active_id.as_ref() == Some(&id) {
                         self.new_chat();
                     }
@@ -671,6 +717,9 @@ impl App {
     }
     fn event(&mut self, event: Event) -> AppResult<()> {
         match event {
+            Event::Work(generation, event) if generation == self.generation => {
+                self.work_event(event)?
+            }
             Event::Services(generation, version, models) if generation == self.generation => {
                 self.services_loading = false;
                 self.version_status = match self.versions.apply(version) {
@@ -737,6 +786,7 @@ impl App {
                 }
                 self.generation += 1;
                 self.session = Some(session);
+                self.work = work::WorkRuntime::default();
                 self.services_loading = false;
                 self.notifications_loading = false;
                 self.new_chat();
@@ -761,6 +811,7 @@ impl App {
                         }
                         if outcome.unauthorized {
                             self.session = None;
+                            self.work = work::WorkRuntime::default();
                             self.generation += 1;
                             self.services_loading = false;
                             self.notifications_loading = false;
@@ -807,6 +858,7 @@ impl App {
                 self.status = "已讀取郵件預覽，尚未傳給 AI".into();
             }
             Event::Socket(generation, connected) if generation == self.generation => {
+                self.poll_work(true);
                 if connected {
                     self.notification_status = "即時通知已連線".into();
                 }
@@ -818,11 +870,24 @@ impl App {
                     Ok(page) => {
                         let more = page.has_more;
                         let mut inbox = self.inbox.clone();
-                        let added = inbox.merge(page)?;
+                        // 任務完成提示由結果落盤後統一發出，避免 REST 事件與任務輪詢各提示一次。
+                        let added = page
+                            .events
+                            .iter()
+                            .filter(|e| {
+                                !e.kind.starts_with("chat.")
+                                    && !e.kind.starts_with("attachment.")
+                                    && !self.inbox.events.iter().any(|old| old.id == e.id)
+                                    && e.read_at.is_none()
+                                    && !e.expired()
+                            })
+                            .count();
+                        inbox.merge(page)?;
                         notifications::save(&self.root, &inbox)?;
                         self.inbox = inbox;
                         self.notification_status = "通知已同步；即時通道與定期補查並行".into();
                         if added > 0 && self.config.notification_popups {
+                            self.work.task_balloon = false;
                             tray(
                                 self.window,
                                 NIM_MODIFY,
@@ -886,6 +951,7 @@ impl App {
             }
         }
         if !self.smoke {
+            self.poll_work(false);
             if self.session.is_some() && !self.logged_in() && self.busy == "none" {
                 let _ = self.logout();
                 self.fail("登入已到期，請重新登入。".into());
@@ -968,6 +1034,23 @@ fn show_window(window: HWND) -> bool {
     }
 }
 /// 原生通知不搶焦點，點擊後才顯示主視窗；Windows 可自行停用彈出提示。
+/// 共用 EXE 的 icon 資源；使用者尚未提供圖檔時才使用 Windows 預設圖案。
+fn app_icon() -> HICON {
+    unsafe {
+        // Win32 MAKEINTRESOURCEW(1)：低位數值代表資源 ID，API 不會將它解參考。
+        let resource_id = ptr::without_provenance::<u16>(1);
+        let icon = LoadIconW(GetModuleHandleW(ptr::null()), resource_id);
+        if icon.is_null() {
+            LoadIconW(ptr::null_mut(), IDI_APPLICATION)
+        } else {
+            icon
+        }
+    }
+}
+fn taskbar_created_message() -> u32 {
+    static MESSAGE: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+    *MESSAGE.get_or_init(|| unsafe { RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()) })
+}
 fn tray(window: HWND, operation: u32, message: Option<&str>) {
     let mut data = NOTIFYICONDATAW {
         cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
@@ -977,7 +1060,7 @@ fn tray(window: HWND, operation: u32, message: Option<&str>) {
         uCallbackMessage: TRAY_MESSAGE,
         ..Default::default()
     };
-    data.hIcon = unsafe { LoadIconW(ptr::null_mut(), IDI_APPLICATION) };
+    data.hIcon = app_icon();
     for (dest, source) in data.szTip.iter_mut().zip(wide("LM_AI")) {
         *dest = source;
     }
@@ -1011,6 +1094,11 @@ unsafe extern "system" fn window_proc(
     if !pointer.is_null() {
         // COM 可能重入視窗程序，try_borrow_mut 避免重疊的可變參照。
         if let Ok(mut app) = unsafe { &*pointer }.try_borrow_mut() {
+            if message == taskbar_created_message() && !app.smoke {
+                // Explorer 重啟會清除通知區圖案；隱藏中的 App 必須重新加入，才能讓使用者還原。
+                tray(window, NIM_ADD, None);
+                return 0;
+            }
             match message {
                 WM_ACTIVATEAPP if wparam == 0 => {
                     if let Err(e) = app.stop_recording() {
@@ -1020,6 +1108,13 @@ unsafe extern "system" fn window_proc(
                 }
                 WM_TIMER => {
                     app.tick();
+                    return 0;
+                }
+                WM_SIZE if wparam == SIZE_MINIMIZED as usize => {
+                    // 最小化只隱藏視窗；全域快捷鍵、通知與工作查詢繼續。
+                    unsafe {
+                        ShowWindow(window, SW_HIDE);
+                    }
                     return 0;
                 }
                 WM_SIZE => {
@@ -1034,9 +1129,50 @@ unsafe extern "system" fn window_proc(
                     app.capture();
                     return 0;
                 }
-                TRAY_MESSAGE if matches!(lparam as u32, WM_LBUTTONUP | NIN_BALLOONUSERCLICK) => {
+                TRAY_MESSAGE
+                    if matches!(
+                        lparam as u32,
+                        WM_LBUTTONUP | WM_LBUTTONDBLCLK | NIN_BALLOONUSERCLICK
+                    ) =>
+                {
                     show_window(window);
-                    let _ = app.view.post(&json!({"type":"show_notifications"}));
+                    if lparam as u32 == NIN_BALLOONUSERCLICK {
+                        let _ = app.view.post(&json!({"type":if app.work.task_balloon {"show_tasks"} else {"show_notifications"}}));
+                    }
+                    return 0;
+                }
+                TRAY_MESSAGE if matches!(lparam as u32, WM_RBUTTONUP | WM_CONTEXTMENU) => {
+                    unsafe {
+                        let menu = CreatePopupMenu();
+                        if !menu.is_null() {
+                            AppendMenuW(menu, MF_STRING, 1, wide("還原視窗").as_ptr());
+                            AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
+                            AppendMenuW(menu, MF_STRING, 2, wide("離開 LM_AI").as_ptr());
+                            let mut point = POINT::default();
+                            GetCursorPos(&mut point);
+                            SetForegroundWindow(window);
+                            let action = TrackPopupMenu(
+                                menu,
+                                TPM_RETURNCMD | TPM_RIGHTBUTTON,
+                                point.x,
+                                point.y,
+                                0,
+                                window,
+                                ptr::null(),
+                            );
+                            DestroyMenu(menu);
+                            PostMessageW(window, WM_NULL, 0, 0);
+                            match action {
+                                1 => {
+                                    show_window(window);
+                                }
+                                2 => {
+                                    PostMessageW(window, WM_CLOSE, 0, 0);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
                     return 0;
                 }
                 WM_GETMINMAXINFO => {
@@ -1121,7 +1257,7 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
             hInstance: instance,
             lpszClassName: name.as_ptr(),
             hCursor: LoadCursorW(ptr::null_mut(), IDC_ARROW),
-            hIcon: LoadIconW(ptr::null_mut(), IDI_APPLICATION),
+            hIcon: app_icon(),
             ..Default::default()
         };
         if RegisterClassW(&class) == 0 {
@@ -1149,6 +1285,7 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
         GetClientRect(window, &mut rect);
         view.resize(rect.right, rect.bottom);
         let mut app = App {
+            work: work::WorkRuntime::default(),
             window,
             view,
             root,

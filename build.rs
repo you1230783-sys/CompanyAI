@@ -14,6 +14,29 @@ fn collect(root: &Path, directory: &Path, files: &mut Vec<PathBuf>) {
     }
 }
 fn main() {
+    // 本版尚未提供使用者指定圖案，缺少 assets/app.ico 時保留 Windows fallback。
+    // 日後放入多尺寸 ICO 即會嵌入 EXE，視窗／工作列／托盤共用資源 ID 1。
+    let icon = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("Cargo manifest directory"))
+        .join("assets/app.ico");
+    println!("cargo:rerun-if-changed=assets");
+    if icon.is_file() {
+        let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo output directory"));
+        let source = output.join("app-icon.rc");
+        let resource = output.join("app-icon.res");
+        fs::write(
+            &source,
+            format!("1 ICON \"{}\"\n", icon.to_string_lossy().replace('\\', "/")),
+        )
+        .expect("write icon resource script");
+        let status = std::process::Command::new("rc.exe")
+            .args(["/nologo", "/c65001", "/fo"])
+            .arg(&resource)
+            .arg(&source)
+            .status()
+            .expect("Windows SDK rc.exe is required when assets/app.ico is provided");
+        assert!(status.success(), "Icon resource compilation failed");
+        println!("cargo:rustc-link-arg-bins={}", resource.display());
+    }
     let root = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("Cargo manifest directory"))
         .join("ui");
     println!("cargo:rerun-if-changed=ui");

@@ -140,7 +140,7 @@ document.fonts?.ready.then(() => {
 
 function showView(view) {
   activeView = view;
-  for (const name of ["chat", "notifications", "outlook"])
+  for (const name of ["chat", "notifications", "outlook", "tasks"])
     $(name + "-view").hidden = name !== view;
   $("show-notifications").classList.toggle("active", view === "notifications");
   $("show-outlook").classList.toggle("active", view === "outlook");
@@ -152,7 +152,9 @@ function showView(view) {
       ? conversation?.title || "新對話"
       : view === "notifications"
         ? "通知"
-        : "Outlook 助理";
+        : view === "tasks"
+          ? "工作任務"
+          : "Outlook 助理";
   $("delete-chat").hidden = view !== "chat" || !state.active_id;
   $("save-label").hidden = view !== "chat";
 }
@@ -195,7 +197,17 @@ function renderMessages() {
         table.replaceWith(wrapper);
         wrapper.append(table);
       });
-    } else bubble.textContent = message.content;
+    } else {
+      bubble.textContent = message.content;
+      if (message.attachments?.length)
+        bubble.append(
+          node(
+            "div",
+            "sent-attachments",
+            "附件：" + message.attachments.join("、"),
+          ),
+        );
+    }
     content.append(bubble);
     const tools = node("div", "message-tools");
     const copy = node("button", "copy-message");
@@ -388,6 +400,7 @@ function receive(next) {
   renderNotifications();
   renderMail();
   showView(activeView);
+  window.WorkUI?.render();
   if (next.focus_draft) {
     showView("chat");
     $("prompt").focus();
@@ -403,9 +416,9 @@ function resizePrompt() {
   input.style.height = Math.min(160, Math.max(48, input.scrollHeight)) + "px";
 }
 function submit(action = "send") {
-  if (!state.can_send) return;
+  if (!state.can_send || window.WorkUI?.getFileBusy()) return;
   const text = $("prompt").value;
-  if (!text.trim()) {
+  if (!text.trim() && !state.work?.attachments?.length) {
     toast("請先輸入文字");
     return;
   }
@@ -680,9 +693,13 @@ if (bridge) {
     if (event.data.type === "state") receive(event.data.state);
     else if (event.data.type === "show_notifications")
       showView("notifications");
+    else if (event.data.type === "show_tasks") showView("tasks");
     else if (event.data.type === "toast") toast(event.data.text);
     else if (event.data.type === "self_test") window.runSelfTest?.();
-    else receiveHotkeyMessage(event.data);
+    else {
+      receiveHotkeyMessage(event.data);
+      window.WorkUI?.receive(event.data);
+    }
   });
   send({ type: "ready" });
 }

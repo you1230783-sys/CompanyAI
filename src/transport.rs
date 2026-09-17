@@ -239,6 +239,39 @@ fn request_method(
     auth: Option<(&str, &str)>,
     timeout_ms: i32,
 ) -> AppResult<HttpResponse> {
+    let mut reader = std::io::Cursor::new(body.as_bytes());
+    exchange(
+        url,
+        method,
+        content_type,
+        Payload {
+            reader: &mut reader,
+            length: body.len() as u32,
+        },
+        auth,
+        timeout_ms,
+        None,
+    )
+}
+
+/// 已知長度的輸入串流：大檔案逐段解密、上傳，不一次載入記憶體。
+pub struct Payload<'a> {
+    pub reader: &'a mut dyn std::io::Read,
+    pub length: u32,
+}
+pub type ResponseChunks<'a> = &'a mut dyn FnMut(&[u8]) -> AppResult<bool>;
+
+/// JSON、附件與 SSE 共用憑證、代理與禁止轉址規則。
+/// on_chunk 僅接受 200 text/event-stream；其他 HTTP 回應仍以有界 JSON 回傳。
+pub fn exchange(
+    url: &Url,
+    method: &str,
+    content_type: &str,
+    payload: Payload<'_>,
+    auth: Option<(&str, &str)>,
+    timeout_ms: i32,
+    mut on_chunk: Option<ResponseChunks<'_>>,
+) -> AppResult<HttpResponse> {
     let host = wide(url.host_str().ok_or("網址缺少主機名稱。")?);
     let path = match url.query() {
         Some(query) => format!("{}?{query}", url.path()),
@@ -253,6 +286,9 @@ fn request_method(
             return Err("驗證 Header 無效。".into());
         }
         headers.push_str(&format!("{name}: {value}\r\n"));
+    }
+    if on_chunk.is_some() {
+        headers = headers.replace("Accept: application/json", "Accept: text/event-stream");
     }
     // 本機示範不經代理，避免系統 PAC 或企業代理把 loopback 請求轉送出去。
     let proxy_mode = if matches!(url.host_str(), Some("127.0.0.1" | "[::1]" | "localhost")) {
@@ -269,7 +305,7 @@ fn request_method(
             ptr::null(),
             0,
         ))?;
-        if WinHttpSetTimeouts(session.0, 10_000, 10_000, 15_000, timeout_ms) == 0 {
+        if WinHttpSetTimeouts(session.0, 10_000, 10_000, timeout_ms, timeout_ms) == 0 {
             return Err(network_error());
         }
         let connection = Handle::checked(WinHttpConnect(
@@ -318,13 +354,43 @@ fn request_method(
             request.0,
             headers.as_ptr(),
             (headers.len() - 1) as u32,
-            body.as_ptr().cast(),
-            body.len() as u32,
-            body.len() as u32,
+            ptr::null(),
+            0,
+            payload.length,
             0,
         ) == 0
-            || WinHttpReceiveResponse(request.0, ptr::null_mut()) == 0
         {
+            return Err(network_error());
+        }
+        let mut remaining = payload.length as usize;
+        let mut upload_buffer = [0u8; 48 * 1024];
+        while remaining > 0 {
+            let limit = remaining.min(upload_buffer.len());
+            let count = payload
+                .reader
+                .read(&mut upload_buffer[..limit])
+                .map_err(|_| "無法讀取附件暫存資料。")?;
+            if count == 0 {
+                return Err("附件資料不完整，請重新選取。".into());
+            }
+            let mut offset = 0;
+            while offset < count {
+                let mut written = 0;
+                if WinHttpWriteData(
+                    request.0,
+                    upload_buffer[offset..count].as_ptr().cast(),
+                    (count - offset) as u32,
+                    &mut written,
+                ) == 0
+                    || written == 0
+                {
+                    return Err(network_error());
+                }
+                offset += written as usize;
+            }
+            remaining -= count;
+        }
+        if WinHttpReceiveResponse(request.0, ptr::null_mut()) == 0 {
             return Err(network_error());
         }
         let mut status = 0_u32;
@@ -345,6 +411,25 @@ fn request_method(
                 "HTTP {status} 重新導向已停止。請填寫 API 的最終網址，不可導向登入 HTML 頁面。"
             ));
         }
+        if on_chunk.is_some() && status == 200 {
+            let mut content_type = [0u16; 128];
+            let mut size = (content_type.len() * 2) as u32;
+            if WinHttpQueryHeaders(
+                request.0,
+                WINHTTP_QUERY_CONTENT_TYPE,
+                ptr::null(),
+                content_type.as_mut_ptr().cast(),
+                &mut size,
+                ptr::null_mut(),
+            ) == 0
+                || !String::from_utf16_lossy(&content_type)
+                    .to_ascii_lowercase()
+                    .starts_with("text/event-stream")
+            {
+                return Err("串流回應必須為 text/event-stream；將查詢任務結果。".into());
+            }
+        }
+        let started = std::time::Instant::now();
         let mut bytes = Vec::new();
         loop {
             let mut chunk = [0_u8; 8192];
@@ -360,6 +445,18 @@ fn request_method(
             }
             if read == 0 {
                 break;
+            }
+            if status == 200 {
+                if let Some(callback) = on_chunk.as_mut() {
+                    if callback(&chunk[..read as usize])? {
+                        break;
+                    }
+                    // 十分鐘後轉為 REST 查詢；伺服器繼續執行，不取消長任務。
+                    if started.elapsed() > std::time::Duration::from_secs(600) {
+                        return Err("長任務已轉為背景查詢。".into());
+                    }
+                    continue;
+                }
             }
             if bytes.len() + read as usize > 1_048_576 {
                 return Err("API 回應超過 1 MB，已停止讀取。".into());
