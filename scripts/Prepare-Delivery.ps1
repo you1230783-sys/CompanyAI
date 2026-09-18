@@ -38,7 +38,7 @@ try {
     }
     Move-Item -LiteralPath $vendorNext -Destination $vendorPath
 
-    & (Join-Path $PSScriptRoot 'Build.ps1')
+    & (Join-Path $PSScriptRoot 'Build.ps1') -IncludeInstaller
 
     # 明確列舉交付內容；不帶入 .git、快取、登入資料或另一個專案的資源。
     $projectItems = @('src','ui','installer','assets','examples','scripts','docs','.cargo','dist','build.rs','Cargo.toml','Cargo.lock','rust-toolchain.toml','README.md','AGENTS.md','.gitignore','.gitattributes')
@@ -93,7 +93,7 @@ try {
 
     # 子程序從解壓後的根目錄執行，原有 CARGO_TARGET_DIR / RUSTC 由包內腳本重設。
     $verifyScript = Join-Path $verified 'scripts\Build.ps1'
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $verifyScript
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $verifyScript -IncludeInstaller
     if ($LASTEXITCODE -ne 0) { throw 'Offline ZIP verification failed. Previous delivery is retained.' }
     # 在解壓後的位置驗證 VS Code 設定產生；本機路徑不寫進候選 ZIP。
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $verified 'scripts\Configure-VSCode.ps1')

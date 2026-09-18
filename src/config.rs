@@ -12,6 +12,12 @@ pub const TOKEN_PATH: &str = "/lm_server/api/desktop/oauth/token";
 pub const VERSION_PATH: &str = "/lm_server/api/desktop/version";
 pub const MODELS_PATH: &str = "/lm_server/api/desktop/models";
 pub const DOWNLOAD_PATH: &str = "/lm_server/desktop/download";
+/// 0.8.1 另查兩份靜態清單；未提供的格式回 404 即可，舊 download 路由仍可用。
+pub const UPDATE_MANIFEST_PATHS: [&str; 3] = [
+    DOWNLOAD_PATH,
+    "/lm_server/desktop/releases/update-manifest-exe.json",
+    "/lm_server/desktop/releases/update-manifest.json",
+];
 pub const MAX_SESSION_SECONDS: u64 = 30 * 24 * 60 * 60;
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]

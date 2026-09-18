@@ -1,9 +1,17 @@
-# LM_AI 0.8.0 — Windows 工作助理
+# LM_AI 0.8.1 — Windows 工作助理
 
 Rust 桌面程式，提供公司瀏覽器登入、文字／附件對話、串流、持久背景任務、選字快捷鍵、網站通知及 Classic Outlook 唯讀助理。
 介面使用 WebView2、內嵌 HTML/CSS 與離線 Markdown 套件；不需 Node、Python 或外部 CDN。
 
-## 0.8 更新
+## 0.8.1 更新
+
+- 同時讀取 EXE／NSIS 簽署清單，通過驗證後選最高版本；同版優先 EXE。
+- EXE 下載後提供手動更換說明與開啟資料夾按鈕；較新 NSIS 保留安裝並重新啟動流程。
+- 僅交付 `dist/LM_AI.exe` 與 `dist/update-manifest-exe.json`，停用 `CompanyAI.exe` 相容檔名。
+- 本次不重製安裝包與離線 ZIP；儲存庫原有包仍屬 0.8.0，不能用於重建或驗收 0.8.1。
+- 網站部署與選版規則見 [0.8.1 契約](docs/UPDATE_0_8_1_CONTRACT.md)，驗證界線見 [0.8.1 驗收](docs/VALIDATION_0_8_1.md)。
+
+## 0.8 既有功能
 
 - 安裝、更新與解除安裝改為 NSIS 原生流程，使用者端不呼叫 CMD／PowerShell／外部腳本。
 - 一般更新先同意下載，再另行同意安裝重啟；退出不自動安裝。
@@ -35,8 +43,8 @@ Rust 桌面程式，提供公司瀏覽器登入、文字／附件對話、串流
 
 ## 直接使用
 
-1. 執行 `dist/LM_AI_Setup.exe`，安裝到 `%LOCALAPPDATA%\Programs\LM_AI` 並建立捷徑；可從 Windows 已安裝的應用程式解除安裝。也可繼續使用可攜版 `dist/LM_AI.exe`，`CompanyAI.exe` 是相同內容的相容檔名。
-2. Setup 包含 WebView2 離線安裝檔。可攜版缺少 WebView2 時，先執行隨附的 `dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe`；詳見 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md)。
+1. 直接執行 `dist/LM_AI.exe`。從 0.8.0 升級時先從托盤離開舊版，再手動更換檔案；舊版更新器尚不支援 EXE 清單。
+2. 缺少 WebView2 時，先執行隨附的 `dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe`；詳見 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md)。
 3. 按左下齒輪 → 瀏覽器登入，核對短碼並允許授權；登入最長保存 30 天。
 4. 選擇後端提供的「快速／品質」等模型，輸入文字並送出。預設 Enter 換行、Ctrl+Enter 送出；設定可改為 Enter 送出、Shift+Enter 換行。
 5. 使用者訊息靠右、AI 靠左；支援表格、程式碼高亮／複製、數學公式、註腳、任務清單與一般 Markdown。

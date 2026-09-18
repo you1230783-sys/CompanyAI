@@ -19,7 +19,7 @@ if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notm
 if ($LASTEXITCODE -ne 0) { throw 'NSIS installer build failed.' }
 # 私鑰不包含在離線包；重建者可以編譯驗證，只有持有原私鑰的發行者能發布更新。
 if (Test-Path (Join-Path $root '.private\update-key.dpapi')) {
-    & (Join-Path $PSScriptRoot 'Update-Signing.ps1')
+    & (Join-Path $PSScriptRoot 'Update-Signing.ps1') -Kind nsis
     $verify = New-Object Diagnostics.Process
     $verify.StartInfo.FileName = Join-Path $root 'dist\LM_AI.exe'
     $verify.StartInfo.Arguments = '--verify-update-package "' + (Join-Path $root 'dist\update-manifest.json') + '" "' + (Join-Path $root 'dist\LM_AI_Setup.exe') + '"'

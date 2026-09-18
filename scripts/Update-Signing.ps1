@@ -1,6 +1,6 @@
 ﻿# 僅供開發者發行更新；此檔不會安裝到使用者電腦，也不由應用程式執行。
 [CmdletBinding()]
-param([switch]$Initialize, [string]$Url = '/lm_server/desktop/releases/LM_AI_Setup.exe')
+param([switch]$Initialize, [ValidateSet('exe','nsis')][string]$Kind = 'exe', [string]$Url)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $privatePath = Join-Path $root '.private\update-key.dpapi'
@@ -29,15 +29,32 @@ try {
     $secret = [Security.Cryptography.ProtectedData]::Unprotect([IO.File]::ReadAllBytes($privatePath), $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
     $rsa.FromXmlString([Text.Encoding]::UTF8.GetString($secret))
     $version = [regex]::Match((Get-Content (Join-Path $root 'Cargo.toml') -Raw), '(?m)^version = "([^"]+)"').Groups[1].Value
-    $setup = Join-Path $root 'dist\LM_AI_Setup.exe'
+    $fileName = if ($Kind -eq 'exe') { 'LM_AI.exe' } else { 'LM_AI_Setup.exe' }
+    $manifestName = if ($Kind -eq 'exe') { 'update-manifest-exe.json' } else { 'update-manifest.json' }
+    if (-not $Url) { $Url = '/lm_server/desktop/releases/' + $fileName }
+    $setup = Join-Path $root ('dist\' + $fileName)
+    # 防止只編譯 EXE 後，誤把仍是舊版的安裝包標記成新版本。
+    if ((Get-Item $setup).VersionInfo.FileVersion -ne "$version.0") { throw 'Artifact version differs from Cargo.toml; build the selected artifact first.' }
     $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
     $size = (Get-Item $setup).Length
-    $message = "LM_AI_UPDATE_V1`n$version`nwindows-x86_64`nnsis`n$size`n$hash`n"
+    $message = "LM_AI_UPDATE_V1`n$version`nwindows-x86_64`n$Kind`n$size`n$hash`n"
     $signature = $rsa.SignData([Text.Encoding]::UTF8.GetBytes($message), 'SHA256')
-    $manifest = [ordered]@{schema_version=1;version=$version;platform='windows-x86_64';kind='nsis';url=$Url;size=$size;sha256=$hash;signature=([BitConverter]::ToString($signature).Replace('-','').ToLowerInvariant())}
+    $manifest = [ordered]@{schema_version=1;version=$version;platform='windows-x86_64';kind=$Kind;url=$Url;size=$size;sha256=$hash;signature=([BitConverter]::ToString($signature).Replace('-','').ToLowerInvariant())}
     $json = $manifest | ConvertTo-Json
-    [IO.File]::WriteAllText((Join-Path $root 'dist\update-manifest.json'), $json, (New-Object Text.UTF8Encoding $false))
-    Write-Host 'Ready: dist/update-manifest.json (publish together with this exact Setup.exe).'
+    $manifestPath = Join-Path $root ('dist\' + $manifestName)
+    [IO.File]::WriteAllText($manifestPath, $json, (New-Object Text.UTF8Encoding $false))
+    # 由主程式內建公鑰與正式驗證程式核對，不只相信發行脚本簽署成功。
+    $verify = New-Object Diagnostics.Process
+    $verify.StartInfo.FileName = Join-Path $root 'dist\LM_AI.exe'
+    $verify.StartInfo.Arguments = '--verify-update-package "' + $manifestPath + '" "' + $setup + '"'
+    $verify.StartInfo.UseShellExecute = $false
+    $verify.StartInfo.CreateNoWindow = $true
+    try {
+        if (-not $verify.Start()) { throw 'Cannot start native release verifier.' }
+        if (-not $verify.WaitForExit(60000)) { $verify.Kill(); throw 'Native release verification timed out.' }
+        if ($verify.ExitCode -ne 0) { throw 'Native updater rejected the signed manifest or artifact.' }
+    } finally { $verify.Dispose() }
+    Write-Host "Ready: dist/$manifestName (publish together with this exact $fileName)."
 } finally {
     if ($secret) { [Array]::Clear($secret,0,$secret.Length) }
     $rsa.Dispose()

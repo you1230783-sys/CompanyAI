@@ -1,5 +1,7 @@
 # 離線交付與 Git 工作流程
 
+> 0.8.1 依使用者指示僅建置及上傳單一主程式 `LM_AI.exe`、EXE 清單、原始碼與文件，不重製 Setup／ZIP。一般建置為 `Build.ps1 -EmptyCargoCache`；完整包為明確選用的 `Prepare-Delivery.ps1`。舊 ZIP 與 installer-verification.json／verification.json 為 0.8.0 歷史記錄，0.8.1 請查看 exe-verification.json。
+
 ## 專案包含的內容
 
 每個應用程式有自己的資料夾，本專案位於 `Y:\Rust\Project\CompanyAI`。Git 儲存庫應建立在這裡。
@@ -15,8 +17,8 @@ CompanyAI/
   scripts/                 開發機環境、編譯、交付腳本；不在使用者端執行
   installer/               NSIS 安裝原始碼、固定工具 ZIP 與測試 payload
   docs/                    網站串接及離線操作文件
-  dist/CompanyAI.exe       已編譯的 Windows 程式
-  dist/LM_AI.exe            相同程式的新版產品檔名
+  dist/LM_AI.exe            唯一主程式檔名
+  dist/update-manifest-exe.json 獨立 EXE 簽章與下載契約
   dist/LM_AI_Setup.exe      NSIS 完整安裝／更新包
   dist/update-manifest.json 發行包簽章與下載契約
   dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe  WebView2 離線安裝包

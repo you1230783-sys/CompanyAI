@@ -1,4 +1,4 @@
-//! 原生下載及更新驗證。使用者端只執行已驗證的 NSIS EXE，不啟動命令殼層或腳本。
+//! EXE／NSIS 共用下載與簽章驗證；EXE 交由使用者手動更換，NSIS 才能啟動安裝。
 use crate::{config::Config, AppResult};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -17,6 +17,17 @@ pub struct UpdateArtifact {
     pub sha256: String,
     /// RSA-3072 / PKCS#1 v1.5 / SHA256，十六進位編碼；信任金鑰隨程式內嵌。
     pub signature: String,
+}
+
+impl UpdateArtifact {
+    /// 固定本機檔名，不將伺服器提供的路徑用於本機寫檔。
+    fn file_name(&self) -> AppResult<&'static str> {
+        match self.kind.as_str() {
+            "exe" => Ok("LM_AI.exe"),
+            "nsis" => Ok("LM_AI_Setup.exe"),
+            _ => Err("不支援的更新檔格式。".into()),
+        }
+    }
 }
 
 fn decode_hex(value: &str) -> AppResult<Vec<u8>> {
@@ -87,15 +98,14 @@ fn verify_signature(message: &[u8], signature: &[u8]) -> AppResult<()> {
     Ok(())
 }
 
-pub fn validate_artifact(config: &Config, a: &UpdateArtifact, latest: &str) -> AppResult<()> {
+/// 先驗證每份候選清單，之後才比較版本，避免偽造高版本遮蔽合法更新。
+fn validate_manifest(config: &Config, a: &UpdateArtifact) -> AppResult<()> {
     let url = config.endpoint(&a.url)?;
+    crate::service::version_number(&a.version)?;
     if url.origin() != config.base_url()?.origin()
-        || a.version != latest
-        || crate::service::version_number(&a.version)?
-            <= crate::service::version_number(crate::service::CURRENT_VERSION)?
         || a.schema_version != 1
         || a.platform != "windows-x86_64"
-        || a.kind != "nsis"
+        || !matches!(a.kind.as_str(), "exe" | "nsis")
         || !(100_000..=1_073_741_824).contains(&a.size)
         || a.sha256.len() != 64
         || !a
@@ -109,14 +119,75 @@ pub fn validate_artifact(config: &Config, a: &UpdateArtifact, latest: &str) -> A
     verify_signature(signed_message(a).as_bytes(), &decode_hex(&a.signature)?)
 }
 
-/// 點擊同意下載後才查詢既有 download 路由；版本服務不必帶更新檔欄位。
-pub fn fetch_artifact(config: &Config, latest: &str) -> AppResult<UpdateArtifact> {
-    let response = crate::transport::get(&config.endpoint(crate::config::DOWNLOAD_PATH)?, None)?;
-    if response.status != 200 {
-        return Err(format!("更新資訊 HTTP {}；請稍後重試。", response.status));
+pub fn validate_artifact(config: &Config, a: &UpdateArtifact, latest: &str) -> AppResult<()> {
+    validate_manifest(config, a)?;
+    let version = crate::service::version_number(&a.version)?;
+    if version < crate::service::version_number(latest)?
+        || version <= crate::service::version_number(crate::service::CURRENT_VERSION)?
+    {
+        return Err("更新檔低於已知最新版本，或不是比目前程式更新的版本。".into());
     }
-    let artifact: UpdateArtifact = serde_json::from_str(&response.body)
-        .map_err(|_| "下載頁尚未提供新版 JSON 契約，請聯絡管理者。")?;
+    Ok(())
+}
+
+/// 數字版本優先；同版優先 EXE，方便現階段手動測試，未來較新 NSIS 仍會勝出。
+fn preference(a: &UpdateArtifact) -> AppResult<([u32; 3], bool)> {
+    Ok((crate::service::version_number(&a.version)?, a.kind == "exe"))
+}
+
+/// 各來源可回單份清單或最多 16 份的 JSON 陣列；每一份獨立驗證。
+fn parse_manifests(body: &str) -> AppResult<Vec<UpdateArtifact>> {
+    if body.len() > 65_536 {
+        return Err("更新清單過大。".into());
+    }
+    let value: serde_json::Value = serde_json::from_str(body).map_err(|_| "更新清單不是 JSON。")?;
+    let values = match value {
+        serde_json::Value::Array(values) if values.len() <= 16 => values,
+        value @ serde_json::Value::Object(_) => vec![value],
+        _ => return Err("更新清單格式或數量不正確。".into()),
+    };
+    Ok(values
+        .into_iter()
+        .filter_map(|v| serde_json::from_value(v).ok())
+        .collect())
+}
+
+fn select_latest(config: &Config, candidates: Vec<UpdateArtifact>) -> AppResult<UpdateArtifact> {
+    let mut best: Option<UpdateArtifact> = None;
+    for candidate in candidates {
+        if validate_manifest(config, &candidate).is_err() {
+            continue;
+        }
+        let replace = match &best {
+            Some(previous) => preference(&candidate)? > preference(previous)?,
+            None => true,
+        };
+        if replace {
+            best = Some(candidate);
+        }
+    }
+    best.ok_or_else(|| "找不到通過簽章驗證的 EXE 或 NSIS 更新清單；請檢查網站發行檔。".into())
+}
+
+/// 只讀小型清單，不下載程式。不存在、舊 HTML 頁或損毀的單一來源不遮蔽其他合法來源。
+pub fn discover_latest(config: &Config) -> AppResult<UpdateArtifact> {
+    let mut candidates = Vec::new();
+    for path in crate::config::UPDATE_MANIFEST_PATHS {
+        let response = crate::transport::get(&config.endpoint(path)?, None);
+        if let Ok(response) = response {
+            if response.status == 200 {
+                if let Ok(mut entries) = parse_manifests(&response.body) {
+                    candidates.append(&mut entries);
+                }
+            }
+        }
+    }
+    select_latest(config, candidates)
+}
+
+/// 使用者同意後重新選最新版；不得下載比已顯示版本更舊的檔案。
+pub fn fetch_artifact(config: &Config, latest: &str) -> AppResult<UpdateArtifact> {
+    let artifact = discover_latest(config)?;
     validate_artifact(config, &artifact, latest)?;
     Ok(artifact)
 }
@@ -126,6 +197,26 @@ pub struct ReadyUpdate {
     pub artifact: UpdateArtifact,
     pub path: PathBuf,
     _locked_file: fs::File,
+}
+
+/// 以 Shell 原生 API 在檔案總管選取已驗證的 EXE；不組合命令列，也不執行更新檔。
+pub fn show_download(ready: &ReadyUpdate) -> AppResult<()> {
+    use windows::{
+        core::PCWSTR,
+        Win32::{System::Com::CoTaskMemFree, UI::Shell::*},
+    };
+    if ready.artifact.kind != "exe" {
+        return Err("只有獨立 EXE 使用手動更換流程。".into());
+    }
+    let path = crate::wide(&ready.path.to_string_lossy());
+    unsafe {
+        let mut item = ptr::null_mut();
+        SHParseDisplayName(PCWSTR(path.as_ptr()), None, &mut item, 0, None)
+            .map_err(|e| format!("無法定位下載檔：{e}"))?;
+        let result = SHOpenFolderAndSelectItems(item, None, 0);
+        CoTaskMemFree(Some(item.cast()));
+        result.map_err(|e| format!("無法開啟下載資料夾：{e}"))
+    }
 }
 
 fn verify_file(file: &mut fs::File, artifact: &UpdateArtifact) -> AppResult<()> {
@@ -155,7 +246,7 @@ pub fn download(config: &Config, latest: &str) -> AppResult<ReadyUpdate> {
         .join("updates")
         .join(crate::jobs::new_id()?);
     fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
-    let path = directory.join("LM_AI_Setup.exe");
+    let path = directory.join(artifact.file_name()?);
     let result = (|| {
         crate::transport::download_file(&config.endpoint(&artifact.url)?, &path, artifact.size)?;
         let mut file = fs::OpenOptions::new()
@@ -179,6 +270,9 @@ pub fn download(config: &Config, latest: &str) -> AppResult<ReadyUpdate> {
 
 /// NSIS 等指定 PID 退出、取得同一實例鎖後才替換；失敗由安裝程式顯示原生錯誤。
 pub fn launch_update(ready: &ReadyUpdate, config: &Config, latest: &str) -> AppResult<()> {
+    if ready.artifact.kind != "nsis" {
+        return Err("獨立 EXE 需手動更換，不能當作安裝程式執行。".into());
+    }
     validate_artifact(config, &ready.artifact, latest)?;
     Command::new(&ready.path)
         .arg(format!("/UPDATEPID={}", std::process::id()))
@@ -198,7 +292,7 @@ pub fn verify_release(manifest: &std::path::Path, installer: &std::path::Path) -
     if artifact.version != crate::service::CURRENT_VERSION
         || artifact.schema_version != 1
         || artifact.platform != "windows-x86_64"
-        || artifact.kind != "nsis"
+        || !matches!(artifact.kind.as_str(), "exe" | "nsis")
     {
         return Err("發行資訊與程式版本不符。".into());
     }
@@ -209,6 +303,9 @@ pub fn verify_release(manifest: &std::path::Path, installer: &std::path::Path) -
     let mut file = fs::File::open(installer).map_err(|e| e.to_string())?;
     verify_file(&mut file, &artifact)
 }
+
+#[cfg(test)]
+mod update_tests;
 
 #[cfg(test)]
 mod tests {

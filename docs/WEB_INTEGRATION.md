@@ -1,6 +1,6 @@
 # LM_AI：網站／API 串接契約
 
-> **0.8 更新流程以 [UPDATE_0_8_CONTRACT.md](UPDATE_0_8_CONTRACT.md) 為準**：原下載路由改回更新 JSON，下載完整 NSIS Setup；聊天與 SSE 以 0.7 契約為準。
+> **0.8.1 更新流程以 [UPDATE_0_8_1_CONTRACT.md](UPDATE_0_8_1_CONTRACT.md) 為準**：支援 EXE／NSIS 簽署 JSON，合法最高版本優先、同版選 EXE。EXE 手動更換，NSIS 保留原生安裝；聊天與 SSE 以 0.7 契約為準。
 
 > **0.6 新功能請見 [DESKTOP_0_6_CONTRACT.md](DESKTOP_0_6_CONTRACT.md)**：依模型的附件規則、全站鈴鐺同步／已讀／刪除及 Outlook MSG 自動補充。本頁以下保留既有相容契約。
 

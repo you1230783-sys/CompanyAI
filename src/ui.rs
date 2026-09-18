@@ -266,6 +266,7 @@ impl App {
         });
         let _=self.view.post(&json!({"type":"state","state":{
             "update_status":self.update_status,"update_ready":self.update_ready.is_some(),"update_busy":self.update_busy,
+            "update_kind":self.update_ready.as_ref().map(|ready|ready.artifact.kind.as_str()),
             "version":service::CURRENT_VERSION,"config":self.config,"status":self.status,"error":self.error,
             "busy":self.busy,"logged_in":self.logged_in(),"can_send":self.can_send(),"update_required":self.versions.blocked(),
             "models":models,"conversations":conversations,"active_id":self.active_id,"messages":self.messages,
@@ -1014,10 +1015,10 @@ impl App {
                     }
                 }
                 if self.update_ready.as_ref().is_some_and(|ready| {
-                    self.versions
-                        .known
-                        .as_ref()
-                        .is_none_or(|info| ready.artifact.version != info.latest_version)
+                    self.versions.known.as_ref().is_none_or(|info| {
+                        service::version_number(&ready.artifact.version).ok()
+                            < service::version_number(&info.latest_version).ok()
+                    })
                 }) {
                     self.update_ready = None;
                     self.update_status = "網站已發布不同版本，請重新同意下載。".into();
@@ -1074,19 +1075,23 @@ impl App {
                 self.update_busy = false;
                 match result {
                     Ok(plan) => {
-                        if self
-                            .versions
-                            .known
-                            .as_ref()
-                            .is_none_or(|info| info.latest_version != plan.artifact.version)
-                        {
+                        if self.versions.known.as_ref().is_none_or(|info| {
+                            service::version_number(&plan.artifact.version).ok()
+                                < service::version_number(&info.latest_version).ok()
+                        }) {
                             self.update_status = "下載期間版本資訊已變更，請重新下載。".into();
                             return Ok(());
                         }
+                        // 清單可能比版本 API 更新；下載期間發現更高的簽署版本亦可接受。
+                        if let Some(info) = &mut self.versions.known {
+                            info.latest_version = plan.artifact.version.clone();
+                        }
+                        self.update_status = if plan.artifact.kind == "exe" {
+                            format!("{} 獨立 EXE 已下載並驗證。請開啟下載資料夾，從系統托盤離開 LM_AI 後手動更換檔案；個人資料會保留。", plan.artifact.version)
+                        } else {
+                            format!("{} 安裝包已下載並驗證。請按「安裝並重新啟動」確認；退出不會自動安裝。", plan.artifact.version)
+                        };
                         self.update_ready = Some(plan);
-                        self.update_status =
-                            "新版已下載並驗證。請按「安裝並重新啟動」確認；退出不會自動安裝。"
-                                .into();
                         self.toast(&self.update_status.clone());
                     }
                     Err(e) => {
@@ -1293,9 +1298,9 @@ impl App {
         }
         let latest = info.latest_version.clone();
         let message = if self.versions.blocked() {
-            "此版本已停止支援，必須安裝更新後才能繼續使用。現在下載新版安裝包？"
+            "此版本已停止支援，必須更新後才能繼續使用。現在下載新版？EXE 需手動更換，安裝包會另行詢問安裝。"
         } else {
-            "找到新版。是否下載完整安裝包？下載後會再次詢問，取得同意才關閉及更新。"
+            "找到新版。是否下載更新檔？EXE 下載後由您手動更換；安裝包則會再次詢問，取得同意才關閉及安裝。"
         };
         if unsafe {
             MessageBoxW(
@@ -1332,6 +1337,23 @@ impl App {
             .latest_version
             .clone();
         crate::deployment::validate_artifact(&self.config, &ready.artifact, &latest)?;
+        if ready.artifact.kind == "exe" {
+            // 手動更新僅開啟檔案位置；不退出、不執行新版，也不解除強制版本門檻。
+            crate::deployment::show_download(ready)?;
+            let message = format!(
+                "新版位於：\n{}\n\n請從系統托盤選「離開」，再將新版 LM_AI.exe 複製到您原本使用的位置，取代舊檔後重新開啟。聊天、登入與偏好資料會保留。",
+                ready.path.display()
+            );
+            unsafe {
+                MessageBoxW(
+                    self.window,
+                    wide(&message).as_ptr(),
+                    wide("手動更新 LM_AI").as_ptr(),
+                    MB_OK | MB_ICONINFORMATION,
+                );
+            }
+            return Ok(());
+        }
         if unsafe {
             MessageBoxW(self.window,
             wide("新版已下載且驗證完成。是否現在保存草稿、關閉 LM_AI、安裝並重新啟動？安裝位置為目前使用者的 Programs\\LM_AI；正在執行的本機郵件操作將停止。取消則保留待安裝狀態。").as_ptr(),

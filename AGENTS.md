@@ -69,6 +69,8 @@
 
 ## 修改後的交付與 Git 規則
 
+- **0.8.1 使用者最新指示優先**：本次不製作 NSIS 安裝包或離線 ZIP；以 `scripts/Build.ps1 -EmptyCargoCache` 完成 v142、測試、release 與 EXE 簽章驗證後，提交／推送 LM_AI.exe、清單及對應原始碼與文件。只保留 LM_AI.exe 主程式檔名，CompanyAI.exe 停用。雙格式更新以 docs/UPDATE_0_8_1_CONTRACT.md 為準；既有安裝包與 ZIP 保持歷史版本，不稱為本次交付。未來明確要求完整包時再使用下方完整交付流程。
+
 - 使用者要求專案包含原始碼、已編譯 EXE、Rust 離線編譯包及附屬文件，這些產物必須保持同一版本。
 - 完成原始碼、依賴、設定、腳本或交付文件修改後，執行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Prepare-Delivery.ps1`。它會更新 vendor、執行 Build、製作 ZIP，並在全新解壓目錄使用包內工具鏈、空 Cargo 快取及 `--frozen` 再次驗證。
 - 成功後交付 `dist/LM_AI.exe`、相同內容的相容檔名 `dist/CompanyAI.exe`、`dist/LM_AI_Setup.exe`、`dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe`、`offline/CompanyAI-offline.zip`、ZIP 的 `.sha256`、`offline/manifest.json`、`offline/verification.json`、`offline/environment.txt`，dist/update-manifest.json、offline/installer-verification.json，以及對應原始碼與文件。

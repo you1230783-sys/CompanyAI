@@ -1,8 +1,13 @@
 ﻿[CmdletBinding()]
-param()
+param([switch]$IncludeInstaller, [switch]$EmptyCargoCache)
 $ErrorActionPreference = 'Stop'
 # 統一載入 v142 與指定 SDK，讓手動執行及未來網頁呼叫使用相同編譯環境。
 . (Join-Path $PSScriptRoot 'Enter-DevShell.ps1')
+# 空快取驗證直接讀取專案 vendor，不依賴開發機已有的 registry 下載。
+if ($EmptyCargoCache) {
+    $env:CARGO_HOME = Join-Path $projectRoot ('.build\cargo-empty-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $env:CARGO_HOME | Out-Null
+}
 Push-Location $projectRoot
 try {
     # 不只相信環境變數：以指定 cl.exe 編譯小型探針，確認真正的 _MSC_VER 與 x64。
@@ -46,9 +51,14 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     $smokeCheck.StartInfo.CreateNoWindow = $true
     $smokeCheck.StartInfo.WindowStyle = 'Hidden'
     $smokeCheck.StartInfo.RedirectStandardError = $true
-    if (-not $smokeCheck.Start() -or -not $smokeCheck.WaitForExit(60000)) { throw 'Executable UI smoke check timed out.' }
-    if ($smokeCheck.ExitCode -ne 0) { throw ('Executable UI smoke check failed: ' + $smokeCheck.StandardError.ReadToEnd()) }
-    $smokeCheck.Dispose()
+    try {
+        if (-not $smokeCheck.Start()) { throw 'Could not start executable UI smoke check.' }
+        if (-not $smokeCheck.WaitForExit(60000)) {
+            $smokeCheck.Kill()
+            throw 'Executable UI smoke check timed out.'
+        }
+        if ($smokeCheck.ExitCode -ne 0) { throw ('Executable UI smoke check failed: ' + $smokeCheck.StandardError.ReadToEnd()) }
+    } finally { $smokeCheck.Dispose() }
     # 記錄實際版本與 DLL 依賴，之後可與公司的環境直接比較。
     $dependencies = & $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER /dump /dependents $exe
     if ($LASTEXITCODE -ne 0) { throw 'DLL inspection failed.' }
@@ -76,10 +86,34 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     # 編譯更新 EXE；完整離線 ZIP 由 Prepare-Delivery.ps1 負責建立及驗證。
     $dist = Join-Path $projectRoot 'dist'
     New-Item -ItemType Directory -Path $dist -Force | Out-Null
-    Copy-Item -LiteralPath $exe -Destination (Join-Path $dist 'CompanyAI.exe') -Force
     Copy-Item -LiteralPath $exe -Destination (Join-Path $dist 'LM_AI.exe') -Force
-    # NSIS 編譯器固定版本與雜湊，離線包自帶 ZIP；使用者機不需這些開發工具。
-    & (Join-Path $PSScriptRoot 'Build-Installer.ps1')
-    & (Join-Path $PSScriptRoot 'Test-Installer.ps1')
-    Write-Host "Ready: $dist\LM_AI.exe and LM_AI_Setup.exe"
+    # 0.8.1 起僅交付 LM_AI.exe；移除已停用的相容檔名，不再產生第二份主程式。
+    $legacyExe = Join-Path $dist 'CompanyAI.exe'
+    if (Test-Path -LiteralPath $legacyExe) { Remove-Item -LiteralPath $legacyExe }
+    if (Test-Path (Join-Path $projectRoot '.private\update-key.dpapi')) {
+        & (Join-Path $PSScriptRoot 'Update-Signing.ps1') -Kind exe
+    } else {
+        $oldManifest = Join-Path $dist 'update-manifest-exe.json'
+        if (Test-Path -LiteralPath $oldManifest) { Remove-Item -LiteralPath $oldManifest }
+        Write-Host 'No private update key: executable rebuilt without a publishable EXE manifest.'
+    }
+    # 安裝包為明確選用；EXE 發行不重建 NSIS，也不產生离線 ZIP。
+    if ($IncludeInstaller) {
+        & (Join-Path $PSScriptRoot 'Build-Installer.ps1')
+        & (Join-Path $PSScriptRoot 'Test-Installer.ps1')
+    }
+    [ordered]@{
+        recorded_at = (Get-Date -Format o)
+        version = (Get-Item $exe).VersionInfo.FileVersion
+        result = 'PASS'
+        msvc = $env:VCToolsVersion
+        compiler_report = $compilerReport
+        empty_cargo_cache = [bool]$EmptyCargoCache
+        cargo_home = $env:CARGO_HOME
+        checks = @('v142 x64 compiler probe','fmt','Clippy','workspace tests','cargo build --release --frozen','WebView2 DOM self-check')
+        exe_sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+        installer_built = [bool]$IncludeInstaller
+        offline_zip_built = $false
+    } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $projectRoot 'offline\exe-verification.json') -Encoding UTF8
+    Write-Host "Ready: $dist\LM_AI.exe"
 } finally { Pop-Location }

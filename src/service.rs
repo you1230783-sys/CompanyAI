@@ -165,9 +165,16 @@ pub fn fetch_version(config: &Config) -> AppResult<VersionInfo> {
     if response.status != 200 {
         return Err("暫時無法檢查版本，稍後會再嘗試。".into());
     }
-    let info: VersionInfo =
+    let mut info: VersionInfo =
         serde_json::from_str(&response.body).map_err(|_| "版本資訊格式不正確。")?;
     info.validate()?;
+    // 版本 API 維持最低版本政策；兩種簽署清單提供實際最新發行版本。
+    // 清單暫時無法讀取時保留 API 的結果，不清除已知強制更新門檻。
+    if let Ok(artifact) = crate::deployment::discover_latest(config) {
+        if version_number(&artifact.version)? > version_number(&info.latest_version)? {
+            info.latest_version = artifact.version;
+        }
+    }
     Ok(info)
 }
 

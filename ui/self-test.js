@@ -477,6 +477,11 @@ window.runSelfTest = async () => {
     fixture.update_ready = true;
     LMUI.receive(fixture);
     check(document.getElementById("required-update-download").textContent === "安裝並重新啟動", "downloaded update awaits second action");
+    fixture.update_kind = "exe";
+    LMUI.receive(fixture);
+    check(document.getElementById("required-update-download").textContent === "開啟下載資料夾", "portable update offers manual replacement");
+    check(document.getElementById("required-update-dialog").open, "portable download does not unlock mandatory update");
+    fixture.update_kind = "nsis";
     fixture.update_required = false;
     LMUI.receive(fixture);
     check(!document.getElementById("required-update-dialog").open, "supported version has no update gate");

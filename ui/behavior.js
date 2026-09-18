@@ -48,7 +48,9 @@
   window.BehaviorUI = {
     render() {
       $("update-status").textContent = state.update_status || "";
-      $("download").textContent = state.update_ready ? "安裝並重新啟動" : "下載更新";
+      $("download").textContent = state.update_ready
+        ? (state.update_kind === "exe" ? "開啟下載資料夾" : "安裝並重新啟動")
+        : "下載更新";
       $("download").disabled = !!state.update_busy;
       $("required-update-status").textContent = state.update_status || state.version_status || "請下載並安裝新版。";
       $("required-update-download").textContent = $("download").textContent;
