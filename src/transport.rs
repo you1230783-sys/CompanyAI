@@ -270,7 +270,70 @@ pub fn exchange(
     payload: Payload<'_>,
     auth: Option<(&str, &str)>,
     timeout_ms: i32,
+    on_chunk: Option<ResponseChunks<'_>>,
+) -> AppResult<HttpResponse> {
+    exchange_inner(
+        url,
+        method,
+        content_type,
+        payload,
+        auth,
+        timeout_ms,
+        on_chunk,
+        "text/event-stream",
+    )
+}
+
+/// 有界二進位下載，沿用禁止重新導向／系統 TLS 驗證，不傳登入 Token。
+pub fn download_file(url: &Url, path: &std::path::Path, expected_size: u64) -> AppResult<()> {
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|e| format!("無法建立更新暫存：{e}"))?;
+    let mut received = 0u64;
+    let started = std::time::Instant::now();
+    let mut chunk = |bytes: &[u8]| {
+        received += bytes.len() as u64;
+        if received > expected_size || started.elapsed().as_secs() > 1800 {
+            return Err("更新檔超過指定長度或下載逾時。".into());
+        }
+        file.write_all(bytes).map_err(|e| e.to_string())?;
+        Ok(false)
+    };
+    let response = exchange_inner(
+        url,
+        "GET",
+        "application/octet-stream",
+        Payload {
+            reader: &mut std::io::empty(),
+            length: 0,
+        },
+        None,
+        30_000,
+        Some(&mut chunk),
+        "application/octet-stream",
+    )?;
+    if response.status != 200 || received != expected_size {
+        return Err(format!(
+            "更新下載不完整（HTTP {}），請重試。",
+            response.status
+        ));
+    }
+    file.sync_all().map_err(|e| e.to_string())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn exchange_inner(
+    url: &Url,
+    method: &str,
+    content_type: &str,
+    payload: Payload<'_>,
+    auth: Option<(&str, &str)>,
+    timeout_ms: i32,
     mut on_chunk: Option<ResponseChunks<'_>>,
+    response_type: &str,
 ) -> AppResult<HttpResponse> {
     let host = wide(url.host_str().ok_or("網址缺少主機名稱。")?);
     let path = match url.query() {
@@ -288,7 +351,10 @@ pub fn exchange(
         headers.push_str(&format!("{name}: {value}\r\n"));
     }
     if on_chunk.is_some() {
-        headers = headers.replace("Accept: application/json", "Accept: text/event-stream");
+        headers = headers.replace(
+            "Accept: application/json",
+            &format!("Accept: {response_type}"),
+        );
     }
     // 本機示範不經代理，避免系統 PAC 或企業代理把 loopback 請求轉送出去。
     let proxy_mode = if matches!(url.host_str(), Some("127.0.0.1" | "[::1]" | "localhost")) {
@@ -424,9 +490,9 @@ pub fn exchange(
             ) == 0
                 || !String::from_utf16_lossy(&content_type)
                     .to_ascii_lowercase()
-                    .starts_with("text/event-stream")
+                    .starts_with(response_type)
             {
-                return Err("串流回應必須為 text/event-stream；將查詢任務結果。".into());
+                return Err(format!("回應 Content-Type 必須為 {response_type}。"));
             }
         }
         let started = std::time::Instant::now();
@@ -459,7 +525,9 @@ pub fn exchange(
                         break;
                     }
                     // 十分鐘後轉為 REST 查詢；伺服器繼續執行，不取消長任務。
-                    if started.elapsed() > std::time::Duration::from_secs(600) {
+                    if response_type == "text/event-stream"
+                        && started.elapsed() > std::time::Duration::from_secs(600)
+                    {
                         return Err("長任務已轉為背景查詢。".into());
                     }
                     continue;
@@ -498,6 +566,42 @@ mod tests {
         net::TcpListener,
         thread,
     };
+
+    #[test]
+    fn binary_download_is_bounded_and_rejects_html_redirect_and_truncation() {
+        for (status, mime, body, expected, success) in [
+            (200, "application/octet-stream", "MZpayload", 9, true),
+            (200, "application/octet-stream", "MZpayload", 8, false),
+            (200, "application/octet-stream", "MZpayload", 10, false),
+            (200, "text/html", "MZpayload", 9, false),
+            (302, "application/octet-stream", "MZpayload", 9, false),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let url = Url::parse(&format!(
+                "http://{}/installer",
+                listener.local_addr().unwrap()
+            ))
+            .unwrap();
+            let server = thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut buffer = [0u8; 4096];
+                let n = stream.read(&mut buffer).unwrap();
+                assert!(!String::from_utf8_lossy(&buffer[..n]).contains("Authorization:"));
+                let response = format!("HTTP/1.1 {status} Test\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+                stream.write_all(response.as_bytes()).unwrap();
+            });
+            let path = std::env::temp_dir().join(format!(
+                "LM_AI-download-test-{}",
+                crate::jobs::new_id().unwrap()
+            ));
+            assert_eq!(download_file(&url, &path, expected).is_ok(), success);
+            if success {
+                assert_eq!(std::fs::read(&path).unwrap(), body.as_bytes());
+            }
+            std::fs::remove_file(path).unwrap();
+            server.join().unwrap();
+        }
+    }
 
     #[test]
     fn sse_delivers_first_event_before_server_finishes() {

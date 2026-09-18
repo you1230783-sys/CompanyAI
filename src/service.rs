@@ -4,7 +4,7 @@ use crate::{
     storage::Session,
     transport, AppResult,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -25,13 +25,10 @@ pub fn version_number(value: &str) -> AppResult<[u32; 3]> {
     Ok(numbers)
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VersionInfo {
     pub latest_version: String,
     pub minimum_version: String,
-    /// 網站尚未部署更新欄位時仍能查版本；安裝來源不得從下載頁 HTML 推測。
-    #[serde(default)]
-    pub update: Option<crate::deployment::UpdateArtifact>,
     #[serde(default)]
     pub message: String,
 }
@@ -60,10 +57,46 @@ pub struct VersionState {
 }
 impl VersionState {
     pub fn apply(&mut self, result: AppResult<VersionInfo>) -> AppResult<()> {
-        let info = result?;
+        let mut info = result?;
         info.validate()?;
+        // 已確認必須更新後，後續回應不可降低門檻；只有安裝足夠新的程式才能解除。
+        if let Some(previous) = self.known.as_ref().filter(|v| v.required()) {
+            if version_number(&info.minimum_version)? < version_number(&previous.minimum_version)? {
+                info.minimum_version = previous.minimum_version.clone();
+            }
+            if version_number(&info.latest_version)? < version_number(&info.minimum_version)? {
+                info.latest_version = previous.latest_version.clone();
+            }
+        }
         self.known = Some(info);
         Ok(())
+    }
+    /// 此檔沒有個人資訊；原子寫入保留已確認的最低版本，重新開啟及離線都不能解除。
+    pub fn save(&self, root: &std::path::Path) -> AppResult<()> {
+        if let Some(info) = &self.known {
+            crate::storage::atomic_write(
+                &root.join("version-policy.json"),
+                &serde_json::to_vec(info).map_err(|e| e.to_string())?,
+            )?;
+        }
+        Ok(())
+    }
+    pub fn load(root: &std::path::Path) -> AppResult<Self> {
+        let path = root.join("version-policy.json");
+        let bytes = match std::fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Self::default()),
+            Err(e) => return Err(format!("無法讀取已保存的版本限制：{e}")),
+        };
+        if bytes.len() > 65_536 {
+            return Err("版本限制檔案過大，請聯絡 IT。".into());
+        }
+        let mut state = Self::default();
+        state.apply(
+            serde_json::from_slice(&bytes)
+                .map_err(|_| "版本限制檔案損毀，請重新安裝新版。".to_string()),
+        )?;
+        Ok(state)
     }
     pub fn blocked(&self) -> bool {
         self.known.as_ref().is_some_and(VersionInfo::required)
@@ -163,6 +196,35 @@ pub fn fetch_models(config: &Config, session: Option<&Session>) -> AppResult<Mod
 mod tests {
     use super::*;
     #[test]
+    fn mandatory_floor_survives_restart_and_server_downgrade() {
+        let root = std::env::temp_dir().join(format!(
+            "LM_AI-policy-test-{}",
+            crate::jobs::new_id().unwrap()
+        ));
+        let mut state = VersionState::default();
+        state
+            .apply(Ok(VersionInfo {
+                latest_version: "99.0.0".into(),
+                minimum_version: "98.0.0".into(),
+                message: String::new(),
+            }))
+            .unwrap();
+        state.save(&root).unwrap();
+        let mut reloaded = VersionState::load(&root).unwrap();
+        assert!(reloaded.blocked());
+        reloaded
+            .apply(Ok(VersionInfo {
+                latest_version: CURRENT_VERSION.into(),
+                minimum_version: "0.1.0".into(),
+                message: String::new(),
+            }))
+            .unwrap();
+        assert!(reloaded.blocked());
+        assert_eq!(reloaded.known.unwrap().minimum_version, "98.0.0");
+        std::fs::remove_file(root.join("version-policy.json")).unwrap();
+        std::fs::remove_dir(root).unwrap();
+    }
+    #[test]
     fn version_order_and_failure_policy() {
         assert!(version_number("0.10.0").unwrap() > version_number("0.9.9").unwrap());
         for value in ["1.0", "1.0.0.0", "v1.0.0", "1.0.-1", "1.0.0-beta"] {
@@ -175,7 +237,6 @@ mod tests {
             .apply(Ok(VersionInfo {
                 latest_version: "99.0.0".into(),
                 minimum_version: "99.0.0".into(),
-                update: None,
                 message: String::new(),
             }))
             .unwrap();
@@ -186,7 +247,6 @@ mod tests {
             .apply(Ok(VersionInfo {
                 latest_version: "0.1.0".into(),
                 minimum_version: "99.0.0".into(),
-                update: None,
                 message: String::new()
             }))
             .is_err());

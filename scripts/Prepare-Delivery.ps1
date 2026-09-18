@@ -41,7 +41,7 @@ try {
     & (Join-Path $PSScriptRoot 'Build.ps1')
 
     # 明確列舉交付內容；不帶入 .git、快取、登入資料或另一個專案的資源。
-    $projectItems = @('src','ui','assets','examples','scripts','docs','.cargo','dist','build.rs','Cargo.toml','Cargo.lock','rust-toolchain.toml','README.md','AGENTS.md','.gitignore','.gitattributes')
+    $projectItems = @('src','ui','installer','assets','examples','scripts','docs','.cargo','dist','build.rs','Cargo.toml','Cargo.lock','rust-toolchain.toml','README.md','AGENTS.md','.gitignore','.gitattributes')
     foreach ($item in $projectItems) { Copy-Item -LiteralPath (Join-Path $deliveryRoot $item) -Destination $stage -Recurse -Force }
     Copy-Tree $vendorPath (Join-Path $stage 'vendor')
     $portableToolchain = Join-Path $stage 'toolchain'
@@ -61,6 +61,7 @@ try {
     }
     New-Item -ItemType Directory -Path (Join-Path $stage 'offline') -Force | Out-Null
     Copy-Item -LiteralPath 'offline\environment.txt' -Destination (Join-Path $stage 'offline\environment.txt')
+    Copy-Item -LiteralPath 'offline\installer-verification.json' -Destination (Join-Path $stage 'offline\installer-verification.json')
 
     # 記錄原始碼與 EXE 的 SHA256，使 ZIP 與 Git 中的版本可互相比對。
     $files = @()

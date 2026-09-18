@@ -1,5 +1,7 @@
 # LM_AI：網站／API 串接契約
 
+> **0.8 更新流程以 [UPDATE_0_8_CONTRACT.md](UPDATE_0_8_CONTRACT.md) 為準**：原下載路由改回更新 JSON，下載完整 NSIS Setup；聊天與 SSE 以 0.7 契約為準。
+
 > **0.6 新功能請見 [DESKTOP_0_6_CONTRACT.md](DESKTOP_0_6_CONTRACT.md)**：依模型的附件規則、全站鈴鐺同步／已讀／刪除及 Outlook MSG 自動補充。本頁以下保留既有相容契約。
 
 > **0.5 新功能請先實作 [DESKTOP_0_5_CONTRACT.md](DESKTOP_0_5_CONTRACT.md)**：附件規則路由、文件／圖片上傳、串流、持久背景任務、估時與通知。此處保留既有登入／版本／模型／通知基礎；0.5 契約先行提供網站端同步開發；驗證範圍見 [VALIDATION_0_5.md](VALIDATION_0_5.md)。
@@ -20,7 +22,7 @@
 | POST | `/lm_server/v1/chat/completions` | Bearer Token；模型代號替換後轉送 |
 | GET | `/lm_server/api/desktop/version` | 匿名查詢最低／最新版本 |
 | GET | `/lm_server/api/desktop/models` | 可匿名或依 Bearer Token 回傳有權使用的模型選單 |
-| GET | `/lm_server/desktop/download` | 瀏覽器下載頁；提供新版 EXE 與版本資訊 |
+| GET | `/lm_server/desktop/download` | 更新清單 JSON；格式見 0.8 契約（可依 Accept 保留 HTML 頁） |
 
 另外需提供瀏覽器授權頁，例如 `/lm_server/desktop/activate`（GET 顯示、POST 允許／拒絕）。
 這個頁面的 URL 由 device 回應決定，不必固定上述例子，但入口必須與公司主機同來源。

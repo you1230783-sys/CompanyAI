@@ -18,3 +18,5 @@ jobs-*.dpapi
 
 site-notifications.dpapi
 /outlook-exports/
+
+/.private/

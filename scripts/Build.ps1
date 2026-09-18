@@ -39,8 +39,16 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
     $exe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\release\company-ai.exe'
     # GUI 程式以隱藏的自我檢查模式驗證控制項，避免編譯腳本停在主視窗。
-    $smokeCheck = Start-Process -FilePath $exe -ArgumentList '--self-check' -Wait -PassThru -WindowStyle Hidden
-    if ($smokeCheck.ExitCode -ne 0) { throw 'Executable UI smoke check failed.' }
+    $smokeCheck = New-Object Diagnostics.Process
+    $smokeCheck.StartInfo.FileName = $exe
+    $smokeCheck.StartInfo.Arguments = '--self-check'
+    $smokeCheck.StartInfo.UseShellExecute = $false
+    $smokeCheck.StartInfo.CreateNoWindow = $true
+    $smokeCheck.StartInfo.WindowStyle = 'Hidden'
+    $smokeCheck.StartInfo.RedirectStandardError = $true
+    if (-not $smokeCheck.Start() -or -not $smokeCheck.WaitForExit(60000)) { throw 'Executable UI smoke check timed out.' }
+    if ($smokeCheck.ExitCode -ne 0) { throw ('Executable UI smoke check failed: ' + $smokeCheck.StandardError.ReadToEnd()) }
+    $smokeCheck.Dispose()
     # 記錄實際版本與 DLL 依賴，之後可與公司的環境直接比較。
     $dependencies = & $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER /dump /dependents $exe
     if ($LASTEXITCODE -ne 0) { throw 'DLL inspection failed.' }
@@ -70,15 +78,8 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     New-Item -ItemType Directory -Path $dist -Force | Out-Null
     Copy-Item -LiteralPath $exe -Destination (Join-Path $dist 'CompanyAI.exe') -Force
     Copy-Item -LiteralPath $exe -Destination (Join-Path $dist 'LM_AI.exe') -Force
-    # 主程式完成驗證後，才將本次產物嵌入單檔 Setup；不依賴外部安裝封裝工具。
-    & cargo clippy --frozen --features setup --bin lm-ai-setup -- -D warnings
-    if ($LASTEXITCODE -ne 0) { throw 'Setup Clippy failed.' }
-    & cargo build --release --frozen --features setup --bin lm-ai-setup
-    if ($LASTEXITCODE -ne 0) { throw 'Setup build failed.' }
-    $setup = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\release\lm-ai-setup.exe'
-    $payloadArguments = @('--verify-payload', ('"' + (Join-Path $dist 'LM_AI.exe') + '"'), ('"' + (Join-Path $dist 'MicrosoftEdgeWebView2RuntimeInstallerX64.exe') + '"'))
-    $setupCheck = Start-Process -FilePath $setup -ArgumentList $payloadArguments -Wait -PassThru -WindowStyle Hidden
-    if ($setupCheck.ExitCode -ne 0) { throw 'Setup payload verification failed.' }
-    Copy-Item -LiteralPath $setup -Destination (Join-Path $dist 'LM_AI_Setup.exe') -Force
+    # NSIS 編譯器固定版本與雜湊，離線包自帶 ZIP；使用者機不需這些開發工具。
+    & (Join-Path $PSScriptRoot 'Build-Installer.ps1')
+    & (Join-Path $PSScriptRoot 'Test-Installer.ps1')
     Write-Host "Ready: $dist\LM_AI.exe and LM_AI_Setup.exe"
 } finally { Pop-Location }

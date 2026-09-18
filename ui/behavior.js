@@ -39,11 +39,22 @@
   notice.hidden = true;
   $("model-button").parentElement.append(notice);
   let noticeTimer;
+  // 強制更新不能用 Escape 或關閉設定解除；仍提供退出與重試。
+  const updateGate = $("required-update-dialog");
+  updateGate.addEventListener("cancel", event => event.preventDefault());
+  $("required-update-exit").onclick = () => send({type:"exit"});
+  $("required-update-refresh").onclick = () => send({type:"refresh"});
+  $("required-update-download").onclick = () => send({type:"download"});
   window.BehaviorUI = {
     render() {
       $("update-status").textContent = state.update_status || "";
-      $("download").textContent = state.update_ready ? "立即更新並重新啟動" : "下載更新";
+      $("download").textContent = state.update_ready ? "安裝並重新啟動" : "下載更新";
       $("download").disabled = !!state.update_busy;
+      $("required-update-status").textContent = state.update_status || state.version_status || "請下載並安裝新版。";
+      $("required-update-download").textContent = $("download").textContent;
+      $("required-update-download").disabled = !!state.update_busy;
+      if (state.update_required && !updateGate.open) updateGate.showModal();
+      if (!state.update_required && updateGate.open) updateGate.close();
       const c = state.config;
       $("hotkey-enabled").checked = c.hotkey_enabled !== false;
       $("selection-icon").checked = !!c.selection_icon;

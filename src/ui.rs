@@ -96,6 +96,7 @@ enum Command {
     ReopenLogin,
     Refresh,
     Download,
+    Exit,
     Model {
         id: String,
     },
@@ -140,7 +141,7 @@ enum Event {
     Grant(u64, AppResult<DeviceGrant>),
     Login(u64, AppResult<Session>),
     Capture(AppResult<String>),
-    UpdateReady(AppResult<PathBuf>),
+    UpdateReady(AppResult<crate::deployment::ReadyUpdate>),
     SelectionRect(Option<crate::selection_popup::SelectionRect>),
     Mail(u64, AppResult<MailPreview>),
     Events(u64, AppResult<notifications::EventPage>),
@@ -171,9 +172,8 @@ struct App {
     models: Option<ModelCatalog>,
     versions: VersionState,
     version_status: String,
-    update_ready: Option<PathBuf>,
+    update_ready: Option<crate::deployment::ReadyUpdate>,
     update_busy: bool,
-    update_attempted: String,
     update_status: String,
     services_loading: bool,
     generation: u64,
@@ -277,6 +277,10 @@ impl App {
         self.focus_draft = false;
     }
     fn fail(&mut self, error: String) {
+        // 強制更新對話框會遮住主畫面狀態列，下載／安裝錯誤須在對話框內可見。
+        if self.versions.blocked() {
+            self.update_status = error.clone();
+        }
         self.status = error;
         self.error = true;
     }
@@ -322,7 +326,7 @@ impl App {
         history::save(&self.root, &self.archive)
     }
     fn restore_window(&mut self) {
-        if self.config.always_new_chat && self.work.incoming.is_none() {
+        if self.config.always_new_chat && self.work.incoming.is_none() && !self.versions.blocked() {
             self.new_chat();
         }
         self.publish();
@@ -435,6 +439,9 @@ impl App {
         });
     }
     fn start_notifications(&mut self) {
+        if self.versions.blocked() {
+            return;
+        }
         self.start_site();
         self.socket_cancel.store(true, Ordering::Relaxed);
         self.socket_cancel = Arc::new(AtomicBool::new(false));
@@ -587,6 +594,20 @@ impl App {
         Ok(())
     }
     fn command(&mut self, command: Command) -> AppResult<()> {
+        // 不只停用按鈕：所有進入原生層的功能命令一律受版本門檻約束。
+        if self.versions.blocked()
+            && !matches!(
+                command,
+                Command::Ready
+                    | Command::Draft { .. }
+                    | Command::Refresh
+                    | Command::Download
+                    | Command::Exit
+                    | Command::SelfTestResult { .. }
+            )
+        {
+            return Err("此版本已停止支援，安裝更新完成前無法使用功能。".into());
+        }
         match command {
             Command::SiteAction { command } => self.site_action(command)?,
             Command::MailBatch { command } => self.mail_batch_command(command)?,
@@ -721,9 +742,15 @@ impl App {
                 self.toast("快捷鍵已更新");
             }
             Command::Refresh => self.refresh_services(),
+            Command::Exit => unsafe {
+                PostMessageW(self.window, WM_CLOSE, 1, 0);
+            },
             Command::Download => {
+                if self.update_busy {
+                    return Ok(());
+                }
                 if self.update_ready.is_some() {
-                    self.apply_ready_update(true)?;
+                    self.apply_ready_update()?;
                 } else {
                     self.start_update_download()?;
                 }
@@ -934,6 +961,11 @@ impl App {
         Ok(())
     }
     fn event(&mut self, event: Event) -> AppResult<()> {
+        if self.versions.blocked() && !matches!(event, Event::Services(..) | Event::UpdateReady(..))
+        {
+            // 停止以舊版繼續串接自動郵件／附件流程，已提交的伺服器任務留給新版恢復。
+            return Ok(());
+        }
         match event {
             Event::Site(generation, event) if generation == self.generation => {
                 self.site_event(event)?
@@ -981,14 +1013,22 @@ impl App {
                         self.fail(e);
                     }
                 }
-                if self.versions.known.as_ref().is_some_and(|v| {
-                    v.available() && v.update.is_some() && self.update_attempted != v.latest_version
+                if self.update_ready.as_ref().is_some_and(|ready| {
+                    self.versions
+                        .known
+                        .as_ref()
+                        .is_none_or(|info| ready.artifact.version != info.latest_version)
                 }) {
-                    if let Err(e) = self.start_update_download() {
-                        self.update_status = e;
-                    }
+                    self.update_ready = None;
+                    self.update_status = "網站已發布不同版本，請重新同意下載。".into();
                 }
                 if self.versions.blocked() {
+                    self.versions.save(&self.root)?;
+                    self.mail_flow.cancel.store(true, Ordering::Relaxed);
+                    self.cancelled.store(true, Ordering::Relaxed);
+                    self.socket_cancel.store(true, Ordering::Relaxed);
+                    self.selection_popup.update(None);
+                    self.selection_popup.enabled.store(false, Ordering::Relaxed);
                     self.fail(self.version_status.clone());
                     self.toast("目前版本需更新，請由設定下載新版");
                 }
@@ -1034,9 +1074,19 @@ impl App {
                 self.update_busy = false;
                 match result {
                     Ok(plan) => {
+                        if self
+                            .versions
+                            .known
+                            .as_ref()
+                            .is_none_or(|info| info.latest_version != plan.artifact.version)
+                        {
+                            self.update_status = "下載期間版本資訊已變更，請重新下載。".into();
+                            return Ok(());
+                        }
                         self.update_ready = Some(plan);
                         self.update_status =
-                            "新版已準備完成，退出時套用；也可立即更新並重新啟動。".into();
+                            "新版已下載並驗證。請按「安裝並重新啟動」確認；退出不會自動安裝。"
+                                .into();
                         self.toast(&self.update_status.clone());
                     }
                     Err(e) => {
@@ -1046,7 +1096,11 @@ impl App {
             }
             Event::SelectionRect(rect) => {
                 self.selection_popup
-                    .update(if self.busy == "none" { rect } else { None });
+                    .update(if self.busy == "none" && !self.versions.blocked() {
+                        rect
+                    } else {
+                        None
+                    });
             }
             Event::Capture(result) => {
                 self.busy = "none";
@@ -1155,13 +1209,17 @@ impl App {
         Ok(())
     }
     fn tick(&mut self) {
-        let mut changed = self.site_tick();
-        match self.mail_batch_tick() {
-            Ok(updated) => changed |= updated,
-            Err(e) => {
-                self.mail_flow.phase = "idle";
-                self.mail_flow.status = format!("自動流程已暫停：{e} 附件保留，可在對話手動送出。");
-                changed = true;
+        let mut changed = false;
+        if !self.versions.blocked() {
+            changed = self.site_tick();
+            match self.mail_batch_tick() {
+                Ok(updated) => changed |= updated,
+                Err(e) => {
+                    self.mail_flow.phase = "idle";
+                    self.mail_flow.status =
+                        format!("自動流程已暫停：{e} 附件保留，可在對話手動送出。");
+                    changed = true;
+                }
             }
         }
         if self.suppress_hotkey && crate::hotkey::pressed_modifiers() == 0 {
@@ -1195,7 +1253,9 @@ impl App {
             }
         }
         if !self.smoke {
-            self.poll_work(false);
+            if !self.versions.blocked() {
+                self.poll_work(false);
+            }
             if self.session.is_some() && !self.logged_in() && self.busy == "none" {
                 let _ = self.logout();
                 self.fail("登入已到期，請重新登入。".into());
@@ -1203,7 +1263,9 @@ impl App {
             }
             if self.last_events.elapsed() > Duration::from_secs(60) {
                 self.last_events = Instant::now();
-                self.fetch_events();
+                if !self.versions.blocked() {
+                    self.fetch_events();
+                }
                 changed = true;
             }
             if self.last_services.elapsed() > Duration::from_secs(300) {
@@ -1229,41 +1291,71 @@ impl App {
             self.update_status = "目前已是最新版本。".into();
             return Ok(());
         }
-        self.update_attempted = info.latest_version.clone();
-        let artifact = info
-            .update
-            .clone()
-            .ok_or("網站尚未提供直接更新檔資訊，請由 IT 安裝新版。")?;
-        crate::deployment::validate_artifact(&self.config, &artifact, &info.latest_version)?;
+        let latest = info.latest_version.clone();
+        let message = if self.versions.blocked() {
+            "此版本已停止支援，必須安裝更新後才能繼續使用。現在下載新版安裝包？"
+        } else {
+            "找到新版。是否下載完整安裝包？下載後會再次詢問，取得同意才關閉及更新。"
+        };
+        if unsafe {
+            MessageBoxW(
+                self.window,
+                wide(message).as_ptr(),
+                wide("下載 LM_AI 更新").as_ptr(),
+                MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION,
+            )
+        } != IDYES
+        {
+            return Ok(());
+        }
         let config = self.config.clone();
         let tx = self.tx.clone();
         self.update_busy = true;
         self.update_status = "正在背景下載並驗證更新…".into();
         thread::spawn(move || {
             let _ = tx.send(Event::UpdateReady(crate::deployment::download(
-                &config, &artifact,
+                &config, &latest,
             )));
         });
         Ok(())
     }
-    fn apply_ready_update(&mut self, restart: bool) -> AppResult<()> {
-        if self.work.incoming.is_some() || self.busy != "none" || self.mail_flow.phase != "idle" {
-            return Err("請先完成檔案接收或停止郵件流程，再重新啟動更新。".into());
+    fn apply_ready_update(&mut self) -> AppResult<()> {
+        // 更新時取消本機操作，伺服器持久任務會保留供新版恢復；先保存草稿。
+        let Some(ready) = &self.update_ready else {
+            return Ok(());
+        };
+        let latest = self
+            .versions
+            .known
+            .as_ref()
+            .ok_or("尚未取得版本資訊。")?
+            .latest_version
+            .clone();
+        crate::deployment::validate_artifact(&self.config, &ready.artifact, &latest)?;
+        if unsafe {
+            MessageBoxW(self.window,
+            wide("新版已下載且驗證完成。是否現在保存草稿、關閉 LM_AI、安裝並重新啟動？安裝位置為目前使用者的 Programs\\LM_AI；正在執行的本機郵件操作將停止。取消則保留待安裝狀態。").as_ptr(),
+            wide("安裝 LM_AI 更新").as_ptr(), MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION)
+        } != IDYES
+        {
+            return Ok(());
         }
         self.preserve_draft()?;
-        if let Some(plan) = &self.update_ready {
-            crate::deployment::launch_update(plan, restart)?;
-        }
-        self.update_ready = None;
-        if restart {
-            unsafe {
-                PostMessageW(self.window, WM_CLOSE, 1, 0);
-            }
+        crate::deployment::launch_update(
+            self.update_ready.as_ref().ok_or("更新檔不存在。")?,
+            &self.config,
+            &latest,
+        )?;
+        self.update_busy = true;
+        self.mail_flow.cancel.store(true, Ordering::Relaxed);
+        self.cancelled.store(true, Ordering::Relaxed);
+        unsafe {
+            PostMessageW(self.window, WM_CLOSE, 1, 0);
         }
         Ok(())
     }
     fn capture(&mut self) {
-        if self.recording_since.is_some() || self.suppress_hotkey {
+        if self.versions.blocked() || self.recording_since.is_some() || self.suppress_hotkey {
             return;
         }
         if self.busy != "none" {
@@ -1411,7 +1503,7 @@ unsafe extern "system" fn window_proc(
                 crate::selection_popup::CLICK_MESSAGE => {
                     let source = app.selection_popup.source;
                     app.selection_popup.update(None);
-                    if source != 0 && app.busy == "none" {
+                    if source != 0 && app.busy == "none" && !app.versions.blocked() {
                         let tx = app.tx.clone();
                         app.busy = "capture";
                         thread::spawn(move || {
@@ -1436,13 +1528,6 @@ unsafe extern "system" fn window_proc(
                             ShowWindow(window, SW_HIDE);
                         }
                         return 0;
-                    }
-                    if app.update_ready.is_some() {
-                        if let Err(e) = app.apply_ready_update(false) {
-                            app.fail(e);
-                            app.publish();
-                            return 0;
-                        }
                     }
                     unsafe {
                         DestroyWindow(window);
@@ -1611,6 +1696,7 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
         Ok(a) => (a, None),
         Err(e) => (Archive::default(), Some(e)),
     };
+    let versions = VersionState::load(&root)?;
     let (tx, rx) = mpsc::channel();
     let (command_tx, commands) = mpsc::channel();
     unsafe {
@@ -1684,11 +1770,10 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
             status: "準備就緒".into(),
             error: false,
             models: None,
-            versions: VersionState::default(),
+            versions,
             version_status: "正在檢查版本".into(),
             update_ready: None,
             update_busy: false,
-            update_attempted: String::new(),
             update_status: String::new(),
             services_loading: false,
             generation: 0,

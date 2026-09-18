@@ -465,6 +465,21 @@ window.runSelfTest = async () => {
       await new Promise(resolve => setTimeout(resolve,1800));
       check(document.querySelector(".model-notice").hidden, "automatic model notice fades after 1.5 seconds");
     } finally { send = behaviorSend; }
+    fixture.update_required = true;
+    fixture.update_busy = true;
+    LMUI.receive(fixture);
+    check(document.getElementById("required-update-dialog").open, "mandatory update blocks UI");
+    check(document.getElementById("required-update-download").disabled, "duplicate download is disabled");
+    const escapeUpdate = new Event("cancel", {cancelable:true});
+    document.getElementById("required-update-dialog").dispatchEvent(escapeUpdate);
+    check(escapeUpdate.defaultPrevented, "Escape cannot dismiss mandatory update");
+    fixture.update_busy = false;
+    fixture.update_ready = true;
+    LMUI.receive(fixture);
+    check(document.getElementById("required-update-download").textContent === "安裝並重新啟動", "downloaded update awaits second action");
+    fixture.update_required = false;
+    LMUI.receive(fixture);
+    check(!document.getElementById("required-update-dialog").open, "supported version has no update gate");
     window.chrome?.webview?.postMessage({
       type: "self_test_result",
       ok: true,

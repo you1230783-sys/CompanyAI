@@ -1,0 +1,15 @@
+﻿{
+    "result":  "PASS",
+    "recorded_at":  "2026-09-18T16:40:42.7882087+08:00",
+    "toolset":  "14.29.30133",
+    "checks":  [
+                   "NSIS install",
+                   "shortcuts and registration",
+                   "PID handoff wait",
+                   "update replacement",
+                   "automatic restart",
+                   "locked-file failure preserves old app",
+                   "NSIS uninstall preserves unknown files"
+               ],
+    "scope":  "isolated native payload, same NSIS source; corporate antivirus requires company testing"
+}

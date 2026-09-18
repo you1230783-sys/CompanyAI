@@ -12,10 +12,13 @@ CompanyAI/
   Cargo.toml、Cargo.lock    專案與固定依賴
   rust-toolchain.toml       固定 Rust 版本
   .cargo/config.toml       目標平台、靜態 CRT、vendor 設定
-  scripts/                 環境、編譯、交付腳本
+  scripts/                 開發機環境、編譯、交付腳本；不在使用者端執行
+  installer/               NSIS 安裝原始碼、固定工具 ZIP 與測試 payload
   docs/                    網站串接及離線操作文件
   dist/CompanyAI.exe       已編譯的 Windows 程式
   dist/LM_AI.exe            相同程式的新版產品檔名
+  dist/LM_AI_Setup.exe      NSIS 完整安裝／更新包
+  dist/update-manifest.json 發行包簽章與下載契約
   dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe  WebView2 離線安裝包
   offline/
     CompanyAI-offline.zip 完整離線包（Git LFS）
@@ -30,7 +33,7 @@ CompanyAI/
 
 離線 ZIP 另外包含 `toolchain/`（Rust、Cargo、rustfmt、Clippy、標準函式庫及 rust-src 原始碼）與 `vendor/`（Cargo.lock 對應的套件原始碼及授權資訊）。
 這兩個解壓目錄不另外提交 Git，避免重複保存；所需內容已在 ZIP 內。
-ZIP 不包含自身、Git 歷史、target、個人登入資料或其他專案的共用服務。
+ZIP 不包含更新私鑰 .private/、自身、Git 歷史、target、個人登入資料或其他專案的共用服務。
 
 ## 拿到公司使用
 
