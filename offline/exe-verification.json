@@ -1,23 +1,23 @@
-﻿{
-    "recorded_at":  "2026-09-18T17:53:17.9272143+08:00",
-    "version":  "0.8.1.0",
-    "result":  "PASS",
-    "msvc":  "14.29.30133",
-    "compiler_report":  [
-                            "v142.c",
-                            "Verified _MSC_FULL_VER=192930159 x64"
-                        ],
-    "empty_cargo_cache":  true,
-    "cargo_home":  "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-d1040faadc8c4527a9ba68c9524a7d12",
-    "checks":  [
-                   "v142 x64 compiler probe",
-                   "fmt",
-                   "Clippy",
-                   "workspace tests",
-                   "cargo build --release --frozen",
-                   "WebView2 DOM self-check"
-               ],
-    "exe_sha256":  "c31acfe8498e6334c2e9848a11351a7b02bd91bbd1c10c67eb283e206ee27e06",
-    "installer_built":  false,
-    "offline_zip_built":  false
+{
+  "recorded_at": "2026-09-18T18:18:14.4249981+08:00",
+  "version": "0.8.2.0",
+  "result": "PASS",
+  "msvc": "14.29.30133",
+  "compiler_report": [
+    "v142.c",
+    "Verified _MSC_FULL_VER=192930159 x64"
+  ],
+  "empty_cargo_cache": true,
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-0d727dc0327a42a782ccb9b63027a2b0",
+  "checks": [
+    "v142 x64 compiler probe",
+    "fmt",
+    "Clippy",
+    "workspace tests",
+    "cargo build --release --frozen",
+    "WebView2 DOM self-check"
+  ],
+  "exe_sha256": "ba731d1ca1c48ce359fe203ed24c47a6c611b4da3ea9b14952e9ccf9a4555c95",
+  "installer_built": false,
+  "offline_zip_built": false
 }

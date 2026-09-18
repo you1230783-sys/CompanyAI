@@ -324,6 +324,16 @@ HTTP 200：
 - 無自訂代理帳密／用戶端憑證選取；不需要 CORS。SSO、Cookie 和 CSRF 由瀏覽器授權頁處理。
 - 正式模式不開本機 HTTP port，只有 --demo 會在 127.0.0.1 隨機埠啟動模擬服務。
 
+### 0.8.2 登入連線診斷
+
+登入依序為：POST device 取得登入碼 → ShellExecuteW 開啟預設瀏覽器 → POST token 輪詢授權。若 device 連線失敗，瀏覽器尚未開啟。Edge 能讀取 version JSON，只代表該瀏覽器當時能連到 version GET，不代表桌面 WinHTTP 或兩個登入 POST 已通過。
+
+網路錯誤現在包含用途與 API 階段，例如「申請登入碼失敗（尚未開啟瀏覽器）：Windows 網路錯誤 10022（WinHttpSendRequest）」。這只是訊息格式範例，尚未在公司故障電腦確認實際失敗階段。新增診斷不包含網址、查詢參數、Header、本文、登入碼或 Token；請回報完整錯誤文字即可，不需提供憑證。
+
+10022 對應 WSAEINVAL，表示參數或連線狀態無效，不能只憑代碼判定為防毒、代理或 WebView2 缺漏。維持 WinHTTP 自動代理、系統憑證驗證與不自動重送 POST 的規則；不以改直連或關閉防毒作為預設修正。回傳成功但寫入 0 bytes 時改報傳送無進度，不讀取可能殘留的 GetLastError；這是錯誤呈現修正，不代表已證實為本次 10022 的原因。
+
+參考：[Microsoft WinHTTP](https://learn.microsoft.com/en-us/windows/win32/api/winhttp/nf-winhttp-winhttpopen)、[Windows Socket 錯誤碼](https://learn.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2)。
+
 ## 11. 網站驗收順序
 
 1. version 回 0.4.0／0.4.0，models 回 fast／quality；桌面顯示對應名稱。

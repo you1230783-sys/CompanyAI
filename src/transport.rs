@@ -13,9 +13,9 @@ pub struct HttpResponse {
 /// WinHTTP handle 與建立它的請求一起存活；Drop 確保每個錯誤路徑都會關閉。
 struct Handle(*mut c_void);
 impl Handle {
-    fn checked(value: *mut c_void) -> AppResult<Self> {
+    fn checked(operation: &str, value: *mut c_void) -> AppResult<Self> {
         if value.is_null() {
-            Err(network_error())
+            Err(network_error(operation))
         } else {
             Ok(Self(value))
         }
@@ -30,16 +30,18 @@ impl Drop for Handle {
     }
 }
 
-fn network_error() -> String {
+/// 必須緊接失敗的 WinHTTP 呼叫，先取得錯誤碼，再組合說明。
+/// 只記錄固定的 API 名稱；不附上網址、Header 或本文，避免洩漏登入碼與 Token。
+fn network_error(operation: &str) -> String {
     let code = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
-    match code {
-        12002 => "連線逾時。請確認 API 可從這台電腦連線；請求可能已送達，重試前請留意。".into(),
-        12007 => "無法解析主機名稱，請檢查內網 DNS 與網站網址。".into(),
-        12175 => {
-            "HTTPS 憑證驗證失敗。請由公司 IT 安裝正確的信任憑證；程式不會略過憑證驗證。".into()
-        }
-        _ => format!("Windows 網路錯誤 {code}。請確認網址、VPN、代理伺服器與防火牆。"),
-    }
+    let detail = match code {
+        10022 => "網路元件回報參數或連線狀態無效；請提供失敗步驟及錯誤碼供排查。",
+        12002 => "連線逾時。請確認 API 可從這台電腦連線；請求可能已送達，重試前請留意。",
+        12007 => "無法解析主機名稱，請檢查內網 DNS 與網站網址。",
+        12175 => "HTTPS 憑證驗證失敗。請由公司 IT 安裝正確的信任憑證；程式不會略過憑證驗證。",
+        _ => "請確認網址、VPN、代理伺服器與防火牆。",
+    };
+    format!("Windows 網路錯誤 {code}（{operation}）。{detail}")
 }
 
 /// 發送一次 HTTP 請求，不自動重試或跟隨重新導向，避免重複呼叫或把憑證帶到別站。
@@ -88,39 +90,48 @@ pub fn watch_notifications(
     let host = wide(url.host_str().ok_or("通知主機無效。")?);
     let local = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
     unsafe {
-        let session = Handle::checked(WinHttpOpen(
-            wide("LM_AI/notifications").as_ptr(),
-            if local {
-                WINHTTP_ACCESS_TYPE_NO_PROXY
-            } else {
-                WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY
-            },
-            ptr::null(),
-            ptr::null(),
-            0,
-        ))?;
+        let session = Handle::checked(
+            "WinHttpOpen",
+            WinHttpOpen(
+                wide("LM_AI/notifications").as_ptr(),
+                if local {
+                    WINHTTP_ACCESS_TYPE_NO_PROXY
+                } else {
+                    WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY
+                },
+                ptr::null(),
+                ptr::null(),
+                0,
+            ),
+        )?;
         if WinHttpSetTimeouts(session.0, 10_000, 10_000, 15_000, 15_000) == 0 {
-            return Err(network_error());
+            return Err(network_error("WinHttpSetTimeouts"));
         }
-        let connection = Handle::checked(WinHttpConnect(
-            session.0,
-            host.as_ptr(),
-            url.port_or_known_default().ok_or("通知埠號無效。")?,
-            0,
-        ))?;
-        let request = Handle::checked(WinHttpOpenRequest(
-            connection.0,
-            wide("GET").as_ptr(),
-            wide(url.path()).as_ptr(),
-            ptr::null(),
-            ptr::null(),
-            ptr::null(),
-            if url.scheme() == "https" {
-                WINHTTP_FLAG_SECURE
-            } else {
-                0
-            },
-        ))?;
+        let connection = Handle::checked(
+            "WinHttpConnect",
+            WinHttpConnect(
+                session.0,
+                host.as_ptr(),
+                url.port_or_known_default().ok_or("通知埠號無效。")?,
+                0,
+            ),
+        )?;
+        let request = Handle::checked(
+            "WinHttpOpenRequest",
+            WinHttpOpenRequest(
+                connection.0,
+                wide("GET").as_ptr(),
+                wide(url.path()).as_ptr(),
+                ptr::null(),
+                ptr::null(),
+                ptr::null(),
+                if url.scheme() == "https" {
+                    WINHTTP_FLAG_SECURE
+                } else {
+                    0
+                },
+            ),
+        )?;
         let disable =
             WINHTTP_DISABLE_REDIRECTS | WINHTTP_DISABLE_COOKIES | WINHTTP_DISABLE_AUTHENTICATION;
         if WinHttpSetOption(
@@ -129,14 +140,17 @@ pub fn watch_notifications(
             &disable as *const u32 as *const c_void,
             4,
         ) == 0
-            || WinHttpSetOption(
-                request.0,
-                WINHTTP_OPTION_UPGRADE_TO_WEB_SOCKET,
-                ptr::null(),
-                0,
-            ) == 0
         {
-            return Err(network_error());
+            return Err(network_error("WinHttpSetOption/notifications"));
+        }
+        if WinHttpSetOption(
+            request.0,
+            WINHTTP_OPTION_UPGRADE_TO_WEB_SOCKET,
+            ptr::null(),
+            0,
+        ) == 0
+        {
+            return Err(network_error("WinHttpSetOption/websocket"));
         }
         let headers = wide(&format!(
             "Authorization: Bearer {token}\r\nAccept: application/json\r\nX-Client-Version: {}\r\n",
@@ -151,9 +165,11 @@ pub fn watch_notifications(
             0,
             0,
         ) == 0
-            || WinHttpReceiveResponse(request.0, ptr::null_mut()) == 0
         {
-            return Err(network_error());
+            return Err(network_error("WinHttpSendRequest"));
+        }
+        if WinHttpReceiveResponse(request.0, ptr::null_mut()) == 0 {
+            return Err(network_error("WinHttpReceiveResponse"));
         }
         let mut status = 0u32;
         let mut length = 4;
@@ -165,13 +181,15 @@ pub fn watch_notifications(
             &mut length,
             ptr::null_mut(),
         ) == 0
-            || status != 101
         {
+            return Err(network_error("WinHttpQueryHeaders/status"));
+        }
+        if status != 101 {
             return Err("即時通知尚未連線，先使用定時補查。".into());
         }
         let raw = WinHttpWebSocketCompleteUpgrade(request.0, 0);
         if raw.is_null() {
-            return Err(network_error());
+            return Err(network_error("WinHttpWebSocketCompleteUpgrade"));
         }
         let socket = Socket(Arc::new(AtomicUsize::new(raw as usize)));
         let shared = socket.0.clone();
@@ -364,36 +382,45 @@ fn exchange_inner(
     };
     // SAFETY: 傳入的 UTF-16 字串與 body 在整次同步請求期間有效；所有輸出緩衝區有明確長度。
     unsafe {
-        let session = Handle::checked(WinHttpOpen(
-            wide(concat!("CompanyAI/", env!("CARGO_PKG_VERSION"))).as_ptr(),
-            proxy_mode,
-            ptr::null(),
-            ptr::null(),
-            0,
-        ))?;
+        let session = Handle::checked(
+            "WinHttpOpen",
+            WinHttpOpen(
+                wide(concat!("CompanyAI/", env!("CARGO_PKG_VERSION"))).as_ptr(),
+                proxy_mode,
+                ptr::null(),
+                ptr::null(),
+                0,
+            ),
+        )?;
         if WinHttpSetTimeouts(session.0, 10_000, 10_000, timeout_ms, timeout_ms) == 0 {
-            return Err(network_error());
+            return Err(network_error("WinHttpSetTimeouts"));
         }
-        let connection = Handle::checked(WinHttpConnect(
-            session.0,
-            host.as_ptr(),
-            url.port_or_known_default().ok_or("網址埠號無效。")?,
-            0,
-        ))?;
+        let connection = Handle::checked(
+            "WinHttpConnect",
+            WinHttpConnect(
+                session.0,
+                host.as_ptr(),
+                url.port_or_known_default().ok_or("網址埠號無效。")?,
+                0,
+            ),
+        )?;
         let flags = if url.scheme() == "https" {
             WINHTTP_FLAG_SECURE
         } else {
             0
         };
-        let request = Handle::checked(WinHttpOpenRequest(
-            connection.0,
-            wide(method).as_ptr(),
-            wide(&path).as_ptr(),
-            ptr::null(),
-            ptr::null(),
-            ptr::null(),
-            flags,
-        ))?;
+        let request = Handle::checked(
+            "WinHttpOpenRequest",
+            WinHttpOpenRequest(
+                connection.0,
+                wide(method).as_ptr(),
+                wide(&path).as_ptr(),
+                ptr::null(),
+                ptr::null(),
+                ptr::null(),
+                flags,
+            ),
+        )?;
         let policy = WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
         if WinHttpSetOption(
             request.0,
@@ -402,7 +429,7 @@ fn exchange_inner(
             4,
         ) == 0
         {
-            return Err(network_error());
+            return Err(network_error("WinHttpSetOption/redirect"));
         }
         // 不重用網站 cookies；本應用只使用明確取得的 API 憑證。
         let disabled = WINHTTP_DISABLE_COOKIES;
@@ -413,7 +440,7 @@ fn exchange_inner(
             4,
         ) == 0
         {
-            return Err(network_error());
+            return Err(network_error("WinHttpSetOption/cookies"));
         }
         let headers = wide(&headers);
         if WinHttpSendRequest(
@@ -426,7 +453,7 @@ fn exchange_inner(
             0,
         ) == 0
         {
-            return Err(network_error());
+            return Err(network_error("WinHttpSendRequest"));
         }
         let mut remaining = payload.length as usize;
         let mut upload_buffer = [0u8; 48 * 1024];
@@ -448,16 +475,22 @@ fn exchange_inner(
                     (count - offset) as u32,
                     &mut written,
                 ) == 0
-                    || written == 0
                 {
-                    return Err(network_error());
+                    return Err(network_error("WinHttpWriteData"));
+                }
+                // API 成功但沒有寫入資料時，GetLastError 不代表本次結果。
+                // 明確報告無進度，避免顯示其他呼叫殘留的 10022 等錯誤碼。
+                if written == 0 {
+                    return Err(
+                        "傳送資料失敗（WinHttpWriteData）：未寫入任何資料，已停止傳送。".into(),
+                    );
                 }
                 offset += written as usize;
             }
             remaining -= count;
         }
         if WinHttpReceiveResponse(request.0, ptr::null_mut()) == 0 {
-            return Err(network_error());
+            return Err(network_error("WinHttpReceiveResponse"));
         }
         let mut status = 0_u32;
         let mut size = 4_u32;
@@ -470,7 +503,7 @@ fn exchange_inner(
             ptr::null_mut(),
         ) == 0
         {
-            return Err(network_error());
+            return Err(network_error("WinHttpQueryHeaders/status"));
         }
         if (300..400).contains(&status) {
             return Err(format!(
@@ -488,9 +521,12 @@ fn exchange_inner(
                 &mut size,
                 ptr::null_mut(),
             ) == 0
-                || !String::from_utf16_lossy(&content_type)
-                    .to_ascii_lowercase()
-                    .starts_with(response_type)
+            {
+                return Err(network_error("WinHttpQueryHeaders/content-type"));
+            }
+            if !String::from_utf16_lossy(&content_type)
+                .to_ascii_lowercase()
+                .starts_with(response_type)
             {
                 return Err(format!("回應 Content-Type 必須為 {response_type}。"));
             }
@@ -506,7 +542,7 @@ fn exchange_inner(
             if on_chunk.is_some() && status == 200 {
                 let mut available = 0;
                 if WinHttpQueryDataAvailable(request.0, &mut available) == 0 {
-                    return Err(network_error());
+                    return Err(network_error("WinHttpQueryDataAvailable"));
                 }
                 if available == 0 {
                     break;
@@ -514,7 +550,7 @@ fn exchange_inner(
                 wanted = available.min(wanted);
             }
             if WinHttpReadData(request.0, chunk.as_mut_ptr().cast(), wanted, &mut read) == 0 {
-                return Err(network_error());
+                return Err(network_error("WinHttpReadData"));
             }
             if read == 0 {
                 break;
@@ -566,6 +602,38 @@ mod tests {
         net::TcpListener,
         thread,
     };
+
+    #[test]
+    fn invalid_timeout_reports_winhttp_stage_without_sending_credentials() {
+        // -2 是 WinHTTP 不接受的逾時值；用真正的 API 失敗驗證診斷，
+        // 並確認錯誤在建立網路連線前返回，不會傳送測試憑證或登入本文。
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let url = Url::parse(&format!(
+            "http://{}/device?code=private-query",
+            listener.local_addr().unwrap()
+        ))
+        .unwrap();
+        let error = request_method(
+            &url,
+            "POST",
+            "application/x-www-form-urlencoded",
+            "device_code=private-body",
+            Some(("Authorization", "Bearer private-token")),
+            -2,
+        )
+        .err()
+        .expect("invalid timeout must fail");
+        assert!(
+            error.contains("Windows 網路錯誤 87（WinHttpSetTimeouts）"),
+            "{error}"
+        );
+        assert!(!error.contains("private-"));
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+    }
 
     #[test]
     fn binary_download_is_bounded_and_rejects_html_redirect_and_truncation() {

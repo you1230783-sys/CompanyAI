@@ -992,11 +992,11 @@ impl App {
                             "目前為最新版本".into()
                         }
                     }
-                    Err(_) => {
+                    Err(error) => {
                         if self.versions.blocked() {
-                            "請更新至已確認的最低版本".into()
+                            format!("請更新至已確認的最低版本；{error}")
                         } else {
-                            "暫時無法檢查版本，允許使用".into()
+                            format!("暫時無法檢查版本，允許使用；{error}")
                         }
                     }
                 };
@@ -1415,7 +1415,11 @@ fn open_browser(value: &str) -> AppResult<()> {
         )
     };
     if result as isize <= 32 {
-        Err("無法開啟預設瀏覽器。".into())
+        // ShellExecuteW 直接以回傳值表示失敗；不可把 GetLastError 當成其錯誤碼。
+        Err(format!(
+            "無法開啟預設瀏覽器（ShellExecuteW：{}）。請確認 Windows 的預設瀏覽器設定。",
+            result as isize
+        ))
     } else {
         Ok(())
     }

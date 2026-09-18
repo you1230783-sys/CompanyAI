@@ -161,7 +161,8 @@ impl ModelCatalog {
 }
 
 pub fn fetch_version(config: &Config) -> AppResult<VersionInfo> {
-    let response = transport::get(&config.endpoint(VERSION_PATH)?, None)?;
+    let response = transport::get(&config.endpoint(VERSION_PATH)?, None)
+        .map_err(|error| format!("檢查版本失敗：{error}"))?;
     if response.status != 200 {
         return Err("暫時無法檢查版本，稍後會再嘗試。".into());
     }
@@ -186,7 +187,8 @@ pub fn fetch_models(config: &Config, session: Option<&Session>) -> AppResult<Mod
     let response = transport::get(
         &config.endpoint(MODELS_PATH)?,
         token.as_ref().map(|v| ("Authorization", v.as_str())),
-    )?;
+    )
+    .map_err(|error| format!("取得模型清單失敗：{error}"))?;
     if response.status == 401 {
         return Err("請先登入，再重新整理模型選單。".into());
     }

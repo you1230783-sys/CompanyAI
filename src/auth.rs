@@ -16,7 +16,8 @@ pub fn request_device(config: &Config) -> AppResult<DeviceGrant> {
     let response = transport::post_form(
         &config.endpoint(&config.device_path)?,
         &[("client_id", CLIENT_ID), ("scope", "chat:write")],
-    )?;
+    )
+    .map_err(|error| format!("申請登入碼失敗（尚未開啟瀏覽器）：{error}"))?;
     if response.status != 200 {
         return Err(protocol::api_error(response.status, &response.body, ""));
     }
@@ -43,7 +44,8 @@ pub fn poll_once(config: &Config, grant: &DeviceGrant) -> AppResult<PollResult> 
             ("device_code", &grant.device_code),
             ("client_id", CLIENT_ID),
         ],
-    )?;
+    )
+    .map_err(|error| format!("查詢登入授權結果失敗：{error}"))?;
     if response.status == 200 {
         let token: TokenResponse = serde_json::from_str(&response.body)
             .map_err(|_| "授權端點的 Token JSON 格式錯誤。".to_string())?;
