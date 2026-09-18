@@ -14,6 +14,17 @@ fn collect(root: &Path, directory: &Path, files: &mut Vec<PathBuf>) {
     }
 }
 fn main() {
+    // Setup 另一步編譯，內嵌本次已驗證的 release EXE 與 Microsoft 離線 Runtime。
+    if env::var_os("CARGO_FEATURE_SETUP").is_some() {
+        let root = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("manifest"));
+        let app = root.join("dist/LM_AI.exe");
+        let runtime = root.join("dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe");
+        println!("cargo:rerun-if-changed={}", app.display());
+        println!("cargo:rerun-if-changed={}", runtime.display());
+        fs::write(PathBuf::from(env::var_os("OUT_DIR").expect("output")).join("setup_payload.rs"),
+            format!("static APP: &[u8] = include_bytes!({:?});\nstatic RUNTIME: &[u8] = include_bytes!({:?});\n", app.to_string_lossy(), runtime.to_string_lossy())).expect("write setup payload");
+    }
+
     // 多尺寸 ICO 嵌入 EXE，檔案總管／視窗／工作列／托盤共用資源 ID 1。
     // 圖示由 scripts/Convert-AppIcon.ps1 產生，離線編譯直接使用已交付的 ICO。
     let icon = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("Cargo manifest directory"))
@@ -29,7 +40,48 @@ fn main() {
         let resource = output.join("app-icon.res");
         fs::write(
             &source,
-            format!("1 ICON \"{}\"\n", icon.to_string_lossy().replace('\\', "/")),
+            format!(
+                r#"1 ICON "{}"
+1 VERSIONINFO
+ FILEVERSION {version}
+ PRODUCTVERSION {version}
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+BEGIN
+ BLOCK "StringFileInfo"
+ BEGIN
+  BLOCK "040404b0"
+  BEGIN
+   VALUE "CompanyName", "LARGAN"
+   VALUE "ProductName", "LM_AI"
+   VALUE "FileDescription", "{description}（Dev: 1230783）"
+   VALUE "FileVersion", "{display_version}.0"
+   VALUE "ProductVersion", "{display_version}.0"
+   VALUE "LegalCopyright", "Copyright © 2026 LARGAN. All rights reserved."
+  END
+ END
+ BLOCK "VarFileInfo"
+ BEGIN
+  VALUE "Translation", 0x0404, 1200
+ END
+END
+"#,
+                icon.to_string_lossy().replace('\\', "/"),
+                version = format!(
+                    "{},0",
+                    env::var("CARGO_PKG_VERSION")
+                        .expect("package version")
+                        .replace('.', ",")
+                ),
+                display_version = env::var("CARGO_PKG_VERSION").expect("package version"),
+                description = if env::var_os("CARGO_FEATURE_SETUP").is_some() {
+                    "公司 AI 助理安裝程式"
+                } else {
+                    "公司 AI 助理"
+                }
+            ),
         )
         .expect("write icon resource script");
         let status = std::process::Command::new("rc.exe")

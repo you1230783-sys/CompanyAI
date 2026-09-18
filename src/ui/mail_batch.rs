@@ -173,7 +173,19 @@ impl App {
                     }
                 }
                 // 初篩也留有本機對話，不會把結果加到使用者後來切換的另一個對話。
-                let messages = vec![Message::user(&batch::conversation_intro(&mails)?)];
+                if !self
+                    .work
+                    .caps
+                    .as_ref()
+                    .is_some_and(|c| c.supports("background"))
+                {
+                    return Err("Outlook 初篩需要網站支援背景處理。".into());
+                }
+                self.work.mode = "background".into();
+                let request_id = jobs::new_id()?;
+                let mut intro = Message::user(&batch::conversation_intro(&mails)?);
+                intro.request_id = Some(request_id.clone());
+                let messages = vec![intro];
                 let mut archive = self.archive.clone();
                 let local = archive.insert(messages)?;
                 history::save(&self.root, &archive)?;
@@ -197,6 +209,46 @@ impl App {
                     self.demo,
                 );
                 let principal = self.work.store.principal_id.clone();
+                let prompt = batch::prompt(&mails, allow_export, 20)?;
+                let mut request = jobs::chat_request(
+                    &config.model,
+                    &[Message::user(&prompt)],
+                    &local,
+                    &request_id,
+                    "background",
+                    vec![],
+                )?;
+                jobs::set_purpose(&mut request, true, false)?;
+                let triage = jobs::Task {
+                    request_id,
+                    conversation_id: local.clone(),
+                    request,
+                    mode: "background".into(),
+                    title: "Outlook 郵件初篩".into(),
+                    created_at: crate::unix_now(),
+                    remote: None,
+                    applied: false,
+                    message: "背景初篩中；退出後仍可查詢原始結果，郵件匯出需重新授權。".into(),
+                    mail_analysis: false,
+                    title_generation: false,
+                    tool_events: Vec::new(),
+                    partial: String::new(),
+                };
+                self.work.store.tasks.push(triage.clone());
+                self.work_save()?;
+                self.submit_work(triage.clone())?;
+                self.preserve_draft()?;
+                self.active_id = Some(local.clone());
+                self.messages = self
+                    .archive
+                    .conversations
+                    .iter()
+                    .find(|c| c.id == local)
+                    .ok_or("缺少初篩對話。")?
+                    .messages
+                    .clone();
+                self.set_draft(String::new());
+                self.focus_draft = true;
                 thread::spawn(move || {
                     let result = (|| {
                         let mut prepared = Prepared {
@@ -226,18 +278,59 @@ impl App {
                             prepared.analysis_caps = Some(caps);
                         }
                         batch::check_cancel(&cancel)?;
-                        // 只有首次請求帶此 Skill 的開頭，供網站分流至初篩路由。
-                        let prompt = batch::prompt(&mails, allow_export, rules.max_count)?;
+                        // 初篩已透過共用持久任務送出；此執行緒只等待結果及本次 COM 授權。
+                        // 即使 App 退出，伺服器工作仍保留；重啟不自動恢復郵件匯出權限。
                         let reply = if demo {
-                            json!({"schema_version":1,"summary":"本機示範：已完成多封基本資訊初篩；示範模式不存取真實 Outlook 或匯出 MSG。","requests":[]}).to_string()
+                            json!({"schema_version":1,"summary":"本機示範：已完成基本資訊初篩。","requests":[]}).to_string()
                         } else {
-                            let body =
-                                protocol::chat_json(&config.model, &[Message::user(&prompt)])?;
-                            auth::send_chat(&config, &session, &body).reply?
+                            let deadline = Instant::now() + Duration::from_secs(3600);
+                            loop {
+                                batch::check_cancel(&cancel)?;
+                                match jobs::task_status(&config, &session, &triage) {
+                                    Ok(status) if status.state == "completed" => {
+                                        let reply = protocol::assistant_text(
+                                            &status
+                                                .result
+                                                .as_ref()
+                                                .ok_or("初篩缺少結果。")?
+                                                .to_string(),
+                                        )?;
+                                        let _ = tx.send(Event::Work(
+                                            generation,
+                                            work::WorkEvent::Polled(
+                                                triage.request_id.clone(),
+                                                Ok(status),
+                                            ),
+                                        ));
+                                        break reply;
+                                    }
+                                    Ok(status) if status.terminal() => {
+                                        return Err(format!(
+                                            "初篩已結束：{} {}",
+                                            status.state, status.error_message
+                                        ))
+                                    }
+                                    _ => {}
+                                }
+                                if Instant::now() >= deadline {
+                                    return Err("初篩等待超過一小時；任務仍可在工作列表查詢，後續匯出已暫停。".into());
+                                }
+                                for _ in 0..25 {
+                                    batch::check_cancel(&cancel)?;
+                                    thread::sleep(Duration::from_millis(200));
+                                }
+                            }
                         };
                         batch::check_cancel(&cancel)?;
                         let decision =
-                            batch::decision(&reply, &mails, allow_export, rules.max_count)?;
+                            match batch::decision(&reply, &mails, allow_export, rules.max_count) {
+                                Ok(decision) => decision,
+                                Err(reason) => {
+                                    // 不能解析或越權時仍顯示完整原文，但絕不猜測並執行匯出。
+                                    prepared.summary = format!("{reply}\n\n---\n{reason}");
+                                    return Ok(prepared);
+                                }
+                            };
                         prepared.summary = decision.summary;
                         let mut total = 0;
                         for (index, request) in decision.requests.iter().enumerate() {
@@ -343,7 +436,7 @@ impl App {
                 if prepared.files.is_empty() {
                     self.mail_flow.phase = "idle";
                     self.mail_flow.status =
-                        "初篩完成，AI 未要求匯出郵件。可開啟分析對話查看。".into();
+                        "初篩回覆已保存，未執行郵件匯出。可開啟分析對話查看原文與說明。".into();
                 } else {
                     // 先持久保存附件清單才交接暫存檔所有權並開始網路上傳。
                     let mut store = self.work.store.clone();
@@ -476,6 +569,8 @@ impl App {
             applied: false,
             message: "MSG 已處理，正在送出整理".into(),
             mail_analysis: false,
+            title_generation: false,
+            tool_events: Vec::new(),
             partial: String::new(),
         };
         history::save(&self.root, &archive)?;

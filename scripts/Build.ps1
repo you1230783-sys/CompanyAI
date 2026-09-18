@@ -70,5 +70,15 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     New-Item -ItemType Directory -Path $dist -Force | Out-Null
     Copy-Item -LiteralPath $exe -Destination (Join-Path $dist 'CompanyAI.exe') -Force
     Copy-Item -LiteralPath $exe -Destination (Join-Path $dist 'LM_AI.exe') -Force
-    Write-Host "Ready: $dist\CompanyAI.exe"
+    # 主程式完成驗證後，才將本次產物嵌入單檔 Setup；不依賴外部安裝封裝工具。
+    & cargo clippy --frozen --features setup --bin lm-ai-setup -- -D warnings
+    if ($LASTEXITCODE -ne 0) { throw 'Setup Clippy failed.' }
+    & cargo build --release --frozen --features setup --bin lm-ai-setup
+    if ($LASTEXITCODE -ne 0) { throw 'Setup build failed.' }
+    $setup = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\release\lm-ai-setup.exe'
+    $payloadArguments = @('--verify-payload', ('"' + (Join-Path $dist 'LM_AI.exe') + '"'), ('"' + (Join-Path $dist 'MicrosoftEdgeWebView2RuntimeInstallerX64.exe') + '"'))
+    $setupCheck = Start-Process -FilePath $setup -ArgumentList $payloadArguments -Wait -PassThru -WindowStyle Hidden
+    if ($setupCheck.ExitCode -ne 0) { throw 'Setup payload verification failed.' }
+    Copy-Item -LiteralPath $setup -Destination (Join-Path $dist 'LM_AI_Setup.exe') -Force
+    Write-Host "Ready: $dist\LM_AI.exe and LM_AI_Setup.exe"
 } finally { Pop-Location }

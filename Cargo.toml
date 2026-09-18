@@ -1,10 +1,18 @@
 [package]
 name = "company-ai"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 rust-version = "1.98"
 
 # 每個應用程式是自己的 workspace，依賴鎖定與編譯輸出不與其他專案混用。
+[features]
+setup = []
+
+[[bin]]
+name = "lm-ai-setup"
+path = "src/bin/setup.rs"
+required-features = ["setup"]
+
 [workspace]
 resolver = "2"
 
@@ -20,7 +28,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 url = "2.5"
 webview2-com = "=0.39.1"
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Ole", "Win32_System_Variant", "Win32_UI_Shell"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Ole", "Win32_System_Variant", "Win32_UI_Shell", "Win32_UI_Accessibility"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 sha2 = "0.10"
 windows-sys = { version = "0.61", features = [
@@ -32,6 +40,8 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_LibraryLoader",
     "Win32_System_SystemInformation",
     "Win32_System_Memory",
+    "Win32_System_Threading",
+    "Win32_Security",
     "Win32_System_DataExchange",
     "Win32_System_Ole",
     "Win32_UI_Controls",

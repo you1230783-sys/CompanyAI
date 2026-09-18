@@ -351,3 +351,7 @@ Outlook 第一輪維持以 `# Outlook 郵件初篩 outlook-triage` 開頭，供�
 - [OAuth Device Authorization Grant — RFC 8628](https://www.rfc-editor.org/rfc/rfc8628.html)
 - [Windows WinHTTP](https://learn.microsoft.com/en-us/windows/win32/api/winhttp/nf-winhttp-winhttpopen)
 - [Windows DPAPI](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata)
+
+## 0.7 桌面契約
+
+新版用途旗標、一般／背景模式、SSE、Outlook 容錯與自動更新欄位見 [DESKTOP_0_7_CONTRACT.md](DESKTOP_0_7_CONTRACT.md)；驗證範圍見 [VALIDATION_0_7.md](VALIDATION_0_7.md)。聊天路徑保留 /lm_server/v1/chat/completions。

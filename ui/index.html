@@ -152,8 +152,8 @@
             </div>
             <div class="execution-controls">
               <div class="execution-switch" aria-label="執行模式">
-                <button id="execution-sync" hidden>一般回覆</button>
-                <button id="execution-stream" hidden>串流回覆</button
+                
+                <button id="execution-stream" hidden>一般</button
                 ><button id="execution-background" hidden>背景處理</button>
               </div>
               <button id="estimate-time" class="secondary-button" hidden>
@@ -367,6 +367,25 @@
           </p>
         </section>
         <section>
+          <h3>使用習慣</h3>
+          <label class="check-row"><input id="hotkey-enabled" type="checkbox" />啟用選取文字快捷鍵</label>
+          <p class="subtle">只在按下指定快捷鍵時複製選字並填入草稿，不監聽一般輸入、不自動送出。</p>
+          <label class="check-row"><input id="selection-icon" type="checkbox" />選取文字時顯示 AI 圖示</label>
+          <p class="subtle">在支援的程式中偵測選取範圍與位置；點擊圖示才擷取文字，不會因選取而上傳內容。</p>
+          <fieldset><legend>Enter 行為</legend>
+            <label><input type="radio" name="enter-behavior" id="enter-newline" />換行</label>
+            <label><input type="radio" name="enter-behavior" id="enter-send" />送出</label>
+          </fieldset>
+          <p id="enter-hint" class="subtle"></p>
+          <fieldset><legend>快捷操作的模型</legend>
+            <label><input type="radio" name="quick-model" id="quick-fast" />簡單任務自動使用快速模型</label>
+            <label><input type="radio" name="quick-model" id="quick-current" />維持目前選擇的模型</label>
+          </fieldset>
+          <p id="quick-model-hint" class="subtle"></p>
+          <label class="check-row"><input id="always-new-chat" type="checkbox" />永遠開啟新對話</label>
+          <p class="subtle">啟動或從托盤、捷徑叫出時開啟新對話，保留原草稿與背景任務；點擊指定對話或任務不受影響。</p>
+        </section>
+        <section>
           <h3>通知</h3>
           <label class="check-row"
             ><input
@@ -381,7 +400,10 @@
         </section>
         <section>
           <h3>版本與服務</h3>
-          <p id="version-label">LM_AI 0.6.0</p>
+          <p>LARGAN · 公司 AI 助理 · Dev: 1230783</p>
+          <p class="subtle">Copyright © 2026 LARGAN. All rights reserved.</p>
+          <p id="update-status" class="subtle" role="status"></p>
+          <p id="version-label">LM_AI 0.7.0</p>
           <div class="button-row">
             <button id="refresh" class="secondary-button">
               <span data-icon="refresh"></span>重新整理服務</button
@@ -408,6 +430,11 @@
         ><button id="confirm-ok" class="primary-button">確認</button>
       </div>
     </dialog>
+    <dialog id="rename-dialog">
+      <h2>編輯對話標題</h2>
+      <input id="rename-title" maxlength="100" aria-label="對話標題" />
+      <div class="button-row right"><button id="rename-cancel">取消</button><button id="rename-save">儲存</button></div>
+    </dialog>
     <div id="toast" role="status" hidden></div>
     <script src="vendor/markdown-it.min.js"></script>
     <script src="vendor/footnote.min.js"></script>
@@ -424,5 +451,6 @@
     <script src="app.js"></script>
     <script src="work.js"></script>
     <script src="mail.js"></script>
+    <script src="behavior.js"></script>
   </body>
 </html>

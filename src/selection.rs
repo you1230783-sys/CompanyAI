@@ -116,7 +116,11 @@ pub(crate) fn capture(source: HWND, hotkey: Hotkey) -> AppResult<String> {
                         thread::sleep(Duration::from_millis(25));
                         continue;
                     }
-                    return result;
+                    if let Ok(text) = result {
+                        return Ok(text);
+                    }
+                    // Adobe 延遲提供格式時，即使序號未再變動仍可能稍後可讀。
+                    // 只重試本次複製之後的剪貼簿，不退回舊內容。
                 }
             }
             thread::sleep(Duration::from_millis(25));

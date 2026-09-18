@@ -296,13 +296,13 @@ function renderHistory() {
   const list = $("history-list");
   list.replaceChildren();
   const conversations = [...state.conversations].sort(
-    (a, b) => b.updated_at - a.updated_at,
+    (a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.updated_at - a.updated_at,
   );
   for (const c of conversations) {
     const button = node(
       "button",
       "history-item" + (c.id === state.active_id ? " selected" : ""),
-      c.title,
+      (c.pinned ? "📌 " : "") + c.title,
     );
     button.title = c.title;
     button.dataset.id = c.id;
@@ -476,7 +476,7 @@ function receive(next) {
     ? "尚未保存"
     : state.busy === "chat"
       ? "回覆後自動保存"
-      : "對話加密保存在本機";
+      : "";
   if (next.draft_revision !== lastDraftRevision) {
     lastDraftRevision = next.draft_revision;
     $("prompt").value = next.draft || "";
@@ -490,6 +490,7 @@ function receive(next) {
   showView(activeView);
   window.WorkUI?.render();
   window.MailUI?.render();
+  window.BehaviorUI?.render();
   if (next.focus_draft) {
     showView("chat");
     $("prompt").focus();
@@ -524,7 +525,8 @@ $("prompt").addEventListener("input", () => {
   );
 });
 $("prompt").addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && event.ctrlKey && !event.isComposing) {
+  // IME 確認選字的 Enter 不得誤送；Shift+Enter 一律保留換行。
+  if (event.key === "Enter" && !event.isComposing && event.keyCode !== 229 && !event.shiftKey && !event.altKey && !event.metaKey && (event.ctrlKey || state.config.enter_sends)) {
     event.preventDefault();
     submit();
   }
@@ -790,6 +792,7 @@ if (bridge) {
     else if (event.data.type === "show_notifications")
       showView("notifications");
     else if (event.data.type === "show_tasks") showView("tasks");
+    else if (event.data.type === "model_notice") window.BehaviorUI?.modelNotice(event.data.text);
     else if (event.data.type === "toast") toast(event.data.text);
     else if (event.data.type === "self_test") window.runSelfTest?.();
     else {

@@ -1,5 +1,5 @@
 ﻿{
-    "generated_at":  "2026-09-17T20:15:16.1276154+08:00",
+    "generated_at":  "2026-09-18T11:44:59.5607911+08:00",
     "rust":  "1.98.1",
     "target":  "x86_64-pc-windows-msvc",
     "msvc":  "14.29.30133",
@@ -8,91 +8,111 @@
     "files":  [
                   {
                       "path":  "src/attachments.rs",
-                      "sha256":  "9ce27f8575d4410f14abfb20434d9d15e9a9fc1114fd67e556448e62cc0f1df4"
+                      "sha256":  "807a6e5e2f7c7aec8bcdc8a6c8bd00a2c607f36706d5c434e559efd7a29d3d06"
                   },
                   {
                       "path":  "src/auth.rs",
-                      "sha256":  "6f4dfbf7f3b26d7fe579080dbc68b1a0128639a4b4d71ce4c95fb16766807b84"
+                      "sha256":  "030561b09b0b64a0401a0b2bf0e71a91cb36044fbea230b726c120a094f1540a"
                   },
                   {
                       "path":  "src/config.rs",
-                      "sha256":  "cf86bc8564def890a83d29a8057233ceba6cbd5b537bfb86ab67692846cc04c0"
+                      "sha256":  "1beede1db994cf2022e49fd829e5b226247d522733673c2ddb5d345771392728"
                   },
                   {
                       "path":  "src/demo.rs",
-                      "sha256":  "7a6738cb10dbd800e02f2894e14522fbf28af3340003ab549cb82c50349cf24a"
+                      "sha256":  "0bd7d3713c04584b87fd09263bd3119cbc1143ee55130665fa37d7715200ba9b"
+                  },
+                  {
+                      "path":  "src/deployment.rs",
+                      "sha256":  "0e94900cd81b444c4ae75345b6990db0cab2f784ffd0c398895881ddc6f1f5a4"
+                  },
+                  {
+                      "path":  "src/embedded_json.rs",
+                      "sha256":  "d6e7cc787bc5f20a1002e7b02c6e3e90a86a3b31744e7da321df6ecf584b1778"
                   },
                   {
                       "path":  "src/history.rs",
-                      "sha256":  "5584d3b87159de33a5105b9210abc700cdd3856f7337a282b3973cd3162fe440"
+                      "sha256":  "6e67814d2795a3989de5d328dca9fcbefc6891def208481ddc3e1f3ca1cdf93d"
                   },
                   {
                       "path":  "src/hotkey.rs",
-                      "sha256":  "a0325147d6c18704600df2cc27665165fb8e59d141905e01e93c179229938e1c"
+                      "sha256":  "ac8d27353e1a2dc83b0ed561f86b907b69798d0e36b197f156b5bcb3710c578d"
                   },
                   {
                       "path":  "src/jobs.rs",
-                      "sha256":  "f03b1c92c90d50768d9e63209a75de89e30e0743698d913993e9569558b11be9"
+                      "sha256":  "7f71de0ee42ea2b92104c109e6b698d4808250683f95a8ab7e04ce731936a4aa"
                   },
                   {
                       "path":  "src/lib.rs",
-                      "sha256":  "cd788dfce598953c6c804f9b03a5a16fc849c5c5f51836b26624f9420a39dfe1"
+                      "sha256":  "7903a09cc48fc9b14dbe40b5a49b7894695f941e6b3a5a8ea4436bc0ddc0bbfd"
                   },
                   {
                       "path":  "src/main.rs",
-                      "sha256":  "205a82c2cb92449a552d35cfb54061e9e75d28a49b8f1486c1f3e97bd28caca5"
+                      "sha256":  "9bea98e5357ce75c1c6063598b31bb9b47b3226811361b27a3db1fdfd5d07c64"
                   },
                   {
                       "path":  "src/notifications.rs",
-                      "sha256":  "bd27909bebdd3fbe1e08625f0443cd3fe5b3ba16efcc6ae3303a626902076a38"
+                      "sha256":  "f643dcd8ce17258d17110d1dcbd70be1cde5dbc5db6ee76e4a4d7e133dd2cf64"
                   },
                   {
                       "path":  "src/outlook.rs",
-                      "sha256":  "9a57aa2df2bc04717b78a077f7015d9d6381dc2b59532cac998cb1f815a1f200"
+                      "sha256":  "256d3cc4bc9da63ed2d97e8536977d11248fea5d725d2fcfe0f1e9bdf0fce4f5"
                   },
                   {
                       "path":  "src/protocol.rs",
-                      "sha256":  "372bfc3b16a22474d7c2dfd66d16622c896b549234f49f455f25ed399cafef28"
+                      "sha256":  "593d8a56ff2124c02e2c8c78e200d64f6eff054ac9b1a6275c4031b5e1bf7f5b"
                   },
                   {
                       "path":  "src/selection.rs",
-                      "sha256":  "782c4c1f26d8b5f08e460a55574f020384cf48a0b2ac28ac12eb78e937e35d9e"
+                      "sha256":  "ac133ae8ab24e62369f5eaec049c344619464f67a13240e19a12f469e3518d30"
+                  },
+                  {
+                      "path":  "src/selection_popup.rs",
+                      "sha256":  "a510c685d5f0b6ec2ad44ddf2566befdcd968e29c407109691ec702e542e6423"
                   },
                   {
                       "path":  "src/service.rs",
-                      "sha256":  "947cae658e411d03b2d75e7c65b6466bcd3e652dde236c3432edf2bc29431d49"
+                      "sha256":  "df7c31ae31a1c120d565c315bc6fc217d167456755c01b8ce0418b02cb5ac54b"
+                  },
+                  {
+                      "path":  "src/single_instance.rs",
+                      "sha256":  "e25d80582ada1a3c2cb5f3bf02d32dd89179ec8b0a3f03526f7d81202f0edf8e"
                   },
                   {
                       "path":  "src/site_notifications.rs",
-                      "sha256":  "7f9bb9910524b26dea1f7c6d0f9605dd3b88a663a3ac68cc03a5660ae24f6679"
+                      "sha256":  "7471273910cb18a70f4919c2f5c1b72191aee9cca18f9625c6c1d6bf3ffd0b1d"
                   },
                   {
                       "path":  "src/storage.rs",
-                      "sha256":  "d6b7fa790fe6a470c66103c2bb2730a5f62da440aefe7152baf64f1c682faadb"
+                      "sha256":  "dcf4c6788f9277b7a81db4696d8a3db9d457d1152ff37e9c5bf39446e1e25908"
                   },
                   {
                       "path":  "src/transport.rs",
-                      "sha256":  "8f9fb105bfa544acdde4a035e4202064a6fa03b0c3de2f94399103c5eaefd1cb"
+                      "sha256":  "aa03802fd48a1e0cb86cf846b9cb12826a652f4cd7d35943a4a4394d2537784d"
                   },
                   {
                       "path":  "src/ui.rs",
-                      "sha256":  "3df522f76869b1a76b1dcb37c75a7cd02c016c0f5e0eb766d57a4ca4e694f9c9"
+                      "sha256":  "7a7f1f96b5ec082f99789e9fcb4a56f05e9d77fc76ec834b396f991f1458a2ce"
                   },
                   {
                       "path":  "src/webview.rs",
                       "sha256":  "34fee1535a97012805f3ad4a52df10bacd36d086ea5355b3890846c68f4f0025"
                   },
                   {
+                      "path":  "src/bin/setup.rs",
+                      "sha256":  "2198c6926688c33b1e9ead447bc2b3b2ffa185212a613d8d0b374b29cbe7593c"
+                  },
+                  {
                       "path":  "src/demo/work.rs",
-                      "sha256":  "a315795d99ebb7ffc95613c71617630bcf9d7f0414a537cb5c6b2e634f33a31f"
+                      "sha256":  "ca83738f2d3d82e72c731854bccd93f2218ddfe2b4b5a17395329c26e3fef414"
                   },
                   {
                       "path":  "src/demo/work/tests.rs",
-                      "sha256":  "fec25fefc63b69be01b9d32232111c8d2cb57a1fd5922f9d506f983be032418c"
+                      "sha256":  "f042c762a8b5f2e6e603559c527428c10e8215ad4c2f66785f620d5a56e6b3d6"
                   },
                   {
                       "path":  "src/outlook/batch.rs",
-                      "sha256":  "c424480ef3d310ffa986a27b1df1df18d4ab265094209b061b6a0c800f63343b"
+                      "sha256":  "50f0255afd0d464e71511aff97ebe5f4bdd34aadaee589f9ee54924e7396c6d4"
                   },
                   {
                       "path":  "src/outlook/skill.md",
@@ -100,31 +120,35 @@
                   },
                   {
                       "path":  "src/outlook/batch/query.rs",
-                      "sha256":  "dc427f706d087df83528790e881052cf0761d44d1ad489eb0b6894705c82d7a5"
+                      "sha256":  "3f703bf2e47a224a83ce38486702193f8d0e4b8a0836b8634a83c26301926a4f"
                   },
                   {
                       "path":  "src/outlook/batch/query_tests.rs",
-                      "sha256":  "6b00d57fb01c62dee5195be17d04314617dd5fc22d84adefad280a049ae67817"
+                      "sha256":  "d97bedb0e047a2cf93de7cb2041d22094a4cbc4292a8f5c8f9633d46a09c22e7"
                   },
                   {
                       "path":  "src/site_notifications/http_tests.rs",
-                      "sha256":  "24ddef8c4694780c2e17925dbc571ada807157745cc7d052e09115f3f6928d5b"
+                      "sha256":  "ae99676f221e06dc4a1f4b0b9a9d18a940a8ea8bea1d778ff8a4872d60fb6f1f"
                   },
                   {
                       "path":  "src/ui/mail_batch.rs",
-                      "sha256":  "91fc2a911c1bd7a81a9f739b075e2af196c0c7e06677151202520f055d8a6b18"
+                      "sha256":  "95918a9f3b79a2b164ebf7c7cc717fb1f321cfed90e7aac9dd7d7056575a2493"
                   },
                   {
                       "path":  "src/ui/site.rs",
-                      "sha256":  "a2b2110852b0b1b6f3ccda0a6043605f3ff67fc7cef783ca73245747238ac957"
+                      "sha256":  "986c17b606e91371a32441d5a2bb72845c8bfd85ed7d9cc2215ade8d5f569684"
                   },
                   {
                       "path":  "src/ui/work.rs",
-                      "sha256":  "0e8c6f6e4612713331284516f204271ab9f056d9fd217688de526070bf269520"
+                      "sha256":  "9398092d9485556e01c65bf20eb81f87bb2a34d99c46525117fee4b7e5211a24"
                   },
                   {
                       "path":  "ui/app.js",
-                      "sha256":  "8cc456a94d9454df3fdf23ac668471797ce3dd24e5bace46ac5e9188a8ae0325"
+                      "sha256":  "ac7dd9c86e90191327ea1eb5a7e608c312556d15ed658c2027d78b724cbbcebf"
+                  },
+                  {
+                      "path":  "ui/behavior.js",
+                      "sha256":  "6edec4f1a9a62c57f90e4c65705395e844a1905650939888a238fe83661b70fa"
                   },
                   {
                       "path":  "ui/icons.js",
@@ -132,7 +156,7 @@
                   },
                   {
                       "path":  "ui/index.html",
-                      "sha256":  "c88f1e7d9f6b56a0ac67ecfb378d4bfb3b5417c2ecbd4ddb014790c7dc534ad0"
+                      "sha256":  "8b0572e1e1408c9bd8a5879a587d8509ff962da9a25ee69afc016921fe5383b4"
                   },
                   {
                       "path":  "ui/mail.js",
@@ -140,15 +164,15 @@
                   },
                   {
                       "path":  "ui/self-test.js",
-                      "sha256":  "c91031e248873bfdaf3367528efc127e48784c7c3bdc0846199fed54800cec62"
+                      "sha256":  "a26078385be7d2bfa92c4f3f59adf20f60861461a056ff823c7ac6ab7c6b6654"
                   },
                   {
                       "path":  "ui/style.css",
-                      "sha256":  "812745596735898a8df2afff1700c9ea02d6f571dc54e3c4d1d5c9f3a4db02b3"
+                      "sha256":  "bd96cc0d58ff73ddb7afa301c0c0f26cca59314a915a83e63a864e755ea9b3d8"
                   },
                   {
                       "path":  "ui/work.js",
-                      "sha256":  "fe17177297e45606d4190b53fa8e7ae361b3a6913ea09641a4f793cc94b737ee"
+                      "sha256":  "59751f098f15df4c84c1434e5e27d57781edfdfbdcedeeb62b3c5924c66ad3f4"
                   },
                   {
                       "path":  "ui/vendor/dompurify.LICENSE",
@@ -372,7 +396,7 @@
                   },
                   {
                       "path":  "examples/browser_smoke.rs",
-                      "sha256":  "9c1247232a0f8607984715e24de6f9d1ec6abf60437709c94220e3d565d21b1b"
+                      "sha256":  "2106f0394580313eb94a09a59306b8dccf1d3b8c5828c851f83ff0cae771ebe1"
                   },
                   {
                       "path":  "examples/hotkey_probe.rs",
@@ -380,7 +404,7 @@
                   },
                   {
                       "path":  "scripts/Build.ps1",
-                      "sha256":  "1daa943a4cc563dec235ac86d7c82d97fb701d69961070073a491e13dc07679f"
+                      "sha256":  "579ebebd2274c42f9ae4213e402bea7b7f9415de6235c5bf21a2b4cf03c44cd0"
                   },
                   {
                       "path":  "scripts/Configure-VSCode.ps1",
@@ -407,6 +431,22 @@
                       "sha256":  "85b6dd72597553ae6f27eafe6526a1807687117eaa555a941cce9dbd4232547b"
                   },
                   {
+                      "path":  "scripts/deployment/Apply-Update.ps1",
+                      "sha256":  "5012dd09113e661e64ce4f5a80f834771255b231cf2ba115670ecd15f023f96d"
+                  },
+                  {
+                      "path":  "scripts/deployment/Download.ps1",
+                      "sha256":  "4f00c5373549935c0c5e18975e3dc3482b62226fc17bc9d01d84cf883e087c81"
+                  },
+                  {
+                      "path":  "scripts/deployment/Install.ps1",
+                      "sha256":  "dc0516746f7406302b0095c1b59e2e3f6ca161616388191f625bb0fca371c84d"
+                  },
+                  {
+                      "path":  "scripts/deployment/Uninstall.ps1",
+                      "sha256":  "4e9a653dd6b3d1bdf7814446832195557c319237fd8af3ee7f6312466b3b5f15"
+                  },
+                  {
                       "path":  "docs/BACKEND_ROADMAP.md",
                       "sha256":  "2de3bcad614bbc918aa7ec158f10247f5124fc6bcbbb688f8c814b4027113932"
                   },
@@ -417,6 +457,10 @@
                   {
                       "path":  "docs/DESKTOP_0_6_CONTRACT.md",
                       "sha256":  "96c22ea1c7fb2788081ab89076f6f2a88de6cdd39f270b044d087295834c1aa1"
+                  },
+                  {
+                      "path":  "docs/DESKTOP_0_7_CONTRACT.md",
+                      "sha256":  "90b4180e68fc2c0ab55b8190f926445e5365b5dca9da3a9337d790766b4b5ab5"
                   },
                   {
                       "path":  "docs/HOTKEY_0_4_1.md",
@@ -455,8 +499,12 @@
                       "sha256":  "0821931c788e882b050919154fa4b563d82f2eea66d718180ad709da277867ef"
                   },
                   {
+                      "path":  "docs/VALIDATION_0_7.md",
+                      "sha256":  "0406d78e84753b538f10b1e1098cd6ec98b23ea59cc9e581aa1dedcf95667ccf"
+                  },
+                  {
                       "path":  "docs/WEB_INTEGRATION.md",
-                      "sha256":  "60f7f3b84ebd5a561c9667f7b9bb2beef19c96a9ccad6a03ef29f5212814c054"
+                      "sha256":  "e02038105c3b009ab3abc853c364cc28fe3317b66694d1fada21ccf2facdd06f"
                   },
                   {
                       "path":  ".cargo/config.toml",
@@ -464,11 +512,15 @@
                   },
                   {
                       "path":  "dist/CompanyAI.exe",
-                      "sha256":  "fe6653fb75589e4f86b22f2a8d514ca6f67d0baa11daa395908c6e8261e6c836"
+                      "sha256":  "116e734a12bb78784f05c5e40450abf7ffe68c066c27546102d58ee22376a5bc"
                   },
                   {
                       "path":  "dist/LM_AI.exe",
-                      "sha256":  "fe6653fb75589e4f86b22f2a8d514ca6f67d0baa11daa395908c6e8261e6c836"
+                      "sha256":  "116e734a12bb78784f05c5e40450abf7ffe68c066c27546102d58ee22376a5bc"
+                  },
+                  {
+                      "path":  "dist/LM_AI_Setup.exe",
+                      "sha256":  "dedc92c1e04ee68ce088ace7178140fb6ab0190f70b9b199a61452d87499936d"
                   },
                   {
                       "path":  "dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe",
@@ -480,15 +532,15 @@
                   },
                   {
                       "path":  "build.rs",
-                      "sha256":  "1aa76a96aa5a34df731f3bd826c18a4c178a519149518db4d78020d73b2c5f19"
+                      "sha256":  "e1be9882ff801ab8de35b317dbeddeb6d9ff57fe90d28ab734a8c5e9209228fd"
                   },
                   {
                       "path":  "Cargo.toml",
-                      "sha256":  "b0f21e3e7ac3a7afe1b38be58f09246cf8166d6f6dc5cd133a966aad0fbd35d3"
+                      "sha256":  "d4e184c2253eca9b7ed8bb68e69f8ce6c9a0a0b1acf112a30e61feddd26886f8"
                   },
                   {
                       "path":  "Cargo.lock",
-                      "sha256":  "403f1c615e80a587814d6a9f012660636df9e8aed4a33e6e50746b2255f9082e"
+                      "sha256":  "c2d977b6c3c1f52c52d83c3fa7a2cc3efc4580f4978d3a3b0fc549543607b715"
                   },
                   {
                       "path":  "rust-toolchain.toml",
@@ -496,11 +548,11 @@
                   },
                   {
                       "path":  "README.md",
-                      "sha256":  "bc1048b815a1229cd5ec1a0be4889ad47f596c9998d5131e5160ca7975743729"
+                      "sha256":  "6e95b091658b3de25b56acfa44bd2876602399c4e548c8d4290fcaadf90dc127"
                   },
                   {
                       "path":  "AGENTS.md",
-                      "sha256":  "fb69cd07299c7736d1d685a017589397af4df0cedc8293c25a2ef12d950e0c57"
+                      "sha256":  "b62d7a4a4de7cac218b27e25c8517504ae9d924787ad21049effd046916eb126"
                   },
                   {
                       "path":  ".gitignore",

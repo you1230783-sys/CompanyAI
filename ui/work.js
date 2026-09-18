@@ -67,7 +67,7 @@ async function addFiles(files) {
   const work = state.work || {},
     rules = work.rules;
   if (!state.logged_in || !rules?.enabled || work.mode === "sync") {
-    toast("請先登入並選擇網站支援的串流／背景模式。");
+    toast("請先登入並選擇網站支援的一般／背景模式。");
     return;
   }
   const existing = work.attachments || [];
@@ -145,8 +145,6 @@ $("prompt").addEventListener("paste", (event) => {
   const files = images.map((item) => item.getAsFile()).filter(Boolean);
   addFiles(files);
 });
-$("execution-sync").onclick = () =>
-  workCommand({ action: "mode", mode: "sync" });
 $("execution-stream").onclick = () =>
   workCommand({ action: "mode", mode: "stream" });
 $("execution-background").onclick = () =>
@@ -179,7 +177,7 @@ function renderWork() {
   $("attachment-rules").textContent = rules?.enabled
     ? `最多 ${Math.min(20, rules.max_count)} 個 · 單檔 ${bytesLabel(Math.min(rules.max_file_bytes, 0xffffffff))} · 合計 ${bytesLabel(rules.max_total_bytes)} · ${rules.allowed_extensions.join("、")}`
     : "網站尚未啟用附件，仍可使用純文字聊天。";
-  for (const mode of ["sync", "stream", "background"]) {
+  for (const mode of ["stream", "background"]) {
     $("execution-" + mode).hidden = !(work.modes || []).includes(mode);
     $("execution-" + mode).classList.toggle("selected", work.mode === mode);
     $("execution-" + mode).setAttribute(
@@ -254,7 +252,7 @@ function renderWork() {
     $("task-list").replaceChildren();
     if (!tasks.length)
       $("task-list").append(
-        node("div", "empty-small", "尚無任務。串流與背景回覆會顯示在這裡。"),
+        node("div", "empty-small", "尚無任務。一般與背景回覆會顯示在這裡。"),
       );
     for (const task of tasks) {
       const card = node("article", "task-card");
@@ -321,9 +319,8 @@ function renderWork() {
       $("task-list").append(card);
     }
   }
-  const current = tasks.find(
-    (t) => t.active && t.conversation_id === state.active_id,
-  );
+  const current = tasks.find(t => t.active && t.conversation_id === state.active_id)
+    || tasks.find(t => t.conversation_id === state.active_id && t.tool_events?.length);
   const live = $("live-task");
   const savedPartial = current && state.messages.some((message) => message.request_id === current.id && message.role === "assistant" && message.incomplete);
   const partial = savedPartial ? "" : current?.partial || "";
@@ -333,6 +330,7 @@ function renderWork() {
     partial,
     current?.queue_position,
     current?.tool_status,
+    current?.tool_events,
     current?.message,
   ]);
   if (live.dataset.signature !== liveSignature) {
@@ -348,6 +346,16 @@ function renderWork() {
           "AI · " + (workLabels[current.state] || "處理中"),
         ),
       );
+      if (current.tool_events?.length) {
+        const details = node("details", "tool-history");
+        details.append(node("summary", "", "工具執行紀錄"));
+        for (const event of current.tool_events) {
+          const item = toolStatusNode(event);
+          if (item) details.append(item);
+        }
+        live.append(details);
+      }
+      if (!current.active) return;
       const bubble = node("div", "bubble markdown");
       const tool = toolStatusNode(current.tool_status);
       if (tool) live.append(tool);

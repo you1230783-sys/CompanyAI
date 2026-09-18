@@ -4,6 +4,22 @@ use company_ai::{demo::DemoServer, ui, AppResult};
 
 fn main() {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if arguments.first().map(String::as_str) == Some("--apply-update") && arguments.len() == 2 {
+        if let Err(error) =
+            company_ai::deployment::apply_update(std::path::Path::new(&arguments[1]))
+        {
+            ui::show_fatal_error(&error);
+            std::process::exit(1);
+        }
+        return;
+    }
+    if arguments.as_slice() == ["--uninstall"] {
+        if let Err(error) = company_ai::deployment::uninstall() {
+            ui::show_fatal_error(&error);
+            std::process::exit(1);
+        }
+        return;
+    }
     let smoke = arguments.iter().any(|argument| argument == "--self-check");
     let result: AppResult<()> = (|| {
         if arguments

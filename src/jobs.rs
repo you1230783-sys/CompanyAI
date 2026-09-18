@@ -133,6 +133,10 @@ pub struct Task {
     #[serde(default)]
     pub mail_analysis: bool,
     #[serde(default)]
+    pub title_generation: bool,
+    #[serde(default)]
+    pub tool_events: Vec<ToolStatus>,
+    #[serde(default)]
     pub partial: String,
 }
 impl Task {
@@ -191,7 +195,7 @@ impl WorkStore {
         id.is_some_and(|id| {
             self.tasks
                 .iter()
-                .any(|t| t.conversation_id == id && t.active())
+                .any(|t| t.conversation_id == id && !t.title_generation && t.active())
         })
     }
     pub fn drafts(&self, id: Option<&str>) -> Vec<&Attachment> {
@@ -477,6 +481,9 @@ pub fn chat_request(
 ) -> AppResult<Value> {
     validate_id(conversation)?;
     validate_id(request_id)?;
+    if !matches!(mode, "stream" | "background") {
+        return Err("聊天僅支援一般（串流）或背景處理。".into());
+    }
     let mut value: Value = serde_json::from_str(&protocol::chat_json(model, messages)?)
         .map_err(|_| "聊天資料不正確。")?;
     value["conversation_id"] = json!(conversation);
@@ -484,7 +491,18 @@ pub fn chat_request(
     value["execution_mode"] = json!(mode);
     value["stream"] = json!(mode == "stream");
     value["attachment_tokens"] = json!(tokens);
+    set_purpose(&mut value, false, false)?;
     Ok(value)
+}
+
+/// 用途旗標互斥：Outlook 初篩與標題產生不可同時啟用。
+pub fn set_purpose(request: &mut Value, outlook: bool, title: bool) -> AppResult<()> {
+    if outlook && title {
+        return Err("Outlook 初篩不可同時要求產生對話標題。".into());
+    }
+    request["outlook_triage"] = json!(outlook);
+    request["auto_generate_title"] = json!(title);
+    Ok(())
 }
 
 /// SSE 可以在任意位元組中斷（包括 UTF-8 字元）；先累積完整行再解碼。
@@ -517,7 +535,7 @@ impl SseDecoder {
                 .map_err(|_| "串流必須為 UTF-8。")?;
             if line.is_empty() {
                 // 網站具名 done 可以沒有 data；與 OpenAI [DONE] 都是正常結束。
-                if self.event == "done" {
+                if matches!(self.event.as_str(), "done" | "complete" | "completed") {
                     self.done = true;
                 } else if self.event == "start" && self.data.is_empty() {
                     emit("start", "{}")?;
@@ -687,6 +705,48 @@ pub fn submit_cancellable(
 mod tests {
     use super::*;
     #[test]
+    fn purpose_flags_are_exclusive_and_chat_modes_stay_consistent() {
+        let mut value = chat_request(
+            "fast",
+            &[Message::user("問題")],
+            "conversation",
+            "request",
+            "stream",
+            vec![],
+        )
+        .unwrap();
+        assert_eq!(value["stream"], true);
+        assert_eq!(value["execution_mode"], "stream");
+        set_purpose(&mut value, true, false).unwrap();
+        assert_eq!(value["outlook_triage"], true);
+        assert_eq!(value["auto_generate_title"], false);
+        assert!(set_purpose(&mut value, true, true).is_err());
+        let background = chat_request(
+            "fast",
+            &[Message::user("問題")],
+            "conversation",
+            "request",
+            "background",
+            vec![],
+        )
+        .unwrap();
+        assert_eq!(background["stream"], false);
+        assert!(chat_request("fast", &[], "conversation", "request", "sync", vec![]).is_err());
+    }
+    #[test]
+    fn completion_aliases_do_not_require_a_later_done_marker() {
+        for event in ["done", "complete", "completed"] {
+            let mut parser = SseDecoder::default();
+            parser
+                .push(
+                    format!("event: {event}\ndata: {{\"event\":\"{event}\"}}\n\n").as_bytes(),
+                    |_, _| Ok(()),
+                )
+                .unwrap();
+            assert!(parser.done);
+        }
+    }
+    #[test]
     fn named_start_and_done_need_no_data_and_ignore_trailing_bytes() {
         let mut parser = SseDecoder::default();
         let mut found = Vec::new();
@@ -721,6 +781,8 @@ mod tests {
             applied: false,
             message: String::new(),
             mail_analysis: false,
+            title_generation: false,
+            tool_events: Vec::new(),
             partial: "已收到的部分".into(),
         };
         assert!(retain_partial(&mut archive, &task).unwrap());
@@ -801,6 +863,8 @@ mod tests {
             applied: false,
             message: String::new(),
             mail_analysis: false,
+            title_generation: false,
+            tool_events: Vec::new(),
             partial: String::new(),
         };
         let mut wrong = status.clone();
@@ -849,6 +913,8 @@ mod tests {
                 applied,
                 message: String::new(),
                 mail_analysis: false,
+                title_generation: false,
+                tool_events: Vec::new(),
                 partial: String::new(),
                 remote: Some(TaskStatus {
                     task_id: index.to_string(),

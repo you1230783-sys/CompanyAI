@@ -14,6 +14,12 @@ const MAX_CONVERSATIONS: usize = 200;
 pub struct Conversation {
     pub id: String,
     pub title: String,
+    #[serde(default)]
+    pub pinned: bool,
+    #[serde(default)]
+    pub title_manual: bool,
+    #[serde(default)]
+    pub draft: String,
     pub created_at: u64,
     pub updated_at: u64,
     pub messages: Vec<Message>,
@@ -65,6 +71,9 @@ impl Archive {
         self.conversations.push(Conversation {
             id: id.clone(),
             title,
+            pinned: false,
+            title_manual: false,
+            draft: String::new(),
             created_at: unix_now(),
             updated_at: unix_now(),
             messages,
@@ -99,7 +108,8 @@ impl Archive {
             if conversation.id.len() != 32
                 || !conversation.id.bytes().all(|b| b.is_ascii_hexdigit())
                 || !ids.insert(&conversation.id)
-                || conversation.title.chars().count() > 50
+                || conversation.title.chars().count() > 100
+                || conversation.draft.encode_utf16().count() > 16_000
                 || conversation.messages.len() > 40
                 || conversation.messages.iter().any(|m| {
                     !matches!(m.role.as_str(), "user" | "assistant") || m.content.len() > 1_048_576
@@ -146,6 +156,31 @@ pub fn save(root: &Path, archive: &Archive) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn older_history_migrates_and_user_metadata_survives_message_updates() {
+        let old = r#"{"id":"0123456789abcdef0123456789abcdef","title":"原標題","created_at":1,"updated_at":1,"messages":[]}"#;
+        let conversation: Conversation = serde_json::from_str(old).unwrap();
+        assert!(
+            !conversation.pinned && !conversation.title_manual && conversation.draft.is_empty()
+        );
+        let mut archive = Archive {
+            schema: 1,
+            conversations: vec![conversation],
+        };
+        let id = archive.conversations[0].id.clone();
+        archive.conversations[0].pinned = true;
+        archive.conversations[0].title_manual = true;
+        archive.conversations[0].title = "自訂標題".into();
+        archive.conversations[0].draft = "尚未送出的內容".into();
+        archive
+            .update(&id, vec![crate::protocol::Message::user("新訊息")])
+            .unwrap();
+        let loaded: Archive =
+            serde_json::from_str(&serde_json::to_string(&archive).unwrap()).unwrap();
+        assert!(loaded.conversations[0].pinned && loaded.conversations[0].title_manual);
+        assert_eq!(loaded.conversations[0].title, "自訂標題");
+        assert_eq!(loaded.conversations[0].draft, "尚未送出的內容");
+    }
     #[test]
     fn encrypted_history_roundtrip_update_delete_and_corruption() {
         let mut archive = Archive::default();

@@ -151,16 +151,18 @@ pub fn format_analysis(reply: String) -> String {
         #[serde(default)]
         requested_context: String,
     }
-    let trimmed = reply.trim();
-    let json = trimmed
-        .strip_prefix("```json")
-        .or_else(|| trimmed.strip_prefix("```"))
-        .and_then(|s| s.strip_suffix("```"))
-        .unwrap_or(trimmed)
-        .trim();
-    let Ok(result) = serde_json::from_str::<Analysis>(json) else {
+    let Ok(values) = crate::embedded_json::objects(&reply) else {
         return reply;
     };
+    let mut analyses = values
+        .into_iter()
+        .filter_map(|v| serde_json::from_value::<Analysis>(v).ok());
+    let Some(result) = analyses.next() else {
+        return reply;
+    };
+    if analyses.next().is_some() {
+        return reply;
+    }
     let category = match result.category.as_str() {
         "important" => "重要",
         "needs_more_info" => "需更多資訊",

@@ -93,8 +93,8 @@ impl Default for WorkRuntime {
             capability_model: String::new(),
             store: WorkStore::default(),
             incoming: None,
-            mode: "sync".into(),
-            status: "網站尚未啟用進階聊天；純文字聊天仍可使用".into(),
+            mode: "stream".into(),
+            status: "正在確認一般／背景聊天能力".into(),
             estimate: None,
             estimate_revision: 0,
             uploads: HashSet::new(),
@@ -118,8 +118,8 @@ impl App {
             "progress":a.remote.as_ref().and_then(|r|r.progress),"queue_position":a.remote.as_ref().and_then(|r|r.queue_position),
             "timing":a.remote.as_ref().map(|r|&r.timing)
         })).collect();
-        let tasks:Vec<_>=self.work.store.tasks.iter().rev().map(|t|json!({
-            "id":t.request_id,"conversation_id":t.conversation_id,"title":t.title,"mode":t.mode,"created_at":t.created_at,
+        let tasks:Vec<_>=self.work.store.tasks.iter().rev().filter(|t| !t.title_generation).map(|t|json!({
+            "id":t.request_id,"conversation_id":t.conversation_id,"title":t.title,"mode":t.mode,"tool_events":t.tool_events,"created_at":t.created_at,
             "state":if t.applied && !t.remote.as_ref().is_some_and(TaskStatus::terminal){"stopped"}else{t.remote.as_ref().map(|r|r.state.as_str()).unwrap_or("submitting")},"active":t.active(),"message":t.message,
             "progress":t.remote.as_ref().and_then(|r|r.progress),"queue_position":t.remote.as_ref().and_then(|r|r.queue_position),
             "timing":t.remote.as_ref().map(|r|&r.timing),"partial":if Some(&t.conversation_id)==self.active_id.as_ref(){t.partial.as_str()}else{""},
@@ -132,7 +132,7 @@ impl App {
             "draft_error":self.check_draft_files().err(),"estimate":self.work.estimate,"can_estimate":self.work.caps.as_ref().is_some_and(|c|c.timing_estimates),
             "pending":self.work.store.pending(self.active_id.as_deref()),"transferring":self.work.incoming.is_some()})
     }
-    fn work_save(&mut self) -> AppResult<()> {
+    pub(super) fn work_save(&mut self) -> AppResult<()> {
         if self.work.storage_error {
             return Err("任務紀錄無法保存，請重新啟動後檢查；不會送出新工作。".into());
         }
@@ -239,7 +239,12 @@ impl App {
         {
             return false;
         }
-        !self.work.capability_loading
+        self.work
+            .caps
+            .as_ref()
+            .is_some_and(|c| c.supports(&self.work.mode))
+            && matches!(self.work.mode.as_str(), "stream" | "background")
+            && !self.work.capability_loading
             && !self.work.storage_error
             && self.work.incoming.is_none()
             && !self.work.store.pending(self.active_id.as_deref())
@@ -295,9 +300,6 @@ impl App {
                         return Err("目前無法加入附件，請先完成操作或新增對話。".into());
                     }
                     let cap = self.work.caps.as_ref().ok_or("網站尚未提供附件能力。")?;
-                    if self.work.mode == "sync" {
-                        return Err("請先選擇串流或背景模式，再加入附件。".into());
-                    }
                     let files = self.work.store.drafts(self.active_id.as_deref());
                     cap.attachments.check(
                         &name,
@@ -451,12 +453,8 @@ impl App {
                 self.work_save()?;
             }
             WorkCommand::Mode { mode } => {
-                if mode == "sync" && !self.work.store.drafts(self.active_id.as_deref()).is_empty() {
-                    return Err("附件請使用串流或背景模式；移除草稿附件後可切回一般回覆。".into());
-                }
-                if self.work.caps.as_ref().is_some_and(|c| c.supports(&mode))
-                    && (mode != "sync"
-                        || self.work.store.drafts(self.active_id.as_deref()).is_empty())
+                if matches!(mode.as_str(), "stream" | "background")
+                    && self.work.caps.as_ref().is_some_and(|c| c.supports(&mode))
                 {
                     self.work.mode = mode;
                     self.work.estimate = None;
@@ -546,14 +544,29 @@ impl App {
         last.request_id = Some(request_id.clone());
         last.attachments = names;
         // 尚無 server conversation 時，送出執行緒先用相同 local ID 建立／取得；重試仍固定 ID。
-        let request = jobs::chat_request(
-            &self.config.model,
+        let use_fast = self.config.quick_actions_fast
+            && matches!(action, "translate" | "summarize" | "polish");
+        let model = if use_fast {
+            "fast"
+        } else {
+            self.config.model.as_str()
+        };
+        if !self
+            .models
+            .as_ref()
+            .is_some_and(|c| c.models.iter().any(|m| m.id == model))
+        {
+            return Err("目前帳號沒有快速模型權限；請改選維持目前模型。".into());
+        }
+        let mut request = jobs::chat_request(
+            model,
             &messages,
             &local,
             &request_id,
             &self.work.mode,
             tokens,
         )?;
+        jobs::set_purpose(&mut request, action == "mail", false)?;
         if self.work.store.tasks.iter().filter(|t| t.active()).count() >= 8 {
             return Err("最多同時追蹤 8 個聊天任務，請先等待部分任務完成。".into());
         }
@@ -571,6 +584,8 @@ impl App {
             applied: false,
             message: "正在送出；關閉後會恢復查詢".into(),
             mail_analysis: action == "mail",
+            title_generation: false,
+            tool_events: Vec::new(),
             partial: String::new(),
         };
         self.messages = messages;
@@ -585,6 +600,65 @@ impl App {
         self.set_draft(String::new());
         self.work.estimate = None;
         self.status = "工作已保存，正在交給伺服器；可切換到其他對話".into();
+        self.submit_work(task)?;
+        if use_fast && self.config.model != "fast" {
+            let _ = self
+                .view
+                .post(&json!({"type":"model_notice","text":"本次已自動切換為快速模型"}));
+        }
+        if action != "mail" && self.messages.iter().filter(|m| m.role == "user").count() == 1 {
+            if let Err(e) = self.queue_title(&local) {
+                self.toast(&format!("對話已送出；標題暫用問題摘要：{e}"));
+            }
+        }
+        Ok(())
+    }
+    /// 標題是獨立背景工作，不混入使用者聊天訊息；手動改名永遠優先。
+    fn queue_title(&mut self, local: &str) -> AppResult<()> {
+        if self.work.store.tasks.iter().filter(|t| t.active()).count() >= 8 {
+            return Ok(());
+        }
+        if !self
+            .models
+            .as_ref()
+            .is_some_and(|c| c.models.iter().any(|m| m.id == "fast"))
+        {
+            return Ok(());
+        }
+        let question = self
+            .messages
+            .first()
+            .map(|m| m.content.as_str())
+            .unwrap_or_default();
+        let prompt =
+            format!("請為下列使用者問題產生繁體中文標題，最多 15 個字，只回覆標題：\n{question}");
+        let id = jobs::new_id()?;
+        let mut request = jobs::chat_request(
+            "fast",
+            &[Message::user(&prompt)],
+            local,
+            &id,
+            "background",
+            vec![],
+        )?;
+        jobs::set_purpose(&mut request, false, true)?;
+        let task = Task {
+            request_id: id,
+            conversation_id: local.into(),
+            request,
+            mode: "background".into(),
+            title: "產生對話標題".into(),
+            created_at: crate::unix_now(),
+            remote: None,
+            applied: false,
+            message: String::new(),
+            mail_analysis: false,
+            title_generation: true,
+            tool_events: Vec::new(),
+            partial: String::new(),
+        };
+        self.work.store.tasks.push(task.clone());
+        self.work_save()?;
         self.submit_work(task)
     }
     pub(super) fn submit_work(&mut self, task: Task) -> AppResult<()> {
@@ -602,11 +676,56 @@ impl App {
         self.work
             .cancellations
             .insert(task.request_id.clone(), cancel.clone());
+        let attachment_info: Vec<_> = self
+            .work
+            .store
+            .attachments
+            .iter()
+            .filter(|a| {
+                a.conversation_id == task.conversation_id
+                    && !a.removed
+                    && a.sent
+                    && task.request["attachment_tokens"]
+                        .as_array()
+                        .is_some_and(|tokens| {
+                            a.token().is_some_and(|token| {
+                                tokens.iter().any(|v| v.as_str() == Some(token))
+                            })
+                        })
+            })
+            .map(|a| (a.name.clone(), a.size))
+            .collect();
+        let principal = self.work.store.principal_id.clone();
         thread::spawn(move || {
             let id = task.request_id.clone();
             let result = (|| {
                 let mut task = task;
-                let remote = jobs::conversation(&config, &session, &task.conversation_id)?;
+                // 快捷操作／標題可能使用另一模型，須重新驗證其能力與附件規則。
+                let requested = task.request["model"].as_str().ok_or("缺少模型。")?;
+                if requested != config.model {
+                    let mut model_config = config.clone();
+                    model_config.model = requested.into();
+                    let caps = jobs::capabilities(&model_config, &session)?;
+                    if caps.principal_id != principal {
+                        return Err("模型帳號識別已改變，請重新登入。".into());
+                    }
+                    if !caps.supports(&task.mode) {
+                        return Err("此模型不支援選定的回覆模式。".into());
+                    }
+                    let mut total = 0;
+                    if !task.title_generation {
+                        for (index, (name, size)) in attachment_info.iter().enumerate() {
+                            caps.attachments.check(name, *size, index, total)?;
+                            total += *size;
+                        }
+                    }
+                }
+                let server_conversation = if task.title_generation {
+                    &task.request_id
+                } else {
+                    &task.conversation_id
+                };
+                let remote = jobs::conversation(&config, &session, server_conversation)?;
                 task.request["conversation_id"] = json!(remote);
                 jobs::submit_cancellable(&config, &session, &task, &cancel, |update| {
                     let _ = tx.send(Event::Work(
@@ -804,7 +923,7 @@ impl App {
                             } else if cap.supports("background") {
                                 "background"
                             } else {
-                                "sync"
+                                "stream"
                             }
                             .into();
                         }
@@ -818,9 +937,9 @@ impl App {
                     Err(_) => {
                         if self.work.capability_model != model {
                             self.work.caps = None;
-                            self.work.mode = "sync".into();
+                            self.work.mode = "stream".into();
                         }
-                        self.work.status = "網站能力暫不可用；未啟用時仍可純文字對話".into();
+                        self.work.status = "網站聊天能力暫不可用，請重新整理服務。".into();
                     }
                 }
             }
@@ -1010,7 +1129,12 @@ impl App {
                         self.work.tool_status.remove(&id);
                     }
                     jobs::StreamUpdate::Tool(status) if task.active() => {
+                        if task.tool_events.len() == 32 {
+                            task.tool_events.remove(0);
+                        }
+                        task.tool_events.push(status.clone());
                         self.work.tool_status.insert(id, status);
+                        self.work_save()?;
                     }
                     jobs::StreamUpdate::Started | jobs::StreamUpdate::Tool(_) => {}
                 }
@@ -1018,6 +1142,22 @@ impl App {
             WorkEvent::Submitted(id, result) => {
                 self.work.streams.remove(&id);
                 self.work.cancellations.remove(&id);
+                if result.is_err() {
+                    if let Some(task) = self
+                        .work
+                        .store
+                        .tasks
+                        .iter_mut()
+                        .find(|t| t.request_id == id && t.title_generation)
+                    {
+                        // 標題是附加功能，失敗不能占用工作上限或阻擋原聊天。
+                        // 已建立的 server 任務保留，不用新的 request ID 自動重送。
+                        task.applied = true;
+                        task.message = "標題暫時無法產生，保留本機問題摘要。".into();
+                        self.work_save()?;
+                        return Ok(());
+                    }
+                }
                 let interrupted = result.is_err();
                 if let Some(task) = self
                     .work
@@ -1099,7 +1239,29 @@ impl App {
             let remote = task.remote.as_ref().ok_or("缺少任務狀態。")?;
             if remote.state == "completed" {
                 let mut archive = self.archive.clone();
-                jobs::apply_reply(&mut archive, &task)?;
+                if task.title_generation {
+                    let reply = protocol::assistant_text(
+                        &remote.result.as_ref().ok_or("缺少標題結果。")?.to_string(),
+                    )?;
+                    if let Some(c) = archive
+                        .conversations
+                        .iter_mut()
+                        .find(|c| c.id == task.conversation_id && !c.title_manual)
+                    {
+                        let title: String = reply
+                            .trim()
+                            .trim_matches('"')
+                            .chars()
+                            .filter(|c| !c.is_control())
+                            .take(15)
+                            .collect();
+                        if !title.is_empty() {
+                            c.title = title;
+                        }
+                    }
+                } else {
+                    jobs::apply_reply(&mut archive, &task)?;
+                }
                 history::save(&self.root, &archive)?;
                 self.archive = archive;
                 if self.active_id.as_ref() == Some(&task.conversation_id) {
@@ -1112,7 +1274,7 @@ impl App {
                         self.messages = c.messages.clone();
                     }
                 }
-            } else {
+            } else if !task.title_generation {
                 self.preserve_partial_reply(&task)?;
             }
             if let Some(saved) = self
@@ -1135,10 +1297,11 @@ impl App {
             } else {
                 "工作失敗，請查看任務"
             };
-            if remote.state != "cancelled" && !self.is_foreground() {
+            if !task.title_generation && remote.state != "cancelled" && !self.is_foreground() {
                 self.toast(label);
             }
-            if remote.state != "cancelled"
+            if !task.title_generation
+                && remote.state != "cancelled"
                 && self.config.notification_popups
                 && !self.is_foreground()
             {

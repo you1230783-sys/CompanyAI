@@ -434,13 +434,20 @@ pub fn exchange(
         loop {
             let mut chunk = [0_u8; 8192];
             let mut read = 0_u32;
-            if WinHttpReadData(
-                request.0,
-                chunk.as_mut_ptr().cast(),
-                chunk.len() as u32,
-                &mut read,
-            ) == 0
-            {
+            // SSE 小事件不能直接要求填滿 8 KB；WinHTTP 可能等待更多資料才返回。
+            // 先查目前可讀長度，再只讀該段，工具進度及首段文字才會立即送到介面。
+            let mut wanted = chunk.len() as u32;
+            if on_chunk.is_some() && status == 200 {
+                let mut available = 0;
+                if WinHttpQueryDataAvailable(request.0, &mut available) == 0 {
+                    return Err(network_error());
+                }
+                if available == 0 {
+                    break;
+                }
+                wanted = available.min(wanted);
+            }
+            if WinHttpReadData(request.0, chunk.as_mut_ptr().cast(), wanted, &mut read) == 0 {
                 return Err(network_error());
             }
             if read == 0 {
@@ -491,6 +498,81 @@ mod tests {
         net::TcpListener,
         thread,
     };
+
+    #[test]
+    fn sse_delivers_first_event_before_server_finishes() {
+        // 回授握手比固定延遲更能識別緩衝：伺服器必須等客戶端收到首筆事件才送 done。
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url =
+            url::Url::parse(&format!("http://{}/stream", listener.local_addr().unwrap())).unwrap();
+        let (seen, received) = std::sync::mpsc::channel();
+        let worker = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0u8; 1024];
+            loop {
+                let n = stream.read(&mut buffer).unwrap();
+                assert!(n > 0);
+                request.extend_from_slice(&buffer[..n]);
+                if request
+                    .windows(4)
+                    .position(|b| b == b"\r\n\r\n")
+                    .is_some_and(|end| request.len() >= end + 6)
+                {
+                    break;
+                }
+            }
+            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n").unwrap();
+            let first =
+                "event: tool_status\ndata: {\"tool_name\":\"search\",\"status\":\"started\"}\n\n";
+            write!(stream, "{:x}\r\n{}\r\n", first.len(), first).unwrap();
+            stream.flush().unwrap();
+            let immediate = received
+                .recv_timeout(std::time::Duration::from_secs(3))
+                .is_ok();
+            let last = "event: delta\ndata: {\"text\":\"中文\"}\n\nevent: done\ndata: {\"event\":\"done\"}\n\n";
+            write!(stream, "{:x}\r\n{}\r\n0\r\n\r\n", last.len(), last).unwrap();
+            immediate
+        });
+        let mut parser = crate::jobs::SseDecoder::default();
+        let mut text = String::new();
+        let mut callback = |bytes: &[u8]| {
+            parser.push(bytes, |event, data| {
+                if event == "tool_status" {
+                    let _ = seen.send(());
+                }
+                if event == "delta" {
+                    text.push_str(
+                        serde_json::from_str::<serde_json::Value>(data).unwrap()["text"]
+                            .as_str()
+                            .unwrap(),
+                    );
+                }
+                Ok(())
+            })?;
+            Ok(parser.done)
+        };
+        let mut body = std::io::Cursor::new(b"{}");
+        exchange(
+            &url,
+            "POST",
+            "application/json",
+            Payload {
+                reader: &mut body,
+                length: 2,
+            },
+            None,
+            5000,
+            Some(&mut callback),
+        )
+        .unwrap();
+        assert!(worker.join().unwrap(), "SSE was buffered until completion");
+        assert_eq!(text, "中文");
+        assert!(parser.done);
+    }
 
     #[test]
     fn redirect_is_rejected_before_a_second_request() {

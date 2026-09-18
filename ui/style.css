@@ -538,6 +538,23 @@ textarea::placeholder {
   align-items: center;
   margin-top: 5px;
 }
+.model-notice {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  width: max-content;
+  max-width: min(320px, 75vw);
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(30, 41, 59, 0.88);
+  color: white;
+  pointer-events: none;
+  z-index: 50;
+  transition: opacity 250ms ease;
+}
+.model-notice.fade { opacity: 0; }
+.settings-content fieldset { border: 0; padding: 8px 0; margin: 8px 0; }
+.settings-content fieldset label { display: block; padding: 4px 0; }
 .model-picker {
   position: relative;
 }

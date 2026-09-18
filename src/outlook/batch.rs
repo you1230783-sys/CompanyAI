@@ -59,16 +59,18 @@ pub fn check_cancel(cancel: &AtomicBool) -> AppResult<()> {
         Ok(())
     }
 }
-/// 嚴格解析整份回覆；任何越界 ID／未知工具都拒絕，不能部分執行。
+/// 允許 JSON 前後有說明；必須只有一份決策，且整份授權驗證成功才執行。
 pub fn decision(reply: &str, mails: &[Mail], allow: bool, maximum: usize) -> AppResult<Decision> {
-    let trimmed = reply.trim();
-    let raw = trimmed
-        .strip_prefix("```json")
-        .and_then(|s| s.strip_suffix("```"))
-        .unwrap_or(trimmed)
-        .trim();
-    let result: Decision = serde_json::from_str(raw)
-        .map_err(|_| "AI 未依郵件工具契約回覆；未匯出任何郵件，請重試或改用其他模型。")?;
+    let candidates: Vec<_> = crate::embedded_json::objects(reply)?
+        .into_iter()
+        .filter(|value| value.get("schema_version").is_some() && value.get("requests").is_some())
+        .collect();
+    if candidates.len() != 1 {
+        return Err("未找到唯一的郵件決策 JSON；已保留 AI 原文，未執行匯出。".into());
+    }
+    let result: Decision =
+        serde_json::from_value(candidates.into_iter().next().ok_or("缺少郵件 JSON。")?)
+            .map_err(|_| "郵件 JSON 欄位不完整；已保留 AI 原文，未執行匯出。")?;
     if result.schema_version != 1
         || result.summary.len() > 16_000
         || result.requests.len() > maximum.min(20)
@@ -335,6 +337,19 @@ pub fn export(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn embedded_decision_is_extracted_but_ambiguous_or_unauthorized_commands_are_rejected() {
+        let json = r#"{"schema_version":1,"summary":"重要郵件摘要","requests":[]}"#;
+        let wrapped = format!("以下是分析：\n```json\n{json}\n```\n請留意期限。");
+        assert_eq!(
+            decision(&wrapped, &[], false, 20).unwrap().summary,
+            "重要郵件摘要"
+        );
+        assert!(decision(&format!("{json}\n{json}"), &[], false, 20).is_err());
+        assert!(decision("以下有重要信件，但這次沒有 JSON。", &[], false, 20).is_err());
+        let unauthorized = r#"前言 {"schema_version":1,"summary":"摘要","requests":[{"tool":"outlook.export_msg","mail_id":"outside","reason":"test"}]} 後文"#;
+        assert!(decision(unauthorized, &[], true, 20).is_err());
+    }
     #[test]
     fn analysis_names_match_every_uploaded_msg_without_changing_the_uploads() {
         let names = vec![

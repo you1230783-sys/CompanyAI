@@ -1,6 +1,6 @@
 //! 登入與聊天的工作流程，與介面分離，方便用本機測試伺服器驗證。
 use crate::{
-    config::{AuthHeader, Config, CLIENT_ID},
+    config::{Config, CLIENT_ID},
     protocol::{self, DeviceGrant, OAuthError, TokenResponse},
     storage::Session,
     transport, AppResult,
@@ -101,13 +101,17 @@ pub fn wait_for_login(
     }
 }
 
+// 僅保留舊協定的測試工具；正式桌面聊天全部走 jobs 的持久任務。
+#[cfg(test)]
 pub struct ChatOutcome {
     pub reply: AppResult<String>,
     pub unauthorized: bool,
 }
 
 /// 憑證放在 Header，JSON 本文只含模型與訊息，不把共用的上游 API Key 存入程式。
+#[cfg(test)]
 pub fn send_chat(config: &Config, session: &Session, body: &str) -> ChatOutcome {
+    use crate::config::AuthHeader;
     let mut unauthorized = false;
     let reply = (|| {
         config.validate()?;

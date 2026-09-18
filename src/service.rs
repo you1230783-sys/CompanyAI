@@ -29,6 +29,9 @@ pub fn version_number(value: &str) -> AppResult<[u32; 3]> {
 pub struct VersionInfo {
     pub latest_version: String,
     pub minimum_version: String,
+    /// 網站尚未部署更新欄位時仍能查版本；安裝來源不得從下載頁 HTML 推測。
+    #[serde(default)]
+    pub update: Option<crate::deployment::UpdateArtifact>,
     #[serde(default)]
     pub message: String,
 }
@@ -172,6 +175,7 @@ mod tests {
             .apply(Ok(VersionInfo {
                 latest_version: "99.0.0".into(),
                 minimum_version: "99.0.0".into(),
+                update: None,
                 message: String::new(),
             }))
             .unwrap();
@@ -182,6 +186,7 @@ mod tests {
             .apply(Ok(VersionInfo {
                 latest_version: "0.1.0".into(),
                 minimum_version: "99.0.0".into(),
+                update: None,
                 message: String::new()
             }))
             .is_err());

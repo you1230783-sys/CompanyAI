@@ -37,6 +37,12 @@ pub struct Config {
     pub sidebar_collapsed: bool,
     pub notification_popups: bool,
     pub dark_mode: bool,
+    /// 快捷鍵只在啟用時註冊；浮動圖示為獨立、預設關閉的選項。
+    pub hotkey_enabled: bool,
+    pub selection_icon: bool,
+    pub enter_sends: bool,
+    pub quick_actions_fast: bool,
+    pub always_new_chat: bool,
 }
 
 /// 只有個人偏好能落盤；舊版檔案中的網址、路由、Header 和 HTTP 欄位會被忽略。
@@ -49,6 +55,11 @@ struct Preferences {
     sidebar_collapsed: bool,
     notification_popups: Option<bool>,
     dark_mode: bool,
+    hotkey_enabled: Option<bool>,
+    selection_icon: bool,
+    enter_sends: bool,
+    quick_actions_fast: Option<bool>,
+    always_new_chat: bool,
 }
 
 impl Serialize for Config {
@@ -60,6 +71,11 @@ impl Serialize for Config {
             sidebar_collapsed: self.sidebar_collapsed,
             notification_popups: Some(self.notification_popups),
             dark_mode: self.dark_mode,
+            hotkey_enabled: Some(self.hotkey_enabled),
+            selection_icon: self.selection_icon,
+            enter_sends: self.enter_sends,
+            quick_actions_fast: Some(self.quick_actions_fast),
+            always_new_chat: self.always_new_chat,
         }
         .serialize(serializer)
     }
@@ -74,6 +90,11 @@ impl<'de> Deserialize<'de> for Config {
             sidebar_collapsed: saved.sidebar_collapsed,
             notification_popups: saved.notification_popups.unwrap_or(true),
             dark_mode: saved.dark_mode,
+            hotkey_enabled: saved.hotkey_enabled.unwrap_or(true),
+            selection_icon: saved.selection_icon,
+            enter_sends: saved.enter_sends,
+            quick_actions_fast: saved.quick_actions_fast.unwrap_or(true),
+            always_new_chat: saved.always_new_chat,
             ..Self::default()
         })
     }
@@ -94,6 +115,11 @@ impl Default for Config {
             sidebar_collapsed: false,
             notification_popups: true,
             dark_mode: false,
+            hotkey_enabled: true,
+            selection_icon: false,
+            enter_sends: false,
+            quick_actions_fast: true,
+            always_new_chat: false,
         }
     }
 }
@@ -215,6 +241,23 @@ pub fn validate_url(url: &Url, allow_http: bool) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn behavior_preferences_round_trip_with_safe_legacy_defaults() {
+        let old: Config = serde_json::from_str("{}").unwrap();
+        assert!(old.hotkey_enabled);
+        assert!(!old.selection_icon && !old.enter_sends && !old.always_new_chat);
+        let value = Config {
+            hotkey_enabled: false,
+            selection_icon: true,
+            enter_sends: true,
+            always_new_chat: true,
+            quick_actions_fast: false,
+            ..old
+        };
+        let saved: Config = serde_json::from_str(&serde_json::to_string(&value).unwrap()).unwrap();
+        assert!(!saved.hotkey_enabled && !saved.quick_actions_fast);
+        assert!(saved.selection_icon && saved.enter_sends && saved.always_new_chat);
+    }
 
     #[test]
     fn saved_preferences_cannot_override_company_routes() {
@@ -229,7 +272,7 @@ mod tests {
         assert_eq!(config.model, "quality");
         assert_eq!(config.hotkey, "Ctrl+Shift+F8");
         let saved = serde_json::to_value(&config).unwrap();
-        assert_eq!(saved.as_object().unwrap().len(), 6);
+        assert_eq!(saved.as_object().unwrap().len(), 11);
         assert!(saved.get("server_url").is_none());
         assert!(Config::default().validate().is_ok());
     }

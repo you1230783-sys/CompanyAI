@@ -1,7 +1,7 @@
 //! 主視窗與工作流程。背景工作只透過訊息傳回資料，不跨執行緒操作 WebView2。
 use crate::{
     auth,
-    config::{Config, DOWNLOAD_PATH},
+    config::Config,
     demo::DemoServer,
     history::{self, Archive},
     notifications::{self, Inbox},
@@ -65,6 +65,21 @@ enum Command {
         action: String,
     },
     NewChat,
+    Behavior {
+        hotkey_enabled: bool,
+        selection_icon: bool,
+        enter_sends: bool,
+        quick_actions_fast: bool,
+        always_new_chat: bool,
+    },
+    RenameChat {
+        id: String,
+        title: String,
+    },
+    PinChat {
+        id: String,
+        pinned: bool,
+    },
     Preferences {
         font_size: u8,
         sidebar_collapsed: bool,
@@ -124,8 +139,9 @@ enum Event {
     ),
     Grant(u64, AppResult<DeviceGrant>),
     Login(u64, AppResult<Session>),
-    Chat(u64, auth::ChatOutcome),
     Capture(AppResult<String>),
+    UpdateReady(AppResult<PathBuf>),
+    SelectionRect(Option<crate::selection_popup::SelectionRect>),
     Mail(u64, AppResult<MailPreview>),
     Events(u64, AppResult<notifications::EventPage>),
     Read(u64, String, AppResult<()>),
@@ -137,6 +153,7 @@ struct App {
     mail_flow: mail_batch::MailRuntime,
     work: work::WorkRuntime,
     window: HWND,
+    selection_popup: crate::selection_popup::Popup,
     view: WebView,
     root: PathBuf,
     config: Config,
@@ -154,6 +171,10 @@ struct App {
     models: Option<ModelCatalog>,
     versions: VersionState,
     version_status: String,
+    update_ready: Option<PathBuf>,
+    update_busy: bool,
+    update_attempted: String,
+    update_status: String,
     services_loading: bool,
     generation: u64,
     login_operation: u64,
@@ -181,6 +202,7 @@ struct App {
 }
 impl Drop for App {
     fn drop(&mut self) {
+        let _ = self.preserve_draft();
         self.mail_flow.cancel.store(true, Ordering::Relaxed);
         self.cancelled.store(true, Ordering::Relaxed);
         self.socket_cancel.store(true, Ordering::Relaxed);
@@ -226,7 +248,7 @@ impl App {
             .archive
             .conversations
             .iter()
-            .map(|c| json!({"id":c.id,"title":c.title,"updated_at":c.updated_at}))
+            .map(|c| json!({"id":c.id,"title":c.title,"updated_at":c.updated_at,"pinned":c.pinned}))
             .collect();
         let mut events:Vec<serde_json::Value>=self.inbox.events.iter().filter(|e|!e.expired()&&!e.dismissed&&e.visible_ai()).map(|e|json!({
             "id":e.id,"source":"ai","type":e.kind,"title":e.title,"summary":e.summary,"created_at":e.created_at,"read_at":e.read_at,"notification_key":format!("ai:{}",e.id)
@@ -243,6 +265,7 @@ impl App {
                 })
         });
         let _=self.view.post(&json!({"type":"state","state":{
+            "update_status":self.update_status,"update_ready":self.update_ready.is_some(),"update_busy":self.update_busy,
             "version":service::CURRENT_VERSION,"config":self.config,"status":self.status,"error":self.error,
             "busy":self.busy,"logged_in":self.logged_in(),"can_send":self.can_send(),"update_required":self.versions.blocked(),
             "models":models,"conversations":conversations,"active_id":self.active_id,"messages":self.messages,
@@ -262,11 +285,54 @@ impl App {
     }
     fn set_draft(&mut self, text: String) {
         self.draft = text;
+        if let Some(c) = self
+            .archive
+            .conversations
+            .iter_mut()
+            .find(|c| Some(&c.id) == self.active_id.as_ref())
+        {
+            c.draft = self.draft.clone();
+        }
         self.draft_revision += 1;
         self.work.estimate = None;
         self.work.estimate_revision += 1;
     }
+    /// 換頁前保留草稿，避免托盤還原或快捷鍵開新對話時丟失輸入。
+    fn preserve_draft(&mut self) -> AppResult<()> {
+        if self.draft.is_empty() && self.active_id.is_none() {
+            return Ok(());
+        }
+        if self.history_error.is_some() {
+            return Err("本機紀錄無法保存，請先處理後再切換對話。".into());
+        }
+        if self.active_id.is_none() {
+            self.active_id = Some(self.archive.insert(Vec::new())?);
+        }
+        if let Some(c) = self
+            .archive
+            .conversations
+            .iter_mut()
+            .find(|c| Some(&c.id) == self.active_id.as_ref())
+        {
+            c.draft = self.draft.clone();
+            if c.messages.is_empty() && !c.title_manual {
+                c.title = format!("草稿：{}", self.draft.chars().take(30).collect::<String>());
+            }
+        }
+        history::save(&self.root, &self.archive)
+    }
+    fn restore_window(&mut self) {
+        if self.config.always_new_chat && self.work.incoming.is_none() {
+            self.new_chat();
+        }
+        self.publish();
+        show_window(self.window);
+    }
     fn new_chat(&mut self) {
+        if let Err(e) = self.preserve_draft() {
+            self.fail(e);
+            return;
+        }
         self.active_id = None;
         self.messages.clear();
         self.set_draft(String::new());
@@ -295,7 +361,11 @@ impl App {
             self.stop_recording()?;
         }
         selection::unregister(self.window);
-        if let Err(e) = selection::register(self.window, next) {
+        if let Err(e) = if self.config.hotkey_enabled {
+            selection::register(self.window, next)
+        } else {
+            Ok(())
+        } {
             if let Some(old) = self.hotkey {
                 let _ = selection::register(self.window, old);
             }
@@ -310,7 +380,7 @@ impl App {
             }
             return Err(e);
         }
-        self.hotkey = Some(next);
+        self.hotkey = self.config.hotkey_enabled.then_some(next);
         self.config = config;
         Ok(())
     }
@@ -484,34 +554,7 @@ impl App {
         if messages.len() >= 40 {
             return Err("此對話已達 20 輪，請新增對話。".into());
         }
-        if self.work.caps.is_some() && self.work.mode != "sync" {
-            return self.begin_work_chat(messages, action);
-        }
-        let body = protocol::chat_json(&self.config.model, &messages)?;
-        // 送出時就分配穩定的對話 ID；回覆完成時不換 ID，避免誤判切換對話而跳到底。
-        if self.active_id.is_none() {
-            self.active_id = Some(self.archive.insert(messages.clone())?);
-        }
-        self.messages = messages;
-        self.set_draft(String::new());
-        self.busy = "chat";
-        self.status = "正在等待 AI 回覆…".into();
-        self.error = false;
-        let (config, session, tx, generation) = (
-            self.config.clone(),
-            self.session.clone().ok_or("請先登入。")?,
-            self.tx.clone(),
-            self.generation,
-        );
-        let mail_analysis = action == "mail";
-        thread::spawn(move || {
-            let mut outcome = auth::send_chat(&config, &session, &body);
-            if mail_analysis {
-                outcome.reply = outcome.reply.map(outlook::format_analysis);
-            }
-            let _ = tx.send(Event::Chat(generation, outcome));
-        });
-        Ok(())
+        self.begin_work_chat(messages, action)
     }
     fn read_mail(&mut self, body: bool) -> AppResult<()> {
         if self.mail_busy {
@@ -597,6 +640,61 @@ impl App {
                     self.new_chat();
                 }
             }
+            Command::Behavior {
+                hotkey_enabled,
+                selection_icon,
+                enter_sends,
+                quick_actions_fast,
+                always_new_chat,
+            } => {
+                let previous = self.config.clone();
+                self.config.hotkey_enabled = hotkey_enabled;
+                self.config.selection_icon = selection_icon;
+                self.config.enter_sends = enter_sends;
+                self.config.quick_actions_fast = quick_actions_fast;
+                self.config.always_new_chat = always_new_chat;
+                if let Err(e) = self.apply_hotkey(self.config.hotkey.clone()) {
+                    self.config = previous;
+                    let _ = self.apply_hotkey(self.config.hotkey.clone());
+                    return Err(e);
+                }
+                self.selection_popup
+                    .enabled
+                    .store(selection_icon, Ordering::Relaxed);
+                if !selection_icon {
+                    self.selection_popup.update(None);
+                }
+            }
+            Command::RenameChat { id, title } => {
+                let title = title.trim();
+                if title.is_empty()
+                    || title.chars().count() > 100
+                    || title.chars().any(char::is_control)
+                {
+                    return Err("標題需為 1 至 100 字，不能包含換行。".into());
+                }
+                let mut archive = self.archive.clone();
+                let c = archive
+                    .conversations
+                    .iter_mut()
+                    .find(|c| c.id == id)
+                    .ok_or("找不到對話。")?;
+                c.title = title.into();
+                c.title_manual = true;
+                history::save(&self.root, &archive)?;
+                self.archive = archive;
+            }
+            Command::PinChat { id, pinned } => {
+                let mut archive = self.archive.clone();
+                archive
+                    .conversations
+                    .iter_mut()
+                    .find(|c| c.id == id)
+                    .ok_or("找不到對話。")?
+                    .pinned = pinned;
+                history::save(&self.root, &archive)?;
+                self.archive = archive;
+            }
             Command::Preferences {
                 font_size,
                 sidebar_collapsed,
@@ -623,7 +721,13 @@ impl App {
                 self.toast("快捷鍵已更新");
             }
             Command::Refresh => self.refresh_services(),
-            Command::Download => open_browser(self.config.endpoint(DOWNLOAD_PATH)?.as_str())?,
+            Command::Download => {
+                if self.update_ready.is_some() {
+                    self.apply_ready_update(true)?;
+                } else {
+                    self.start_update_download()?;
+                }
+            }
             Command::OpenLink { url } => open_browser(&url)?,
             Command::Copy { text } => {
                 if text.len() > 1_048_576 {
@@ -652,6 +756,7 @@ impl App {
             }
             Command::SelectChat { id } => {
                 if self.busy == "none" && self.work.incoming.is_none() {
+                    self.preserve_draft()?;
                     let c = self
                         .archive
                         .conversations
@@ -659,8 +764,9 @@ impl App {
                         .find(|c| c.id == id)
                         .ok_or("找不到對話。")?;
                     self.messages = c.messages.clone();
+                    let draft = c.draft.clone();
                     self.active_id = Some(id);
-                    self.set_draft(String::new());
+                    self.set_draft(draft);
                 }
             }
             Command::DeleteChat { id } => {
@@ -801,9 +907,28 @@ impl App {
                 if !self.can_send() {
                     return Err("請先登入並選擇可用模型。".into());
                 }
+                if !self
+                    .work
+                    .caps
+                    .as_ref()
+                    .is_some_and(|c| c.supports("background"))
+                {
+                    return Err("Outlook 判讀需要網站支援背景處理。".into());
+                }
+                self.work.mode = "background".into();
+                let subject = self.mail.as_ref().ok_or("請先選取郵件。")?.subject.clone();
                 let prompt = outlook::analysis_prompt(self.mail.as_ref().ok_or("請先選取郵件。")?)?;
                 self.new_chat();
                 self.begin_chat(prompt, "mail")?;
+                if let Some(c) = self
+                    .archive
+                    .conversations
+                    .iter_mut()
+                    .find(|c| Some(&c.id) == self.active_id.as_ref())
+                {
+                    c.title = format!("Outlook：{}", subject.chars().take(80).collect::<String>());
+                }
+                history::save(&self.root, &self.archive)?;
             }
         }
         Ok(())
@@ -856,6 +981,13 @@ impl App {
                         self.fail(e);
                     }
                 }
+                if self.versions.known.as_ref().is_some_and(|v| {
+                    v.available() && v.update.is_some() && self.update_attempted != v.latest_version
+                }) {
+                    if let Err(e) = self.start_update_download() {
+                        self.update_status = e;
+                    }
+                }
                 if self.versions.blocked() {
                     self.fail(self.version_status.clone());
                     self.toast("目前版本需更新，請由設定下載新版");
@@ -898,47 +1030,30 @@ impl App {
                 self.refresh_services();
                 self.start_notifications();
             }
-            Event::Chat(generation, outcome) if generation == self.generation => {
-                self.busy = "none";
-                match outcome.reply {
-                    Ok(reply) => {
-                        self.messages.push(Message::assistant(reply));
-                        self.status = "回覆完成".into();
-                        if let Err(e) = self.save_history() {
-                            self.history_error = Some(e.clone());
-                            return Err(e);
-                        }
+            Event::UpdateReady(result) => {
+                self.update_busy = false;
+                match result {
+                    Ok(plan) => {
+                        self.update_ready = Some(plan);
+                        self.update_status =
+                            "新版已準備完成，退出時套用；也可立即更新並重新啟動。".into();
+                        self.toast(&self.update_status.clone());
                     }
                     Err(e) => {
-                        if let Some(last) = self.messages.pop() {
-                            self.set_draft(last.content);
-                        }
-                        if outcome.unauthorized {
-                            self.mail_flow = mail_batch::MailRuntime::default();
-                            self.site = site::SiteRuntime::default();
-                            self.session = None;
-                            self.work = work::WorkRuntime::default();
-                            self.generation += 1;
-                            self.services_loading = false;
-                            self.notifications_loading = false;
-                            self.notifications_pending = false;
-                            self.inbox = Inbox::default();
-                            self.models = None;
-                            self.mail = None;
-                            self.mail_busy = false;
-                            self.notification_status = "請重新登入以同步通知".into();
-                            self.socket_cancel.store(true, Ordering::Relaxed);
-                            if !self.demo {
-                                let _ = storage::clear_session(&self.root);
-                            }
-                        }
-                        return Err(e);
+                        self.update_status = e;
                     }
                 }
+            }
+            Event::SelectionRect(rect) => {
+                self.selection_popup
+                    .update(if self.busy == "none" { rect } else { None });
             }
             Event::Capture(result) => {
                 self.busy = "none";
                 let text = result?;
+                if self.config.always_new_chat {
+                    self.new_chat();
+                }
                 let joined = if self.draft.trim().is_empty() {
                     text
                 } else {
@@ -1101,6 +1216,52 @@ impl App {
             self.publish();
         }
     }
+    fn start_update_download(&mut self) -> AppResult<()> {
+        if self.update_busy || self.update_ready.is_some() {
+            return Ok(());
+        }
+        let info = self
+            .versions
+            .known
+            .as_ref()
+            .ok_or("尚未取得版本資訊，請先重新整理服務。")?;
+        if !info.available() {
+            self.update_status = "目前已是最新版本。".into();
+            return Ok(());
+        }
+        self.update_attempted = info.latest_version.clone();
+        let artifact = info
+            .update
+            .clone()
+            .ok_or("網站尚未提供直接更新檔資訊，請由 IT 安裝新版。")?;
+        crate::deployment::validate_artifact(&self.config, &artifact, &info.latest_version)?;
+        let config = self.config.clone();
+        let tx = self.tx.clone();
+        self.update_busy = true;
+        self.update_status = "正在背景下載並驗證更新…".into();
+        thread::spawn(move || {
+            let _ = tx.send(Event::UpdateReady(crate::deployment::download(
+                &config, &artifact,
+            )));
+        });
+        Ok(())
+    }
+    fn apply_ready_update(&mut self, restart: bool) -> AppResult<()> {
+        if self.work.incoming.is_some() || self.busy != "none" || self.mail_flow.phase != "idle" {
+            return Err("請先完成檔案接收或停止郵件流程，再重新啟動更新。".into());
+        }
+        self.preserve_draft()?;
+        if let Some(plan) = &self.update_ready {
+            crate::deployment::launch_update(plan, restart)?;
+        }
+        self.update_ready = None;
+        if restart {
+            unsafe {
+                PostMessageW(self.window, WM_CLOSE, 1, 0);
+            }
+        }
+        Ok(())
+    }
     fn capture(&mut self) {
         if self.recording_since.is_some() || self.suppress_hotkey {
             return;
@@ -1243,6 +1404,51 @@ unsafe extern "system" fn window_proc(
                 return 0;
             }
             match message {
+                crate::single_instance::RESTORE_MESSAGE => {
+                    app.restore_window();
+                    return 0;
+                }
+                crate::selection_popup::CLICK_MESSAGE => {
+                    let source = app.selection_popup.source;
+                    app.selection_popup.update(None);
+                    if source != 0 && app.busy == "none" {
+                        let tx = app.tx.clone();
+                        app.busy = "capture";
+                        thread::spawn(move || {
+                            let hotkey = Hotkey {
+                                modifiers: 0,
+                                key: 0,
+                            };
+                            let _ =
+                                tx.send(Event::Capture(selection::capture(source as HWND, hotkey)));
+                        });
+                    }
+                    return 0;
+                }
+                WM_CLOSE => {
+                    if let Err(e) = app.preserve_draft() {
+                        app.fail(e);
+                        app.publish();
+                        return 0;
+                    }
+                    if wparam == 0 {
+                        unsafe {
+                            ShowWindow(window, SW_HIDE);
+                        }
+                        return 0;
+                    }
+                    if app.update_ready.is_some() {
+                        if let Err(e) = app.apply_ready_update(false) {
+                            app.fail(e);
+                            app.publish();
+                            return 0;
+                        }
+                    }
+                    unsafe {
+                        DestroyWindow(window);
+                    }
+                    return 0;
+                }
                 WM_ACTIVATEAPP if wparam == 0 => {
                     if let Err(e) = app.stop_recording() {
                         app.fail(e);
@@ -1254,6 +1460,10 @@ unsafe extern "system" fn window_proc(
                     return 0;
                 }
                 WM_SIZE if wparam == SIZE_MINIMIZED as usize => {
+                    if let Err(e) = app.preserve_draft() {
+                        app.fail(e);
+                    }
+
                     // 最小化只隱藏視窗；全域快捷鍵、通知與工作查詢繼續。
                     unsafe {
                         ShowWindow(window, SW_HIDE);
@@ -1278,7 +1488,11 @@ unsafe extern "system" fn window_proc(
                         WM_LBUTTONUP | WM_LBUTTONDBLCLK | NIN_BALLOONUSERCLICK
                     ) =>
                 {
-                    show_window(window);
+                    if lparam as u32 == NIN_BALLOONUSERCLICK {
+                        show_window(window);
+                    } else {
+                        app.restore_window();
+                    }
                     if lparam as u32 == NIN_BALLOONUSERCLICK {
                         let _ = app.view.post(&json!({"type":if app.work.task_balloon {"show_tasks"} else {"show_notifications"}}));
                     }
@@ -1307,10 +1521,10 @@ unsafe extern "system" fn window_proc(
                             PostMessageW(window, WM_NULL, 0, 0);
                             match action {
                                 1 => {
-                                    show_window(window);
+                                    app.restore_window();
                                 }
                                 2 => {
-                                    PostMessageW(window, WM_CLOSE, 0, 0);
+                                    PostMessageW(window, WM_CLOSE, 1, 0);
                                 }
                                 _ => {}
                             }
@@ -1354,6 +1568,14 @@ impl Drop for ComApartment {
 }
 /// 自我檢查使用隔離資料夾，實際載入 WebView2 與 Markdown DOM，不連公司服務。
 pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
+    let _instance = if !smoke && demo.is_none() {
+        match crate::single_instance::acquire()? {
+            Some(instance) => Some(instance),
+            None => return Ok(()),
+        }
+    } else {
+        None
+    };
     unsafe {
         windows::Win32::System::Com::CoInitializeEx(
             None,
@@ -1394,7 +1616,11 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
     unsafe {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         let instance = GetModuleHandleW(ptr::null());
-        let name = wide("LM_AI_Window");
+        let name = wide(if demo.is_some() || smoke {
+            "LM_AI_TestWindow"
+        } else {
+            "LM_AI_Window"
+        });
         let class = WNDCLASSEXW {
             cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
             lpfnWndProc: Some(window_proc),
@@ -1430,11 +1656,19 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
         let mut rect = RECT::default();
         GetClientRect(window, &mut rect);
         view.resize(rect.right, rect.bottom);
+        let selection_tx = tx.clone();
+        let selection_popup = crate::selection_popup::Popup::new(window, move |rect| {
+            let _ = selection_tx.send(Event::SelectionRect(rect));
+        })?;
+        selection_popup
+            .enabled
+            .store(config.selection_icon && !smoke, Ordering::Relaxed);
         let mut app = App {
             site: site::SiteRuntime::default(),
             mail_flow: mail_batch::MailRuntime::default(),
             work: work::WorkRuntime::default(),
             window,
+            selection_popup,
             view,
             root,
             config,
@@ -1452,6 +1686,10 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
             models: None,
             versions: VersionState::default(),
             version_status: "正在檢查版本".into(),
+            update_ready: None,
+            update_busy: false,
+            update_attempted: String::new(),
+            update_status: String::new(),
             services_loading: false,
             generation: 0,
             login_operation: 0,
@@ -1477,6 +1715,19 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
             ready: false,
             smoke_result: None,
         };
+        if !smoke && !app.config.always_new_chat {
+            if let Some(c) = app
+                .archive
+                .conversations
+                .iter()
+                .max_by_key(|c| c.updated_at)
+            {
+                app.active_id = Some(c.id.clone());
+                app.messages = c.messages.clone();
+                let draft = c.draft.clone();
+                app.set_draft(draft);
+            }
+        }
         if !smoke {
             if let Err(e) = app.apply_hotkey(app.config.hotkey.clone()) {
                 app.fail(e);

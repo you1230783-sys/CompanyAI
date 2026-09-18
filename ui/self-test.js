@@ -425,6 +425,46 @@ window.runSelfTest = async () => {
     check(document.querySelector(".incomplete-warning")?.textContent.includes("回覆中斷") && document.getElementById("messages").textContent.includes("這是斷線前已收到的內容"), "interrupted answer and warning remain together");
     fixture.config.dark_mode = false;
     LMUI.receive(fixture);
+    // 使用者偏好：真正呼叫與日常使用相同的 DOM 事件處理器，不發出網路請求。
+    const behaviorSend = send;
+    const behaviorCommands = [];
+    try {
+      send = command => behaviorCommands.push(command);
+      fixture.work.tasks = [];
+      fixture.work.pending = false;
+      fixture.can_send = true;
+      fixture.config.enter_sends = true;
+      fixture.config.hotkey_enabled = false;
+      fixture.config.quick_actions_fast = false;
+      fixture.conversations = [
+        {id:"recent",title:"近期",updated_at:100,pinned:false},
+        {id:"pinned",title:"重要",updated_at:1,pinned:true},
+      ];
+      LMUI.receive(fixture);
+      check(document.querySelector("#history-list button")?.dataset.id === "pinned", "pinned conversation precedes newer ordinary conversation");
+      check(document.getElementById("hotkey-hint").hidden, "disabled hotkey hint hidden");
+      check(document.getElementById("enter-hint").textContent.includes("Shift + Enter"), "enter send mode hint");
+      const prompt = document.getElementById("prompt");
+      prompt.value = "中文測試";
+      prompt.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter", isComposing:true, bubbles:true, cancelable:true}));
+      prompt.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter", shiftKey:true, bubbles:true, cancelable:true}));
+      check(!behaviorCommands.some(c=>c.type === "chat"), "IME confirmation and Shift Enter never send");
+      prompt.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter", bubbles:true, cancelable:true}));
+      check(behaviorCommands.filter(c=>c.type === "chat").length === 1, "plain Enter sends when enabled");
+      fixture.config.enter_sends = false;
+      LMUI.receive(fixture);
+      prompt.value = "換行模式";
+      prompt.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter", bubbles:true, cancelable:true}));
+      check(behaviorCommands.filter(c=>c.type === "chat").length === 1, "plain Enter preserves newline mode");
+      prompt.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter",ctrlKey:true,bubbles:true,cancelable:true}));
+      check(behaviorCommands.filter(c=>c.type === "chat").length === 2, "Ctrl Enter sends in newline mode");
+      check(!document.getElementById("execution-sync"), "old synchronous reply control removed");
+      check(document.getElementById("execution-stream").textContent === "一般", "stream label is general");
+      BehaviorUI.modelNotice("本次已自動切換為快速模型");
+      check(!document.querySelector(".model-notice").hidden, "automatic model notice shown");
+      await new Promise(resolve => setTimeout(resolve,1800));
+      check(document.querySelector(".model-notice").hidden, "automatic model notice fades after 1.5 seconds");
+    } finally { send = behaviorSend; }
     window.chrome?.webview?.postMessage({
       type: "self_test_result",
       ok: true,
