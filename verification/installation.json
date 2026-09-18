@@ -1,0 +1,15 @@
+{
+  "recorded_at": "2026-09-18T13:23:56.23728+08:00",
+  "result": "PASS",
+  "checks": [
+    "portable native window self-check",
+    "NSIS per-user install",
+    "installed payload hash",
+    "start menu shortcuts",
+    "uninstall registration",
+    "installed native window self-check",
+    "NSIS uninstall and cleanup"
+  ],
+  "install_directory": "%LOCALAPPDATA%\\Programs\\LARGAN_NSIS_Probe",
+  "scope": "Local development computer; corporate antivirus result is not yet known."
+}

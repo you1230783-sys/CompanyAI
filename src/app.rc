@@ -1,0 +1,43 @@
+#include <windows.h>
+#include "resource.h"
+
+LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL
+IDD_MAIN DIALOGEX 0, 0, 300, 155
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "LARGAN 安裝測試小工具"
+FONT 10, "Segoe UI"
+BEGIN
+    LTEXT "如果你看到這個視窗，測試工具已成功啟動。", -1, 14, 14, 274, 16
+    LTEXT "目前電腦時間：", -1, 14, 39, 274, 14
+    LTEXT "", IDC_TIME, 14, 57, 274, 18
+    LTEXT "這是獨立測試，不連網、不啟動命令列或腳本。\n版本 1.0.0 · LARGAN · Dev: 1230783", -1, 14, 86, 274, 32
+    PUSHBUTTON "重新整理", IDC_REFRESH, 150, 128, 64, 18
+    DEFPUSHBUTTON "關閉", IDCANCEL, 222, 128, 64, 18
+END
+
+1 VERSIONINFO
+ FILEVERSION 1,0,0,0
+ PRODUCTVERSION 1,0,0,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+BEGIN
+ BLOCK "StringFileInfo"
+ BEGIN
+  BLOCK "040404b0"
+  BEGIN
+   VALUE "CompanyName", "LARGAN"
+   VALUE "ProductName", "LARGAN NSIS Probe"
+   VALUE "FileDescription", "安裝驗證小工具（Dev: 1230783）"
+   VALUE "FileVersion", "1.0.0.0"
+   VALUE "ProductVersion", "1.0.0.0"
+   VALUE "LegalCopyright", "Copyright © 2026 LARGAN. All rights reserved."
+   VALUE "OriginalFilename", "LARGAN_NSIS_Probe.exe"
+  END
+ END
+ BLOCK "VarFileInfo"
+ BEGIN
+  VALUE "Translation", 0x0404, 1200
+ END
+END

@@ -1,0 +1,9 @@
+﻿Recorded: 2026-09-18T13:21:29.6529253+08:00
+MSVC: 14.29.30133
+Compiler: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\cl.exe
+main.cpp
+Verified _MSC_FULL_VER=192930159 x64
+NSIS: v3.12
+CRT: static; target: x64
+Native UI self-check: PASS
+No process-launch imports in native tool: PASS

@@ -1,0 +1,3 @@
+#define IDD_MAIN 101
+#define IDC_TIME 1001
+#define IDC_REFRESH 1002
