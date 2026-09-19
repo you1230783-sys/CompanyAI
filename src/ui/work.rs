@@ -2,7 +2,7 @@
 use super::*;
 use crate::{
     attachments::{self, Attachment, AttachmentStatus, Incoming},
-    jobs::{self, Capabilities, Task, TaskStatus, Timing, WorkStore},
+    jobs::{self, Capabilities, Task, TaskStatus, WorkStore},
 };
 use serde_json::Value;
 use std::collections::HashSet;
@@ -35,9 +35,6 @@ pub(super) enum WorkCommand {
     Mode {
         mode: String,
     },
-    Estimate {
-        text: String,
-    },
     CancelTask {
         id: String,
     },
@@ -63,7 +60,6 @@ pub(super) enum WorkEvent {
     Submitted(String, AppResult<()>),
     Polled(String, AppResult<TaskStatus>),
     PollFinished,
-    Estimated(u64, AppResult<Timing>),
 }
 pub(super) struct WorkRuntime {
     pub caps: Option<Capabilities>,
@@ -72,8 +68,6 @@ pub(super) struct WorkRuntime {
     pub incoming: Option<Incoming>,
     pub mode: String,
     pub status: String,
-    pub estimate: Option<Timing>,
-    pub estimate_revision: u64,
     pub uploads: HashSet<String>,
     pub streams: HashSet<String>,
     pub cancellations: std::collections::HashMap<String, Arc<AtomicBool>>,
@@ -95,8 +89,6 @@ impl Default for WorkRuntime {
             incoming: None,
             mode: "stream".into(),
             status: "正在確認一般／背景聊天能力".into(),
-            estimate: None,
-            estimate_revision: 0,
             uploads: HashSet::new(),
             streams: HashSet::new(),
             cancellations: Default::default(),
@@ -115,21 +107,20 @@ impl App {
         let attachments:Vec<_>=self.work.store.drafts(self.active_id.as_deref()).iter().map(|a|json!({
             "id":a.id,"name":a.name,"size":a.size,"state":if a.state=="ready"&&a.token().is_none(){"expired"}else{&a.state},
             "message":a.message,"uploaded_bytes":a.uploaded_bytes,
-            "progress":a.remote.as_ref().and_then(|r|r.progress),"queue_position":a.remote.as_ref().and_then(|r|r.queue_position),
-            "timing":a.remote.as_ref().map(|r|&r.timing)
+            "progress":a.remote.as_ref().and_then(|r|r.progress),"queue_position":a.remote.as_ref().and_then(|r|r.queue_position)
         })).collect();
         let tasks:Vec<_>=self.work.store.tasks.iter().rev().filter(|t| !t.title_generation).map(|t|json!({
             "id":t.request_id,"conversation_id":t.conversation_id,"title":t.title,"mode":t.mode,"tool_events":t.tool_events,"created_at":t.created_at,
             "state":if t.applied && !t.remote.as_ref().is_some_and(TaskStatus::terminal){"stopped"}else{t.remote.as_ref().map(|r|r.state.as_str()).unwrap_or("submitting")},"active":t.active(),"message":t.message,
             "progress":t.remote.as_ref().and_then(|r|r.progress),"queue_position":t.remote.as_ref().and_then(|r|r.queue_position),
-            "timing":t.remote.as_ref().map(|r|&r.timing),"partial":if Some(&t.conversation_id)==self.active_id.as_ref(){t.partial.as_str()}else{""},
+            "partial":if Some(&t.conversation_id)==self.active_id.as_ref(){t.partial.as_str()}else{""},
             "can_retry":t.active()&&t.remote.is_none()&&!self.work.streams.contains(&t.request_id),
             "tool_status":if t.active(){self.work.tool_status.get(&t.request_id)}else{None}
         })).collect();
         // 身分代號、附件 Token 與完整請求不傳入 WebView2。
         json!({"attachments":attachments,"tasks":tasks,"rules":self.work.caps.as_ref().filter(|_|self.work.capability_model == self.config.model && !self.work.capability_loading).map(|c|&c.attachments),
             "modes":self.work.caps.as_ref().map(|c|&c.execution_modes),"mode":self.work.mode,"status":self.work.status,
-            "draft_error":self.check_draft_files().err(),"estimate":self.work.estimate,"can_estimate":self.work.caps.as_ref().is_some_and(|c|c.timing_estimates),
+            "draft_error":self.check_draft_files().err(),
             "pending":self.work.store.pending(self.active_id.as_deref()),"transferring":self.work.incoming.is_some()})
     }
     pub(super) fn work_save(&mut self) -> AppResult<()> {
@@ -457,11 +448,8 @@ impl App {
                     && self.work.caps.as_ref().is_some_and(|c| c.supports(&mode))
                 {
                     self.work.mode = mode;
-                    self.work.estimate = None;
-                    self.work.estimate_revision += 1;
                 }
             }
-            WorkCommand::Estimate { text } => self.estimate_work(&text)?,
             WorkCommand::CancelTask { id } => {
                 let task = self
                     .work
@@ -598,7 +586,6 @@ impl App {
         self.work.store.tasks.push(task.clone());
         self.work_save()?;
         self.set_draft(String::new());
-        self.work.estimate = None;
         self.status = "工作已保存，正在交給伺服器；可切換到其他對話".into();
         self.submit_work(task)?;
         if use_fast && self.config.model != "fast" {
@@ -735,62 +722,6 @@ impl App {
                 })
             })();
             let _ = tx.send(Event::Work(generation, WorkEvent::Submitted(id, result)));
-        });
-        Ok(())
-    }
-    fn estimate_work(&mut self, text: &str) -> AppResult<()> {
-        if !self.can_send() || !self.work.caps.as_ref().is_some_and(|c| c.timing_estimates) {
-            return Err("目前無法估時。".into());
-        }
-        let local = self.ensure_local_conversation()?;
-        let mut messages = self.messages.clone();
-        messages.push(Message::user(text));
-        let tokens = self
-            .work
-            .store
-            .drafts(Some(&local))
-            .iter()
-            .map(|a| {
-                a.token()
-                    .map(str::to_owned)
-                    .ok_or("附件尚未就緒。".to_string())
-            })
-            .collect::<AppResult<Vec<_>>>()?;
-        let body = jobs::chat_request(
-            &self.config.model,
-            &messages,
-            &local,
-            &jobs::new_id()?,
-            &self.work.mode,
-            tokens,
-        )?;
-        self.work.estimate_revision += 1;
-        let revision = self.work.estimate_revision;
-        self.work.status = "正在估算排隊與處理時間…".into();
-        let (config, session, tx, generation) = (
-            self.config.clone(),
-            self.session.clone().ok_or("請先登入。")?,
-            self.tx.clone(),
-            self.generation,
-        );
-        thread::spawn(move || {
-            let result = (|| {
-                let remote = jobs::conversation(&config, &session, &local)?;
-                let mut body = body;
-                body["conversation_id"] = json!(remote);
-                let timing: Timing = jobs::post(
-                    &config,
-                    &session,
-                    &format!("{}/chat/estimate", jobs::PREFIX),
-                    &body,
-                )?;
-                timing.validate()?;
-                Ok(timing)
-            })();
-            let _ = tx.send(Event::Work(
-                generation,
-                WorkEvent::Estimated(revision, result),
-            ));
         });
         Ok(())
     }
@@ -1209,19 +1140,6 @@ impl App {
                 }
             }
             WorkEvent::PollFinished => self.work.polling = false,
-            WorkEvent::Estimated(revision, result) if revision == self.work.estimate_revision => {
-                match result {
-                    Ok(timing) => {
-                        self.work.estimate = Some(timing);
-                        self.work.status = "估時僅供參考，實際排隊以伺服器為準".into();
-                    }
-                    Err(error) => {
-                        self.work.estimate = None;
-                        self.work.status = format!("估時暫不可用：{error}");
-                    }
-                }
-            }
-            _ => {}
         }
         Ok(())
     }

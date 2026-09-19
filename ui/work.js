@@ -30,17 +30,6 @@ function bytesLabel(bytes) {
     ? (bytes / 1048576).toFixed(1) + " MB"
     : (bytes / 1024).toFixed(1) + " KB";
 }
-function durationLabel(seconds) {
-  if (seconds === null || seconds === undefined || !Number.isFinite(seconds))
-    return "未知";
-  if (seconds < 60) return Math.ceil(seconds) + " 秒";
-  if (seconds < 3600) return Math.ceil(seconds / 60) + " 分鐘";
-  return (seconds / 3600).toFixed(1) + " 小時";
-}
-function timingLabel(timing) {
-  if (!timing) return "尚無估時";
-  return `排隊約 ${durationLabel(timing.estimated_wait_seconds)} · 處理約 ${durationLabel(timing.estimated_processing_seconds)} · 合計約 ${durationLabel(timing.estimated_total_seconds)}`;
-}
 const workLabels = {
   reading: "接收檔案",
   upload_pending: "等待上傳",
@@ -149,8 +138,6 @@ $("execution-stream").onclick = () =>
   workCommand({ action: "mode", mode: "stream" });
 $("execution-background").onclick = () =>
   workCommand({ action: "mode", mode: "background" });
-$("estimate-time").onclick = () =>
-  workCommand({ action: "estimate", text: $("prompt").value });
 $("refresh-tasks").onclick = () => workCommand({ action: "refresh" });
 $("show-tasks").onclick = () => showView("tasks");
 function actionButton(label, action) {
@@ -186,14 +173,8 @@ function renderWork() {
     );
     $("execution-" + mode).disabled = fileBatchBusy;
   }
-  $("estimate-time").hidden = !work.can_estimate;
-  $("estimate-time").disabled = !state.can_send || fileBatchBusy;
-  $("timing-estimate").textContent =
-    work.draft_error ||
-    (work.estimate
-      ? timingLabel(work.estimate) + "（僅供參考）"
-      : work.status || "");
-  $("timing-estimate").hidden = !$("timing-estimate").textContent;
+  $("work-status").textContent = work.draft_error || work.status || "";
+  $("work-status").hidden = !$("work-status").textContent;
   $("attachment-list").replaceChildren();
   for (const file of files) {
     const card = node("div", "attachment-card");
@@ -219,8 +200,6 @@ function renderWork() {
       progress.setAttribute("aria-label", file.name + " 處理進度");
       card.append(progress);
     }
-    if (file.timing && ["queued", "processing"].includes(file.state))
-      card.append(node("div", "subtle", timingLabel(file.timing)));
     if (file.message) card.append(node("div", "work-error", file.message));
     if (file.state === "failed")
       card.append(
@@ -264,8 +243,6 @@ function renderWork() {
           `${workLabels[task.state] || task.state}${task.queue_position ? " · 排隊順位 " + task.queue_position : ""}`,
         ),
       );
-      if (task.active)
-        card.append(node("p", "subtle", timingLabel(task.timing)));
       if (task.progress !== null && task.progress !== undefined) {
         const progress = node("progress", "work-progress");
         progress.max = 100;
@@ -374,8 +351,6 @@ window.WorkUI = {
   render: renderWork,
   receive: receiveFile,
   addFiles,
-  durationLabel,
-  timingLabel,
   getFileBusy: () => fileBatchBusy,
 };
 renderWork();

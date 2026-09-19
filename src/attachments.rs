@@ -113,8 +113,6 @@ pub struct AttachmentStatus {
     pub expires_at: Option<u64>,
     #[serde(default)]
     pub error_message: String,
-    #[serde(default)]
-    pub timing: jobs::Timing,
 }
 impl AttachmentStatus {
     pub fn validate(&self) -> AppResult<()> {
@@ -141,7 +139,7 @@ impl AttachmentStatus {
         {
             return Err("附件狀態回應不正確。".into());
         }
-        self.timing.validate()
+        Ok(())
     }
 }
 impl Attachment {

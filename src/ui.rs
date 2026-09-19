@@ -299,8 +299,6 @@ impl App {
             c.draft = self.draft.clone();
         }
         self.draft_revision += 1;
-        self.work.estimate = None;
-        self.work.estimate_revision += 1;
     }
     /// 換頁前保留草稿，避免托盤還原或快捷鍵開新對話時丟失輸入。
     fn preserve_draft(&mut self) -> AppResult<()> {
@@ -652,8 +650,6 @@ impl App {
             Command::Draft { text } => {
                 if self.busy != "chat" && text.encode_utf16().count() <= 16_000 {
                     self.draft = text;
-                    self.work.estimate = None;
-                    self.work.estimate_revision += 1;
                 }
             }
             Command::Chat { text, action } => self.begin_chat(text, &action)?,
@@ -777,8 +773,6 @@ impl App {
                     self.config.model = id;
                     self.work.status = "正在重新確認此模型的附件規則…".into();
                     self.refresh_work_capabilities();
-                    self.work.estimate = None;
-                    self.work.estimate_revision += 1;
                     storage::save_config(&self.root, &self.config)?;
                 }
             }

@@ -117,7 +117,7 @@ window.runSelfTest = async () => {
       },
       modes: ["stream", "background"],
       mode: "stream",
-      can_estimate: true,
+      status: "附件與執行模式由網站提供",
       attachments: [
         {
           id: "file1",
@@ -143,6 +143,11 @@ window.runSelfTest = async () => {
     };
     LMUI.receive(fixture);
     await frame();
+    check(!document.getElementById("estimate-time"), "time estimate control removed");
+    const modeBox = document.querySelector(".execution-switch").getBoundingClientRect();
+    const statusBox = document.getElementById("work-status").getBoundingClientRect();
+    check(statusBox.left >= modeBox.right && statusBox.top < modeBox.bottom,
+      "work status shares the mode row");
     check(
       document.querySelectorAll(".attachment-card").length === 1,
       "attachment processing card",
@@ -175,10 +180,6 @@ window.runSelfTest = async () => {
     LMUI.receive(fixture);
     await frame();
     check(LMUI.atBottom(), "stream follows bottom");
-    check(
-      WorkUI.durationLabel(null) === "未知",
-      "unknown estimate is not zero",
-    );
     fixture.work.attachments = Array.from({ length: 20 }, (_, i) => ({
       id: "limit" + i,
       name: "existing.png",
@@ -359,6 +360,33 @@ window.runSelfTest = async () => {
     document.getElementById("settings-button").click();
     const settings = document.getElementById("settings-dialog"),
       box = settings.getBoundingClientRect();
+    // 在真正 WebView2 排版後核對邊界，涵蓋大字體及較窄設定面板。
+    const settingsContent = settings.querySelector(".settings-content");
+    const originalFont = fixture.config.font_size;
+    for (const font of [12, 14, 20]) {
+      fixture.config.font_size = font;
+      LMUI.receive(fixture);
+      for (const width of [320, 520]) {
+        settings.style.width = width + "px";
+        await frame();
+        check(settingsContent.scrollWidth <= settingsContent.clientWidth + 1,
+          `settings has no horizontal overflow at ${width}px / ${font}px`);
+        for (const row of settings.querySelectorAll(".option-row")) {
+          const circle = row.querySelector("input").getBoundingClientRect();
+          const text = row.querySelector("span").getBoundingClientRect();
+          check(circle.right <= text.left + 0.5 && circle.top < text.top + parseFloat(getComputedStyle(row).lineHeight),
+            `radio circle is beside the first text line: ${row.querySelector("input").id}, ${width}px / ${font}px`);
+          check(row.scrollWidth <= row.clientWidth + 1,
+            "radio label is not horizontally clipped");
+        }
+        for (const row of settings.querySelectorAll(".input-row,.button-row,fieldset")) {
+          check(row.scrollWidth <= row.clientWidth + 1, "settings controls fit their row");
+        }
+      }
+    }
+    settings.style.width = "";
+    fixture.config.font_size = originalFont;
+    LMUI.receive(fixture);
     settings.dispatchEvent(
       new PointerEvent("pointerdown", {
         clientX: box.left - 2,

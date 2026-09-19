@@ -152,15 +152,11 @@
             </div>
             <div class="execution-controls">
               <div class="execution-switch" aria-label="執行模式">
-                
-                <button id="execution-stream" hidden>一般</button
-                ><button id="execution-background" hidden>背景處理</button>
+                <button id="execution-stream" hidden>一般</button>
+                <button id="execution-background" hidden>背景處理</button>
               </div>
-              <button id="estimate-time" class="secondary-button" hidden>
-                估算時間
-              </button>
+              <p id="work-status" class="subtle work-hint" role="status"></p>
             </div>
-            <p id="timing-estimate" class="subtle work-hint"></p>
             <details class="attachment-help" hidden>
               <summary>附件規則</summary>
               <p id="attachment-rules"></p>
@@ -373,13 +369,13 @@
           <label class="check-row"><input id="selection-icon" type="checkbox" />選取文字時顯示 AI 圖示</label>
           <p class="subtle">在支援的程式中偵測選取範圍與位置；點擊圖示才擷取文字，不會因選取而上傳內容。</p>
           <fieldset><legend>Enter 行為</legend>
-            <label><input type="radio" name="enter-behavior" id="enter-newline" />換行</label>
-            <label><input type="radio" name="enter-behavior" id="enter-send" />送出</label>
+            <label class="option-row"><input type="radio" name="enter-behavior" id="enter-newline" /><span>換行</span></label>
+            <label class="option-row"><input type="radio" name="enter-behavior" id="enter-send" /><span>送出</span></label>
           </fieldset>
           <p id="enter-hint" class="subtle"></p>
           <fieldset><legend>快捷操作的模型</legend>
-            <label><input type="radio" name="quick-model" id="quick-fast" />簡單任務自動使用快速模型</label>
-            <label><input type="radio" name="quick-model" id="quick-current" />維持目前選擇的模型</label>
+            <label class="option-row"><input type="radio" name="quick-model" id="quick-fast" /><span>簡單任務自動使用快速模型</span></label>
+            <label class="option-row"><input type="radio" name="quick-model" id="quick-current" /><span>維持目前選擇的模型</span></label>
           </fieldset>
           <p id="quick-model-hint" class="subtle"></p>
           <label class="check-row"><input id="always-new-chat" type="checkbox" />永遠開啟新對話</label>

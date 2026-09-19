@@ -1,4 +1,4 @@
-Recorded: 2026-09-19T09:12:56.0173437+08:00
+Recorded: 2026-09-19T10:36:53.1776353+08:00
 Host OS: Microsoft Windows NT 10.0.26200.0
 Visual Studio: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools
 MSVC: 14.29.30133
@@ -9,8 +9,8 @@ Windows SDK: 10.0.19041.0\
 Target: x86_64-pc-windows-msvc
 CRT: static
 Rust binaries: Y:\Rust\.tools\rustup\toolchains\1.98.1-x86_64-pc-windows-msvc\bin
-Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-832bacd16f7e4fcb998dcd52b011c565
-EXE SHA256: 21C9B1954DE3A502067F8A3612729DBA7D65E2C8FE4CC8FD45D9E44E4CE988B4
+Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-9787a7c5a143429a831b90aeeb5aff66
+EXE SHA256: 2B8B1574B1EAB4C6AFF4FF0FB73BDE2E3F503EC34F175AAD07533E47ECE3EF14
 
 rustc 1.98.1 (48a229cea 2026-09-01)
 binary: rustc
@@ -34,8 +34,8 @@ File Type: EXECUTABLE IMAGE
     user32.dll
     kernel32.dll
     oleaut32.dll
-    shell32.dll
     ole32.dll
+    shell32.dll
     combase.dll
     shlwapi.dll
     propsys.dll
@@ -55,8 +55,8 @@ File Type: EXECUTABLE IMAGE
 
         3000 .data
        18000 .pdata
-      1A7000 .rdata
+      1A4000 .rdata
         2000 .reloc
        33000 .rsrc
-      22A000 .text
+      21B000 .text
         1000 _RDATA

@@ -1,4 +1,4 @@
-//! 0.5 桌面契約：能力、附件工作、持久任務、估時與串流。
+//! 0.5 桌面契約：能力、附件工作、持久任務與串流。
 //! 網站負責排隊／轉檔／模型執行；REST 是結果真相來源，SSE 與通知只改善即時呈現。
 use crate::{
     attachments::{Attachment, AttachmentRules, AttachmentStatus},
@@ -23,8 +23,6 @@ pub struct Capabilities {
     pub principal_id: String,
     pub execution_modes: Vec<String>,
     pub attachments: AttachmentRules,
-    #[serde(default)]
-    pub timing_estimates: bool,
 }
 impl Capabilities {
     pub fn validate(&self) -> AppResult<()> {
@@ -45,33 +43,6 @@ impl Capabilities {
         self.execution_modes.iter().any(|m| m == mode)
     }
 }
-#[derive(Clone, Default, Serialize, Deserialize)]
-pub struct Timing {
-    pub estimated_wait_seconds: Option<f64>,
-    pub estimated_processing_seconds: Option<f64>,
-    pub estimated_total_seconds: Option<f64>,
-    pub sample_count: Option<u64>,
-    pub confidence: Option<String>,
-    pub generated_at: Option<String>,
-}
-impl Timing {
-    pub fn validate(&self) -> AppResult<()> {
-        if [
-            self.estimated_wait_seconds,
-            self.estimated_processing_seconds,
-            self.estimated_total_seconds,
-        ]
-        .iter()
-        .flatten()
-        .any(|v| !v.is_finite() || *v < 0.0)
-            || self.confidence.as_ref().is_some_and(|v| v.len() > 30)
-            || self.generated_at.as_ref().is_some_and(|v| v.len() > 50)
-        {
-            return Err("估時資料格式不正確。".into());
-        }
-        Ok(())
-    }
-}
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TaskStatus {
     pub task_id: String,
@@ -81,8 +52,6 @@ pub struct TaskStatus {
     pub progress: Option<f64>,
     #[serde(default)]
     pub queue_position: Option<u32>,
-    #[serde(default)]
-    pub timing: Timing,
     #[serde(default)]
     pub result: Option<Value>,
     #[serde(default)]
@@ -102,7 +71,6 @@ impl TaskStatus {
         {
             return Err("任務回應格式不正確。".into());
         }
-        self.timing.validate()?;
         if self.state == "completed" {
             protocol::assistant_text(
                 &self
@@ -705,6 +673,31 @@ pub fn submit_cancellable(
 mod tests {
     use super::*;
     #[test]
+    fn old_timing_fields_do_not_break_task_or_attachment_recovery() {
+        // 舊後端與已保存紀錄可能仍帶 timing；移除功能後忽略額外欄位，
+        // 實際的狀態、進度及排隊順位仍須正常還原，不必遷移或清除工作。
+        let legacy = json!({
+            "task_id":"task_old", "client_request_id":"request_old",
+            "job_id":"attachment_old", "state":"queued", "progress":25,
+            "queue_position":3,
+            "timing":{"estimated_total_seconds":60,"confidence":"medium"}
+        });
+        let task: TaskStatus = serde_json::from_value(legacy.clone()).unwrap();
+        task.validate().unwrap();
+        assert_eq!(task.progress, Some(25.0));
+        assert_eq!(task.queue_position, Some(3));
+        assert!(serde_json::to_value(task).unwrap().get("timing").is_none());
+        let attachment: AttachmentStatus = serde_json::from_value(legacy).unwrap();
+        attachment.validate().unwrap();
+        assert_eq!(attachment.progress, Some(25.0));
+        assert_eq!(attachment.queue_position, Some(3));
+        assert!(serde_json::to_value(attachment)
+            .unwrap()
+            .get("timing")
+            .is_none());
+    }
+
+    #[test]
     fn purpose_flags_are_exclusive_and_chat_modes_stay_consistent() {
         let mut value = chat_request(
             "fast",
@@ -806,7 +799,6 @@ mod tests {
             state: "completed".into(),
             progress: None,
             queue_position: None,
-            timing: Timing::default(),
             result: Some(
                 json!({"choices":[{"message":{"role":"assistant","content":"完整答案"}}]}),
             ),
@@ -848,7 +840,6 @@ mod tests {
             state: "failed".into(),
             progress: None,
             queue_position: None,
-            timing: Timing::default(),
             result: None,
             error_message: "failed".into(),
         };
@@ -922,7 +913,6 @@ mod tests {
                     state: state.into(),
                     progress: None,
                     queue_position: None,
-                    timing: Timing::default(),
                     result: None,
                     error_message: String::new(),
                 }),

@@ -25,14 +25,11 @@ struct ChatJob {
     polls: usize,
     answer: String,
 }
-fn timing() -> Value {
-    json!({"estimated_wait_seconds":2,"estimated_processing_seconds":4,"estimated_total_seconds":6,"sample_count":12,"confidence":"medium","generated_at":crate::notifications::now_text()})
-}
 fn attachment(id: &str, file: &FileJob) -> Value {
-    json!({"job_id":id,"state":file.state,"progress":if file.state=="ready"{Some(100)}else{None},"queue_position":if file.state=="queued"{Some(1)}else{None},"attachment_token":if file.state=="ready"{Some(format!("attachment_{id}"))}else{None},"expires_at":crate::unix_now()+3600,"timing":timing(),"error_message":""})
+    json!({"job_id":id,"state":file.state,"progress":if file.state=="ready"{Some(100)}else{None},"queue_position":if file.state=="queued"{Some(1)}else{None},"attachment_token":if file.state=="ready"{Some(format!("attachment_{id}"))}else{None},"expires_at":crate::unix_now()+3600,"error_message":""})
 }
 fn task(id: &str, task: &ChatJob) -> Value {
-    json!({"task_id":id,"client_request_id":task.request["client_request_id"],"state":task.state,"queue_position":if task.state=="queued"{Some(1)}else{None},"progress":null,"timing":timing(),"error_message":"","result":if task.state=="completed"{json!({"choices":[{"message":{"role":"assistant","content":task.answer}}]})}else{Value::Null}})
+    json!({"task_id":id,"client_request_id":task.request["client_request_id"],"state":task.state,"queue_position":if task.state=="queued"{Some(1)}else{None},"progress":null,"error_message":"","result":if task.state=="completed"{json!({"choices":[{"message":{"role":"assistant","content":task.answer}}]})}else{Value::Null}})
 }
 fn write_reply(stream: &mut TcpStream, status: u32, mime: &str, body: &str) -> AppResult<()> {
     stream.write_all(format!("HTTP/1.1 {status} Result\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).as_bytes()).map_err(|e|e.to_string())
@@ -53,8 +50,7 @@ pub(super) fn serve_work(
         || route == format!("{prefix}/capabilities")
         || route.starts_with(&format!("{prefix}/conversations"))
         || route.starts_with(&format!("{prefix}/attachments"))
-        || route.starts_with(&format!("{prefix}/tasks"))
-        || route == format!("{prefix}/chat/estimate");
+        || route.starts_with(&format!("{prefix}/tasks"));
     if !relevant {
         return Ok(false);
     }
@@ -77,7 +73,7 @@ pub(super) fn serve_work(
                 ".webp", ".msg",
             ]
         };
-        json!({"contract_version":1,"principal_id":format!("demo_{owner}"),"execution_modes":["sync","stream","background"],"timing_estimates":true,"attachments":{"enabled":true,"max_count":20,"max_file_bytes":10485760,"max_total_bytes":52428800,"allowed_extensions":extensions,"allowed_mime_types":[]}})
+        json!({"contract_version":1,"principal_id":format!("demo_{owner}"),"execution_modes":["sync","stream","background"],"attachments":{"enabled":true,"max_count":20,"max_file_bytes":10485760,"max_total_bytes":52428800,"allowed_extensions":extensions,"allowed_mime_types":[]}})
     } else if method == "POST" && route == format!("{prefix}/conversations") {
         let local = json_body["client_conversation_id"]
             .as_str()
@@ -88,8 +84,6 @@ pub(super) fn serve_work(
             .entry((owner.into(), local.into()))
             .or_insert_with(|| format!("conversation_{local}"));
         json!({"conversation_id":id})
-    } else if method == "POST" && route == format!("{prefix}/chat/estimate") {
-        timing()
     } else if method == "POST"
         && route.starts_with(&format!("{prefix}/conversations/"))
         && route.ends_with("/attachments")

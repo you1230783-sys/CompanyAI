@@ -1,7 +1,14 @@
-# LM_AI 0.8.3 — Windows 工作助理
+# LM_AI 0.8.4 — Windows 工作助理
 
 Rust 桌面程式，提供公司瀏覽器登入、文字／附件對話、串流、持久背景任務、選字快捷鍵、網站通知及 Classic Outlook 唯讀助理。
 介面使用 WebView2、內嵌 HTML/CSS 與離線 Markdown 套件；不需 Node、Python 或外部 CDN。
+
+## 0.8.4 介面整理
+
+- 移除時間估算按鈕、估時請求，以及附件／任務的預估時間；保留實際狀態、進度與排隊順位。
+- 狀態說明與「一般／背景處理」排在同一列，長文字在可用空間內換行。
+- 設定面板略微加寬，控制項可收縮與換行，消除水平捲軸；單選圓圈與選項文字並排。
+- EXE、更新 JSON、原始碼與驗證文件一併交付；不重製安裝包或離線 ZIP。驗證範圍見 [0.8.4 驗收](docs/VALIDATION_0_8_4.md)。
 
 ## 0.8.3 隔離內網連線
 
@@ -74,7 +81,7 @@ Rust 桌面程式，提供公司瀏覽器登入、文字／附件對話、串流
 選「一般」逐段閱讀串流，或「背景處理」先取得任務，完成後收到提示。按迴紋針選檔，也可直接在輸入框貼上圖片。
 文件與圖片合計最多 20 個；副檔名、單檔及合計大小由後端提供，不需為一般規則調整更新 EXE。
 附件先上傳網站轉換，卡片顯示排隊／轉檔／可送出／失敗；全部就緒後才可送出 AI 分析。桌面不處理 MD 轉換或 OCR。
-可按「估算時間」查看排隊、處理與總時間；未知顯示未知，估算不是完成保證。
+0.8.4 起不再估算完成時間；附件及任務卡片仍顯示伺服器回報的實際狀態、進度及排隊順位。
 
 任務面板可查看狀態、回到對話或取消。可同時處理不同對話，同一對話先等當前工作結束；最多追蹤 8 個未完成聊天工作。
 串流斷線保留片段、改查原任務；退出後重開並登入同帳號，也會查回結果。重試沿用 request_id，不直接新建重複工作。
@@ -119,7 +126,7 @@ Token、對話與通知分別為 `session.dpapi`、`history.dpapi`、`notificati
 - [DESKTOP_0_6_CONTRACT.md](docs/DESKTOP_0_6_CONTRACT.md)：全站鈴鐺、模型規則與 Outlook MSG。
 - [VALIDATION_0_6.md](docs/VALIDATION_0_6.md)：新版測試與公司驗收。
 
-- [DESKTOP_0_5_CONTRACT.md](docs/DESKTOP_0_5_CONTRACT.md)：附件、模式、持久任務、估時與新通知契約。
+- [DESKTOP_0_5_CONTRACT.md](docs/DESKTOP_0_5_CONTRACT.md)：附件、模式、持久任務與通知的歷史契約；估時功能於 0.8.4 移除。
 - [VALIDATION_0_5.md](docs/VALIDATION_0_5.md)：新版操作、本機測試與公司驗收。
 - [WEB_INTEGRATION.md](docs/WEB_INTEGRATION.md)：既有登入、聊天、版本與模型契約。
 - [NOTIFICATIONS_AND_OUTLOOK.md](docs/NOTIFICATIONS_AND_OUTLOOK.md)：本次網站需新增的通知 API、WebSocket 與 Outlook 分析格式。
@@ -134,7 +141,7 @@ Token、對話與通知分別為 `session.dpapi`、`history.dpapi`、`notificati
 .\dist\LM_AI.exe --demo
 ```
 
-齒輪 → 登入，在本機頁面允許授權後可測附件狀態、串流、背景任務、估時、通知與已讀。模擬後端不做真實轉檔，狀態僅保存在記憶體。Outlook 助理會使用虛構郵件，不讀真實信箱。
+齒輪 → 登入，在本機頁面允許授權後可測附件狀態、串流、背景任務、通知與已讀。模擬後端不做真實轉檔，狀態僅保存在記憶體。Outlook 助理會使用虛構郵件，不讀真實信箱。
 只監聽 loopback，所有回覆明示本機模擬；不連公司服務。一般使用不需要 Rust 或 Visual Studio。
 
 ## 使用 VS Code 編輯

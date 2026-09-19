@@ -553,8 +553,6 @@ textarea::placeholder {
   transition: opacity 250ms ease;
 }
 .model-notice.fade { opacity: 0; }
-.settings-content fieldset { border: 0; padding: 8px 0; margin: 8px 0; }
-.settings-content fieldset label { display: block; padding: 4px 0; }
 .model-picker {
   position: relative;
 }
@@ -810,8 +808,9 @@ dialog::backdrop {
   backdrop-filter: blur(3px);
 }
 #settings-dialog {
-  width: 470px;
+  width: 520px;
   max-height: 85vh;
+  overflow: hidden;
 }
 .dialog-heading {
   display: flex;
@@ -825,11 +824,15 @@ dialog::backdrop {
   font-weight: 550;
 }
 .settings-content {
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   max-height: calc(85vh - 130px);
-  padding-right: 5px;
+  padding-right: 8px;
+  scrollbar-gutter: stable;
+  overflow-wrap: anywhere;
 }
 .settings-content section {
+  min-width: 0;
   padding: 16px 0;
   border-top: 1px solid var(--line);
 }
@@ -877,7 +880,8 @@ h3 {
   display: flex;
   gap: 8px;
 }
-input:not([type="range"]):not([type="checkbox"]) {
+/* 文字輸入框的寬度與內距不能套到 radio，否則圓圈會佔滿一行。 */
+input:not([type="range"]):not([type="checkbox"]):not([type="radio"]) {
   width: 100%;
   min-width: 0;
   border: 1px solid var(--line);
@@ -890,8 +894,49 @@ input[type="range"] {
   accent-color: #487c62;
   margin: 14px 0 0;
 }
-input[type="checkbox"] {
+input[type="checkbox"],
+input[type="radio"] {
   accent-color: #487c62;
+}
+/* 欄位可縮小、按鈕可換行，避免靠裁切內容來消除設定頁的水平捲軸。 */
+.settings-content .input-row {
+  flex-wrap: wrap;
+}
+.settings-content #hotkey {
+  flex: 1 1 10rem;
+  width: auto;
+}
+.settings-content .input-row button {
+  flex: 0 0 auto;
+}
+.settings-content fieldset {
+  min-inline-size: 0;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.settings-content legend {
+  max-width: 100%;
+  font-size: 0.86rem;
+}
+.option-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.7;
+}
+.option-row + .option-row {
+  margin-top: 6px;
+}
+.option-row input[type="radio"] {
+  flex: 0 0 auto;
+  width: 1em;
+  height: 1em;
+  margin: 0.35em 0 0;
+}
+.option-row span {
+  min-width: 0;
 }
 label {
   font-size: 0.86rem;
@@ -1119,11 +1164,13 @@ output {
 .execution-controls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   margin-top: 8px;
 }
 .execution-switch {
   display: flex;
+  flex: 0 0 auto;
+  white-space: nowrap;
   gap: 2px;
   border-radius: 8px;
 }
@@ -1143,6 +1190,12 @@ output {
 .attachment-help {
   font-size: 0.78em;
   margin: 5px 0;
+}
+.execution-controls .work-hint {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 .attachment-help {
   color: var(--muted);
