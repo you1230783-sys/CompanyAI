@@ -320,7 +320,7 @@ HTTP 200：
 - Token 由 Windows DPAPI 加密，綁定目前 Windows 使用者及實際端點。換端點需重新登入；只換模型不必。
 - 對話成功回覆後以 Windows 使用者 DPAPI 加密保存；未送出草稿只在記憶體。登出清除本機 Token，不代表伺服器端撤銷。
 - 目前明確採指定內網 HTTP；HTTP 會明文傳輸 Token 和內容。若日後啟用 HTTPS，使用 Windows 信任庫，不略過憑證錯誤。
-- 使用 WinHTTP 自動代理；登入／metadata 讀取逾時 15 秒，聊天讀取逾時 120 秒，屬各階段逾時而非整次硬性總時限。
+- 0.8.3 起固定公司 origin `http://lp2-en-server:80` 與 loopback 使用 WinHTTP 直接連線；其他 origin 使用系統自動代理。登入／metadata 讀取逾時 15 秒，聊天讀取逾時 120 秒，屬各階段逾時而非整次硬性總時限。
 - 無自訂代理帳密／用戶端憑證選取；不需要 CORS。SSO、Cookie 和 CSRF 由瀏覽器授權頁處理。
 - 正式模式不開本機 HTTP port，只有 --demo 會在 127.0.0.1 隨機埠啟動模擬服務。
 
@@ -330,9 +330,17 @@ HTTP 200：
 
 網路錯誤現在包含用途與 API 階段，例如「申請登入碼失敗（尚未開啟瀏覽器）：Windows 網路錯誤 10022（WinHttpSendRequest）」。這只是訊息格式範例，尚未在公司故障電腦確認實際失敗階段。新增診斷不包含網址、查詢參數、Header、本文、登入碼或 Token；請回報完整錯誤文字即可，不需提供憑證。
 
-10022 對應 WSAEINVAL，表示參數或連線狀態無效，不能只憑代碼判定為防毒、代理或 WebView2 缺漏。維持 WinHTTP 自動代理、系統憑證驗證與不自動重送 POST 的規則；不以改直連或關閉防毒作為預設修正。回傳成功但寫入 0 bytes 時改報傳送無進度，不讀取可能殘留的 GetLastError；這是錯誤呈現修正，不代表已證實為本次 10022 的原因。
+10022 對應 WSAEINVAL，表示參數或連線狀態無效，不能只憑代碼判定為防毒、代理或 WebView2 缺漏。0.8.2 診斷版仍使用自動代理。回傳成功但寫入 0 bytes 時改報傳送無進度，不讀取可能殘留的 GetLastError；這是錯誤呈現修正，不代表已證實為本次 10022 的原因。
 
 參考：[Microsoft WinHTTP](https://learn.microsoft.com/en-us/windows/win32/api/winhttp/nf-winhttp-winhttpopen)、[Windows Socket 錯誤碼](https://learn.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2)。
+
+### 0.8.3 隔離內網直連
+
+公司實測回報模型與 device 都在 WinHttpOpen 回傳 10022，尚未呼叫 WinHttpConnect 或送出 HTTP 請求。使用者確認公司網路與外網完全隔離，Windows 代理為「自動偵測」。因此固定公司 origin 改用 `WINHTTP_ACCESS_TYPE_NO_PROXY`，不再為這個目的地初始化 `WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY`。這是針對已確認的失敗階段與部署環境調整，仍不能斷言 Trend 或某個 Windows 服務就是根因。
+
+規則以 `src/config.rs` 的 SERVER_URL 完整 origin（scheme、host、有效 port）比對；不將任意單段主機名、私有 IP、相似網域或其他埠號一律直連。HTTP API、更新下載及 WebSocket 使用同一個 session 建立函式。若日後公司要求此 origin 經代理，需同步調整桌面連線契約，不能只改 Windows 代理設定而預期此版自動跟隨。
+
+不修改系統代理、不增加外網探測、不呼叫 PowerShell，也不重送 POST。HTTPS 仍使用系統信任憑證。新的初始化錯誤會區分 `WinHttpOpen/direct` 與 `WinHttpOpen/automatic-proxy`；若直連仍在 WinHttpOpen 出現 10022，應繼續排查該電腦的 WinHTTP／網路元件，不能視為已修復。
 
 ## 11. 網站驗收順序
 

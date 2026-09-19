@@ -1,4 +1,5 @@
-//! 使用 Windows 原生 WinHTTP：沿用系統憑證信任與代理設定，不需附帶 OpenSSL DLL。
+//! 使用 Windows 原生 WinHTTP：固定公司內網直接連線，其他主機沿用系統代理。
+//! HTTPS 沿用系統憑證信任，不需附帶 OpenSSL DLL。
 //! 所有同步請求都在背景執行緒呼叫，避免凍結介面。
 use crate::{wide, AppResult};
 use std::{ffi::c_void, ptr};
@@ -27,6 +28,44 @@ impl Drop for Handle {
         unsafe {
             WinHttpCloseHandle(self.0);
         }
+    }
+}
+
+/// 公司服務位於與外網隔離的固定內網，直接連線，不依賴自動代理服務。
+/// 只比對完整 origin（scheme、host、有效 port），不以「沒有句點」或私有 IP
+/// 推測任意主機都能直連；未來其他服務仍保留 Windows 自動代理設定。
+fn uses_direct_connection(url: &Url) -> bool {
+    if matches!(url.host_str(), Some("127.0.0.1" | "[::1]" | "localhost")) {
+        // 本機示範與測試不經公司代理，避免把 loopback 請求轉送出去。
+        return true;
+    }
+    Url::parse(crate::config::SERVER_URL).is_ok_and(|company| company.origin() == url.origin())
+}
+
+/// HTTP 與通知 WebSocket 共用相同連線規則。
+/// WinHttpOpen 只建立 session，不會重送登入／聊天，也不修改 Windows 代理設定。
+fn open_session(url: &Url, agent: &str) -> AppResult<Handle> {
+    let direct = uses_direct_connection(url);
+    // SAFETY: 字串在同步呼叫期間有效；代理名稱及 bypass 在這兩種模式均須為 NULL。
+    unsafe {
+        Handle::checked(
+            if direct {
+                "WinHttpOpen/direct"
+            } else {
+                "WinHttpOpen/automatic-proxy"
+            },
+            WinHttpOpen(
+                wide(agent).as_ptr(),
+                if direct {
+                    WINHTTP_ACCESS_TYPE_NO_PROXY
+                } else {
+                    WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY
+                },
+                ptr::null(),
+                ptr::null(),
+                0,
+            ),
+        )
     }
 }
 
@@ -88,22 +127,8 @@ pub fn watch_notifications(
         return Err("通知驗證資料不正確。".into());
     }
     let host = wide(url.host_str().ok_or("通知主機無效。")?);
-    let local = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
     unsafe {
-        let session = Handle::checked(
-            "WinHttpOpen",
-            WinHttpOpen(
-                wide("LM_AI/notifications").as_ptr(),
-                if local {
-                    WINHTTP_ACCESS_TYPE_NO_PROXY
-                } else {
-                    WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY
-                },
-                ptr::null(),
-                ptr::null(),
-                0,
-            ),
-        )?;
+        let session = open_session(url, "LM_AI/notifications")?;
         if WinHttpSetTimeouts(session.0, 10_000, 10_000, 15_000, 15_000) == 0 {
             return Err(network_error("WinHttpSetTimeouts"));
         }
@@ -374,24 +399,9 @@ fn exchange_inner(
             &format!("Accept: {response_type}"),
         );
     }
-    // 本機示範不經代理，避免系統 PAC 或企業代理把 loopback 請求轉送出去。
-    let proxy_mode = if matches!(url.host_str(), Some("127.0.0.1" | "[::1]" | "localhost")) {
-        WINHTTP_ACCESS_TYPE_NO_PROXY
-    } else {
-        WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY
-    };
     // SAFETY: 傳入的 UTF-16 字串與 body 在整次同步請求期間有效；所有輸出緩衝區有明確長度。
     unsafe {
-        let session = Handle::checked(
-            "WinHttpOpen",
-            WinHttpOpen(
-                wide(concat!("CompanyAI/", env!("CARGO_PKG_VERSION"))).as_ptr(),
-                proxy_mode,
-                ptr::null(),
-                ptr::null(),
-                0,
-            ),
-        )?;
+        let session = open_session(url, concat!("CompanyAI/", env!("CARGO_PKG_VERSION")))?;
         if WinHttpSetTimeouts(session.0, 10_000, 10_000, timeout_ms, timeout_ms) == 0 {
             return Err(network_error("WinHttpSetTimeouts"));
         }
@@ -602,6 +612,71 @@ mod tests {
         net::TcpListener,
         thread,
     };
+
+    #[test]
+    fn direct_connection_is_limited_to_fixed_company_origin_and_loopback() {
+        for (address, direct) in [
+            ("http://lp2-en-server/lm_server/api/desktop/models", true),
+            (
+                "http://LP2-EN-SERVER:80/lm_server/api/desktop/oauth/device",
+                true,
+            ),
+            (
+                "http://lp2-en-server/lm_server/desktop/releases/LM_AI.exe",
+                true,
+            ),
+            ("http://127.0.0.1:12345/demo", true),
+            ("http://localhost:12345/demo", true),
+            ("http://[::1]:12345/demo", true),
+            ("http://lp2-en-server.example.invalid/", false),
+            ("http://other-intranet-server/", false),
+            ("http://10.0.0.1/", false),
+            ("http://lp2-en-server:8080/", false),
+            ("https://lp2-en-server/", false),
+            ("http://example.invalid/?next=http://lp2-en-server", false),
+        ] {
+            assert_eq!(
+                uses_direct_connection(&Url::parse(address).unwrap()),
+                direct,
+                "{address}"
+            );
+        }
+    }
+
+    #[test]
+    fn company_sessions_actually_use_winhttp_no_proxy() {
+        // 只建立並查詢 session，不連到公司主機、不需要外網，亦不改系統代理。
+        // 查真正的 Windows handle，避免只測選版函式卻漏掉 WinHttpOpen 參數。
+        let url = Url::parse(crate::config::SERVER_URL).unwrap();
+        for agent in [
+            concat!("CompanyAI/", env!("CARGO_PKG_VERSION")),
+            "LM_AI/notifications",
+        ] {
+            let session = open_session(&url, agent).unwrap();
+            let mut info = WINHTTP_PROXY_INFO::default();
+            let mut size = std::mem::size_of_val(&info) as u32;
+            unsafe {
+                let result = WinHttpQueryOption(
+                    session.0,
+                    WINHTTP_OPTION_PROXY,
+                    (&mut info as *mut WINHTTP_PROXY_INFO).cast(),
+                    &mut size,
+                );
+                let error = std::io::Error::last_os_error();
+                let has_proxy = !info.lpszProxy.is_null();
+                // QueryOption 可能配置字串；即使測試失敗，也先按 API 契約釋放。
+                if !info.lpszProxy.is_null() {
+                    windows_sys::Win32::Foundation::GlobalFree(info.lpszProxy.cast());
+                }
+                if !info.lpszProxyBypass.is_null() {
+                    windows_sys::Win32::Foundation::GlobalFree(info.lpszProxyBypass.cast());
+                }
+                assert_ne!(result, 0, "{error}");
+                assert_eq!(info.dwAccessType, WINHTTP_ACCESS_TYPE_NO_PROXY);
+                assert!(!has_proxy);
+            }
+        }
+    }
 
     #[test]
     fn invalid_timeout_reports_winhttp_stage_without_sending_credentials() {

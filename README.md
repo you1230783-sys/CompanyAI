@@ -1,7 +1,14 @@
-# LM_AI 0.8.2 — Windows 工作助理
+# LM_AI 0.8.3 — Windows 工作助理
 
 Rust 桌面程式，提供公司瀏覽器登入、文字／附件對話、串流、持久背景任務、選字快捷鍵、網站通知及 Classic Outlook 唯讀助理。
 介面使用 WebView2、內嵌 HTML/CSS 與離線 Markdown 套件；不需 Node、Python 或外部 CDN。
+
+## 0.8.3 隔離內網連線
+
+- 固定公司來源 `http://lp2-en-server:80` 改用 WinHTTP 直接連線，避免先初始化自動代理；模型、登入、聊天、附件、更新與通知共用規則。
+- 只對完整公司 origin 與既有 loopback 生效，其他主機仍使用自動代理；不修改 Windows 設定，不需連外網或執行外部腳本。
+- 針對 0.8.2 已定位的 `10022（WinHttpOpen）` 提供修正候選；公司電腦仍需實測，尚未確定自動代理元件失敗的根因。
+- 交付 EXE、JSON 與原始碼，不重製安裝包或 ZIP；驗證紀錄見 [0.8.3 驗收](docs/VALIDATION_0_8_3.md)。
 
 ## 0.8.2 連線診斷
 
