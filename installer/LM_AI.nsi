@@ -13,28 +13,38 @@ Unicode true
 !ifndef SETUP_OUTPUT
 !define SETUP_OUTPUT "..\dist\LM_AI_Setup.exe"
 !endif
+; 測試包可使用獨立目錄；正式包不接受編譯參數或 /D 改變公司指定位置。
+!ifdef TEST_PACKAGE
 !ifndef PRODUCT_DIR
+!error "TEST_PACKAGE requires an isolated PRODUCT_DIR"
+!endif
+!else
 !define PRODUCT_DIR "LM_AI"
 !endif
+!define INSTALL_ROOT "C:\largan"
+!define INSTALL_PATH "${INSTALL_ROOT}\${PRODUCT_DIR}"
+!define PUBLISHER "Largan, Inc."
+; 舊登錄鍵與實例鎖是相容識別碼，保留以避免重複登錄或破壞更新交接。
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\LARGAN.${PRODUCT_DIR}"
 Name "LM_AI 公司 AI 助理"
 OutFile "${SETUP_OUTPUT}"
-InstallDir "$LOCALAPPDATA\Programs\${PRODUCT_DIR}"
+InstallDir "${INSTALL_PATH}"
+; 保持與一般權限 Outlook 相同的使用者環境；目錄權限由公司 IT 配置。
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
 SetCompressorDictSize 32
 ShowInstDetails show
 ShowUninstDetails show
 VIProductVersion "${APP_VERSION}.0"
-VIAddVersionKey /LANG=1028 "CompanyName" "LARGAN"
+VIAddVersionKey /LANG=1028 "CompanyName" "${PUBLISHER}"
 VIAddVersionKey /LANG=1028 "ProductName" "LM_AI"
 VIAddVersionKey /LANG=1028 "FileDescription" "公司 AI 助理安裝程式（Dev: 1230783）"
 VIAddVersionKey /LANG=1028 "FileVersion" "${APP_VERSION}.0"
-VIAddVersionKey /LANG=1028 "LegalCopyright" "Copyright © 2026 LARGAN. All rights reserved."
+VIAddVersionKey /LANG=1028 "LegalCopyright" "Copyright © 2026 ${PUBLISHER} All rights reserved."
 !define MUI_ICON "..\assets\app.ico"
 !define MUI_UNICON "..\assets\app.ico"
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipUpdatePage
-!define MUI_WELCOMEPAGE_TEXT "將安裝至目前使用者的應用程式目錄並建立捷徑。聊天、登入及偏好資料將保留。$\r$\n$\r$\n若電腦缺少 WebView2，會使用隨附的 Microsoft 離線安裝程式。"
+!define MUI_WELCOMEPAGE_TEXT "固定安裝至 ${INSTALL_PATH}\，並為目前使用者建立捷徑。聊天、登入及偏好資料將保留。$\r$\n$\r$\n請以一般權限安裝及執行；若無目錄寫入權限，請聯絡 IT 配置。若電腦缺少 WebView2，會使用隨附的 Microsoft 離線安裝程式。"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipUpdatePage
@@ -50,6 +60,20 @@ Var Restart
 Var InstanceLock
 Var HadPrevious
 
+; 同時檢查父目錄與產品目錄，避免固定路徑被 junction/symlink 導向別處。
+; 安裝及解除安裝都先檢查，再進行檔案操作。
+!macro CheckInstallDirectory path
+    System::Call 'kernel32::GetFileAttributesW(w "${path}") i.r0'
+    ${If} $0 != -1
+        IntOp $1 $0 & 0x400
+        ${If} $1 != 0
+            MessageBox MB_ICONSTOP "安裝目錄不可為連結：${path}" /SD IDOK
+            SetErrorLevel 1
+            Abort
+        ${EndIf}
+    ${EndIf}
+!macroend
+
 Function SkipUpdatePage
     StrCmp $UpdatePid "" +2
     Abort
@@ -63,7 +87,9 @@ Function .onInit
     SetShellVarContext current
     SetRegView 64
     ; 固定位置，不把任意伺服器路徑交給安裝器。
-    StrCpy $INSTDIR "$LOCALAPPDATA\Programs\${PRODUCT_DIR}"
+    StrCpy $INSTDIR "${INSTALL_PATH}"
+    !insertmacro CheckInstallDirectory "${INSTALL_ROOT}"
+    !insertmacro CheckInstallDirectory "$INSTDIR"
     ${GetParameters} $0
     ${GetOptions} $0 "/UPDATEPID=" $UpdatePid
     ClearErrors
@@ -99,14 +125,8 @@ Function .onInit
 FunctionEnd
 
 Section "安裝 LM_AI"
-    ; 不允許固定目錄是 junction/symlink，避免寫入使用者預期以外的位置。
-    System::Call 'kernel32::GetFileAttributesW(w "$INSTDIR") i.r0'
-    IntCmp $0 -1 directory_ok
-    IntOp $1 $0 & 0x400
-    IntCmp $1 0 directory_ok
-    MessageBox MB_ICONSTOP "安裝目錄不可為連結。" /SD IDOK
-    Abort
-    directory_ok:
+    !insertmacro CheckInstallDirectory "${INSTALL_ROOT}"
+    !insertmacro CheckInstallDirectory "$INSTDIR"
     InitPluginsDir
     SetOutPath "$PLUGINSDIR"
     File /oname=LM_AI.exe "${APP_SOURCE}"
@@ -127,7 +147,10 @@ Section "安裝 LM_AI"
     runtime_ready:
 !endif
     ClearErrors
+    ; NSIS CreateDirectory 會逐層建立缺少的父目錄；已存在的目錄可直接沿用。
+    ; 先確認成功再準備替換檔案，不刪除原目錄或其中的其他資料。
     CreateDirectory "$INSTDIR"
+    IfErrors failed
     CopyFiles /SILENT "$PLUGINSDIR\LM_AI.exe" "$INSTDIR\LM_AI.pending.exe"
     WriteUninstaller "$INSTDIR\Uninstall.pending.exe"
     IfErrors failed
@@ -160,7 +183,7 @@ Section "安裝 LM_AI"
     CreateShortcut "$SMPROGRAMS\${PRODUCT_DIR}.lnk" "$INSTDIR\LM_AI.exe"
     CreateShortcut "$DESKTOP\${PRODUCT_DIR}.lnk" "$INSTDIR\LM_AI.exe"
     WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "${PRODUCT_DIR} 公司 AI 助理"
-    WriteRegStr HKCU "${UNINSTALL_KEY}" "Publisher" "LARGAN"
+    WriteRegStr HKCU "${UNINSTALL_KEY}" "Publisher" "${PUBLISHER}"
     WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "${APP_VERSION}"
     WriteRegStr HKCU "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
     WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayIcon" "$INSTDIR\LM_AI.exe"
@@ -177,7 +200,7 @@ Section "安裝 LM_AI"
     failed:
     Delete "$INSTDIR\LM_AI.pending.exe"
     Delete "$INSTDIR\Uninstall.pending.exe"
-    MessageBox MB_ICONSTOP "安裝未完成。舊版檔案已保留；請檢查磁碟空間、寫入權限或防毒紀錄後重試。" /SD IDOK
+    MessageBox MB_ICONSTOP "安裝未完成。舊版檔案已保留；請檢查磁碟空間及防毒紀錄。若無法寫入 ${INSTALL_PATH}\，請聯絡 IT 配置該目錄權限，再以一般權限重試。" /SD IDOK
     SetErrorLevel 1
     Abort
     finished:
@@ -196,9 +219,11 @@ FunctionEnd
 Function un.onInit
     SetShellVarContext current
     SetRegView 64
-    StrCmp $INSTDIR "$LOCALAPPDATA\Programs\${PRODUCT_DIR}" +3
+    StrCmp $INSTDIR "${INSTALL_PATH}" +3
     MessageBox MB_ICONSTOP "解除安裝位置不正確。" /SD IDOK
     Abort
+    !insertmacro CheckInstallDirectory "${INSTALL_ROOT}"
+    !insertmacro CheckInstallDirectory "$INSTDIR"
     System::Call 'kernel32::CreateMutexW(p 0, i 0, w "Local\LARGAN.${PRODUCT_DIR}.Desktop") p.r0 ?e'
     Pop $1
     StrCpy $InstanceLock $0

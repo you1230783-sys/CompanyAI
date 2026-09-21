@@ -1,4 +1,4 @@
-﻿# 在隔離的使用者目錄實際驗證 NSIS 安裝、等待退出、重新啟動、失敗保留及解除安裝。
+﻿# 在 C:\largan 的隔離目錄與正式位置驗證 NSIS 安裝、更新、重啟及解除安裝。
 # 僅開發機執行；不打包到安裝程式，不用於使用者更新。
 [CmdletBinding()]
 param()
@@ -6,12 +6,20 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $work = Join-Path $root '.build\installer-test'
 New-Item -ItemType Directory -Path $work -Force | Out-Null
-$installRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Programs\LM_AI_Installer_Test'))
-$allowedRoot = [IO.Path]::GetFullPath($env:LOCALAPPDATA).TrimEnd('\') + '\Programs\'
+$installRoot = [IO.Path]::GetFullPath('C:\largan\LM_AI_Installer_Test')
+$allowedRoot = 'C:\largan\'
 if (-not $installRoot.StartsWith($allowedRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe test installation path.' }
 $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\LARGAN.LM_AI_Installer_Test'
 $shortcuts = @((Join-Path ([Environment]::GetFolderPath('Programs')) 'LM_AI_Installer_Test.lnk'), (Join-Path ([Environment]::GetFolderPath('Desktop')) 'LM_AI_Installer_Test.lnk'))
-foreach ($path in @($installRoot,$key) + $shortcuts) { if (Test-Path -LiteralPath $path) { throw "Previous test artifacts exist; inspect before retrying: $path" } }
+# 正式路徑／登錄／捷徑必須完全未使用，避免驗收覆蓋開發者已安裝的程式。
+$releaseRoot = [IO.Path]::GetFullPath('C:\largan\LM_AI')
+$releaseKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\LARGAN.LM_AI'
+$releaseShortcuts = @((Join-Path ([Environment]::GetFolderPath('Programs')) 'LM_AI.lnk'), (Join-Path ([Environment]::GetFolderPath('Desktop')) 'LM_AI.lnk'))
+foreach ($path in @($installRoot,$key,$releaseRoot,$releaseKey) + $shortcuts + $releaseShortcuts) { if (Test-Path -LiteralPath $path) { throw "Previous test artifacts exist; inspect before retrying: $path" } }
+$parentExisted = Test-Path -LiteralPath 'C:\largan'
+if ($parentExisted) {
+    if ((Get-Item -LiteralPath 'C:\largan').Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Installation parent must not be a link.' }
+}
 function Start-Hidden([string]$File, [string]$Arguments) {
     $process = New-Object Diagnostics.Process
     $process.StartInfo.FileName = $File
@@ -40,7 +48,11 @@ foreach ($generation in @('one','two')) {
 }
 $app = Join-Path $installRoot 'LM_AI.exe'
 $uninstaller = Join-Path $installRoot 'Uninstall.exe'
-Run-Checked (Join-Path $work 'one-setup.exe') '/S'
+# /D 即使由呼叫端指定也不可改變固定目錄。
+$redirect = Join-Path $work 'must-not-install-here'
+if (Test-Path -LiteralPath $redirect) { throw 'Unexpected directory override test artifact.' }
+Run-Checked (Join-Path $work 'one-setup.exe') ('/S /D=' + $redirect)
+if (Test-Path -LiteralPath $redirect) { throw 'Installer accepted an arbitrary directory override.' }
 if ((Get-FileHash $app).Hash -ne (Get-FileHash (Join-Path $work 'one.exe')).Hash) { throw 'First installed payload mismatch.' }
 foreach ($path in $shortcuts) { if (-not (Test-Path $path)) { throw 'Missing shortcut.' } }
 # 只在開發測試讀取捷徑屬性；使用者安裝／更新仍完全由 NSIS 原生操作完成。
@@ -53,7 +65,9 @@ try {
         } finally { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcut) | Out-Null }
     }
 } finally { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcutReader) | Out-Null }
-if ((Get-ItemProperty $key).Publisher -ne 'LARGAN') { throw 'Missing uninstall registration.' }
+if ((Get-ItemProperty $key).Publisher -ne 'Largan, Inc.') { throw 'Incorrect uninstall publisher.' }
+if ((Get-ItemProperty $key).InstallLocation -ne $installRoot) { throw 'Incorrect fixed install location.' }
+if ((Get-Item $uninstaller).VersionInfo.CompanyName -ne 'Largan, Inc.') { throw 'Incorrect uninstaller company name.' }
 if ((Get-ItemProperty $key).UninstallString -ne ('"' + $uninstaller + '"')) { throw 'Uninstaller path is not properly quoted.' }
 # 保留未知檔案，驗證解除安裝不會遞迴刪除使用者新增內容。
 $keep = Join-Path $installRoot 'user-file.txt'
@@ -92,5 +106,53 @@ Run-Checked $uninstaller '/S'
 $deadline = [DateTime]::UtcNow.AddSeconds(15)
 while ((Test-Path $installRoot) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
 if (Test-Path $installRoot) { throw 'Real payload test uninstall incomplete.' }
-[ordered]@{result='PASS';recorded_at=(Get-Date -Format o);toolset=$env:VCToolsVersion;checks=@('NSIS install','shortcuts and registration','PID handoff wait','update replacement','automatic restart','locked-file failure preserves old app','NSIS uninstall preserves unknown files');scope='isolated native payload, same NSIS source; corporate antivirus requires company testing'} | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $root 'offline\installer-verification.json') -Encoding UTF8
+# 最後安裝真正交付的 Setup（包含正式 WebView2 偵測），不以測試包取代此驗證。
+$releaseSetup = Join-Path $root 'dist\LM_AI_Setup.exe'
+$releaseApp = Join-Path $releaseRoot 'LM_AI.exe'
+$releaseUninstaller = Join-Path $releaseRoot 'Uninstall.exe'
+# 預先存在的產品目錄及其他檔案必須保留；首次測試已涵蓋目錄不存在的情況。
+New-Item -ItemType Directory -Path $releaseRoot | Out-Null
+$releaseKeep = Join-Path $releaseRoot 'user-file.txt'
+[IO.File]::WriteAllText($releaseKeep, 'keep release data')
+Run-Checked $releaseSetup ('/S /D=' + $redirect)
+if (Test-Path -LiteralPath $redirect) { throw 'Release installer accepted a directory override.' }
+if ((Get-FileHash $releaseApp).Hash -ne (Get-FileHash (Join-Path $root 'dist\LM_AI.exe')).Hash) { throw 'Release installation differs from the delivered EXE.' }
+foreach ($file in @($releaseApp,$releaseSetup,$releaseUninstaller)) {
+    if ((Get-Item $file).VersionInfo.CompanyName -ne 'Largan, Inc.') { throw "Incorrect release company name: $file" }
+}
+$registration = Get-ItemProperty $releaseKey
+if ($registration.Publisher -ne 'Largan, Inc.' -or $registration.InstallLocation -ne $releaseRoot) { throw 'Incorrect release publisher or install location.' }
+$shortcutReader = New-Object -ComObject WScript.Shell
+try {
+    foreach ($path in $releaseShortcuts) {
+        if (-not (Test-Path -LiteralPath $path)) { throw 'Missing release shortcut.' }
+        $shortcut = $shortcutReader.CreateShortcut($path)
+        try {
+            if ($shortcut.TargetPath -ne $releaseApp -or $shortcut.WorkingDirectory -ne $releaseRoot) { throw 'Incorrect release shortcut target or working directory.' }
+        } finally { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcut) | Out-Null }
+    }
+} finally { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcutReader) | Out-Null }
+Run-Checked $releaseApp '--self-check'
+Run-Checked $releaseUninstaller '/S'
+$deadline = [DateTime]::UtcNow.AddSeconds(15)
+while ((Test-Path $releaseUninstaller) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
+foreach ($path in @($releaseApp,$releaseUninstaller,$releaseKey) + $releaseShortcuts) {
+    if (Test-Path -LiteralPath $path) { throw "Release uninstall did not remove $path" }
+}
+if ([IO.File]::ReadAllText($releaseKeep) -ne 'keep release data') { throw 'Release install/uninstall changed existing user data.' }
+# 僅刪除此測試建立的已知檔案及空目錄，保留公司共用的 C:\largan。
+Remove-Item -LiteralPath $releaseKeep
+[IO.Directory]::Delete($releaseRoot, $false)
+[ordered]@{
+    result = 'PASS'
+    recorded_at = (Get-Date -Format o)
+    version = (Get-Item $releaseSetup).VersionInfo.FileVersion
+    toolset = $env:VCToolsVersion
+    publisher = 'Largan, Inc.'
+    install_path = $releaseRoot
+    parent_existed_before_test = $parentExisted
+    setup_sha256 = (Get-FileHash $releaseSetup -Algorithm SHA256).Hash.ToLowerInvariant()
+    checks = @('NSIS install into missing product directory','existing directory preserves user files','fixed path ignores /D','shortcuts and registration','EXE/setup/uninstaller company name','PID handoff wait','update replacement','automatic restart','locked-file failure preserves old app','NSIS uninstall preserves unknown files','actual release Setup installation and WebView2 self-check','actual release uninstall')
+    scope = 'isolated native payload and actual release Setup at C:\largan\LM_AI; corporate antivirus and Outlook require company testing'
+} | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $root 'offline\installer-verification.json') -Encoding UTF8
 Write-Host 'NSIS installation/update/restart/failure/uninstall tests: PASS'

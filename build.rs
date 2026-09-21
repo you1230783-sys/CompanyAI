@@ -43,12 +43,12 @@ BEGIN
  BEGIN
   BLOCK "040404b0"
   BEGIN
-   VALUE "CompanyName", "LARGAN"
+   VALUE "CompanyName", "Largan, Inc."
    VALUE "ProductName", "LM_AI"
    VALUE "FileDescription", "{description}（Dev: 1230783）"
    VALUE "FileVersion", "{display_version}.0"
    VALUE "ProductVersion", "{display_version}.0"
-   VALUE "LegalCopyright", "Copyright © 2026 LARGAN. All rights reserved."
+   VALUE "LegalCopyright", "Copyright © 2026 Largan, Inc. All rights reserved."
   END
  END
  BLOCK "VarFileInfo"

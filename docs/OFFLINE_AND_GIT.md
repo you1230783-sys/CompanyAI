@@ -1,6 +1,6 @@
 # 離線交付與 Git 工作流程
 
-> 0.8.1 依使用者指示僅建置及上傳單一主程式 `LM_AI.exe`、EXE 清單、原始碼與文件，不重製 Setup／ZIP。一般建置為 `Build.ps1 -EmptyCargoCache`；完整包為明確選用的 `Prepare-Delivery.ps1`。舊 ZIP 與 installer-verification.json／verification.json 為 0.8.0 歷史記錄，0.8.1 請查看 exe-verification.json。
+> 0.8.5 依使用者指示交付單一主程式 `LM_AI.exe`、NSIS Setup、兩種更新清單、原始碼與文件，建置為 `Build.ps1 -EmptyCargoCache -IncludeInstaller`。供應商為 `Largan, Inc.`，固定安裝至 `C:\largan\LM_AI`。本版不重製離線 ZIP；舊 ZIP 與 verification.json 仍為歷史版本，本版請查看 exe-verification.json 及 installer-verification.json。
 
 ## 專案包含的內容
 
@@ -53,7 +53,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build.ps1
 
 腳本自動尋找裝有 v142 的 Visual Studio，使用包內 Rust 工具及 vendor 套件，無須安裝 rustup 或接入網際網路。
 找不到 Visual Studio 時，可先設定 `$env:RUST_PROJECT_VS_PATH = '實際 Visual Studio 安裝路徑'` 再執行。
-驗證包括格式、Clippy、測試、release 編譯、原生視窗自我檢查及 DLL 依賴檢查；完成後更新 `dist\CompanyAI.exe`。
+驗證包括格式、Clippy、測試、release 編譯、原生視窗自我檢查及 DLL 依賴檢查；完成後更新 `dist\LM_AI.exe`。
 測試會使用本機 loopback 模擬 HTTP 服務，不會連線公司 API。
 
 使用 VS Code 編輯時，在解壓後的專案根目錄執行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Configure-VSCode.ps1`，再重新載入 VS Code 視窗。

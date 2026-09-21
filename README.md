@@ -1,7 +1,14 @@
-# LM_AI 0.8.4 — Windows 工作助理
+# LM_AI 0.8.5 — Windows 工作助理
 
 Rust 桌面程式，提供公司瀏覽器登入、文字／附件對話、串流、持久背景任務、選字快捷鍵、網站通知及 Classic Outlook 唯讀助理。
 介面使用 WebView2、內嵌 HTML/CSS 與離線 Markdown 套件；不需 Node、Python 或外部 CDN。
+
+## 0.8.5 公司固定路徑安裝
+
+- EXE、NSIS 安裝／解除安裝程式、已安裝應用程式及關於頁面統一顯示 `Largan, Inc.`。
+- `dist/LM_AI_Setup.exe` 固定安裝至 `C:\largan\LM_AI\`，自動逐層建立缺少的資料夾；已存在時沿用，保留未知檔案。不可用 `/D` 改變位置。
+- 安裝與主程式維持一般使用者權限，捷徑／解除安裝登錄屬於目前使用者；若公司限制目錄寫入，請 IT 配置權限。
+- 交付原始碼、EXE、NSIS、兩種更新 JSON 及驗證文件；既有離線 ZIP 仍是歷史版本。本版部署、舊路徑遷移及驗證界線見 [0.8.5 驗收](docs/VALIDATION_0_8_5.md)。
 
 ## 0.8.4 介面整理
 

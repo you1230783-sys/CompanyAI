@@ -6,6 +6,14 @@
 
 > **0.5 新功能請先實作 [DESKTOP_0_5_CONTRACT.md](DESKTOP_0_5_CONTRACT.md)**：附件規則路由、文件／圖片上傳、串流、持久背景任務與通知（歷史估時功能已於 0.8.4 移除）。此處保留既有登入／版本／模型／通知基礎；驗證範圍見各版驗收文件。
 
+## 0.8.5 NSIS 固定位置發行
+
+- 本版交付 `LM_AI_Setup.exe` 與 `update-manifest.json`，以及 `LM_AI.exe` 與 `update-manifest-exe.json`；版本均為 0.8.5。
+- 供應商顯示 `Largan, Inc.`，安裝位置固定 `C:\largan\LM_AI\`，一般使用者執行，缺少的資料夾自動逐層建立。無新增聊天／登入 API。
+- **若要讓既有 0.8.1～0.8.4 用戶透過更新取得 NSIS，網站此次只發布 0.8.5 NSIS 清單**：`/desktop/download` 回傳 NSIS 清單，獨立 EXE 清單路由保留舊版或回 404。同時提供兩種 0.8.5 清單仍會依既有契約優先選 EXE，不能只改安裝包檔名或 JSON 的 kind。
+- Git 保留兩種已簽署 JSON 供部署選擇；此次上傳 Git 不代表已部署公司網站。`latest_version` 可設 0.8.5，無須因此提高 `minimum_version`。
+- 舊安裝路徑處理與測試界線見 [0.8.5 驗收](VALIDATION_0_8_5.md)。
+
 ## 0.8.4 移除估時與介面整理
 
 - 桌面移除估時命令、背景請求與顯示，不再呼叫 `POST /lm_server/api/desktop/chat/estimate`，亦不再為估時預先建立伺服器對話。

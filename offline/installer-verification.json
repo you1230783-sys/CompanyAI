@@ -1,15 +1,25 @@
 ﻿{
     "result":  "PASS",
-    "recorded_at":  "2026-09-18T16:40:42.7882087+08:00",
+    "recorded_at":  "2026-09-21T10:21:25.4849270+08:00",
+    "version":  "0.8.5.0",
     "toolset":  "14.29.30133",
+    "publisher":  "Largan, Inc.",
+    "install_path":  "C:\\largan\\LM_AI",
+    "parent_existed_before_test":  false,
+    "setup_sha256":  "a222bf54e4e73423b13c4f2cfea957b3866232a913033d490747d6115b7747dd",
     "checks":  [
-                   "NSIS install",
+                   "NSIS install into missing product directory",
+                   "existing directory preserves user files",
+                   "fixed path ignores /D",
                    "shortcuts and registration",
+                   "EXE/setup/uninstaller company name",
                    "PID handoff wait",
                    "update replacement",
                    "automatic restart",
                    "locked-file failure preserves old app",
-                   "NSIS uninstall preserves unknown files"
+                   "NSIS uninstall preserves unknown files",
+                   "actual release Setup installation and WebView2 self-check",
+                   "actual release uninstall"
                ],
-    "scope":  "isolated native payload, same NSIS source; corporate antivirus requires company testing"
+    "scope":  "isolated native payload and actual release Setup at C:\\largan\\LM_AI; corporate antivirus and Outlook require company testing"
 }
