@@ -211,6 +211,58 @@ window.runSelfTest = async () => {
     fixture.work.tasks = [];
     fixture.work.attachments = [];
     LMUI.receive(fixture);
+    // 在已有文字對話的畫面，走真正的選檔接收流程；只模擬原生 ACK，不上傳使用者檔案。
+    // 先前只驗證附件數量超限，未進入 fileBatchBusy，無法抓到已移除按鈕的殘留引用。
+    const attachmentSend = send;
+    const fileCommands = [];
+    const controlLocks = [];
+    let rejectFileAction = null;
+    const sampleBytes = new Uint8Array(192 * 1024 + 17).map((_, i) => i % 251);
+    const sampleFile = new File([sampleBytes], "upload-regression.pdf", {type: "application/pdf"});
+    try {
+      send = message => {
+        if (message.type !== "work") return;
+        const command = message.command;
+        fileCommands.push(command);
+        if (command.action === "file_abort") return;
+        controlLocks.push(document.getElementById("new-chat").disabled &&
+          document.getElementById("send").disabled &&
+          [...document.querySelectorAll(".history-item,[data-history-action]")].every(button => button.disabled));
+        queueMicrotask(() => WorkUI.receive(command.action === rejectFileAction
+          ? {type: "file_error", message: "模擬附件接收失敗"}
+          : {type: "file_ack", id: "test-upload", offset: command.offset || 0,
+              finished: command.action === "file_finish"}));
+      };
+      const selection = new DataTransfer();
+      selection.items.add(sampleFile);
+      const picker = document.getElementById("attachment-input");
+      picker.files = selection.files;
+      await picker.onchange({target: picker});
+      check(fileCommands.map(command => command.action).join(",") === "file_begin,file_chunk,file_chunk,file_finish",
+        "selecting attachment in existing conversation completes native handoff");
+      const chunks = fileCommands.filter(command => command.action === "file_chunk");
+      const decoded = chunks.map(command => atob(command.data)).join("");
+      check(chunks[0].offset === 0 && chunks[1].offset === 192 * 1024 &&
+        decoded.length === sampleBytes.length && [...decoded].every((value, i) => value.charCodeAt(0) === sampleBytes[i]),
+        "attachment handoff preserves bytes and ordered chunk offsets");
+      check(controlLocks.every(Boolean), "file reception locks send and conversation row actions");
+      check(!WorkUI.getFileBusy() && !picker.value && !document.getElementById("add-attachment").disabled &&
+        !document.getElementById("new-chat").disabled && !document.getElementById("send").disabled &&
+        [...document.querySelectorAll(".history-item,[data-history-action]")].every(button => !button.disabled),
+        "file reception restores controls without waiting for state push");
+      rejectFileAction = "file_chunk";
+      fileCommands.length = 0;
+      await WorkUI.addFiles([sampleFile]);
+      check(fileCommands.map(command => command.action).join(",") === "file_begin,file_chunk,file_abort" &&
+        !WorkUI.getFileBusy() && !document.getElementById("add-attachment").disabled &&
+        document.getElementById("toast").textContent.includes("模擬附件接收失敗"),
+        "failed reception aborts partial file and unlocks picker");
+      rejectFileAction = null;
+      fileCommands.length = 0;
+      await WorkUI.addFiles([sampleFile]);
+      check(fileCommands.at(-1).action === "file_finish" && !WorkUI.getFileBusy(),
+        "same attachment can be selected again after failure");
+    } finally { send = attachmentSend; }
     // 經過真正的 Rust 訊息橋錄製組合；測試不送出系統按鍵，也不改使用者的設定。
     const binding = LMUI.keyBindingFromEvent({ code: "Escape", metaKey: true });
     check(binding.modifiers === 8 && binding.key === 27, "Win+Esc key mapping");

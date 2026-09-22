@@ -83,8 +83,9 @@ async function addFiles(files) {
     }
   }
   fileBatchBusy = true;
-  renderWork();
   try {
+    // 初次重繪也在清理範圍內；畫面錯誤不得把接收鎖定永久留在 true。
+    renderWork();
     for (const file of files) {
       let id;
       try {
@@ -214,14 +215,15 @@ function renderWork() {
     card.append(remove);
     $("attachment-list").append(card);
   }
-  if (fileBatchBusy) {
-    $("send").disabled = true;
-    $("new-chat").disabled = true;
-    $("delete-chat").disabled = true;
-    document
-      .querySelectorAll(".history-item,[data-action]")
-      .forEach((button) => (button.disabled = true));
-  }
+  // 對话操作已移至各歷史列。每次均依最新狀態設定，接收結束即可恢復，
+  // 不依賴原生下一次推播，也不重建歷史清單而丟失焦點。
+  const conversationLocked = fileBatchBusy || state.busy !== "none";
+  $("send").disabled = fileBatchBusy || !state.can_send;
+  $("new-chat").disabled = conversationLocked;
+  document.querySelectorAll(".history-item,[data-history-action]")
+    .forEach(button => { button.disabled = conversationLocked; });
+  document.querySelectorAll("[data-action]")
+    .forEach(button => { button.disabled = fileBatchBusy || !state.can_send; });
   $("task-count").textContent = tasks.filter((t) => t.active).length || "";
   $("task-count").hidden = !tasks.some(t => t.active);
   const signature = JSON.stringify(

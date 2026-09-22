@@ -1,6 +1,6 @@
 # 離線交付與 Git 工作流程
 
-> 0.8.7 依使用者指示先交付 `LM_AI.exe`、EXE 更新清單、原始碼與文件，建置為 `Build.ps1 -EmptyCargoCache`。本輪不重製 NSIS 或離線 ZIP：Setup 與 installer-verification.json 仍為 0.8.5，ZIP／verification.json 仍為更早的歷史版本。0.8.7 請查看 exe-verification.json 與 docs/VALIDATION_0_8_7.md；vnc-verification.json 保留 0.8.6 的測試，不代表本版重測。
+> 0.8.8 沿用使用者指定的 EXE 優先交付：`LM_AI.exe`、EXE 更新清單、原始碼與文件，建置為 `Build.ps1 -EmptyCargoCache`。本輪不重製 NSIS 或離線 ZIP：Setup 與 installer-verification.json 仍為 0.8.5，ZIP／verification.json 仍為更早的歷史版本。0.8.8 請查看 exe-verification.json 與 docs/VALIDATION_0_8_8.md；vnc-verification.json 保留 0.8.6 的測試，不代表本版重測。
 
 ## 專案包含的內容
 
