@@ -22,4 +22,12 @@
 
 ## 交付界線
 
-沿用使用者前輪 EXE 優先交付與 Git 推送要求，不製作 NSIS 或離線 ZIP；舊 NSIS 維持 0.8.5。公司端實際選檔／轉檔仍需使用者以新版驗收。本次未修改 VNC，不重做 Viewer 測試。
+使用者已回報 0.8.8 大致正常，追加製作同版 NSIS 並推送 Git。完整建置命令為 `scripts/Build.ps1 -EmptyCargoCache -IncludeInstaller`，交付 EXE、Setup、兩份更新清單與驗證記錄；離線 ZIP 不重製。本次未修改 VNC，不重做 Viewer 連線測試。
+
+NSIS 測試使用 v142 編譯的兩代原生測試程式，檢查固定路徑、捷徑與登錄、等待舊程序退出、替換及重新啟動、檔案鎖定時保留舊版、解除安裝保留未知檔案。另以合成 `machines.json`／`user_config.json` 驗證更新及解除安裝不改寫設定；不使用真實機台密碼。
+
+同一套測試會安裝真正交付的 Setup 至預先確認未使用的 `C:\largan\LM_AI`，比對安裝後 EXE 的 SHA256 並執行 WebView2 自檢，再解除安裝並確認清理完整。公司防毒、目錄寫入權限及缺少 WebView2 的全新電腦仍需公司環境驗證。
+
+2026-09-22 NSIS 完整建置與上述安裝／更新／重啟／占用失敗／解除安裝測試全部通過，`machines.json` 及 `user_config.json` 原內容保留。真正交付包安裝後的 WebView2 自檢亦通過；測試產品目錄、登錄與捷徑已清理。編譯工具仍為 MSVC 14.29.30133 x64，81 項 Rust 測試及空快取 frozen 建置再次通過。
+
+安裝包版本 `0.8.8.0`，大小 `217,573,495` bytes，SHA256：`f14e4b51bad516c2cb6fd8c1454bac0ce9f6eb624663c749188b325238006686`，與 `dist/update-manifest.json` 及 `offline/installer-verification.json` 一致。主程式仍為上方已驗收的相同 SHA256，未修改功能或進版。

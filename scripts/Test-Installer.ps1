@@ -72,6 +72,15 @@ if ((Get-ItemProperty $key).UninstallString -ne ('"' + $uninstaller + '"')) { th
 # 保留未知檔案，驗證解除安裝不會遞迴刪除使用者新增內容。
 $keep = Join-Path $installRoot 'user-file.txt'
 [IO.File]::WriteAllText($keep, 'keep me')
+# VNC 設定固定在 EXE 旁；更新與解除安裝都不得改寫使用者的機台及連線選項。
+# 僅使用合成資料，測試後依確切檔名清理，不接觸真實機台設定。
+$preservedSettings = @{
+    'machines.json' = '{"測試分類":[{"name":"保留機台","ip":"192.0.2.1","password":"synthetic-only"}]}'
+    'user_config.json' = '{"vnc_path":"","options":{"fullscreen":false,"viewonly":true,"autoscaling":true}}'
+}
+foreach ($name in $preservedSettings.Keys) {
+    [IO.File]::WriteAllText((Join-Path $installRoot $name), $preservedSettings[$name])
+}
 # 主程式仍持有實例鎖時交棒，NSIS 必須等退出後再更新。
 $parent = Start-Hidden $app '--hold'
 Start-Sleep -Milliseconds 300
@@ -84,6 +93,9 @@ $deadline = [DateTime]::UtcNow.AddSeconds(10)
 while (-not (Test-Path $marker) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
 if ([IO.File]::ReadAllText($marker) -ne 'two') { throw 'Updated application was not restarted.' }
 if ((Get-FileHash $app).Hash -ne (Get-FileHash (Join-Path $work 'two.exe')).Hash) { throw 'Updated payload mismatch.' }
+foreach ($name in $preservedSettings.Keys) {
+    if ([IO.File]::ReadAllText((Join-Path $installRoot $name)) -cne $preservedSettings[$name]) { throw "Update changed VNC configuration: $name" }
+}
 # 模擬防毒／其他程序占用主程式：安裝不得刪掉原版。
 $locked = [IO.File]::Open($app, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
 try { Run-Checked (Join-Path $work 'one-setup.exe') '/S' 1 } finally { $locked.Dispose() }
@@ -93,7 +105,12 @@ $deadline = [DateTime]::UtcNow.AddSeconds(15)
 while ((Test-Path $uninstaller) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
 foreach ($path in @($app,$uninstaller,$key) + $shortcuts) { if (Test-Path -LiteralPath $path) { throw "Uninstall did not remove $path" } }
 if ([IO.File]::ReadAllText($keep) -ne 'keep me') { throw 'Uninstaller deleted user data.' }
-# 只清除本次測試建立的兩個已知檔案與空目錄，不做遞迴刪除。
+foreach ($name in $preservedSettings.Keys) {
+    $configPath = Join-Path $installRoot $name
+    if ([IO.File]::ReadAllText($configPath) -cne $preservedSettings[$name]) { throw "Uninstall changed VNC configuration: $name" }
+    Remove-Item -LiteralPath $configPath
+}
+# 只清除本次測試建立的已知檔案與空目錄，不做遞迴刪除。
 Remove-Item -LiteralPath $keep,$marker
 [IO.Directory]::Delete($installRoot, $false)
 # 同一 NSIS 來源再安裝真正的 Rust 主程式，驗證解壓後的位元組與 WebView2 介面。
@@ -152,6 +169,7 @@ Remove-Item -LiteralPath $releaseKeep
     install_path = $releaseRoot
     parent_existed_before_test = $parentExisted
     setup_sha256 = (Get-FileHash $releaseSetup -Algorithm SHA256).Hash.ToLowerInvariant()
+    vnc_configuration_preserved = $true
     checks = @('NSIS install into missing product directory','existing directory preserves user files','fixed path ignores /D','shortcuts and registration','EXE/setup/uninstaller company name','PID handoff wait','update replacement','automatic restart','locked-file failure preserves old app','NSIS uninstall preserves unknown files','actual release Setup installation and WebView2 self-check','actual release uninstall')
     scope = 'isolated native payload and actual release Setup at C:\largan\LM_AI; corporate antivirus and Outlook require company testing'
 } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $root 'offline\installer-verification.json') -Encoding UTF8

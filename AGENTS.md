@@ -69,6 +69,8 @@
 
 ## 修改後的交付與 Git 規則
 
+- **0.8.8 NSIS 交付（最新）**：使用者已實測目前版本大致正常，要求製作 NSIS 並上傳 Git。維持版本 0.8.8，執行 `scripts/Build.ps1 -EmptyCargoCache -IncludeInstaller`，交付 EXE、Setup、兩份更新清單及驗證文件。安裝／更新／解除安裝須保留 EXE 旁既有的 VNC 設定。本輪不重製離線 ZIP；以下較早的「不製作 NSIS」限制由本條取代。
+
 - **0.8.8 附件修正**：使用者回報 0.8.7 選檔後無附件請求；修正已移除刪除按鈕的殘留引用與接收控制項恢復，補上合法檔案完整接收／失敗重試自檢。沿用前輪 `Build.ps1 -EmptyCargoCache`、EXE 與 Git 交付範圍，不重製 NSIS 或離線 ZIP。
 
 - **0.8.7 使用者最新指示**：精簡側欄／對話列操作、沿用黑貓圖示，更新 Outlook 說明及品質模型可用性檢查；先執行 `scripts/Build.ps1 -EmptyCargoCache`，交付並推送 EXE、EXE 更新清單、原始碼與驗證文件。使用者確認介面後才製作 NSIS，本輪不重建 NSIS 或離線 ZIP。使用者已實測 0.8.6 VNC 可正常運作，本輪未修改 VNC 啟動流程。
