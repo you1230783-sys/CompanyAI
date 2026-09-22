@@ -1,0 +1,24 @@
+﻿{
+    "recorded_at":  "2026-09-22T11:26:24.3482713+08:00",
+    "result":  "PASS",
+    "app_version":  "0.8.8.0",
+    "package":  "LM_AI_SFX_Test.exe",
+    "package_bytes":  2095067,
+    "package_sha256":  "61bcf0e82567dd042c2e8c071b57fadf9aa56a5f6bad85b87b2547aa0df7daaa",
+    "app_sha256":  "095cde161bfb3331d7a9a8329c63a6995806ad01be723224ec1ee49c6071f8da",
+    "default_path_tested":  "C:\\largan\\LM_AI",
+    "packager":  "Official WinRAR 7.23 x64 Traditional Chinese, unmodified Default.SFX",
+    "checks":  [
+                   "archive contains only LM_AI.exe",
+                   "archive integrity",
+                   "actual SFX default extraction path",
+                   "replace synthetic old EXE",
+                   "VNC configuration and unknown file preservation",
+                   "extracted EXE hash and WebView2 self-check",
+                   "no shortcut or uninstall registration changes",
+                   "test files cleaned"
+               ],
+    "corporate_antivirus_tested":  false,
+    "interactive_dialog_visually_verified":  false,
+    "automatic_update_supported":  false
+}
