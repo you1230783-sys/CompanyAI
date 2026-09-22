@@ -618,10 +618,19 @@ textarea::placeholder {
 }
 .compose-hint {
   display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   font-size: 10px;
   color: var(--muted);
-  margin: 9px 2px 0;
+  margin-left: auto;
+  min-width: 0;
+}
+.compose-hint span {
+  overflow-wrap: anywhere;
+}
+/* 分隔符跟著快捷鍵一起隱藏，停用時不留下多餘逗號。 */
+#hotkey-hint::before {
+  content: "，";
 }
 .jump-button {
   position: absolute;
@@ -1102,9 +1111,6 @@ output {
   .secondary-view {
     padding: 20px;
   }
-  .compose-hint span:last-child {
-    display: none;
-  }
   .user .message-content {
     max-width: 88%;
   }
@@ -1163,8 +1169,9 @@ output {
 }
 .execution-controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 4px 12px;
   margin-top: 8px;
 }
 .execution-switch {
@@ -1192,10 +1199,39 @@ output {
   margin: 5px 0;
 }
 .execution-controls .work-hint {
-  flex: 1;
+  /* 模式與快捷鍵共用第一列；工作狀態另列，避免長進度文字擠開快捷鍵。 */
+  flex: 0 0 100%;
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
+}
+.execution-controls .work-hint:empty {
+  display: none;
+}
+/* 選用的 VNC 頁面沿用主題色；機台依可用寬度排列，長名稱不撐開視窗。 */
+.vnc-options, .vnc-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.vnc-options .check-row { margin: 0; }
+.vnc-path { overflow-wrap: anywhere; }
+.vnc-groups { margin: 16px 0; }
+.vnc-groups [aria-pressed="true"] { background: var(--soft); color: var(--accent); }
+.vnc-machines { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 12px; }
+.vnc-machine { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow-wrap: anywhere; }
+#vnc-manager-dialog { width: min(960px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow-y: auto; }
+.vnc-manager-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 20px; }
+.vnc-manager-list { overflow: auto; max-height: 480px; }
+.vnc-manager-list table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+.vnc-manager-list th, .vnc-manager-list td { padding: 8px; border-bottom: 1px solid var(--line); text-align: left; overflow-wrap: anywhere; }
+.vnc-editor { display: flex; flex-direction: column; gap: 8px; }
+.vnc-editor input:not([type="checkbox"]) { width: 100%; }
+.vnc-machine:hover { border-color: var(--accent); background: var(--soft); }
+.vnc-manager-list td:last-child { white-space: nowrap; }
+@media (max-width: 760px) {
+  .vnc-manager-layout { grid-template-columns: minmax(0, 1fr); }
+  .vnc-manager-list { max-height: 240px; }
 }
 .attachment-help {
   color: var(--muted);

@@ -13,6 +13,9 @@ session.dpapi
 history.dpapi
 notifications.dpapi
 settings.json
+# 與 Python VNC 工具相容的使用者機台檔含連線密碼，不納入版本控制。
+machines.json
+user_config.json
 jobs-*.dpapi
 /uploads/
 

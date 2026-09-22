@@ -49,6 +49,8 @@ pub struct Config {
     pub enter_sends: bool,
     pub quick_actions_fast: bool,
     pub always_new_chat: bool,
+    /// 選用本機工具，預設隱藏；啟用後才允許讀取 VNC 機台設定。
+    pub vnc_enabled: bool,
 }
 
 /// 只有個人偏好能落盤；舊版檔案中的網址、路由、Header 和 HTTP 欄位會被忽略。
@@ -66,6 +68,7 @@ struct Preferences {
     enter_sends: bool,
     quick_actions_fast: Option<bool>,
     always_new_chat: bool,
+    vnc_enabled: bool,
 }
 
 impl Serialize for Config {
@@ -82,6 +85,7 @@ impl Serialize for Config {
             enter_sends: self.enter_sends,
             quick_actions_fast: Some(self.quick_actions_fast),
             always_new_chat: self.always_new_chat,
+            vnc_enabled: self.vnc_enabled,
         }
         .serialize(serializer)
     }
@@ -101,6 +105,7 @@ impl<'de> Deserialize<'de> for Config {
             enter_sends: saved.enter_sends,
             quick_actions_fast: saved.quick_actions_fast.unwrap_or(true),
             always_new_chat: saved.always_new_chat,
+            vnc_enabled: saved.vnc_enabled,
             ..Self::default()
         })
     }
@@ -126,6 +131,7 @@ impl Default for Config {
             enter_sends: false,
             quick_actions_fast: true,
             always_new_chat: false,
+            vnc_enabled: false,
         }
     }
 }
@@ -251,18 +257,23 @@ mod tests {
     fn behavior_preferences_round_trip_with_safe_legacy_defaults() {
         let old: Config = serde_json::from_str("{}").unwrap();
         assert!(old.hotkey_enabled);
-        assert!(!old.selection_icon && !old.enter_sends && !old.always_new_chat);
+        assert!(
+            !old.selection_icon && !old.enter_sends && !old.always_new_chat && !old.vnc_enabled
+        );
         let value = Config {
             hotkey_enabled: false,
             selection_icon: true,
             enter_sends: true,
             always_new_chat: true,
             quick_actions_fast: false,
+            vnc_enabled: true,
             ..old
         };
         let saved: Config = serde_json::from_str(&serde_json::to_string(&value).unwrap()).unwrap();
         assert!(!saved.hotkey_enabled && !saved.quick_actions_fast);
-        assert!(saved.selection_icon && saved.enter_sends && saved.always_new_chat);
+        assert!(
+            saved.selection_icon && saved.enter_sends && saved.always_new_chat && saved.vnc_enabled
+        );
     }
 
     #[test]
@@ -278,7 +289,7 @@ mod tests {
         assert_eq!(config.model, "quality");
         assert_eq!(config.hotkey, "Ctrl+Shift+F8");
         let saved = serde_json::to_value(&config).unwrap();
-        assert_eq!(saved.as_object().unwrap().len(), 11);
+        assert_eq!(saved.as_object().unwrap().len(), 12);
         assert!(saved.get("server_url").is_none());
         assert!(Config::default().validate().is_ok());
     }

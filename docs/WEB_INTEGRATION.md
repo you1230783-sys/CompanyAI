@@ -6,7 +6,15 @@
 
 > **0.5 新功能請先實作 [DESKTOP_0_5_CONTRACT.md](DESKTOP_0_5_CONTRACT.md)**：附件規則路由、文件／圖片上傳、串流、持久背景任務與通知（歷史估時功能已於 0.8.4 移除）。此處保留既有登入／版本／模型／通知基礎；驗證範圍見各版驗收文件。
 
-## 0.8.5 NSIS 固定位置發行
+## 0.8.6 EXE 發行與選用 VNC
+
+一般／背景模式與輸入快捷鍵提示置於同一列，工作狀態另列；換行、送出與選字快捷鍵提示依已套用的本機偏好更新，停用選字快捷鍵時隱藏該提示。Outlook 日期查詢預設為目前資料夾及子資料夾，介面移除所有信箱範圍。
+
+本次只發布 `dist/LM_AI.exe` 與 `dist/update-manifest-exe.json`，網站將 EXE／JSON 成對部署，`latest_version` 可改為 `0.8.6`；一般更新不必提高 `minimum_version`。版本較舊的 NSIS 清單可維持 0.8.5，不能將舊 Setup 改標為 0.8.6。既有 0.8.1 以上客戶端會依版本選擇新版 EXE，下載後仍需使用者手動替換；0.8.0 客戶端不支援 EXE 更新。驗證界線見 [0.8.6 驗收](VALIDATION_0_8_6.md)。
+
+另新增選用的本機 VNC 快速連線：設定 `vnc_enabled` 預設 false，使用者啟用後才顯示側欄入口。設定檔固定沿用 LM_AI.exe 旁的 `machines.json` 與 `user_config.json` 原格式；機台只以使用者手動上移／下移調整順序，不自動排序。Rust 直接呼叫已安裝的 UltraVNC Viewer，不新增網站 API，也不將機台、密碼或連線操作交給 AI。規格與驗證見 [VNC 快速連線](VNC_QUICK_CONNECT.md)。
+
+## 0.8.5 NSIS 固定位置發行（既有安裝包）
 
 - 本版交付 `LM_AI_Setup.exe` 與 `update-manifest.json`，以及 `LM_AI.exe` 與 `update-manifest-exe.json`；版本均為 0.8.5。
 - 供應商顯示 `Largan, Inc.`，安裝位置固定 `C:\largan\LM_AI\`，一般使用者執行，缺少的資料夾自動逐層建立。無新增聊天／登入 API。
@@ -380,7 +388,7 @@ HTTP 200：
 
 介面與串流修正見 [UI_AND_STREAMING.md](UI_AND_STREAMING.md)：支援網站的 `start` → `tool_status` → `delta.text` → `done`，保留 OpenAI 相容格式；斷線保存部分回答並提示不完整，REST 完整結果可原位取代。工具名稱及狀態以原文顯示，不顯示 arguments／result。此修正不新增網站路由。
 
-Outlook 日期查詢已擴充至已載入 Exchange／本機資料檔及分類子資料夾，詳見 [Outlook 查詢說明](OUTLOOK_SEARCH.md)。這是桌面 COM 查詢修正，不新增網站 API；批次基本資訊增加 `folder` 顯示來源資料夾，仍不提供 EntryID／StoreID 或磁碟路徑。
+Outlook 日期查詢預設為「Outlook 目前資料夾及子資料夾」，另可選「預設收件匣及子資料夾」；介面已移除所有已載入信箱與本機資料檔選項，詳見 [Outlook 查詢說明](OUTLOOK_SEARCH.md)。這是桌面介面調整，不新增網站 API；批次基本資訊保留 `folder` 顯示來源資料夾，仍不提供 EntryID／StoreID 或磁碟路徑。本次僅保存變更，未進版或打包。
 
 Outlook 第一輪維持以 `# Outlook 郵件初篩 outlook-triage` 開頭，供網站分流至不額外附帶提示詞／技能的初篩路由。第二輪保留資料與摘要，固定送 `model: "quality"`，列出每份上傳 MSG 對應的完整 `.md` 名稱並允許網站文件工具；不重送初篩 Skill，由網站使用正常提示詞與技能。詳見 [0.6 分流與附件名稱契約](DESKTOP_0_6_CONTRACT.md#初篩與附件分析的分流)。
 

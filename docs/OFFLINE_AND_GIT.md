@@ -1,6 +1,6 @@
 # 離線交付與 Git 工作流程
 
-> 0.8.5 依使用者指示交付單一主程式 `LM_AI.exe`、NSIS Setup、兩種更新清單、原始碼與文件，建置為 `Build.ps1 -EmptyCargoCache -IncludeInstaller`。供應商為 `Largan, Inc.`，固定安裝至 `C:\largan\LM_AI`。本版不重製離線 ZIP；舊 ZIP 與 verification.json 仍為歷史版本，本版請查看 exe-verification.json 及 installer-verification.json。
+> 0.8.6 依使用者指示先交付 `LM_AI.exe`、EXE 更新清單、原始碼與文件，建置為 `Build.ps1 -EmptyCargoCache -TestVnc`。本輪不重製 NSIS 或離線 ZIP：Setup 與 installer-verification.json 仍為 0.8.5，ZIP／verification.json 仍為更早的歷史版本。0.8.6 請查看 exe-verification.json、vnc-verification.json 與 docs/VALIDATION_0_8_6.md；不要把舊包當成本版交付。
 
 ## 專案包含的內容
 

@@ -109,7 +109,7 @@ GET query：`after` 為 opaque cursor，可省略；`limit=100`。可由網站�
 
 技能原文：[src/outlook/skill.md](../src/outlook/skill.md)。不需要網站提供新的工具執行器。
 
-1. 使用者可選 Outlook 多封郵件，或按「所有／僅未讀 × 今天／三天內／本週」。日期查詢預設涵蓋已載入信箱與本機資料檔及子資料夾；也可改查目前資料夾或預設收件匣及其子資料夾。三天含今天，本週從週一開始，使用本機日曆日期。完整範圍與上限見 [Outlook 查詢說明](OUTLOOK_SEARCH.md)。
+1. 使用者可選 Outlook 多封郵件，或按「所有／僅未讀 × 今天／三天內／本週」。日期查詢預設為 Outlook 目前資料夾及子資料夾，也可改查預設收件匣及其子資料夾；介面不再提供所有已載入信箱與本機資料檔選項。三天含今天，本週從週一開始，使用本機日曆日期。完整範圍與上限見 [Outlook 查詢說明](OUTLOOK_SEARCH.md)。
 2. 每批最多 50 封，可勾選子集；截斷有提示。只讀取主旨、寄件者、收件者、副本、時間、未讀狀態，不讀正文。
 3. 使用者確認分析。若勾選「自動補充」，此授權僅涵蓋本批勾選郵件，可由 App 依 AI 請求匯出完整 MSG（正文、圖片及附件）並傳到公司網站。
 4. 初篩使用既有 sync Chat Completions，`stream=false`，把 Skill 與資料作為文字送出。回應 `choices[0].message.content` 必須是下列 JSON 字串；不是 OpenAI `tool_calls` 欄位。

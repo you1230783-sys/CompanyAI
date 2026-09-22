@@ -34,6 +34,7 @@ use windows_sys::Win32::{
 };
 mod mail_batch;
 mod site;
+mod vnc;
 mod work;
 const TRAY_MESSAGE: u32 = WM_APP + 4;
 
@@ -41,6 +42,9 @@ const TRAY_MESSAGE: u32 = WM_APP + 4;
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Command {
+    Vnc {
+        command: vnc::VncCommand,
+    },
     SiteAction {
         command: crate::site_notifications::Action,
     },
@@ -71,6 +75,8 @@ enum Command {
         enter_sends: bool,
         quick_actions_fast: bool,
         always_new_chat: bool,
+        #[serde(default)]
+        vnc_enabled: bool,
     },
     RenameChat {
         id: String,
@@ -130,6 +136,7 @@ enum Command {
     },
 }
 enum Event {
+    VncSearch(String, AppResult<PathBuf>),
     Site(u64, site::SiteEvent),
     MailBatch(u64, u64, mail_batch::MailEvent),
     Work(u64, work::WorkEvent),
@@ -150,6 +157,7 @@ enum Event {
     AllRead(u64, usize),
 }
 struct App {
+    vnc: vnc::VncRuntime,
     site: site::SiteRuntime,
     mail_flow: mail_batch::MailRuntime,
     work: work::WorkRuntime,
@@ -273,7 +281,7 @@ impl App {
             "draft":self.draft,"draft_revision":self.draft_revision,"focus_draft":self.focus_draft,
             "notifications":events,"notification_status":self.notification_status,"unread_count":self.inbox.unread_count()+self.site.cache.unread_count,"site_status":self.site.status,"site_loading":self.site.loading,"site_mutating":self.site.mutating,"notifications_loading":self.notifications_loading,
             "mail":self.mail,"mail_busy":self.mail_busy,"mail_batch":self.mail_batch_state(),"history_error":self.history_error,
-            "work":self.work_state(),"version_status":self.version_status,"login_code":self.grant.as_ref().map(|g|&g.user_code)
+            "work":self.work_state(),"vnc":self.vnc_state(),"version_status":self.version_status,"login_code":self.grant.as_ref().map(|g|&g.user_code)
         }}));
         self.focus_draft = false;
     }
@@ -608,6 +616,7 @@ impl App {
             return Err("此版本已停止支援，安裝更新完成前無法使用功能。".into());
         }
         match command {
+            Command::Vnc { command } => self.vnc_command(command)?,
             Command::SiteAction { command } => self.site_action(command)?,
             Command::MailBatch { command } => self.mail_batch_command(command)?,
             Command::Work { command } => self.work_command(command)?,
@@ -664,6 +673,7 @@ impl App {
                 enter_sends,
                 quick_actions_fast,
                 always_new_chat,
+                vnc_enabled,
             } => {
                 let previous = self.config.clone();
                 self.config.hotkey_enabled = hotkey_enabled;
@@ -671,6 +681,7 @@ impl App {
                 self.config.enter_sends = enter_sends;
                 self.config.quick_actions_fast = quick_actions_fast;
                 self.config.always_new_chat = always_new_chat;
+                self.config.vnc_enabled = vnc_enabled;
                 if let Err(e) = self.apply_hotkey(self.config.hotkey.clone()) {
                     self.config = previous;
                     let _ = self.apply_hotkey(self.config.hotkey.clone());
@@ -681,6 +692,10 @@ impl App {
                     .store(selection_icon, Ordering::Relaxed);
                 if !selection_icon {
                     self.selection_popup.update(None);
+                }
+                if !vnc_enabled {
+                    // 停用即清除記憶體中的機台與密碼；背景搜尋結果也不再套用。
+                    self.vnc = vnc::VncRuntime::default();
                 }
             }
             Command::RenameChat { id, title } => {
@@ -973,6 +988,7 @@ impl App {
             Event::Work(generation, event) if generation == self.generation => {
                 self.work_event(event)?
             }
+            Event::VncSearch(id, result) => self.vnc_search_result(id, result)?,
             Event::Services(generation, version, models) if generation == self.generation => {
                 self.services_loading = false;
                 self.version_status = match self.versions.apply(version) {
@@ -1770,6 +1786,7 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
             .enabled
             .store(config.selection_icon && !smoke, Ordering::Relaxed);
         let mut app = App {
+            vnc: vnc::VncRuntime::default(),
             site: site::SiteRuntime::default(),
             mail_flow: mail_batch::MailRuntime::default(),
             work: work::WorkRuntime::default(),

@@ -145,9 +145,12 @@ window.runSelfTest = async () => {
     await frame();
     check(!document.getElementById("estimate-time"), "time estimate control removed");
     const modeBox = document.querySelector(".execution-switch").getBoundingClientRect();
+    const hintBox = document.querySelector(".compose-hint").getBoundingClientRect();
     const statusBox = document.getElementById("work-status").getBoundingClientRect();
-    check(statusBox.left >= modeBox.right && statusBox.top < modeBox.bottom,
-      "work status shares the mode row");
+    check(hintBox.left >= modeBox.right && hintBox.top < modeBox.bottom,
+      "keyboard hints share the mode row");
+    check(statusBox.top >= modeBox.bottom,
+      "work status stays below the mode and keyboard hints");
     check(
       document.querySelectorAll(".attachment-card").length === 1,
       "attachment processing card",
@@ -307,15 +310,15 @@ window.runSelfTest = async () => {
       "six Outlook date/unread presets",
     );
     check(
-      document.getElementById("batch-scope").value === "all_stores",
-      "Outlook defaults to loaded stores and subfolders",
+      document.getElementById("batch-scope").value === "current_folder",
+      "Outlook defaults to current folder and subfolders",
     );
-    // 攔截前端命令，驗證三個範圍的六種按鈕都帶對參數，不觸發真實 Outlook。
+    // 攔截前端命令，驗證兩個範圍的六種按鈕都帶對參數，不觸發真實 Outlook。
     const originalMailSend = send;
     const mailCommands = [];
     try {
       send = (command) => mailCommands.push(command);
-      for (const scope of ["all_stores", "current_folder", "inbox"]) {
+      for (const scope of ["current_folder", "inbox"]) {
         document.getElementById("batch-scope").value = scope;
         for (const button of document.querySelectorAll("[data-mail-period]")) {
           button.click();
@@ -328,10 +331,10 @@ window.runSelfTest = async () => {
           );
         }
       }
-      check(mailCommands.length === 18, "all scope and date combinations dispatched");
+      check(mailCommands.length === 12, "all scope and date combinations dispatched");
     } finally {
       send = originalMailSend;
-      document.getElementById("batch-scope").value = "all_stores";
+      document.getElementById("batch-scope").value = "current_folder";
     }
     check(
       document.getElementById("batch-mail-list").textContent.includes("本機資料檔/<分類>") &&
@@ -471,7 +474,9 @@ window.runSelfTest = async () => {
       LMUI.receive(fixture);
       check(document.querySelector("#history-list button")?.dataset.id === "pinned", "pinned conversation precedes newer ordinary conversation");
       check(document.getElementById("hotkey-hint").hidden, "disabled hotkey hint hidden");
-      check(document.getElementById("enter-hint").textContent.includes("Shift + Enter"), "enter send mode hint");
+      check(document.getElementById("compose-enter-hint").textContent === "Shift+Enter 換行，Enter 送出" &&
+        document.getElementById("enter-hint").textContent === document.getElementById("compose-enter-hint").textContent &&
+        document.getElementById("send").title === "送出（Enter）", "enter send hints follow applied preference");
       const prompt = document.getElementById("prompt");
       prompt.value = "中文測試";
       prompt.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter", isComposing:true, bubbles:true, cancelable:true}));
@@ -480,7 +485,13 @@ window.runSelfTest = async () => {
       prompt.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter", bubbles:true, cancelable:true}));
       check(behaviorCommands.filter(c=>c.type === "chat").length === 1, "plain Enter sends when enabled");
       fixture.config.enter_sends = false;
+      fixture.config.hotkey_enabled = true;
+      fixture.config.hotkey = "Ctrl+Shift+F9";
       LMUI.receive(fixture);
+      check(document.getElementById("compose-enter-hint").textContent === "Enter 換行，Ctrl+Enter 送出" &&
+        document.getElementById("send").title === "送出（Ctrl+Enter）", "newline hints follow applied preference");
+      check(!document.getElementById("hotkey-hint").hidden &&
+        document.getElementById("hotkey-hint").textContent === "Ctrl+Shift+F9 選字帶入", "custom capture hotkey hint follows applied preference");
       prompt.value = "換行模式";
       prompt.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter", bubbles:true, cancelable:true}));
       check(behaviorCommands.filter(c=>c.type === "chat").length === 1, "plain Enter preserves newline mode");
@@ -493,6 +504,58 @@ window.runSelfTest = async () => {
       await new Promise(resolve => setTimeout(resolve,1800));
       check(document.querySelector(".model-notice").hidden, "automatic model notice fades after 1.5 seconds");
     } finally { send = behaviorSend; }
+    // VNC 只測試本機頁面命令；攔截傳送，不讀取真實機台檔、不啟動 Viewer。
+    const vncSend = send;
+    const vncCommands = [];
+    try {
+      send = value => vncCommands.push(value);
+      fixture.config.vnc_enabled = false;
+      LMUI.receive(fixture);
+      check(document.getElementById("show-vnc").hidden, "VNC entry hidden by default");
+      document.getElementById("show-vnc").click();
+      check(vncCommands.length === 0, "disabled VNC does not load files");
+      document.getElementById("vnc-enabled").checked = true;
+      document.getElementById("vnc-enabled").dispatchEvent(new Event("change"));
+      check(vncCommands.at(-1).type === "behavior" && vncCommands.at(-1).vnc_enabled, "VNC opt-in sent for persistence");
+      fixture.config.vnc_enabled = true;
+      fixture.vnc = { loaded: true, revision: 3, searching: false, status: "測試資料",
+        viewer_path: "C:\\UltraVNC\\vncviewer.exe", machines_path: "C:\\LM_AI\\machines.json",
+        options: { fullscreen: false, viewonly: false, autoscaling: true },
+        groups: [{ name: "測試分類", machines: [
+          { index: 0, name: "機台10<script>", ip: "192.0.2.10", has_password: true },
+          { index: 1, name: "備用機", ip: "192.0.2.2", has_password: false },
+        ] }] };
+      LMUI.receive(fixture);
+      check(!document.getElementById("show-vnc").hidden, "VNC entry visible after opt-in");
+      document.getElementById("show-vnc").click();
+      check(!document.getElementById("vnc-view").hidden && document.getElementById("chat-view").hidden, "VNC has independent page");
+      const machineButtons = document.querySelectorAll(".vnc-machine");
+      check(machineButtons.length === 2 && machineButtons[0].textContent.includes("機台10<script>") && !document.querySelector("#vnc-machines script"), "VNC keeps file order and treats names as text");
+      machineButtons[0].click();
+      const connection = vncCommands.at(-1).command;
+      check(connection.action === "connect" && connection.group === "測試分類" && connection.index === 0 && connection.revision === 3 && !("password" in connection) && !("ip" in connection), "VNC connection refers only to native machine snapshot");
+      document.getElementById("vnc-viewonly").checked = true;
+      document.getElementById("vnc-viewonly").dispatchEvent(new Event("change"));
+      check(vncCommands.at(-1).command.viewonly && vncCommands.at(-1).command.autoscaling, "VNC options sent independently of chat");
+      document.getElementById("vnc-manage").click();
+      const rowButtons = document.querySelectorAll("#vnc-manager-rows tr:first-child button");
+      check(rowButtons[1].disabled && !rowButtons[2].disabled, "VNC manual move respects group boundaries");
+      rowButtons[2].click();
+      check(vncCommands.at(-1).command.action === "move_machine" && vncCommands.at(-1).command.direction === "down", "VNC manual order command");
+      rowButtons[0].click();
+      check(document.getElementById("vnc-password").value === "", "existing VNC password never filled into editor");
+      document.getElementById("vnc-name").value = "改名保留位置";
+      document.getElementById("vnc-machine-form").dispatchEvent(new Event("submit", { cancelable: true }));
+      const edit = vncCommands.at(-1).command;
+      check(edit.action === "save_machine" && edit.original.index === 0 && edit.password === null, "VNC edit retains original slot and password");
+      document.getElementById("vnc-clear-password").checked = true;
+      document.getElementById("vnc-machine-form").dispatchEvent(new Event("submit", { cancelable: true }));
+      check(vncCommands.at(-1).command.password === "", "VNC password clear is explicit");
+      fixture.config.vnc_enabled = false;
+      LMUI.receive(fixture);
+      check(document.getElementById("show-vnc").hidden && document.getElementById("vnc-view").hidden && !document.getElementById("vnc-manager-dialog").open, "VNC disabling closes and hides tools");
+      check(!document.getElementById("vnc-manager-rows").children.length, "VNC disabling clears machine editor");
+    } finally { send = vncSend; }
     fixture.update_required = true;
     fixture.update_busy = true;
     LMUI.receive(fixture);

@@ -1,0 +1,48 @@
+﻿{
+    "recorded_at":  "2026-09-22T08:12:26.0010276+08:00",
+    "result":  "PASS",
+    "app_version":  "0.8.6",
+    "exe_sha256":  "a1803e19ee5ae790235de2fbccc7f5f8702b11d7bf53f266e7f855c2f0ffa5a6",
+    "viewer_version":  "1.8.2.4",
+    "viewer_sha256":  "b273b5af301cb95d9d82830c2a2521a5825c14be57ee1e9af967c277179cb873",
+    "cases":  [
+                  {
+                      "app_version":  "0.8.6",
+                      "checks":  [
+                                     "native connect() launch",
+                                     "loopback RFB 3.8",
+                                     "VNC password challenge-response",
+                                     "shared flag",
+                                     "framebuffer request"
+                                 ],
+                      "company_machine_tested":  false,
+                      "options":  {
+                                      "autoscaling":  true,
+                                      "fullscreen":  false,
+                                      "viewonly":  false
+                                  },
+                      "result":  "PASS",
+                      "viewer":  "C:\\Program Files\\uvnc bvba/UltraVNC/vncviewer.exe"
+                  },
+                  {
+                      "app_version":  "0.8.6",
+                      "checks":  [
+                                     "native connect() launch",
+                                     "loopback RFB 3.8",
+                                     "VNC password challenge-response",
+                                     "shared flag",
+                                     "framebuffer request"
+                                 ],
+                      "company_machine_tested":  false,
+                      "options":  {
+                                      "autoscaling":  false,
+                                      "fullscreen":  true,
+                                      "viewonly":  true
+                                  },
+                      "result":  "PASS",
+                      "viewer":  "C:\\Program Files\\uvnc bvba/UltraVNC/vncviewer.exe"
+                  }
+              ],
+    "screenshots_verified":  false,
+    "company_machines_tested":  false
+}

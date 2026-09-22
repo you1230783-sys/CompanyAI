@@ -1,6 +1,7 @@
 ﻿[CmdletBinding()]
-param([switch]$IncludeInstaller, [switch]$EmptyCargoCache)
+param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$TestVnc)
 $ErrorActionPreference = 'Stop'
+if ($ValidateOnly -and $IncludeInstaller) { throw 'ValidateOnly cannot be combined with IncludeInstaller.' }
 # 統一載入 v142 與指定 SDK，讓手動執行及未來網頁呼叫使用相同編譯環境。
 . (Join-Path $PSScriptRoot 'Enter-DevShell.ps1')
 # 空快取驗證直接讀取專案 vendor，不依賴開發機已有的 registry 下載。
@@ -59,6 +60,47 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         }
         if ($smokeCheck.ExitCode -ne 0) { throw ('Executable UI smoke check failed: ' + $smokeCheck.StandardError.ReadToEnd()) }
     } finally { $smokeCheck.Dispose() }
+    # 明確選用才啟動本機已安裝的 Viewer；一般自檢不會接觸 VNC。
+    if ($TestVnc) {
+        & cargo build --example vnc_smoke --frozen
+        if ($LASTEXITCODE -ne 0) { throw 'VNC integration harness build failed.' }
+        $probeExe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\vnc_smoke.exe'
+        $caseReports = @()
+        $oldHold = $env:LM_VNC_SMOKE_HOLD_SECONDS
+        $oldReport = $env:LM_VNC_SMOKE_REPORT
+        try {
+            $env:LM_VNC_SMOKE_HOLD_SECONDS = '2'
+            foreach ($mode in @('default', 'fullscreen-viewonly')) {
+                $env:LM_VNC_SMOKE_REPORT = Join-Path $probeRoot ("vnc-$mode.json")
+                if ($mode -eq 'default') { & $probeExe }
+                else { & $probeExe --fullscreen --viewonly --no-autoscaling }
+                if ($LASTEXITCODE -ne 0) { throw "Real UltraVNC integration test failed: $mode" }
+                $caseReports += Get-Content -LiteralPath $env:LM_VNC_SMOKE_REPORT -Raw | ConvertFrom-Json
+            }
+        } finally {
+            $env:LM_VNC_SMOKE_HOLD_SECONDS = $oldHold
+            $env:LM_VNC_SMOKE_REPORT = $oldReport
+        }
+        $viewerPath = $caseReports[0].viewer
+        $vncReport = [ordered]@{
+            recorded_at = (Get-Date -Format o)
+            result = 'PASS'
+            app_version = $caseReports[0].app_version
+            exe_sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+            viewer_version = (Get-Item -LiteralPath $viewerPath).VersionInfo.FileVersion
+            viewer_sha256 = (Get-FileHash -LiteralPath $viewerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            cases = $caseReports
+            screenshots_verified = $false
+            company_machines_tested = $false
+        }
+        $vncReportPath = if ($ValidateOnly) { Join-Path $probeRoot 'vnc-verification.json' } else { Join-Path $projectRoot 'offline\vnc-verification.json' }
+        $vncReport | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $vncReportPath -Encoding UTF8
+    }
+    # 僅驗證尚未發行的修改：保留 target 建置結果，不改 dist、offline 驗證記錄或簽署清單。
+    if ($ValidateOnly) {
+        Write-Host 'Source validation passed; release artifacts and manifests were not updated.'
+        return
+    }
     # 記錄實際版本與 DLL 依賴，之後可與公司的環境直接比較。
     $dependencies = & $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER /dump /dependents $exe
     if ($LASTEXITCODE -ne 0) { throw 'DLL inspection failed.' }
@@ -113,6 +155,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         checks = @('v142 x64 compiler probe','fmt','Clippy','workspace tests','cargo build --release --frozen','WebView2 DOM self-check')
         exe_sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
         installer_built = [bool]$IncludeInstaller
+        real_vnc_tested = [bool]$TestVnc
         offline_zip_built = $false
     } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $projectRoot 'offline\exe-verification.json') -Encoding UTF8
     Write-Host "Ready: $dist\LM_AI.exe"

@@ -1,7 +1,7 @@
 /* 個人偏好與本機對話操作。模型提示只描述該次請求，不改掉使用者選定的模型。 */
 "use strict";
 (() => {
-  const controls = ["hotkey-enabled", "selection-icon", "enter-newline", "enter-send", "quick-fast", "quick-current", "always-new-chat"];
+  const controls = ["hotkey-enabled", "selection-icon", "enter-newline", "enter-send", "quick-fast", "quick-current", "always-new-chat", "vnc-enabled"];
   for (const id of controls) $(id).onchange = () => send({
     type: "behavior",
     hotkey_enabled: $("hotkey-enabled").checked,
@@ -9,6 +9,7 @@
     enter_sends: $("enter-send").checked,
     quick_actions_fast: $("quick-fast").checked,
     always_new_chat: $("always-new-chat").checked,
+    vnc_enabled: $("vnc-enabled").checked,
   });
 
   const rename = node("button", "text-button", "編輯標題");
@@ -65,7 +66,15 @@
       $("quick-fast").checked = c.quick_actions_fast !== false;
       $("quick-current").checked = c.quick_actions_fast === false;
       $("always-new-chat").checked = !!c.always_new_chat;
-      $("enter-hint").textContent = c.enter_sends ? "Shift + Enter 換行" : "Ctrl + Enter 送出";
+      $("vnc-enabled").checked = !!c.vnc_enabled;
+      // 與輸入框 keydown 使用相同的已套用設定；錄製中尚未套用的快捷鍵不顯示於此。
+      const sendKey = c.enter_sends ? "Enter" : "Ctrl+Enter";
+      const newlineKey = c.enter_sends ? "Shift+Enter" : "Enter";
+      const enterHint = `${newlineKey} 換行，${sendKey} 送出`;
+      $("enter-hint").textContent = enterHint;
+      $("compose-enter-hint").textContent = enterHint;
+      $("send").title = `送出（${sendKey}）`;
+      $("hotkey-hint").textContent = `${c.hotkey} 選字帶入`;
       $("quick-model-hint").textContent = c.quick_actions_fast !== false
         ? "點擊翻譯、摘要或潤飾時，以快速模型送出該次請求，通常能縮短等待時間。"
         : "快捷操作使用目前選擇的模型。品質模型可能需要數分鐘，實際依內容及排隊情況而定。";

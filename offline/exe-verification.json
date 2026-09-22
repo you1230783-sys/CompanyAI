@@ -1,6 +1,6 @@
 ﻿{
-    "recorded_at":  "2026-09-21T10:21:25.7149304+08:00",
-    "version":  "0.8.5.0",
+    "recorded_at":  "2026-09-22T08:12:26.5706692+08:00",
+    "version":  "0.8.6.0",
     "result":  "PASS",
     "msvc":  "14.29.30133",
     "compiler_report":  [
@@ -8,7 +8,7 @@
                             "Verified _MSC_FULL_VER=192930159 x64"
                         ],
     "empty_cargo_cache":  true,
-    "cargo_home":  "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-dbf5cbcc7775419db23efd436f20e85e",
+    "cargo_home":  "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-fac4472936324cd4b4af8c793c56e327",
     "checks":  [
                    "v142 x64 compiler probe",
                    "fmt",
@@ -17,7 +17,8 @@
                    "cargo build --release --frozen",
                    "WebView2 DOM self-check"
                ],
-    "exe_sha256":  "f9a2c1b4dc9137dd574a37da5dc5237a6429d763d72db8af82e5a861379f620e",
-    "installer_built":  true,
+    "exe_sha256":  "a1803e19ee5ae790235de2fbccc7f5f8702b11d7bf53f266e7f855c2f0ffa5a6",
+    "installer_built":  false,
+    "real_vnc_tested":  true,
     "offline_zip_built":  false
 }

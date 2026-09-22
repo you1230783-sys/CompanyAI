@@ -9,7 +9,8 @@ const MAX_FOLDERS: usize = 500;
 const MAX_ITEMS: usize = 10_000;
 const MAX_SECONDS: u64 = 30;
 
-/// 舊版訊息未指定 scope 時保留收件匣範圍；新版介面明確選擇 all_stores。
+/// 舊版訊息未指定 scope 時保留收件匣範圍；目前介面預設明確傳入 current_folder。
+/// AllStores 保留既有查詢能力，但不再提供使用者介面選項。
 #[derive(Clone, Copy, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchScope {

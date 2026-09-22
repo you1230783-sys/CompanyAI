@@ -59,7 +59,7 @@
 - 0.6 全站鈴鐺 API 與 AI events 各有游標／快取；網站已讀與刪除成功才更改本機，deleted_ids／410 完整同步契約見 docs/DESKTOP_0_6_CONTRACT.md。
 - 模型切換必須重新查 capabilities?model=alias；不能以舊模型的附件規則放行新模型。網站仍須驗證轉檔後的圖片是否可交給模型。
 - 0.6 Outlook 批次 Skill 於 src/outlook/skill.md；只有本批已勾選、經使用者確認的郵件可依 AI JSON 請求匯出 MSG。允許的工具只有 outlook.export_msg，EntryID／StoreID 與磁碟路徑不提供 AI。
-- 多封日期查詢預設涵蓋 Outlook 已載入的信箱／本機資料檔與子資料夾，也可選目前資料夾或預設收件匣及其子資料夾。全部範圍略過 Outlook 預設寄件備份／草稿／寄件匣／刪除／垃圾郵件／同步問題及搜尋資料夾；不掃描磁碟或自動開啟資料檔。每批取最新 50 封，500 個資料夾／10,000 個項目／30 秒上限與讀取失敗須提示結果不完整；自動 MSG 補充最多 20 封並受 backend 規則限制。退出不恢復 COM 授權；最終聊天使用持久任務。
+- 多封日期查詢預設為 Outlook 目前資料夾及子資料夾，另可選預設收件匣及其子資料夾；介面已移除所有已載入信箱／本機資料檔選項。不掃描磁碟或自動開啟資料檔。每批取最新 50 封，500 個資料夾／10,000 個項目／30 秒上限與讀取失敗須提示結果不完整；自動 MSG 補充最多 20 封並受 backend 規則限制。退出不恢復 COM 授權；最終聊天使用持久任務。
 - RAG、UNC 知識庫、任意檔案工具及其他自動化尚未實作，不自行擴張本次範圍。
 - 前端程式位於 ui/，build.rs 將資源嵌入 EXE；第三方資源及授權位於 ui/vendor，不使用 CDN，也不要求公司安裝 Node。
 - 使用者同意附 WebView2 x64 離線安裝包，放在 dist/ 並納入 ZIP；更新時核對 Microsoft 簽章及 SHA256。
@@ -68,6 +68,9 @@
 - 修改功能時同步更新 docs/WEB_INTEGRATION.md 與相應驗收說明。沒有實際操作 Word／Outlook 或取得外觀截圖時，不能宣稱這些驗收通過。
 
 ## 修改後的交付與 Git 規則
+
+- **0.8.6 使用者最新指示**：先以本機已安裝 UltraVNC 實測正式呼叫流程，再進版 0.8.6，編譯並提交／推送 EXE、EXE 更新清單、原始碼與驗證文件。使用 `scripts/Build.ps1 -EmptyCargoCache -TestVnc`；本輪先不重建 NSIS 或離線 ZIP，舊包維持歷史版本。這取代前次「僅保存本機變更」及 0.8.5 完整 NSIS 交付要求。後續確認需要 NSIS 時再打包。
+- VNC 預設隱藏，只有設定 `vnc_enabled` 啟用後才提供本機頁面。固定沿用 LM_AI.exe 旁 `machines.json`／`user_config.json` 的 Python 格式；機台以原陣列順序顯示，僅手動上移／下移，不自動排序，編輯保留原位置。原生層直接啟動已安裝的 vncviewer.exe，不使用 shell，不把既有密碼傳到前端或 AI。此使用者明確要求的功能為上述「其他自動化尚未實作」的例外；細節見 docs/VNC_QUICK_CONNECT.md。
 
 - **0.8.5 使用者最新指示**：供應商顯示改為 `Largan, Inc.`；重建 NSIS，正式安裝路徑固定 `C:\largan\LM_AI`，逐層建立缺少的資料夾、保留既有目錄及未知檔案。沿用一般使用者權限及單一 LM_AI.exe，避免 Outlook 權限差異。此次交付原始碼、EXE、Setup、兩種更新 JSON 與驗證文件，執行 `scripts/Build.ps1 -EmptyCargoCache -IncludeInstaller`；未要求重新製作離線 ZIP。以下舊版路徑及不製作 Setup 的約定由本條覆蓋。
 

@@ -19,6 +19,7 @@ pub mod site_notifications;
 pub mod storage;
 pub mod transport;
 pub mod ui;
+pub mod vnc;
 mod webview;
 
 /// 統一使用可直接顯示給使用者的錯誤訊息，不把 Token 或 HTTP Header 印到記錄。

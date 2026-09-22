@@ -1,7 +1,14 @@
-# LM_AI 0.8.5 — Windows 工作助理
+# LM_AI 0.8.6 — Windows 工作助理
 
 Rust 桌面程式，提供公司瀏覽器登入、文字／附件對話、串流、持久背景任務、選字快捷鍵、網站通知及 Classic Outlook 唯讀助理。
 介面使用 WebView2、內嵌 HTML/CSS 與離線 Markdown 套件；不需 Node、Python 或外部 CDN。
+
+## 0.8.6 選用 VNC 與介面修正
+
+- 設定中可啟用預設隱藏的 VNC 快速連線，直接呼叫使用者安裝的 UltraVNC Viewer；沿用 EXE 旁的 Python `machines.json`／`user_config.json` 格式。
+- 支援機台管理及手動上移／下移；不自動排序，編輯保留原位置。詳見 [VNC 說明](docs/VNC_QUICK_CONNECT.md)。
+- Outlook 日期查詢預設改為目前資料夾及子資料夾，移除所有信箱選項；模式與快捷鍵提示同列，提示依設定更新。
+- 本次只交付 EXE、EXE 更新清單與原始碼；NSIS 仍為 0.8.5，離線 ZIP 仍為歷史版本。驗證與部署界線見 [0.8.6 驗收](docs/VALIDATION_0_8_6.md)。
 
 ## 0.8.5 公司固定路徑安裝
 

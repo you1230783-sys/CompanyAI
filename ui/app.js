@@ -188,6 +188,7 @@ document.fonts?.ready.then(() => {
 });
 
 function showView(view) {
+  if (view === "vnc" && !state.config.vnc_enabled) view = "chat";
   // receive() 會重繪目前頁面，只有真正跨頁才觸發一次離開操作。
   const previous = activeView;
   activeView = view;
@@ -197,11 +198,12 @@ function showView(view) {
       send({ type: "notifications_left" });
     }
   }
-  for (const name of ["chat", "notifications", "outlook", "tasks"])
+  for (const name of ["chat", "notifications", "outlook", "tasks", "vnc"])
     $(name + "-view").hidden = name !== view;
   $("show-notifications").classList.toggle("active", view === "notifications");
   $("show-outlook").classList.toggle("active", view === "outlook");
   $("show-tasks").classList.toggle("active", view === "tasks");
+  $("show-vnc").classList.toggle("active", view === "vnc");
   const conversation = state.conversations.find(
     (c) => c.id === state.active_id,
   );
@@ -212,7 +214,7 @@ function showView(view) {
         ? "通知"
         : view === "tasks"
           ? "工作任務"
-          : "Outlook 助理";
+          : view === "vnc" ? "VNC 快速連線" : "Outlook 助理";
   $("delete-chat").hidden = view !== "chat" || !state.active_id;
   $("save-label").hidden = view !== "chat";
 }
@@ -468,7 +470,6 @@ function receive(next) {
   $("font-size").value = state.config.font_size;
   $("font-value").textContent = state.config.font_size + " px";
   if (!hotkeyRecording) $("hotkey").value = hotkeyDraft ?? state.config.hotkey;
-  $("hotkey-hint").textContent = state.config.hotkey + " 選字帶入";
   $("version-label").textContent =
     `LM_AI ${state.version} · ${state.version_status}`;
   $("notification-popups").checked = state.config.notification_popups;
@@ -491,6 +492,7 @@ function receive(next) {
   window.WorkUI?.render();
   window.MailUI?.render();
   window.BehaviorUI?.render();
+  window.VncUI?.render();
   if (next.focus_draft) {
     showView("chat");
     $("prompt").focus();
@@ -798,6 +800,7 @@ if (bridge) {
     else {
       receiveHotkeyMessage(event.data);
       window.WorkUI?.receive(event.data);
+      window.VncUI?.receive(event.data);
     }
   });
   send({ type: "ready" });

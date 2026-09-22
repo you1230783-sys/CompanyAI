@@ -42,6 +42,9 @@
           <span data-icon="mail"></span
           ><span class="nav-label">Outlook 助理</span>
         </button>
+        <button id="show-vnc" class="nav-button" title="VNC 快速連線" hidden>
+          <span data-icon="monitor"></span><span class="nav-label">VNC 快速連線</span>
+        </button>
         <div class="history-section nav-label">
           <div class="section-caption">
             最近對話
@@ -143,7 +146,7 @@
                 <button
                   id="send"
                   class="send-button"
-                  title="送出（Ctrl+Enter）"
+                  title="送出"
                   aria-label="送出"
                   data-icon="arrow-up"
                   disabled
@@ -155,6 +158,10 @@
                 <button id="execution-stream" hidden>一般</button>
                 <button id="execution-background" hidden>背景處理</button>
               </div>
+              <div class="compose-hint" aria-label="輸入快捷鍵">
+                <span id="compose-enter-hint"></span>
+                <span id="hotkey-hint" hidden></span>
+              </div>
               <p id="work-status" class="subtle work-hint" role="status"></p>
             </div>
             <details class="attachment-help" hidden>
@@ -164,11 +171,29 @@
                 檔案上傳到公司網站處理。圖片可直接貼到輸入框；轉檔完成後再送出訊息。
               </p>
             </details>
-            <div class="compose-hint">
-              <span>Enter 換行 · Ctrl+Enter 送出</span
-              ><span id="hotkey-hint">Win+Esc 選字帶入</span>
-            </div>
           </div>
+        </section>
+        <section id="vnc-view" class="view secondary-view" hidden>
+          <div class="section-heading">
+            <div><h2>VNC 快速連線</h2><p>選擇機台，以本機安裝的 UltraVNC Viewer 開啟連線。</p></div>
+            <button id="vnc-manage" class="secondary-button" disabled>機台管理</button>
+          </div>
+          <fieldset class="vnc-options">
+            <legend>連線選項</legend>
+            <label class="check-row"><input id="vnc-fullscreen" type="checkbox" disabled />全螢幕模式</label>
+            <label class="check-row"><input id="vnc-viewonly" type="checkbox" disabled />監看模式（唯讀）</label>
+            <label class="check-row"><input id="vnc-autoscaling" type="checkbox" disabled />自動縮放</label>
+          </fieldset>
+          <div class="button-row">
+            <button id="vnc-choose-viewer" class="secondary-button" disabled>指定 VNC</button>
+            <button id="vnc-search-viewer" class="secondary-button" disabled>重新搜尋</button>
+            <button id="vnc-reload" class="secondary-button">重新讀取設定</button>
+          </div>
+          <p class="subtle vnc-path">UltraVNC：<span id="vnc-viewer-path">尚未指定</span></p>
+          <p class="subtle vnc-path">機台設定：<span id="vnc-machines-path">LM_AI.exe 同一資料夾的 machines.json</span></p>
+          <p id="vnc-status" role="status">正在讀取設定…</p>
+          <div id="vnc-groups" class="vnc-groups" role="group" aria-label="機台分類"></div>
+          <div id="vnc-machines" class="vnc-machines"></div>
         </section>
         <section id="tasks-view" class="view secondary-view" hidden>
           <div class="section-heading">
@@ -226,13 +251,12 @@
             </p>
             <label for="batch-scope">日期查詢範圍</label>
             <select id="batch-scope">
-              <option value="all_stores">所有已載入信箱與本機資料檔（含子資料夾）</option>
-              <option value="current_folder">Outlook 目前資料夾及子資料夾</option>
+              <option value="current_folder" selected>Outlook 目前資料夾及子資料夾</option>
               <option value="inbox">預設收件匣及子資料夾</option>
             </select>
             <p class="subtle">
-              全部範圍略過 Outlook 預設的寄件備份、草稿、寄件匣、刪除的郵件、垃圾郵件、同步問題及搜尋資料夾。
-              本機資料檔須先在 Outlook 開啟；規則複製的不同副本會分別列出。若結果過多，可改查目前資料夾。
+              請先在 Outlook 選取要查詢的資料夾，再按日期按鈕；查詢包含該資料夾及其子資料夾。
+              本機資料檔須先在 Outlook 開啟；規則複製的不同副本會分別列出。
             </p>
             <div class="button-row">
               <button id="batch-selected" class="secondary-button">
@@ -380,6 +404,8 @@
           <p id="quick-model-hint" class="subtle"></p>
           <label class="check-row"><input id="always-new-chat" type="checkbox" />永遠開啟新對話</label>
           <p class="subtle">啟動或從托盤、捷徑叫出時開啟新對話，保留原草稿與背景任務；點擊指定對話或任務不受影響。</p>
+          <label class="check-row"><input id="vnc-enabled" type="checkbox" />啟用 VNC 快速連線功能</label>
+          <p class="subtle">啟用後顯示側欄入口。機台設定沿用 LM_AI.exe 同一資料夾的 machines.json 與 user_config.json。</p>
         </section>
         <section>
           <h3>通知</h3>
@@ -399,7 +425,7 @@
           <p>Largan, Inc. · 公司 AI 助理 · Dev: 1230783</p>
           <p class="subtle">Copyright © 2026 Largan, Inc. All rights reserved.</p>
           <p id="update-status" class="subtle" role="status"></p>
-          <p id="version-label">LM_AI 0.7.0</p>
+          <p id="version-label">LM_AI</p>
           <div class="button-row">
             <button id="refresh" class="secondary-button">
               <span data-icon="refresh"></span>重新整理服務</button
@@ -441,6 +467,29 @@
       <input id="rename-title" maxlength="100" aria-label="對話標題" />
       <div class="button-row right"><button id="rename-cancel">取消</button><button id="rename-save">儲存</button></div>
     </dialog>
+    <dialog id="vnc-manager-dialog" aria-labelledby="vnc-manager-title">
+      <div class="section-heading"><h2 id="vnc-manager-title">機台管理</h2><button id="vnc-manager-close" class="secondary-button">關閉</button></div>
+      <p class="subtle">編輯機台保留原位置；可用上移、下移自行排列，順序會直接儲存。</p>
+      <div class="vnc-manager-layout">
+        <div class="vnc-manager-list"><table>
+          <thead><tr><th>分類</th><th>機台名稱</th><th>IP / Server</th><th>密碼</th><th>操作</th></tr></thead>
+          <tbody id="vnc-manager-rows"></tbody>
+        </table></div>
+        <form id="vnc-machine-form" class="vnc-editor">
+          <label for="vnc-group">頁籤 / 分類</label><input id="vnc-group" list="vnc-group-names" maxlength="256" required />
+          <datalist id="vnc-group-names"></datalist>
+          <label for="vnc-name">機台名稱</label><input id="vnc-name" maxlength="256" required />
+          <label for="vnc-ip">IP / Server</label><input id="vnc-ip" maxlength="512" placeholder="192.168.1.101 或 host::5900" required />
+          <label for="vnc-password">密碼</label><input id="vnc-password" type="password" maxlength="1024" autocomplete="new-password" />
+          <label class="check-row"><input id="vnc-clear-password" type="checkbox" />清除已存密碼</label>
+          <p class="subtle">編輯時密碼留空會保留原值。設定檔維持原工具的明文密碼格式。</p>
+          <button id="vnc-save-machine" type="submit" class="primary-button">新增 / 儲存</button>
+          <button id="vnc-new-machine" type="button" class="secondary-button">清空欄位（新增）</button>
+          <button id="vnc-delete-machine" type="button" class="secondary-button" disabled>刪除選取機台</button>
+        </form>
+      </div>
+      <p id="vnc-manager-status" role="status"></p>
+    </dialog>
     <div id="toast" role="status" hidden></div>
     <script src="vendor/markdown-it.min.js"></script>
     <script src="vendor/footnote.min.js"></script>
@@ -458,5 +507,6 @@
     <script src="work.js"></script>
     <script src="mail.js"></script>
     <script src="behavior.js"></script>
+    <script src="vnc.js"></script>
   </body>
 </html>
