@@ -1,4 +1,4 @@
-﻿Recorded: 2026-09-22T11:09:13.2024613+08:00
+﻿Recorded: 2026-09-22T13:22:35.6139468+08:00
 Host OS: Microsoft Windows NT 10.0.26200.0
 Visual Studio: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools
 MSVC: 14.29.30133
@@ -9,7 +9,7 @@ Windows SDK: 10.0.19041.0\
 Target: x86_64-pc-windows-msvc
 CRT: static
 Rust binaries: Y:\Rust\.tools\rustup\toolchains\1.98.1-x86_64-pc-windows-msvc\bin
-Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-62acdc5a5923415b9a47b6efaaa3752c
+Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-9ab8d8c1972f4854b3b7ceb5eb8a1e6e
 EXE SHA256: 095CDE161BFB3331D7A9A8329C63A6995806AD01BE723224EC1EE49C6071F8DA
 
 rustc 1.98.1 (48a229cea 2026-09-01)

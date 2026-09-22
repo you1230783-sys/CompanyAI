@@ -20,21 +20,50 @@ $parentExisted = Test-Path -LiteralPath 'C:\largan'
 if ($parentExisted) {
     if ((Get-Item -LiteralPath 'C:\largan').Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Installation parent must not be a link.' }
 }
-function Start-Hidden([string]$File, [string]$Arguments) {
+function Start-Hidden([string]$File, [string]$Arguments, [string]$BrowserFolder = '') {
     $process = New-Object Diagnostics.Process
     $process.StartInfo.FileName = $File
     $process.StartInfo.Arguments = $Arguments
     $process.StartInfo.UseShellExecute = $false
     $process.StartInfo.CreateNoWindow = $true
     $process.StartInfo.WindowStyle = 'Hidden'
+    $process.StartInfo.RedirectStandardError = $true
+    $process.StartInfo.StandardErrorEncoding = [Text.Encoding]::UTF8
+    if ($BrowserFolder) { $process.StartInfo.EnvironmentVariables['WEBVIEW2_BROWSER_EXECUTABLE_FOLDER'] = $BrowserFolder }
     if (-not $process.Start()) { throw "Cannot start $File" }
     return $process
 }
-function Run-Checked([string]$File, [string]$Arguments, [int]$Expected = 0) {
-    $process = Start-Hidden $File $Arguments
+function Run-Checked([string]$File, [string]$Arguments, [int]$Expected = 0, [string]$BrowserFolder = '') {
+    $process = Start-Hidden $File $Arguments $BrowserFolder
     if (-not $process.WaitForExit(60000)) { $process.Kill(); throw "Timeout: $File" }
-    if ($process.ExitCode -ne $Expected) { throw "Exit code $($process.ExitCode), expected ${Expected}: $File" }
+    if ($process.ExitCode -ne $Expected) {
+        $detail = $process.StandardError.ReadToEnd()
+        $code = $process.ExitCode
+        $process.Dispose()
+        throw "Exit code $code, expected ${Expected}: $File`n$detail"
+    }
     $process.Dispose()
+}
+# 只對測試子程序指定不存在的 Runtime 位置，不移除本機 WebView2 或修改登錄。
+# 自檢沿用正式啟動的 WebView2 初始化；失敗文字寫入 stderr，不跳出阻塞對話框。
+function Assert-RuntimeUnavailable([string]$File, [string]$BrowserFolder) {
+    $process = New-Object Diagnostics.Process
+    $process.StartInfo.FileName = $File
+    $process.StartInfo.Arguments = '--self-check'
+    $process.StartInfo.UseShellExecute = $false
+    $process.StartInfo.CreateNoWindow = $true
+    $process.StartInfo.WindowStyle = 'Hidden'
+    $process.StartInfo.RedirectStandardError = $true
+    $process.StartInfo.StandardErrorEncoding = [Text.Encoding]::UTF8
+    $process.StartInfo.EnvironmentVariables['WEBVIEW2_BROWSER_EXECUTABLE_FOLDER'] = $BrowserFolder
+    try {
+        if (-not $process.Start()) { throw 'Could not start missing-Runtime test.' }
+        if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'Missing-Runtime test timed out.' }
+        $message = $process.StandardError.ReadToEnd()
+        if ($process.ExitCode -ne 1 -or $message -notmatch '無法啟動 LM_AI 介面' -or $message -notmatch 'MicrosoftEdgeWebView2RuntimeInstallerX64.exe') {
+            throw "Missing Runtime did not produce the existing application startup guidance: $message"
+        }
+    } finally { $process.Dispose() }
 }
 $compiler = Join-Path $env:VCToolsInstallDir 'bin\Hostx64\x64\cl.exe'
 $nsis = Join-Path $root '.build\nsis\nsis-3.12\makensis.exe'
@@ -48,24 +77,6 @@ foreach ($generation in @('one','two')) {
 }
 $app = Join-Path $installRoot 'LM_AI.exe'
 $uninstaller = Join-Path $installRoot 'Uninstall.exe'
-# 只在測試包注入登錄讀值，不移除或修改開發機的 WebView2。
-# 空值／零版本必須停止安裝；HKCU 或 HKLM 任一有效版本則可正常安裝。
-$runtimeCases = @(
-    @{ Name = 'missing'; User = ''; Machine = ''; Expected = 2 },
-    @{ Name = 'zero'; User = '0.0.0.0'; Machine = '0.0.0.0'; Expected = 2 },
-    @{ Name = 'user'; User = '140.0.0.1'; Machine = ''; Expected = 0 },
-    @{ Name = 'machine'; User = '0.0.0.0'; Machine = '140.0.0.1'; Expected = 0 }
-)
-foreach ($case in $runtimeCases) {
-    & $nsis /V2 /DAPP_VERSION=98.0.0 /DTEST_PACKAGE /DPRODUCT_DIR=LM_AI_Installer_Test "/DTEST_RUNTIME_USER_VERSION=$($case.User)" "/DTEST_RUNTIME_MACHINE_VERSION=$($case.Machine)" "/DAPP_SOURCE=$work\one.exe" "/DSETUP_OUTPUT=$work\runtime-$($case.Name)-setup.exe" (Join-Path $root 'installer\LM_AI.nsi')
-    if ($LASTEXITCODE -ne 0) { throw "Runtime detection test installer build failed: $($case.Name)" }
-    if ($case.Expected -ne 0) {
-        Run-Checked (Join-Path $work "runtime-$($case.Name)-setup.exe") '/S' $case.Expected
-        foreach ($path in @($installRoot,$key) + $shortcuts) {
-            if (Test-Path -LiteralPath $path) { throw "Missing runtime left installation artifacts: $path" }
-        }
-    }
-}
 # /D 即使由呼叫端指定也不可改變固定目錄。
 $redirect = Join-Path $work 'must-not-install-here'
 if (Test-Path -LiteralPath $redirect) { throw 'Unexpected directory override test artifact.' }
@@ -98,22 +109,6 @@ $preservedSettings = @{
 }
 foreach ($name in $preservedSettings.Keys) {
     [IO.File]::WriteAllText((Join-Path $installRoot $name), $preservedSettings[$name])
-}
-# 更新前也拒絕缺少 Runtime，且不替換 EXE、解除安裝器、登錄或捷徑。
-$beforeFiles = @{}
-foreach ($path in @($app,$uninstaller,$keep) + $shortcuts) { $beforeFiles[$path] = (Get-FileHash -LiteralPath $path).Hash }
-$beforeRegistration = Get-ItemProperty $key | ConvertTo-Json -Compress
-foreach ($case in $runtimeCases) {
-    Run-Checked (Join-Path $work "runtime-$($case.Name)-setup.exe") '/S' $case.Expected
-    if ($case.Expected -ne 0) {
-        foreach ($path in $beforeFiles.Keys) {
-            if ((Get-FileHash -LiteralPath $path).Hash -ne $beforeFiles[$path]) { throw "Missing runtime changed an existing file: $path" }
-        }
-        if ((Get-ItemProperty $key | ConvertTo-Json -Compress) -cne $beforeRegistration) { throw 'Missing runtime changed existing registration.' }
-    }
-    foreach ($name in $preservedSettings.Keys) {
-        if ([IO.File]::ReadAllText((Join-Path $installRoot $name)) -cne $preservedSettings[$name]) { throw "Runtime check changed VNC configuration: $name" }
-    }
 }
 # 主程式仍持有實例鎖時交棒，NSIS 必須等退出後再更新。
 $parent = Start-Hidden $app '--hold'
@@ -157,7 +152,7 @@ Run-Checked $uninstaller '/S'
 $deadline = [DateTime]::UtcNow.AddSeconds(15)
 while ((Test-Path $installRoot) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
 if (Test-Path $installRoot) { throw 'Real payload test uninstall incomplete.' }
-# 最後安裝真正交付的 Setup（包含正式 WebView2 偵測），不以測試包取代此驗證。
+# 最後安裝真正交付的 Setup，不以測試包取代此驗證。
 $releaseSetup = Join-Path $root 'dist\LM_AI_Setup.exe'
 $releaseApp = Join-Path $releaseRoot 'LM_AI.exe'
 $releaseUninstaller = Join-Path $releaseRoot 'Uninstall.exe'
@@ -165,7 +160,10 @@ $releaseUninstaller = Join-Path $releaseRoot 'Uninstall.exe'
 New-Item -ItemType Directory -Path $releaseRoot | Out-Null
 $releaseKeep = Join-Path $releaseRoot 'user-file.txt'
 [IO.File]::WriteAllText($releaseKeep, 'keep release data')
-Run-Checked $releaseSetup ('/S /D=' + $redirect)
+# 安裝器不依賴 Runtime；主程式啟動時才處理無法載入的情況。
+$missingBrowserFolder = Join-Path $work ('missing-runtime-' + [guid]::NewGuid().ToString('N'))
+if (Test-Path -LiteralPath $missingBrowserFolder) { throw 'Missing-Runtime test path must not exist.' }
+Run-Checked $releaseSetup ('/S /D=' + $redirect) 0 $missingBrowserFolder
 if (Test-Path -LiteralPath $redirect) { throw 'Release installer accepted a directory override.' }
 if ((Get-FileHash $releaseApp).Hash -ne (Get-FileHash (Join-Path $root 'dist\LM_AI.exe')).Hash) { throw 'Release installation differs from the delivered EXE.' }
 foreach ($file in @($releaseApp,$releaseSetup,$releaseUninstaller)) {
@@ -183,6 +181,7 @@ try {
         } finally { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcut) | Out-Null }
     }
 } finally { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcutReader) | Out-Null }
+Assert-RuntimeUnavailable $releaseApp $missingBrowserFolder
 Run-Checked $releaseApp '--self-check'
 Run-Checked $releaseUninstaller '/S'
 $deadline = [DateTime]::UtcNow.AddSeconds(15)
@@ -205,7 +204,8 @@ Remove-Item -LiteralPath $releaseKeep
     setup_sha256 = (Get-FileHash $releaseSetup -Algorithm SHA256).Hash.ToLowerInvariant()
     vnc_configuration_preserved = $true
     webview2_bundled = $false
-    runtime_detection_cases = @('missing: exit 2, no new installation','0.0.0.0: exit 2, no new installation','missing/zero: existing installation preserved','HKCU runtime accepted','HKLM runtime accepted after HKCU zero','actual installed Runtime: release Setup and WebView2 self-check')
+    runtime_check_stage = 'application startup only; no installer prerequisite check'
+    runtime_unavailable_simulation = 'child-only WEBVIEW2_BROWSER_EXECUTABLE_FOLDER points to a nonexistent folder; Setup succeeds, installed app exits with existing guidance'
     checks = @('NSIS install into missing product directory','existing directory preserves user files','fixed path ignores /D','shortcuts and registration','EXE/setup/uninstaller company name','PID handoff wait','update replacement','automatic restart','locked-file failure preserves old app','NSIS uninstall preserves unknown files','actual release Setup installation and WebView2 self-check','actual release uninstall')
     scope = 'isolated native payload and actual release Setup at C:\largan\LM_AI; corporate antivirus and Outlook require company testing'
 } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $root 'offline\installer-verification.json') -Encoding UTF8

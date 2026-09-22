@@ -1,6 +1,6 @@
 # 離線交付與 Git 工作流程
 
-> 0.8.8 已由使用者實測確認，最新 NSIS 已拆出 WebView2，由公司另外提供 Git dist 中保留的獨立安裝程式。交付：`LM_AI.exe`、`LM_AI_Setup.exe`、EXE／NSIS 更新清單、原始碼與文件，建置為 `Build.ps1 -EmptyCargoCache -IncludeInstaller`。請查看 exe-verification.json、installer-verification.json 與 docs/VALIDATION_0_8_8.md。離線 ZIP／verification.json 仍為歷史版本，未重新製作；vnc-verification.json 保留 0.8.6 的 Viewer 測試，不代表本版重測。
+> 0.8.8 已由使用者實測確認，最新 NSIS 只安裝 LM_AI，不檢查或安裝 WebView2，一般安裝不自動啟動；Runtime 由公司另外提供 Git dist 中保留的獨立安裝程式。SFX 測試包已撤下。交付：`LM_AI.exe`、`LM_AI_Setup.exe`、EXE／NSIS 更新清單、原始碼與文件，建置為 `Build.ps1 -EmptyCargoCache -IncludeInstaller`。請查看 exe-verification.json、installer-verification.json 與 docs/VALIDATION_0_8_8.md。離線 ZIP／verification.json 仍為歷史版本，未重新製作；vnc-verification.json 保留 0.8.6 的 Viewer 測試，不代表本版重測。
 
 ## 專案包含的內容
 

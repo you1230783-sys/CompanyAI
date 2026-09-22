@@ -69,7 +69,7 @@
 
 ## 修改後的交付與 Git 規則
 
-- **0.8.8 SFX 測試（最新）**：使用者回報精簡 NSIS 被防毒攔截，要求另外製作自解壓縮包測試。只新增 `dist/LM_AI_SFX_Test.exe`，使用未修改的官方 WinRAR 標準模組，包內僅有已驗收的 LM_AI.exe。預設解壓至 `C:\largan\LM_AI`，顯示說明且不自動啟動。沿用版本 0.8.8，以 `Build.ps1 -EmptyCargoCache -ValidateOnly` 驗證，再執行 Build-Sfx.ps1／Test-Sfx.ps1。保留正式 NSIS、兩份更新清單與歷史 ZIP，不把 SFX 宣告為 nsis 更新格式，也不能將本機解壓測試稱為公司防毒驗收。
+- **0.8.8 單純安裝（最新）**：使用者要求移除 SFX 測試包，NSIS 只安裝、不偵測或安裝 WebView2，一般安裝完成不自動啟動主程式。LM_AI.exe 保留原有 WebView2 初始化失敗提示，不新增偵測；既有更新 `/UPDATEPID`／`/RESTART` 交接契約保留。維持 0.8.8，執行 `Build.ps1 -EmptyCargoCache -IncludeInstaller` 後推送 main。使用子程序限定的無效 Runtime 位置驗證「安裝可完成、主程式啟動才失敗並提示」；不移除本機 Runtime、不宣稱已解決趨勢警報。只從最新 Git 移除 SFX 檔案，不改寫歷史，也不重製歷史 ZIP。以下較早的安裝前 Runtime 檢查約定由本條取代。
 
 - **0.8.8 精簡 NSIS（最新）**：使用者同意拆出 WebView2，由公司另外提供。Setup 不嵌入、不下載或自動執行 Runtime；缺少時在替換前提示使用者取得 `MicrosoftEdgeWebView2RuntimeInstallerX64.exe`，以退出碼 2 停止。保留 Git 的獨立 Runtime。維持 0.8.8，執行 `Build.ps1 -EmptyCargoCache -IncludeInstaller` 並推送；測試缺少／零版本、HKCU／HKLM 偵測與既有檔案保留。不重製歷史離線 ZIP。以下隨安裝包提供 Runtime 的舊約定由本條取代。
 

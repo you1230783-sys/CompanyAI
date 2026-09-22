@@ -16,11 +16,11 @@
 
 ### 0.8.8 精簡安裝包與 WebView2 分開提供
 
-最新 `LM_AI_Setup.exe` 不再嵌入 WebView2；公司另行提供 Git `dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe` 至內網下載區。Setup 偵測 HKCU／HKLM 的 Evergreen Runtime，空值或 `0.0.0.0` 不視為已安裝；缺少時顯示原生提示並以退出碼 2 停止，不替換既有程式、不修改機台設定，也不連外下載。提示引導使用者到公司下載位置或聯絡 IT，沒有寫死尚未提供的 URL。
+最新 `LM_AI_Setup.exe` 只安裝 LM_AI，不偵測、不嵌入或安裝 WebView2；公司另行提供 Git `dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe` 至內網下載區。一般安裝完成頁不提供自動開啟，使用者安裝後自行使用捷徑啟動。主程式沿用原有 WebView2 初始化失敗提示，缺少 Runtime 時先補裝再開啟 LM_AI，不必重跑 Setup。先前 Setup 的 Runtime 退出碼 2 阻擋流程已移除。
 
 主程式維持 0.8.8；部署時必須一起替換 Setup 與新簽署的 NSIS 清單，清除舊下載快取，避免同檔名舊完整包與新 SHA256 不符。已安裝 0.8.8 的用戶不需要為拆包重新更新。獨立 Runtime 與主程式更新清單分開提供。
 
-另提供 `dist/LM_AI_SFX_Test.exe` 作為手動自解壓縮測試包，參見 [SFX 測試說明](SFX_TEST_0_8_8.md)。它不支援 NSIS 的程序等待／重啟參數，不能取代 `LM_AI_Setup.exe`、不能在更新清單標記為 `kind: nsis`，現行 API／簽署清單不變。
+SFX 測試包因使用者要求已從最新 Git 移除。既有 NSIS 更新協定仍保留 `/UPDATEPID`／`/RESTART`：只有使用者在 App 同意安裝並重新啟動時才自動重啟。一般手動安裝不啟動主程式；API／簽署格式不變。
 
 ## 0.8.7 Outlook 模型可用性與介面整理
 

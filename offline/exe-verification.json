@@ -1,5 +1,5 @@
 ﻿{
-    "recorded_at":  "2026-09-22T11:09:47.4381131+08:00",
+    "recorded_at":  "2026-09-22T13:23:06.1737554+08:00",
     "version":  "0.8.8.0",
     "result":  "PASS",
     "msvc":  "14.29.30133",
@@ -8,7 +8,7 @@
                             "Verified _MSC_FULL_VER=192930159 x64"
                         ],
     "empty_cargo_cache":  true,
-    "cargo_home":  "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-62acdc5a5923415b9a47b6efaaa3752c",
+    "cargo_home":  "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-9ab8d8c1972f4854b3b7ceb5eb8a1e6e",
     "checks":  [
                    "v142 x64 compiler probe",
                    "fmt",

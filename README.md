@@ -92,7 +92,7 @@ Rust 桌面程式，提供公司瀏覽器登入、文字／附件對話、串流
 ## 直接使用
 
 1. 直接執行 `dist/LM_AI.exe`。從 0.8.0 升級時先從托盤離開舊版，再手動更換檔案；舊版更新器尚不支援 EXE 清單。
-2. NSIS 已改為精簡包，不含 WebView2。缺少時會提示並停止安裝；請先安裝公司另外提供的 `MicrosoftEdgeWebView2RuntimeInstallerX64.exe`，再重跑 Setup。Git 的 `dist/` 保留此獨立安裝程式，詳見 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md)。
+2. NSIS 只安裝 LM_AI，不檢查或安裝 WebView2，一般安裝完成後請自行使用捷徑開啟。如果主程式啟動時提示缺少 WebView2，請安裝公司另外提供的 `MicrosoftEdgeWebView2RuntimeInstallerX64.exe`，再開啟 LM_AI。Git 的 `dist/` 保留此獨立安裝程式，詳見 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md)。
 3. 按左下齒輪 → 瀏覽器登入，核對短碼並允許授權；登入最長保存 30 天。
 4. 選擇後端提供的「快速／品質」等模型，輸入文字並送出。預設 Enter 換行、Ctrl+Enter 送出；設定可改為 Enter 送出、Shift+Enter 換行。
 5. 使用者訊息靠右、AI 靠左；支援表格、程式碼高亮／複製、數學公式、註腳、任務清單與一般 Markdown。
