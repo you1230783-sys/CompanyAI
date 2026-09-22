@@ -30,4 +30,14 @@ NSIS 測試使用 v142 編譯的兩代原生測試程式，檢查固定路徑、
 
 2026-09-22 NSIS 完整建置與上述安裝／更新／重啟／占用失敗／解除安裝測試全部通過，`machines.json` 及 `user_config.json` 原內容保留。真正交付包安裝後的 WebView2 自檢亦通過；測試產品目錄、登錄與捷徑已清理。編譯工具仍為 MSVC 14.29.30133 x64，81 項 Rust 測試及空快取 frozen 建置再次通過。
 
-安裝包版本 `0.8.8.0`，大小 `217,573,495` bytes，SHA256：`f14e4b51bad516c2cb6fd8c1454bac0ce9f6eb624663c749188b325238006686`，與 `dist/update-manifest.json` 及 `offline/installer-verification.json` 一致。主程式仍為上方已驗收的相同 SHA256，未修改功能或進版。
+第一版完整安裝包版本 `0.8.8.0`，大小 `217,573,495` bytes，SHA256：`f14e4b51bad516c2cb6fd8c1454bac0ce9f6eb624663c749188b325238006686`。此包已由下方精簡版取代，僅保留此段作為歷史建置記錄。
+
+## WebView2 拆包（目前交付）
+
+依使用者指示，NSIS 不再嵌入、下載或自動執行 WebView2。獨立 Microsoft x64 Evergreen 安裝程式仍保存在 Git 的 `dist/`，供公司自行提供下載；本輪重新確認 SHA256 與 `WEBVIEW2-OFFLINE.md` 一致，Microsoft Authenticode 簽章有效。精簡包本身的建置不依賴該獨立 Runtime 檔案。
+
+安裝初始化先檢查 HKCU／HKLM 的 Evergreen 版本，空值或 `0.0.0.0` 視為未安裝；缺少時以原生視窗提示取得公司提供的安裝程式，退出碼 2，尚未建立產品目錄或替換任何既有檔案。保留一般使用者安裝及固定路徑。
+
+2026-09-22 再次執行 `Build.ps1 -EmptyCargoCache -IncludeInstaller` 全部通過：實際 MSVC v142 x64 探針、fmt、Clippy、81 項 Rust 測試、空 Cargo 快取 frozen release、WebView2 自檢與更新清單原生驗證。NSIS 測試新增空值／零版本的全新安裝拒絕與既有安裝保留，以及 HKCU 有效／HKCU 零值回退 HKLM 有效兩種成功案例；只在測試包注入讀值，不移除開發機 Runtime 或改動其登錄。這不等同在全新無 Runtime 電腦驗收；該環境仍需公司實測。
+
+正式精簡 Setup 已實際安裝、自檢及解除安裝；更新／重啟／鎖定失敗／未知檔案及 VNC 設定保留測試通過。新版 Setup 為 `1,854,170` bytes（約 1.85 MB），SHA256：`3cd25e25767e41e102efe6d69685646737be5e8e634e4f05dfefba8229cd6171`，對應目前 NSIS 更新清單及 installer-verification.json。版本仍為 0.8.8.0，主程式 EXE 與本文件上方 SHA256 相同；歷史離線 ZIP 未重製。

@@ -1,6 +1,6 @@
 # 離線交付與 Git 工作流程
 
-> 0.8.8 已由使用者實測確認，追加 NSIS 交付：`LM_AI.exe`、`LM_AI_Setup.exe`、EXE／NSIS 更新清單、原始碼與文件，建置為 `Build.ps1 -EmptyCargoCache -IncludeInstaller`。請查看 exe-verification.json、installer-verification.json 與 docs/VALIDATION_0_8_8.md。離線 ZIP／verification.json 仍為歷史版本，未重新製作；vnc-verification.json 保留 0.8.6 的 Viewer 測試，不代表本版重測。
+> 0.8.8 已由使用者實測確認，最新 NSIS 已拆出 WebView2，由公司另外提供 Git dist 中保留的獨立安裝程式。交付：`LM_AI.exe`、`LM_AI_Setup.exe`、EXE／NSIS 更新清單、原始碼與文件，建置為 `Build.ps1 -EmptyCargoCache -IncludeInstaller`。請查看 exe-verification.json、installer-verification.json 與 docs/VALIDATION_0_8_8.md。離線 ZIP／verification.json 仍為歷史版本，未重新製作；vnc-verification.json 保留 0.8.6 的 Viewer 測試，不代表本版重測。
 
 ## 專案包含的內容
 
@@ -19,7 +19,7 @@ CompanyAI/
   docs/                    網站串接及離線操作文件
   dist/LM_AI.exe            唯一主程式檔名
   dist/update-manifest-exe.json 獨立 EXE 簽章與下載契約
-  dist/LM_AI_Setup.exe      NSIS 完整安裝／更新包
+  dist/LM_AI_Setup.exe      NSIS 精簡安裝／更新包（不含 WebView2）
   dist/update-manifest.json 發行包簽章與下載契約
   dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe  WebView2 離線安裝包
   offline/

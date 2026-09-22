@@ -1,6 +1,8 @@
 # WebView2 離線安裝
 
-LM_AI 0.4.0 使用 WebView2 顯示桌面介面。Windows 11 通常已安裝；若 LM_AI 提示缺少執行階段，雙擊同資料夾的 `MicrosoftEdgeWebView2RuntimeInstallerX64.exe`，完成後重新開啟 `LM_AI.exe`。
+LM_AI 使用 WebView2 顯示桌面介面。0.8.8 的最新 NSIS 已改為精簡包，不包含或自動下載 WebView2。Windows 11 通常已安裝；若 Setup 提示缺少執行階段，請從公司另行提供的下載位置取得 `MicrosoftEdgeWebView2RuntimeInstallerX64.exe`，安裝後重新執行 `LM_AI_Setup.exe`。直接使用單檔主程式者則重新開啟 `LM_AI.exe`。
+
+獨立安裝程式仍保存在 [Git 的 dist 目錄](https://github.com/you1230783-sys/CompanyAI/blob/main/dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe)，使用 GitHub 的 Download raw file 下載實際安裝檔，或以 Git LFS 取得，不能把 LFS 指標文字當成 EXE。公司可將這份檔案放到自己的內網下載區，僅供缺少 Runtime 的電腦安裝一次，不必每次 LM_AI 更新重複下載。
 此檔為完整 x64 Evergreen Standalone Installer，安裝時不需下載 WebView2 主程式。公司安裝政策／權限仍由 IT 管理。
 不需要 Rust、VS、Node 或 Python 才能使用 App。Classic Outlook 需另外已安裝並開啟。
 

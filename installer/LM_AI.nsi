@@ -1,5 +1,5 @@
 ; -*- coding: utf-8 -*-
-; 使用者端只執行 NSIS 內建操作、Windows API 與已隨包附上的原生 EXE。
+; 使用者端只執行 NSIS 內建操作與 Windows API；WebView2 由公司另外提供。
 Unicode true
 !include "MUI2.nsh"
 !include "x64.nsh"
@@ -22,6 +22,16 @@ Unicode true
 !define PRODUCT_DIR "LM_AI"
 !endif
 !define INSTALL_ROOT "C:\largan"
+; 正式包不能透過命令列或編譯參數略過 Runtime 偵測。
+; 測試包可指定兩個登錄讀值，以驗證缺少 Runtime，且不改動本機 Edge 登錄。
+!ifdef TEST_RUNTIME_USER_VERSION
+!ifndef TEST_PACKAGE
+!error "Runtime simulation is only allowed in TEST_PACKAGE"
+!endif
+!ifndef TEST_RUNTIME_MACHINE_VERSION
+!error "Runtime simulation requires both user and machine versions"
+!endif
+!endif
 !define INSTALL_PATH "${INSTALL_ROOT}\${PRODUCT_DIR}"
 !define PUBLISHER "Largan, Inc."
 ; 舊登錄鍵與實例鎖是相容識別碼，保留以避免重複登錄或破壞更新交接。
@@ -44,7 +54,7 @@ VIAddVersionKey /LANG=1028 "LegalCopyright" "Copyright © 2026 ${PUBLISHER} All 
 !define MUI_ICON "..\assets\app.ico"
 !define MUI_UNICON "..\assets\app.ico"
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipUpdatePage
-!define MUI_WELCOMEPAGE_TEXT "固定安裝至 ${INSTALL_PATH}\，並為目前使用者建立捷徑。聊天、登入及偏好資料將保留。$\r$\n$\r$\n請以一般權限安裝及執行；若無目錄寫入權限，請聯絡 IT 配置。若電腦缺少 WebView2，會使用隨附的 Microsoft 離線安裝程式。"
+!define MUI_WELCOMEPAGE_TEXT "固定安裝至 ${INSTALL_PATH}\，並為目前使用者建立捷徑。聊天、登入及偏好資料將保留。$\r$\n$\r$\n請以一般權限安裝及執行；若無目錄寫入權限，請聯絡 IT 配置。此安裝包不含 WebView2；若尚未安裝，請先使用公司另外提供的 WebView2 x64 安裝程式。"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipUpdatePage
@@ -79,6 +89,33 @@ Function SkipUpdatePage
     Abort
 FunctionEnd
 
+; Evergreen Runtime 任一使用者／電腦登錄版本有效即可使用。
+; 空值與 0.0.0.0 不代表已安裝；先完成檢查，再等待更新程序及替換任何檔案。
+Function EnsureWebView2
+!ifdef TEST_RUNTIME_USER_VERSION
+    StrCpy $0 "${TEST_RUNTIME_USER_VERSION}"
+!else
+    ReadRegStr $0 HKCU "Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
+!endif
+    StrCmp $0 "" check_machine
+    StrCmp $0 "0.0.0.0" check_machine runtime_ready
+    check_machine:
+    SetRegView 32
+!ifdef TEST_RUNTIME_USER_VERSION
+    StrCpy $0 "${TEST_RUNTIME_MACHINE_VERSION}"
+!else
+    ReadRegStr $0 HKLM "Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
+!endif
+    SetRegView 64
+    StrCmp $0 "" runtime_missing
+    StrCmp $0 "0.0.0.0" runtime_missing runtime_ready
+    runtime_missing:
+    MessageBox MB_ICONSTOP "找不到 Microsoft Edge WebView2 Runtime，LM_AI 尚未安裝或更新。$\r$\n$\r$\n請從公司提供的下載位置取得 MicrosoftEdgeWebView2RuntimeInstallerX64.exe，或聯絡 IT。安裝完成後，請重新執行 LM_AI 安裝程式。$\r$\n$\r$\n此精簡安裝包不含 WebView2，既有程式與設定將保留。" /SD IDOK
+    SetErrorLevel 2
+    Abort
+    runtime_ready:
+FunctionEnd
+
 Function .onInit
     ${IfNot} ${RunningX64}
         MessageBox MB_ICONSTOP "LM_AI 需要 Windows x64。" /SD IDOK
@@ -90,6 +127,7 @@ Function .onInit
     StrCpy $INSTDIR "${INSTALL_PATH}"
     !insertmacro CheckInstallDirectory "${INSTALL_ROOT}"
     !insertmacro CheckInstallDirectory "$INSTDIR"
+    Call EnsureWebView2
     ${GetParameters} $0
     ${GetOptions} $0 "/UPDATEPID=" $UpdatePid
     ClearErrors
@@ -130,22 +168,6 @@ Section "安裝 LM_AI"
     InitPluginsDir
     SetOutPath "$PLUGINSDIR"
     File /oname=LM_AI.exe "${APP_SOURCE}"
-    ; 測試包使用同一安裝程式邏輯，只以小型測試 EXE 替代 payload。
-!ifndef TEST_PACKAGE
-    ReadRegStr $0 HKCU "Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
-    StrCmp $0 "" 0 runtime_ready
-    SetRegView 32
-    ReadRegStr $0 HKLM "Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
-    SetRegView 64
-    StrCmp $0 "" 0 runtime_ready
-    File /oname=WebView2.exe "..\dist\MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
-    ExecWait '"$PLUGINSDIR\WebView2.exe" /silent /install' $0
-    StrCmp $0 0 runtime_ready
-    StrCmp $0 3010 runtime_ready
-    MessageBox MB_ICONSTOP "WebView2 安裝失敗（$0），LM_AI 尚未替換。" /SD IDOK
-    Abort
-    runtime_ready:
-!endif
     ClearErrors
     ; NSIS CreateDirectory 會逐層建立缺少的父目錄；已存在的目錄可直接沿用。
     ; 先確認成功再準備替換檔案，不刪除原目錄或其中的其他資料。

@@ -12,9 +12,7 @@ if (-not (Test-Path (Join-Path $tools 'nsis-3.12\makensis.exe'))) {
 }
 $compiler = Join-Path $tools 'nsis-3.12\makensis.exe'
 $version = [regex]::Match((Get-Content (Join-Path $root 'Cargo.toml') -Raw), '(?m)^version = "([^"]+)"').Groups[1].Value
-$runtime = Join-Path $root 'dist\MicrosoftEdgeWebView2RuntimeInstallerX64.exe'
-$signature = Get-AuthenticodeSignature -LiteralPath $runtime
-if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') { throw 'WebView2 Microsoft signature validation failed.' }
+# 精簡 Setup 不再讀取或嵌入 WebView2；獨立 Runtime 由公司另行提供。
 & $compiler /V2 "/DAPP_VERSION=$version" (Join-Path $root 'installer\LM_AI.nsi')
 if ($LASTEXITCODE -ne 0) { throw 'NSIS installer build failed.' }
 # 私鑰不包含在離線包；重建者可以編譯驗證，只有持有原私鑰的發行者能發布更新。

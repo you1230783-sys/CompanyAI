@@ -48,6 +48,24 @@ foreach ($generation in @('one','two')) {
 }
 $app = Join-Path $installRoot 'LM_AI.exe'
 $uninstaller = Join-Path $installRoot 'Uninstall.exe'
+# 只在測試包注入登錄讀值，不移除或修改開發機的 WebView2。
+# 空值／零版本必須停止安裝；HKCU 或 HKLM 任一有效版本則可正常安裝。
+$runtimeCases = @(
+    @{ Name = 'missing'; User = ''; Machine = ''; Expected = 2 },
+    @{ Name = 'zero'; User = '0.0.0.0'; Machine = '0.0.0.0'; Expected = 2 },
+    @{ Name = 'user'; User = '140.0.0.1'; Machine = ''; Expected = 0 },
+    @{ Name = 'machine'; User = '0.0.0.0'; Machine = '140.0.0.1'; Expected = 0 }
+)
+foreach ($case in $runtimeCases) {
+    & $nsis /V2 /DAPP_VERSION=98.0.0 /DTEST_PACKAGE /DPRODUCT_DIR=LM_AI_Installer_Test "/DTEST_RUNTIME_USER_VERSION=$($case.User)" "/DTEST_RUNTIME_MACHINE_VERSION=$($case.Machine)" "/DAPP_SOURCE=$work\one.exe" "/DSETUP_OUTPUT=$work\runtime-$($case.Name)-setup.exe" (Join-Path $root 'installer\LM_AI.nsi')
+    if ($LASTEXITCODE -ne 0) { throw "Runtime detection test installer build failed: $($case.Name)" }
+    if ($case.Expected -ne 0) {
+        Run-Checked (Join-Path $work "runtime-$($case.Name)-setup.exe") '/S' $case.Expected
+        foreach ($path in @($installRoot,$key) + $shortcuts) {
+            if (Test-Path -LiteralPath $path) { throw "Missing runtime left installation artifacts: $path" }
+        }
+    }
+}
 # /D 即使由呼叫端指定也不可改變固定目錄。
 $redirect = Join-Path $work 'must-not-install-here'
 if (Test-Path -LiteralPath $redirect) { throw 'Unexpected directory override test artifact.' }
@@ -80,6 +98,22 @@ $preservedSettings = @{
 }
 foreach ($name in $preservedSettings.Keys) {
     [IO.File]::WriteAllText((Join-Path $installRoot $name), $preservedSettings[$name])
+}
+# 更新前也拒絕缺少 Runtime，且不替換 EXE、解除安裝器、登錄或捷徑。
+$beforeFiles = @{}
+foreach ($path in @($app,$uninstaller,$keep) + $shortcuts) { $beforeFiles[$path] = (Get-FileHash -LiteralPath $path).Hash }
+$beforeRegistration = Get-ItemProperty $key | ConvertTo-Json -Compress
+foreach ($case in $runtimeCases) {
+    Run-Checked (Join-Path $work "runtime-$($case.Name)-setup.exe") '/S' $case.Expected
+    if ($case.Expected -ne 0) {
+        foreach ($path in $beforeFiles.Keys) {
+            if ((Get-FileHash -LiteralPath $path).Hash -ne $beforeFiles[$path]) { throw "Missing runtime changed an existing file: $path" }
+        }
+        if ((Get-ItemProperty $key | ConvertTo-Json -Compress) -cne $beforeRegistration) { throw 'Missing runtime changed existing registration.' }
+    }
+    foreach ($name in $preservedSettings.Keys) {
+        if ([IO.File]::ReadAllText((Join-Path $installRoot $name)) -cne $preservedSettings[$name]) { throw "Runtime check changed VNC configuration: $name" }
+    }
 }
 # 主程式仍持有實例鎖時交棒，NSIS 必須等退出後再更新。
 $parent = Start-Hidden $app '--hold'
@@ -170,6 +204,8 @@ Remove-Item -LiteralPath $releaseKeep
     parent_existed_before_test = $parentExisted
     setup_sha256 = (Get-FileHash $releaseSetup -Algorithm SHA256).Hash.ToLowerInvariant()
     vnc_configuration_preserved = $true
+    webview2_bundled = $false
+    runtime_detection_cases = @('missing: exit 2, no new installation','0.0.0.0: exit 2, no new installation','missing/zero: existing installation preserved','HKCU runtime accepted','HKLM runtime accepted after HKCU zero','actual installed Runtime: release Setup and WebView2 self-check')
     checks = @('NSIS install into missing product directory','existing directory preserves user files','fixed path ignores /D','shortcuts and registration','EXE/setup/uninstaller company name','PID handoff wait','update replacement','automatic restart','locked-file failure preserves old app','NSIS uninstall preserves unknown files','actual release Setup installation and WebView2 self-check','actual release uninstall')
     scope = 'isolated native payload and actual release Setup at C:\largan\LM_AI; corporate antivirus and Outlook require company testing'
 } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $root 'offline\installer-verification.json') -Encoding UTF8
