@@ -1,0 +1,33 @@
+{
+  "recorded_at": "2026-09-23T06:44:19.6146147+08:00",
+  "result": "PASS",
+  "version": "0.8.9",
+  "source": "User-provided icon.png, copied byte-for-byte to assets/app.png",
+  "source_sha256": "3c4998dc9a69f33f625a34702add209291a2795f258d0d293e4e5526a2a980b6",
+  "ico_sha256": "6f537ed8eed22b8a2ecef10e302c377abf879766b97fb628e9bdae38a0ee8b91",
+  "exe_sha256": "d75e2bbd61df61da2ccabcec1a68afb63e05053c5c6867dffd693fe57568909d",
+  "setup_sha256": "4250daa5c7f04f5bb9d10830785b2c3219e0d01017ab54eecfaba4092cda309f",
+  "sizes": [
+    16,
+    20,
+    24,
+    32,
+    40,
+    48,
+    64,
+    96,
+    128,
+    256
+  ],
+  "checks": [
+    "source PNG visually inspected",
+    "256px ICO preview visually inspected",
+    "EXE resource group 1 frames match ICO byte-for-byte",
+    "Setup resource group 103 frames match ICO byte-for-byte",
+    "Windows LoadImage loads all ten sizes",
+    "transparent corner preserved",
+    "embedded UI brand image DOM self-check passed"
+  ],
+  "desktop_and_tray_screenshots_verified": false,
+  "corporate_antivirus_tested": false
+}

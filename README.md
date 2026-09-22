@@ -1,7 +1,12 @@
-# LM_AI 0.8.8 — Windows 工作助理
+# LM_AI 0.8.9 — Windows 工作助理
 
 Rust 桌面程式，提供公司瀏覽器登入、文字／附件對話、串流、持久背景任務、選字快捷鍵、網站通知及 Classic Outlook 唯讀助理。
 介面使用 WebView2、內嵌 HTML/CSS 與離線 Markdown 套件；不需 Node、Python 或外部 CDN。
+
+## 0.8.9 三花貓圖示
+
+- 使用新的三花貓圖案，統一更新 EXE、視窗、工作列、托盤、介面左上品牌，以及 NSIS 安裝／解除安裝圖示。
+- EXE、NSIS 與兩份更新清單均為 0.8.9；沿用單純安裝、不檢查或附帶 WebView2 的流程。詳見 [0.8.9 驗收](docs/VALIDATION_0_8_9.md)。
 
 ## 0.8.8 附件選檔修正
 

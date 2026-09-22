@@ -6,6 +6,12 @@
 
 > **0.5 新功能請先實作 [DESKTOP_0_5_CONTRACT.md](DESKTOP_0_5_CONTRACT.md)**：附件規則路由、文件／圖片上傳、串流、持久背景任務與通知（歷史估時功能已於 0.8.4 移除）。此處保留既有登入／版本／模型／通知基礎；驗證範圍見各版驗收文件。
 
+## 0.8.9 三花貓圖示發行
+
+本版只更新使用者提供的圖示並進版 0.8.9，不改動聊天、附件、Outlook 或 VNC API。交付 `LM_AI.exe`／`update-manifest-exe.json` 與 `LM_AI_Setup.exe`／`update-manifest.json`，每組檔案必須成對部署，網站可公告 `latest_version: 0.8.9`，一般圖示更新無須提高最低版本。
+
+同版本仍優先選 EXE；若要使用 NSIS 自動安裝流程，所有可探索的更新來源只能公告本版 NSIS，EXE 清單不公開或保留舊版。NSIS 延續只安裝、不檢查或附帶 WebView2，一般安裝完成後手動開啟主程式。驗證見 [0.8.9 驗收](VALIDATION_0_8_9.md)，歷史離線 ZIP 不更新。
+
 ## 0.8.8 附件接收修正
 
 使用者實測後追加 0.8.8 NSIS 發行，`dist/LM_AI_Setup.exe` 與 `dist/update-manifest.json` 必須成對部署；固定安裝至 `C:\largan\LM_AI`，保留既有機台設定。獨立 EXE 與其更新清單也維持 0.8.8。既有雙格式更新選擇規則不變：同版本兩種格式同時被公告時，桌面優先選 EXE（手動替換）；需要 NSIS 安裝流程時，網站所有可探索的清單來源應只公告該版 NSIS，EXE 清單不公開或保留較舊版，不能只修改 download 路由卻保留同版 EXE 清單。Git 上傳本身不會部署內網網站。
