@@ -223,6 +223,7 @@ function renderWork() {
       .forEach((button) => (button.disabled = true));
   }
   $("task-count").textContent = tasks.filter((t) => t.active).length || "";
+  $("task-count").hidden = !tasks.some(t => t.active);
   const signature = JSON.stringify(
     tasks.map((t) => ({ ...t, partial: undefined })),
   );

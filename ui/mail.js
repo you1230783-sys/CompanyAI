@@ -5,6 +5,24 @@ const selectedMails = new Set();
 function mailCommand(command) {
   send({ type: "mail_batch", command });
 }
+function canAutoExportMail() {
+  return state.mail_batch?.quality_status === "available" &&
+    state.models.some(model => model.id === "quality");
+}
+function renderQualityAvailability(status = state.mail_batch?.quality_status) {
+  const messages = {
+    checking: "正在確認品質模型是否可用…",
+    unavailable: "目前品質模型維護中，暫時停用自動補充內文功能。",
+    error: "無法確認品質模型狀態，暫時停用自動補充內文。請重新進入 Outlook 助理或重新整理服務。",
+    signed_out: "登入後可確認品質模型是否可用。",
+  };
+  const available = status === "available" && state.models.some(model => model.id === "quality");
+  $("batch-auto-export").disabled = !!state.mail_batch?.busy || !available;
+  // 查詢期間保留使用者選擇；確認停用或查詢失敗後清除，恢復時須由使用者重新勾選。
+  if (["unavailable", "error", "signed_out"].includes(status)) $("batch-auto-export").checked = false;
+  $("batch-quality-status").textContent = available ? "" : (messages[status] || messages.checking);
+  $("batch-quality-status").hidden = available;
+}
 function renderMailBatch() {
   const batch = state.mail_batch || {},
     mails = batch.list?.mails || [];
@@ -50,7 +68,7 @@ function renderMailBatch() {
     .querySelectorAll("[data-mail-period],#batch-mail-list input")
     .forEach((button) => (button.disabled = !!batch.busy));
   $("batch-select-all").disabled = !!batch.busy || !mails.length;
-  $("batch-auto-export").disabled = !!batch.busy;
+  renderQualityAvailability();
   $("batch-analyze").disabled =
     !!batch.busy || !selectedMails.size || !state.can_send;
   $("batch-stop").disabled = !batch.busy;
@@ -79,24 +97,43 @@ $("batch-select-all").onclick = () => {
   renderMailBatch();
 };
 $("batch-analyze").onclick = () => {
-  const allow = $("batch-auto-export").checked;
+  const allow = $("batch-auto-export").checked && canAutoExportMail();
+  const selectedIds = [...selectedMails];
   ask(
     `分析勾選的 ${selectedMails.size} 封郵件？`,
     allow
-      ? "先傳主旨、寄件者、收件者等基本資訊。你授權 App 依 AI 請求自動匯出本批郵件的完整 MSG（正文、圖片及附件），傳給公司網站轉檔，再由品質模型讀取文件並自動整理。不寄信、不修改信箱。"
-      : "只傳本批勾選郵件的基本資訊，不讀取正文、不匯出 MSG。",
-    () =>
+      ? "第一次先傳主旨、寄件者、收件者等基本資訊，並交由AI自動判斷重要性。如果AI認為有必要，將在下一次對話自動匯出內文並再次傳出。"
+      : "只傳本批勾選郵件的基本資訊，不讀取正文與任何附件。",
+    () => {
+      // 確認視窗開啟期間模型仍可能停用，送出前再確認；原生層亦獨立檢查。
+      if (allow && !canAutoExportMail()) {
+        toast("品質模型目前無法使用，請重新確認分析範圍。");
+        return;
+      }
       mailCommand({
         action: "analyze",
-        ids: [...selectedMails],
+        ids: selectedIds,
         allow_export: allow,
-      }),
+      });
+    },
   );
+  if (allow) {
+    // 僅以 DOM 與固定文字建立紅色授權段落，避免把郵件或伺服器文字當 HTML。
+    const consent = node("strong", "consent-warning", "「你授權本 App 依據 AI 請求，自動匯出本批郵件的完整內容」");
+    $("confirm-message").append(document.createTextNode("\n"), consent,
+      document.createTextNode("，並交由 AI 再次讀取內文判斷重要性。\n本功能不會自動寄信、刪除郵件。"));
+  }
 };
 $("batch-stop").onclick = () => mailCommand({ action: "stop" });
 $("batch-open").onclick = () => {
   showView("chat");
   send({ type: "select_chat", id: state.mail_batch.conversation_id });
 };
-window.MailUI = { render: renderMailBatch };
+window.MailUI = {
+  render: renderMailBatch,
+  enter() {
+    renderQualityAvailability("checking");
+    mailCommand({ action: "refresh_models" });
+  },
+};
 renderMailBatch();

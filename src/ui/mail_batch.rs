@@ -10,6 +10,8 @@ use crate::{
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(super) enum MailCommand {
+    /// 進入助理頁時重查網站模型清單，不能只沿用開啟 App 時的快取。
+    RefreshModels,
     List {
         period: String,
         unread: bool,
@@ -79,11 +81,24 @@ impl Drop for MailRuntime {
 }
 impl App {
     pub(super) fn mail_batch_state(&self) -> serde_json::Value {
+        let quality_status = if !self.logged_in() {
+            "signed_out"
+        } else if self.services_loading {
+            "checking"
+        } else if self.models.is_none() {
+            "error"
+        } else if self.require_mail_analysis_model().is_ok() {
+            "available"
+        } else {
+            "unavailable"
+        };
         json!({"list":self.mail_flow.list,"phase":self.mail_flow.phase,"status":self.mail_flow.status,
-            "busy":self.mail_flow.phase!="idle","conversation_id":self.mail_flow.conversation})
+            "busy":self.mail_flow.phase!="idle","conversation_id":self.mail_flow.conversation,
+            "quality_status":quality_status})
     }
     pub(super) fn mail_batch_command(&mut self, command: MailCommand) -> AppResult<()> {
         match command {
+            MailCommand::RefreshModels => self.refresh_services(),
             MailCommand::Stop => {
                 self.mail_flow.cancel.store(true, Ordering::Relaxed);
                 self.mail_flow.operation += 1;
@@ -163,6 +178,9 @@ impl App {
                     })
                     .collect::<AppResult<_>>()?;
                 if allow_export {
+                    if self.services_loading {
+                        return Err("正在確認品質模型是否可用，請稍候再啟用自動補充內文。".into());
+                    }
                     self.require_mail_analysis_model()?;
                     if self.work.capability_loading
                         || self.work.capability_model != self.config.model
@@ -509,7 +527,7 @@ impl App {
                 .iter()
                 .any(|model| model.id == batch::ANALYSIS_MODEL)
         }) {
-            return Err("目前沒有可用的品質模型（quality）；請重新整理模型或聯絡管理者。".into());
+            return Err("目前品質模型維護中，暫時停用自動補充內文功能。".into());
         }
         Ok(())
     }

@@ -146,14 +146,10 @@ button:hover:not(:disabled) {
   margin-left: auto;
 }
 .brand-mark {
-  width: 28px;
-  height: 28px;
-  background: var(--strong-accent);
-  color: var(--on-accent);
-  border-radius: 9px;
-  display: grid;
-  place-items: center;
-  font-weight: 600;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  object-fit: contain;
 }
 .nav-button {
   justify-content: flex-start;
@@ -172,12 +168,6 @@ button:hover:not(:disabled) {
   background: var(--soft);
   color: var(--accent);
 }
-.new-chat {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  box-shadow: 0 1px 3px #25303904;
-  margin-bottom: 14px;
-}
 .history-section {
   flex: 1;
   min-height: 0;
@@ -194,8 +184,32 @@ button:hover:not(:disabled) {
   letter-spacing: 0.5px;
 }
 .section-caption svg {
-  width: 12px;
-  height: 12px;
+  width: 15px;
+  height: 15px;
+}
+.section-caption #new-chat { font-size: 0.77rem; padding: 5px; gap: 3px; }
+.history-row { position: relative; border-radius: 6px; }
+.history-row:hover, .history-row:focus-within { background: var(--hover); }
+.history-row.selected { background: var(--soft); }
+.history-row.pinned .history-item { font-weight: 600; }
+.history-actions {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  transform: translateY(-50%);
+  display: flex;
+  opacity: 0;
+  pointer-events: none;
+}
+.history-actions .icon-button { width: 27px; height: 28px; padding: 5px; }
+.history-actions .icon-button svg { width: 15px; height: 15px; }
+.history-actions [aria-pressed="true"] { color: var(--accent); background: var(--soft); }
+/* 滑鼠及鍵盤皆可操作；按鈕與選取對話分開，避免操作時意外切換對話。 */
+.history-row:hover .history-actions, .history-row:focus-within .history-actions { opacity: 1; pointer-events: auto; }
+.history-row:hover .history-item, .history-row:focus-within .history-item { padding-right: 86px; }
+@media (hover: none) {
+  .history-actions { opacity: 1; pointer-events: auto; }
+  .history-row .history-item { padding-right: 86px; }
 }
 .history-item {
   display: block;
@@ -209,8 +223,7 @@ button:hover:not(:disabled) {
   font-size: 0.87rem;
   color: var(--muted);
 }
-.history-item.selected {
-  background: var(--soft);
+.history-row.selected .history-item {
   color: var(--accent);
 }
 .sidebar-bottom {
@@ -274,7 +287,7 @@ body.collapsed .sidebar-bottom {
 body.collapsed .sidebar-bottom .icon-button {
   margin: 0;
 }
-body.collapsed .badge {
+body.collapsed #sidebar .badge {
   position: absolute;
   right: 0;
   top: 0;
@@ -318,6 +331,15 @@ main {
   align-items: center;
   gap: 12px;
 }
+.topbar > div:first-child { min-width: 0; }
+.topbar-actions { flex-shrink: 0; gap: 8px; }
+.topbar-actions .icon-button { position: relative; }
+.topbar-actions .icon-button.active { color: var(--accent); background: var(--soft); }
+.topbar-actions .badge { position: absolute; top: -2px; right: -4px; padding: 0 3px; pointer-events: none; }
+body.collapsed .section-caption { padding: 0; justify-content: center; }
+body.collapsed .history-section { flex: 0; margin-top: 18px; overflow: visible; }
+.consent-warning { color: #b42318; font-weight: 600; }
+:root[data-theme="dark"] .consent-warning { color: #ffaaa5; }
 .status {
   font-size: 0.8rem;
   color: var(--muted);

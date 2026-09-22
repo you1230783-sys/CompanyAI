@@ -318,6 +318,53 @@ window.runSelfTest = async () => {
     const mailCommands = [];
     try {
       send = (command) => mailCommands.push(command);
+      LMUI.showView("chat");
+      mailCommands.length = 0;
+      LMUI.showView("outlook");
+      LMUI.showView("outlook");
+      check(mailCommands.length === 1 && mailCommands[0].command.action === "refresh_models",
+        "entering Outlook refreshes model catalog exactly once");
+      check(document.getElementById("batch-auto-export").disabled,
+        "automatic mail export disabled while refreshing models");
+      fixture.mail_batch.quality_status = "unavailable";
+      LMUI.receive(fixture);
+      check(document.getElementById("batch-auto-export").disabled && !document.getElementById("batch-auto-export").checked &&
+        document.getElementById("batch-quality-status").textContent.includes("品質模型維護中"), "missing quality model disables automatic export with maintenance notice");
+      document.getElementById("batch-analyze").click();
+      check(document.getElementById("confirm-message").textContent.includes("不讀取正文與任何附件"), "metadata analysis remains available without quality model");
+      document.getElementById("confirm-ok").click();
+      check(mailCommands.at(-1).command.allow_export === false, "metadata-only analysis never authorizes export");
+      fixture.models.push({id: "quality", label: "品質"});
+      fixture.mail_batch.quality_status = "available";
+      LMUI.receive(fixture);
+      check(!document.getElementById("batch-auto-export").disabled && !document.getElementById("batch-auto-export").checked,
+        "quality recovery enables option without silently granting consent");
+      document.getElementById("batch-auto-export").checked = true;
+      document.getElementById("batch-analyze").click();
+      check(document.querySelector("#confirm-message .consent-warning")?.textContent.includes("自動匯出本批郵件的完整內容") &&
+        document.getElementById("confirm-message").textContent.split("\n").length === 3,
+        "export consent has separate lines and highlighted authorization");
+      // 在確認視窗尚未關閉時撤回模型，舊的同意不得繼續啟動匯出。
+      fixture.models = fixture.models.filter(model => model.id !== "quality");
+      fixture.mail_batch.quality_status = "unavailable";
+      LMUI.receive(fixture);
+      const countBeforeConfirm = mailCommands.length;
+      document.getElementById("confirm-ok").click();
+      check(mailCommands.length === countBeforeConfirm, "quality removed during confirmation prevents export command");
+      fixture.models.push({id: "quality", label: "品質"});
+      fixture.mail_batch.quality_status = "available";
+      LMUI.receive(fixture);
+      document.getElementById("batch-auto-export").checked = true;
+      document.getElementById("batch-analyze").click();
+      document.getElementById("confirm-ok").click();
+      check(mailCommands.at(-1).command.allow_export === true, "explicit consent with available quality model authorizes export");
+      fixture.mail_batch.quality_status = "error";
+      LMUI.receive(fixture);
+      check(document.getElementById("batch-auto-export").disabled && document.getElementById("batch-quality-status").textContent.includes("無法確認"),
+        "catalog failure disables export without misreporting maintenance");
+      fixture.mail_batch.quality_status = "available";
+      LMUI.receive(fixture);
+      mailCommands.length = 0;
       for (const scope of ["current_folder", "inbox"]) {
         document.getElementById("batch-scope").value = scope;
         for (const button of document.querySelectorAll("[data-mail-period]")) {
@@ -467,12 +514,38 @@ window.runSelfTest = async () => {
       fixture.config.enter_sends = true;
       fixture.config.hotkey_enabled = false;
       fixture.config.quick_actions_fast = false;
+      fixture.config.sidebar_collapsed = false;
       fixture.conversations = [
         {id:"recent",title:"近期",updated_at:100,pinned:false},
         {id:"pinned",title:"重要",updated_at:1,pinned:true},
       ];
       LMUI.receive(fixture);
       check(document.querySelector("#history-list button")?.dataset.id === "pinned", "pinned conversation precedes newer ordinary conversation");
+      check(document.querySelectorAll(".topbar-actions button").length === 2 &&
+        document.getElementById("show-notifications").closest(".topbar-actions") &&
+        document.getElementById("show-tasks").closest(".topbar-actions") &&
+        document.getElementById("new-chat").closest(".section-caption"), "compact navigation places tools and new chat correctly");
+      const logo = document.querySelector("img.brand-mark");
+      check(logo.complete && logo.naturalWidth > 0 && logo.getAttribute("src") === "app.ico", "brand loads embedded application cat icon");
+      const rowAction = action => document.querySelector(`[data-history-action="${action}"][data-id="recent"]`);
+      rowAction("rename").focus();
+      check(getComputedStyle(rowAction("rename").parentElement).opacity === "1", "keyboard focus reveals conversation actions");
+      rowAction("rename").click();
+      check(document.getElementById("rename-title").value === "近期", "rename opens clicked row rather than active conversation");
+      document.getElementById("rename-title").value = "重新命名";
+      document.getElementById("rename-save").click();
+      check(behaviorCommands.at(-1).type === "rename_chat" && behaviorCommands.at(-1).id === "recent", "rename targets row id");
+      rowAction("pin").click();
+      check(behaviorCommands.at(-1).type === "pin_chat" && behaviorCommands.at(-1).id === "recent" && behaviorCommands.at(-1).pinned, "pin targets row id");
+      rowAction("delete").click();
+      document.getElementById("confirm-ok").click();
+      check(behaviorCommands.at(-1).type === "delete_chat" && behaviorCommands.at(-1).id === "recent" &&
+        !behaviorCommands.some(c => c.type === "select_chat"), "row actions never switch conversations and delete targets confirmed row");
+      fixture.config.sidebar_collapsed = true;
+      LMUI.receive(fixture);
+      check(document.getElementById("new-chat").getBoundingClientRect().width > 0, "collapsed sidebar retains new chat access");
+      fixture.config.sidebar_collapsed = false;
+      LMUI.receive(fixture);
       check(document.getElementById("hotkey-hint").hidden, "disabled hotkey hint hidden");
       check(document.getElementById("compose-enter-hint").textContent === "Shift+Enter 換行，Enter 送出" &&
         document.getElementById("enter-hint").textContent === document.getElementById("compose-enter-hint").textContent &&

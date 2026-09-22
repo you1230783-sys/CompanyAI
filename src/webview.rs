@@ -235,6 +235,7 @@ fn mime_type(path: &str) -> &'static str {
         Some("css") => "text/css; charset=utf-8",
         Some("js") => "text/javascript; charset=utf-8",
         Some("woff2") => "font/woff2",
+        Some("ico") => "image/x-icon",
         _ => "application/octet-stream",
     }
 }

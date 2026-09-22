@@ -17,8 +17,8 @@
     <div id="app">
       <aside id="sidebar" aria-label="主要選單">
         <div class="brand-row">
-          <span class="brand-mark" aria-hidden="true">L</span
-          ><strong class="nav-label">LM_AI</strong
+          <img class="brand-mark" src="app.ico" alt="" />
+          <strong class="nav-label">LM_AI</strong
           ><button
             id="collapse"
             class="icon-button"
@@ -27,30 +27,21 @@
             data-icon="panel"
           ></button>
         </div>
-        <button id="new-chat" class="nav-button new-chat">
-          <span data-icon="plus"></span><span class="nav-label">新對話</span>
-        </button>
-        <button id="show-notifications" class="nav-button">
-          <span data-icon="bell"></span><span class="nav-label">通知</span
-          ><span id="unread-badge" class="badge" hidden>0</span>
-        </button>
-        <button id="show-tasks" class="nav-button" title="工作任務">
-          <span data-icon="list"></span><span class="nav-label">任務</span
-          ><span id="task-count" class="badge"></span>
-        </button>
-        <button id="show-outlook" class="nav-button">
+        <button id="show-outlook" class="nav-button" title="Outlook 助理">
           <span data-icon="mail"></span
           ><span class="nav-label">Outlook 助理</span>
         </button>
         <button id="show-vnc" class="nav-button" title="VNC 快速連線" hidden>
           <span data-icon="monitor"></span><span class="nav-label">VNC 快速連線</span>
         </button>
-        <div class="history-section nav-label">
+        <div class="history-section">
           <div class="section-caption">
-            最近對話
-            <span data-icon="lock" title="保存於此 Windows 使用者"></span>
+            <span class="nav-label">最近對話</span>
+            <button id="new-chat" class="text-button" title="新對話" aria-label="新對話">
+              <span data-icon="plus"></span><span class="nav-label">新對話</span>
+            </button>
           </div>
-          <div id="history-list" aria-label="本機對話"></div>
+          <div id="history-list" class="nav-label" aria-label="本機對話"></div>
         </div>
         <div class="sidebar-bottom">
           <span id="account-dot" class="account-dot"></span
@@ -70,15 +61,13 @@
             <h1 id="page-title">新對話</h1>
           </div>
           <div class="topbar-actions">
-            <span id="save-label" class="subtle">本機保存</span
-            ><button
-              id="delete-chat"
-              class="icon-button"
-              title="刪除此對話"
-              aria-label="刪除此對話"
-              data-icon="trash"
-              hidden
-            ></button>
+            <span id="save-label" class="subtle">本機保存</span>
+            <button id="show-notifications" class="icon-button" title="通知" aria-label="通知">
+              <span data-icon="bell"></span><span id="unread-badge" class="badge" hidden>0</span>
+            </button>
+            <button id="show-tasks" class="icon-button" title="工作任務" aria-label="工作任務">
+              <span data-icon="list"></span><span id="task-count" class="badge" hidden></span>
+            </button>
           </div>
         </header>
         <div id="status" class="status" role="status">正在準備工作空間…</div>
@@ -239,15 +228,13 @@
           <div class="info-card">
             <span data-icon="shield"></span>
             <div>
-              適用 Classic
-              Outlook。只讀取，不寄送、刪除、移動或變更已讀狀態。確認前不傳送郵件；啟用自動補充後，僅依本批授權匯出及上傳。
+              本功能只讀取信件，不會有其他變更。 若您同意自動補充內文，會自動匯出可能重要的信件全文，傳送給AI自動分析。
             </div>
           </div>
           <section class="mail-batch-panel">
             <h3>多封郵件整理</h3>
             <p class="subtle">
-              三天內含今天，本週從週一開始，使用本機日期。跨資料夾取最新
-              50 封；查詢只讀基本資訊，尚未傳給 AI。
+              本週從週一開始計算，只能取得最新的50封郵件。 僅讀取標題、寄件者、收件者，不會傳遞內文給AI。
             </p>
             <label for="batch-scope">日期查詢範圍</label>
             <select id="batch-scope">
@@ -256,7 +243,6 @@
             </select>
             <p class="subtle">
               請先在 Outlook 選取要查詢的資料夾，再按日期按鈕；查詢包含該資料夾及其子資料夾。
-              本機資料檔須先在 Outlook 開啟；規則複製的不同副本會分別列出。
             </p>
             <div class="button-row">
               <button id="batch-selected" class="secondary-button">
@@ -285,10 +271,9 @@
             </div>
             <div id="batch-mail-list"></div>
             <label class="check-row"
-              ><input id="batch-auto-export" type="checkbox" checked />允許 AI
-              從本批勾選郵件要求 MSG，自動上傳正文、圖片及附件（最多 20
-              封，依模型規則）</label
+              ><input id="batch-auto-export" type="checkbox" checked aria-describedby="batch-quality-status" />允許 AI 從本次送出的郵件，挑選可能重要的信件後，自動要求詳細內文並自動送出。 (至多20封)</label
             >
+            <p id="batch-quality-status" class="subtle" role="status" hidden></p>
             <div class="button-row">
               <button id="batch-analyze" class="primary-button">
                 確認範圍並分析</button
@@ -438,7 +423,7 @@
           <h3>本機資料</h3>
           <p class="subtle">
             對話在此 Windows
-            使用者下加密保存。登出會保留歷史；開啟舊對話後，只有再按送出才會傳給目前登入的帳號。刪除功能位於對話右上角。
+            使用者下加密保存。登出會保留歷史；開啟舊對話後，只有再按送出才會傳給目前登入的帳號。滑鼠移至最近對話的標題，可編輯標題、置頂或刪除對話。
             伺服器端仍會儲存已送出的對話、附件及任務資料；刪除本機資料或移除任務卡片不會刪除伺服器端的紀錄。
           </p>
         </section>

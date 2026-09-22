@@ -215,8 +215,9 @@ function showView(view) {
         : view === "tasks"
           ? "工作任務"
           : view === "vnc" ? "VNC 快速連線" : "Outlook 助理";
-  $("delete-chat").hidden = view !== "chat" || !state.active_id;
   $("save-label").hidden = view !== "chat";
+  // 只在真正進入助理頁時更新，狀態推播重繪不重複查詢。
+  if (previous !== view && view === "outlook") window.MailUI?.enter();
 }
 function renderMessages() {
   const signature = JSON.stringify([
@@ -294,22 +295,46 @@ function renderMessages() {
     $("jump-bottom").hidden = false;
   }
 }
+let historySignature = "";
 function renderHistory() {
   const list = $("history-list");
+  const signature = JSON.stringify([state.conversations, state.active_id, state.busy]);
+  // 背景進度推播不重建相同清單，保留鍵盤焦點與滑鼠所在的操作列。
+  if (signature === historySignature) return;
+  historySignature = signature;
   list.replaceChildren();
   const conversations = [...state.conversations].sort(
     (a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.updated_at - a.updated_at,
   );
   for (const c of conversations) {
+    const row = node("div", "history-row" + (c.id === state.active_id ? " selected" : ""));
     const button = node(
       "button",
-      "history-item" + (c.id === state.active_id ? " selected" : ""),
-      (c.pinned ? "📌 " : "") + c.title,
+      "history-item",
+      c.title,
     );
-    button.title = c.title;
+    button.title = (c.pinned ? "已置頂 · " : "") + c.title;
     button.dataset.id = c.id;
     button.disabled = state.busy !== "none";
-    list.append(button);
+    if (c.pinned) row.classList.add("pinned");
+    const actions = node("div", "history-actions");
+    for (const [action, symbol, label] of [
+      ["rename", "pen", "編輯標題"],
+      ["pin", "pin", c.pinned ? "取消置頂" : "置頂"],
+      ["delete", "trash", "刪除對話"],
+    ]) {
+      const control = node("button", "icon-button");
+      control.innerHTML = icon(symbol);
+      control.dataset.historyAction = action;
+      control.dataset.id = c.id;
+      control.title = label;
+      control.setAttribute("aria-label", `${label}：${c.title}`);
+      control.disabled = state.busy !== "none";
+      if (action === "pin") control.setAttribute("aria-pressed", String(!!c.pinned));
+      actions.append(control);
+    }
+    row.append(button, actions);
+    list.append(row);
   }
   if (!conversations.length)
     list.append(node("p", "empty-small", "開始對話後會自動保存"));
@@ -458,7 +483,6 @@ function receive(next) {
     .querySelectorAll("[data-action]")
     .forEach((button) => (button.disabled = !state.can_send));
   $("new-chat").disabled = state.busy !== "none";
-  $("delete-chat").disabled = state.busy !== "none";
   $("prompt").disabled = state.busy === "chat";
   $("login").disabled = state.busy !== "none" || state.update_required;
   $("logout").disabled = state.busy !== "none" || !state.logged_in;
@@ -700,6 +724,20 @@ document.addEventListener("click", (event) => {
     $("model-menu").hidden = true;
     $("model-button").setAttribute("aria-expanded", "false");
   }
+  const historyAction = event.target.closest("[data-history-action]");
+  if (historyAction && !historyAction.disabled) {
+    const id = historyAction.dataset.id;
+    const conversation = state.conversations.find(c => c.id === id);
+    if (conversation) {
+      if (historyAction.dataset.historyAction === "rename") window.BehaviorUI?.renameChat(id);
+      else if (historyAction.dataset.historyAction === "pin") send({ type: "pin_chat", id, pinned: !conversation.pinned });
+      else if (historyAction.dataset.historyAction === "delete") ask(
+        "刪除此對話？",
+        `「${conversation.title}」\n這會刪除此 Windows 使用者保存的整段對話，無法復原。`,
+        () => send({ type: "delete_chat", id }),
+      );
+    }
+  }
   const history = event.target.closest(".history-item");
   if (history) {
     showView("chat");
@@ -742,12 +780,6 @@ document.addEventListener("click", (event) => {
     } else toast("此連結類型不支援");
   }
 });
-$("delete-chat").onclick = () =>
-  ask(
-    "刪除此對話？",
-    "這會刪除此 Windows 使用者保存的整段對話，無法復原。",
-    () => send({ type: "delete_chat", id: state.active_id }),
-  );
 $("show-notifications").onclick = () => showView("notifications");
 $("show-outlook").onclick = () => showView("outlook");
 $("refresh-notifications").onclick = () => send({ type: "refresh_events" });

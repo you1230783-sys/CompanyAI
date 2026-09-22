@@ -12,28 +12,21 @@
     vnc_enabled: $("vnc-enabled").checked,
   });
 
-  const rename = node("button", "text-button", "編輯標題");
-  const pin = node("button", "text-button", "置頂");
-  $("delete-chat").before(rename, pin);
   let renameId = null;
-  rename.onclick = () => {
-    const current = state.conversations.find(c => c.id === state.active_id);
+  function renameChat(id) {
+    const current = state.conversations.find(c => c.id === id);
     if (!current) return;
     renameId = current.id;
     $("rename-title").value = current.title;
     $("rename-dialog").showModal();
     $("rename-title").select();
-  };
+  }
   $("rename-cancel").onclick = () => $("rename-dialog").close();
   $("rename-save").onclick = () => {
     const title = $("rename-title").value.trim();
     if (!title) return;
     send({ type: "rename_chat", id: renameId, title });
     $("rename-dialog").close();
-  };
-  pin.onclick = () => {
-    const current = state.conversations.find(c => c.id === state.active_id);
-    if (current) send({ type: "pin_chat", id: current.id, pinned: !current.pinned });
   };
   const notice = node("div", "model-notice");
   notice.setAttribute("role", "status");
@@ -47,6 +40,7 @@
   $("required-update-refresh").onclick = () => send({type:"refresh"});
   $("required-update-download").onclick = () => send({type:"download"});
   window.BehaviorUI = {
+    renameChat,
     render() {
       $("update-status").textContent = state.update_status || "";
       $("download").textContent = state.update_ready
@@ -79,9 +73,6 @@
         ? "點擊翻譯、摘要或潤飾時，以快速模型送出該次請求，通常能縮短等待時間。"
         : "快捷操作使用目前選擇的模型。品質模型可能需要數分鐘，實際依內容及排隊情況而定。";
       $("hotkey-hint").hidden = c.hotkey_enabled === false;
-      const current = state.conversations.find(item => item.id === state.active_id);
-      rename.disabled = pin.disabled = !current;
-      pin.textContent = current?.pinned ? "取消置頂" : "置頂";
     },
     modelNotice(text) {
       clearTimeout(noticeTimer);

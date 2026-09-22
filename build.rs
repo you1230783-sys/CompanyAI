@@ -85,6 +85,11 @@ END
     collect(&root, &root, &mut files);
     files.sort();
     let mut generated = String::from("pub static ASSETS: &[(&str, &[u8])] = &[\n");
+    // 品牌圖直接沿用 Windows 圖示來源，避免兩份貓頭資源日後更新不同步。
+    generated.push_str(&format!(
+        "(\"/app.ico\", include_bytes!({:?})),\n",
+        icon.to_string_lossy()
+    ));
     for file in files {
         let name = file
             .strip_prefix(&root)
