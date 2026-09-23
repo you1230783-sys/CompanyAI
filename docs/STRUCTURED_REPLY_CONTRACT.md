@@ -22,12 +22,15 @@
 既有 TaskStatus 的 task_id、client_request_id、state 保持原契約。已完成任務支援下列結果形式：
 
 - `result` 直接為上表的 payload 物件。
+- 0.8.12 起，`result` 可為 Chat Completions 物件：正文取 `choices[0].message.content`，其他欄位取同層 `sections`、`citations`。任務外層仍須提供 `task_id`、`client_request_id`、`state`；result.id 不取代任務關聯驗證。
 - 任務最外層或 `result` 的 `response_payload_json`，可為物件或序列化 JSON 字串。
 - `result.choices[0].message.response_payload_json`，可為物件或序列化 JSON 字串。
 - `result.choices[0].message.content` 是完整 payload 的 JSON 字串。
 - 舊的 `result.choices[0].message.content` 純文字／Markdown。
 
 明確的 response_payload_json 欄位優先，其次是直接 payload，最後才嘗試 content 內的完整 JSON。沒有有效 payload 時保留舊 content；沒有任何可讀回答時回報格式錯誤，不產生空白成功訊息。只檢查固定位置，不遞迴搜尋任意 JSON 或執行其中指令。
+
+新的 Chat Completions 結果與直接 payload 同樣正規化為 `ReplyPayload`，不需要網站另外補 `answer`。只有存在 `sections` 或 `citations` 時才啟用此轉換，純文字 choices 沿用舊格式備援；若同一物件本來已有 answer，維持 answer 優先。明確的 response_payload_json 仍優先於此格式，正文一致時只補空欄位。`id`、`object`、`created`、`model`、`usage`、`finish_reason` 及工具資料不加入顯示 DTO。共用測試樣本為 `ui/fixtures/completion-reply.json`。
 
 舊格式備援只辨識編號章節（如 `1. 回答：`、`## 2. Key points`），標籤與使用者提供的網頁清單一致，見 [介面與串流](UI_AND_STREAMING.md)。一般正文碰巧提到 Sources、信心度等字詞不會觸發收合。0.8.11 支援標題與內容同列，以及使用者回報的五段英文 Markdown 壓成單行。Rust 只在 Answer 開頭、五種章節各出現一次時正規化；不從引用、程式碼或說明前言猜測欄位。若 answer 本身是這種完整五段全文，也會拆出正文並補空欄位，既有非空 sections 仍優先。
 

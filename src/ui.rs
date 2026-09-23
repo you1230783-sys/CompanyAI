@@ -654,6 +654,12 @@ impl App {
                         serde_json::from_str(include_str!("../ui/fixtures/structured-reply.json"))
                             .map_err(|_| "內建結構化回覆測試資料無效。")?;
                     let message = crate::protocol::assistant_message(&payload)?;
+                    let completion: serde_json::Value =
+                        serde_json::from_str(include_str!("../ui/fixtures/completion-reply.json"))
+                            .map_err(|_| "內建完成結果測試資料無效。")?;
+                    let completion_message = crate::protocol::assistant_message(&json!({
+                        "result":completion
+                    }))?;
                     let inline_text = include_str!("../ui/fixtures/inline-reply.txt");
                     let mut inline_message = crate::protocol::assistant_message(&json!({
                         "answer":"您好！這是一個測試訊息。我已準備好為您提供協助。"
@@ -675,7 +681,7 @@ impl App {
                         "type":"self_test",
                         "reply_fixture":{"payload":payload,"message":message,
                             "inline_text":inline_text,"inline_message":inline_message,
-                            "changed_message":changed_message}
+                            "changed_message":changed_message,"completion_message":completion_message}
                     }))?;
                 }
             }

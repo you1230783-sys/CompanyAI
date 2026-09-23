@@ -947,6 +947,55 @@ mod tests {
     }
 
     #[test]
+    fn completion_sections_survive_both_modes_and_encrypted_history() {
+        let mut result: Value =
+            serde_json::from_str(include_str!("../ui/fixtures/completion-reply.json")).unwrap();
+        result["citations"] = json!([{"title":"引用文件","page":2}]);
+        for mode in ["background", "stream"] {
+            let mut user = Message::user("test");
+            user.request_id = Some("completion-request".into());
+            let mut archive = crate::history::Archive::default();
+            let conversation_id = archive.insert(vec![user]).unwrap();
+            let mut task: Task = serde_json::from_value(json!({
+                "request_id":"completion-request", "conversation_id":conversation_id,
+                "request":{}, "mode":mode, "title":"test", "created_at":0,
+                "remote":null, "applied":false,
+                "partial":if mode == "stream" { "回答正文" } else { "" }
+            }))
+            .unwrap();
+            let remote: TaskStatus = serde_json::from_value(json!({
+                "task_id":"completion-task", "client_request_id":"completion-request",
+                "state":"completed", "result":result
+            }))
+            .unwrap();
+            remote.validate().unwrap();
+            task.apply_status(remote).unwrap();
+            assert!(apply_reply(&mut archive, &task).unwrap());
+            assert!(!apply_reply(&mut archive, &task).unwrap());
+            let root = std::env::temp_dir().join(format!("lm-ai-completion-{conversation_id}"));
+            crate::history::save(&root, &archive).unwrap();
+            let restored = crate::history::load(&root).unwrap();
+            let message = &restored.conversations[0].messages[1];
+            let reply = message.response_payload.as_ref().unwrap();
+            assert_eq!(reply.answer, "回答正文");
+            assert_eq!(
+                serde_json::to_value(&reply.sections).unwrap(),
+                result["sections"]
+            );
+            assert_eq!(
+                serde_json::to_value(&reply.citations).unwrap(),
+                result["citations"]
+            );
+            assert!(
+                message.content.contains("仍需人工確認") && message.content.contains("引用文件")
+            );
+            assert!(message.received_replies.is_empty());
+            fs::remove_file(root.join("history.dpapi")).unwrap();
+            fs::remove_dir(root).unwrap();
+        }
+    }
+
+    #[test]
     fn sse_handles_utf8_boundaries_heartbeats_multiline_and_done() {
         let source=": heartbeat\r\nevent: status\r\ndata: {\r\ndata: \"state\":\"中文\"}\r\n\r\ndata: [DONE]\n\n";
         let mut parser = SseDecoder::default();

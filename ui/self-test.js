@@ -637,27 +637,41 @@ window.runSelfTest = async (structuredFixture) => {
     check([...payload.sections.key_points, ...payload.sections.sources, payload.sections.confidence,
       ...payload.sections.limitations].every((value) => completeText.includes(value)),
       "Rust prepares complete copy text including every structured section");
-    for (const mode of ["background", "stream"]) {
-      replyFixture.messages = [];
-      replyFixture.work.tasks = [{ id: "payload-task", conversation_id: replyFixture.active_id,
-        state: "running", active: true, mode, partial: mode === "stream" ? payload.answer : "" }];
-      LMUI.receive(replyFixture);
-      replyFixture.work.tasks = [];
-      replyFixture.messages = [structuredFixture.message];
-      LMUI.receive(replyFixture);
-      const completed = document.querySelector("#messages .bubble");
-      check(completed.querySelector(".answer-body") && completed.querySelector("details"), `${mode} completion uses structured result`);
-      const visible = completed.cloneNode(true);
-      visible.querySelector("details").remove();
-      check(payload.sections.key_points.every((point) => visible.textContent.includes(point)), `${mode} completion keeps every key point visible`);
-      const originalCopySend = send;
-      const copyCommands = [];
-      try {
-        send = (command) => copyCommands.push(command);
-        document.querySelector("#messages .copy-message").click();
-        check(copyCommands.length === 1 && copyCommands[0].type === "copy" && copyCommands[0].text === completeText,
-          `${mode} copy includes the complete response`);
-      } finally { send = originalCopySend; }
+    // 舊 answer payload 與新版 choices + 同層 sections 共用實際完成渲染／複製驗證。
+    for (const completedMessage of [structuredFixture.message, structuredFixture.completion_message]) {
+      const payload = completedMessage.response_payload;
+      const completeText = completedMessage.content;
+      check(payload && [...payload.sections.key_points, ...payload.sections.sources,
+        payload.sections.confidence, ...payload.sections.limitations].every((text) => completeText.includes(text)),
+        "both wire formats retain every field in copy text");
+      for (const mode of ["background", "stream"]) {
+        replyFixture.messages = [];
+        replyFixture.work.tasks = [{ id: "payload-task", conversation_id: replyFixture.active_id,
+          state: "running", active: true, mode, partial: mode === "stream" ? payload.answer : "" }];
+        LMUI.receive(replyFixture);
+        replyFixture.work.tasks = [];
+        replyFixture.messages = [JSON.parse(JSON.stringify(completedMessage))];
+        LMUI.receive(replyFixture);
+        const completed = document.querySelector("#messages .bubble");
+        check(completed.querySelector(".answer-body") && completed.querySelector("details"), `${mode} completion uses structured result`);
+        const visible = completed.cloneNode(true);
+        visible.querySelector("details").remove();
+        check(payload.sections.key_points.every((point) => visible.textContent.includes(point)), `${mode} completion keeps every key point visible`);
+        const details = completed.querySelector("details");
+        check([...payload.sections.sources, payload.sections.confidence, ...payload.sections.limitations]
+          .every((text) => details.textContent.includes(text)), `${mode} retains all metadata in disclosure`);
+        details.querySelector("summary").click();
+        check(details.open && details.querySelector(".answer-details-content").getBoundingClientRect().height > 0,
+          `${mode} completed metadata opens visibly`);
+        const originalCopySend = send;
+        const copyCommands = [];
+        try {
+          send = (command) => copyCommands.push(command);
+          document.querySelector("#messages .copy-message").click();
+          check(copyCommands.length === 1 && copyCommands[0].type === "copy" && copyCommands[0].text === completeText,
+            `${mode} copy includes the complete response`);
+        } finally { send = originalCopySend; }
+      }
     }
     // 使用回報中的單行全文，跨越串流、REST 完成與歷史重繪，確認資料不是被移除。
     const inlineText = structuredFixture.inline_text;

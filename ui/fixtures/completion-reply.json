@@ -1,0 +1,21 @@
+{
+  "id": "task-id",
+  "object": "chat.completion",
+  "created": 1760000000,
+  "model": "quality",
+  "choices": [
+    {
+      "index": 0,
+      "message": { "role": "assistant", "content": "回答正文" },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {},
+  "sections": {
+    "key_points": ["重點一", "重點二"],
+    "sources": ["來源摘要"],
+    "confidence": "high",
+    "limitations": ["仍需人工確認"]
+  },
+  "citations": []
+}

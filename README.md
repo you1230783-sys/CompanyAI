@@ -1,7 +1,13 @@
-# LM_AI 0.8.11 — Windows 工作助理
+# LM_AI 0.8.12 — Windows 工作助理
 
 Rust 桌面程式，提供公司瀏覽器登入、文字／附件對話、串流、持久背景任務、選字快捷鍵、網站通知及 Classic Outlook 唯讀助理。
 介面使用 WebView2、內嵌 HTML/CSS 與離線 Markdown 套件；不需 Node、Python 或外部 CDN。
+
+## 0.8.12 統一完成結果格式
+
+- 支援 `result.choices[0].message.content` 正文，以及同層的 `sections`、`citations`；背景與串流完成結果共用解析。
+- 重點直接顯示，來源／信心／限制／引用可展開，複製及加密歷史保存完整內容。既有 answer payload 與舊格式備援保留。
+- EXE、NSIS 及更新清單進版 0.8.12；驗證記錄見 [0.8.12 驗收](docs/VALIDATION_0_8_12.md)。
 
 ## 0.8.11 完成後保留回覆欄位
 

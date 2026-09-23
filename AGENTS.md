@@ -69,6 +69,8 @@
 
 ## 修改後的交付與 Git 規則
 
+- **0.8.12 統一完成結果（最新）**：支援使用者指定的 `result.choices[0].message.content` 搭配同層 `sections`、`citations`，背景與串流共用解析。沿用先前打包推送授權，執行 `Build.ps1 -EmptyCargoCache -IncludeInstaller`，交付 EXE、NSIS、兩份更新清單及文件至既有 main。沿用 0.8.11 安裝、圖示及歷史 ZIP 界線。
+
 - **0.8.11 完成回覆保留（最新）**：接續使用者回報與原先打包推送授權，修正正文獨存及單行英文五段格式。完成結果非空欄位優先；正文一致才補缺漏，不一致另存可展開原文。執行 `Build.ps1 -EmptyCargoCache -IncludeInstaller`，交付 EXE、NSIS、兩份更新清單與驗證文件並推送既有 main；沿用 0.8.10 安裝、圖示與歷史 ZIP 界線。
 
 - **0.8.10 結構化回覆（最新）**：使用者要求將本輪回覆解析修正打包後推送 Git。進版 0.8.10，執行 `Build.ps1 -EmptyCargoCache -IncludeInstaller`，交付 EXE、NSIS、兩份簽署更新清單、原始碼與驗證文件至既有 main。結構化欄位優先、編號舊格式備援，背景與串流完成結果共用解析；正文及重點可見，其餘可展開。沿用三花貓圖示、單純安裝、不附帶／檢查 WebView2、一般安裝不自動啟動；不重製歷史離線 ZIP、不恢復 SFX。Git 推送不代表內網網站已部署。

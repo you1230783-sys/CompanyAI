@@ -127,7 +127,8 @@ impl ReplyPayload {
     }
 }
 
-/// payload 可能是 JSON 物件或資料庫序列化的 JSON 字串；無效時交回舊格式備援。
+/// 支援 answer payload 及 choices 正文搭配同層 sections／citations 的完成結果。
+/// 也接受資料庫序列化的 JSON 字串；無效時交回舊格式備援。
 fn payload(value: &Value) -> Option<ReplyPayload> {
     let decoded;
     let value = if let Some(text) = value.as_str() {
@@ -136,7 +137,19 @@ fn payload(value: &Value) -> Option<ReplyPayload> {
     } else {
         value
     };
-    let mut reply: ReplyPayload = serde_json::from_value(value.clone()).ok()?;
+    let mut normalized = value.clone();
+    // 新的完成結果把正文放在 choices，其餘顯示欄位仍在同一物件。
+    // 只在帶有結構化欄位時套用，讓純 Chat Completions 保持原有舊格式備援；
+    // 既有 answer 欄位仍優先，且不從任意巢狀物件搜尋正文。
+    if value.get("answer").is_none()
+        && (value.get("sections").is_some() || value.get("citations").is_some())
+    {
+        let answer = value["choices"][0]["message"]["content"].as_str()?;
+        normalized
+            .as_object_mut()?
+            .insert("answer".into(), Value::String(answer.to_string()));
+    }
+    let mut reply: ReplyPayload = serde_json::from_value(normalized).ok()?;
     // 部分服務把舊格式全文放在 answer，但 sections 為空；先拆出正文，再補缺漏。
     if let Some(legacy) = legacy_reply::parse(&reply.answer) {
         reply.answer = legacy.answer.clone();
@@ -292,6 +305,65 @@ mod tests {
 
     fn sample() -> Value {
         serde_json::from_str(include_str!("../../ui/fixtures/structured-reply.json")).unwrap()
+    }
+
+    #[test]
+    fn completion_result_preserves_sibling_sections_and_citations() {
+        let sample: Value =
+            serde_json::from_str(include_str!("../../ui/fixtures/completion-reply.json")).unwrap();
+        let mut with_citations = sample.clone();
+        with_citations["citations"] = json!(["文件一", {"title":"文件二","page":2}]);
+        with_citations["choices"][0]["message"]["tool_calls"] = json!([{"name":"internal-tool"}]);
+        for completion in [sample, with_citations] {
+            for value in [completion.clone(), json!({"result":completion})] {
+                let message = assistant_message(&value).unwrap();
+                let reply = message.response_payload.as_ref().unwrap();
+                assert_eq!(reply.answer, "回答正文");
+                assert_eq!(
+                    serde_json::to_value(&reply.sections).unwrap(),
+                    completion["sections"]
+                );
+                assert_eq!(
+                    serde_json::to_value(&reply.citations).unwrap(),
+                    completion["citations"]
+                );
+                for expected in ["重點一", "重點二", "來源摘要", "high", "仍需人工確認"]
+                {
+                    assert!(message.content.contains(expected));
+                }
+                let saved = serde_json::to_string(&message).unwrap();
+                assert!(!saved.contains("internal-tool"));
+                assert_eq!(assistant_text(&value.to_string()).unwrap(), "回答正文");
+            }
+        }
+    }
+
+    #[test]
+    fn completion_fields_respect_explicit_payload_priority_and_optional_metadata() {
+        let completion: Value =
+            serde_json::from_str(include_str!("../../ui/fixtures/completion-reply.json")).unwrap();
+        let message = assistant_message(&json!({
+            "response_payload_json":{"answer":"回答正文","sections":{"confidence":"medium"}},
+            "result":completion
+        }))
+        .unwrap();
+        let reply = message.response_payload.unwrap();
+        assert_eq!(reply.sections.confidence.as_deref(), Some("medium"));
+        assert_eq!(reply.sections.key_points.len(), 2);
+
+        let citation_only =
+            json!({"choices":[{"message":{"content":"正文"}}],"citations":["文件"]});
+        let reply = assistant_message(&citation_only)
+            .unwrap()
+            .response_payload
+            .unwrap();
+        assert_eq!(reply.citations, vec![json!("文件")]);
+        assert!(reply.sections.key_points.is_empty());
+        for content in [Value::Null, json!(" "), json!([])] {
+            let mut invalid = completion.clone();
+            invalid["choices"][0]["message"]["content"] = content;
+            assert!(assistant_message(&invalid).is_err());
+        }
     }
 
     #[test]

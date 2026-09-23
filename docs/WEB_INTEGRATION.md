@@ -6,6 +6,12 @@
 
 > **0.5 新功能請先實作 [DESKTOP_0_5_CONTRACT.md](DESKTOP_0_5_CONTRACT.md)**：附件規則路由、文件／圖片上傳、串流、持久背景任務與通知（歷史估時功能已於 0.8.4 移除）。此處保留既有登入／版本／模型／通知基礎；驗證範圍見各版驗收文件。
 
+## 0.8.12 統一完成結果格式
+
+使用者確認背景模式原先未由網站完整回傳，並指定串流／背景的最終 `result` 統一為 Chat Completions 物件。桌面新增支援：正文取 `result.choices[0].message.content`，重點／來源／信心／限制取 `result.sections`，引用取 `result.citations`。兩模式完成後均經既有 TaskStatus 解析及保存，不依賴串流原文補齊。外層 task_id／client_request_id／state 與 POST／查詢路由維持原契約，result.id 不能取代任務識別碼。
+
+沿用先前授權打包並推送，進版 0.8.12；EXE／NSIS 各與對應更新清單成對部署。網站可公告 latest_version 0.8.12，不需提高最低版本。詳見 [回覆契約](STRUCTURED_REPLY_CONTRACT.md) 與 [驗收記錄](VALIDATION_0_8_12.md)。Git 推送不等同內網部署。
+
 ## 0.8.11 完成回覆保留修正
 
 0.8.10 對只有 answer 的 payload 直接採用，可能忽略同回覆更完整的 content；完成結果也可能覆蓋串流全文。0.8.11 保留結構化非空欄位優先，但在正文相符時從較完整的結果或同任務已收到的完整五段文字補空欄位。標題與內文同列、五段英文 Markdown 壓成單行皆支援；無法安全合併的原文放進可展開區，隨 DPAPI 歷史及複製文字保存。詳見 [回覆契約](STRUCTURED_REPLY_CONTRACT.md)。
