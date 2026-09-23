@@ -575,6 +575,8 @@ window.runSelfTest = async (structuredFixture) => {
     check(boundaries.textContent.includes("重點。") && boundaries.textContent.includes("補充正文"), "later primary and unknown sections stay visible");
 
     // 經過正式的串流與完成訊息渲染入口，防止只測獨立函式卻漏掉完成後的重繪。
+    // 前一組測試停在 Outlook；先切回對話，才能驗證展開內容實際可見。
+    LMUI.showView("chat");
     const replyFixture = {
       ...fixture,
       active_id: "reply-sections",
@@ -656,6 +658,43 @@ window.runSelfTest = async (structuredFixture) => {
         check(copyCommands.length === 1 && copyCommands[0].type === "copy" && copyCommands[0].text === completeText,
           `${mode} copy includes the complete response`);
       } finally { send = originalCopySend; }
+    }
+    // 使用回報中的單行全文，跨越串流、REST 完成與歷史重繪，確認資料不是被移除。
+    const inlineText = structuredFixture.inline_text;
+    const inlineReply = structuredFixture.inline_message;
+    const compact = document.createElement("div");
+    compact.innerHTML = LMUI.renderAssistantReply(inlineText);
+    check(compact.querySelector("details")?.textContent.includes("100%"), "single-line numbered English headings are recognized");
+    compact.querySelector("details").remove();
+    check(compact.textContent.includes("系統回應正常") && compact.textContent.includes("已確認可接收輸入"),
+      "single-line key points stay outside the disclosure");
+    for (const finalMessage of [inlineReply, structuredFixture.changed_message]) {
+      replyFixture.messages = [];
+      replyFixture.work.tasks = [{ id: "inline-task", conversation_id: replyFixture.active_id,
+        state: "running", active: true, mode: "stream", partial: inlineText }];
+      LMUI.receive(replyFixture);
+      check(document.querySelector("#live-task details")?.textContent.includes("100%"), "inline stream retains confidence");
+      replyFixture.work.tasks = [];
+      // 序列化再還原，模擬歷史資料經訊息橋重新載入。
+      replyFixture.messages = JSON.parse(JSON.stringify([finalMessage]));
+      LMUI.receive(replyFixture);
+      const disclosure = document.querySelector("#messages details");
+      check(disclosure && !disclosure.open && disclosure.textContent.includes("100%") &&
+        disclosure.textContent.includes("未涉及任何實際的文件分析"), "body-only completion retains streamed metadata");
+      disclosure.querySelector("summary").click();
+      check(disclosure.open && disclosure.querySelector(".answer-details-content").getBoundingClientRect().height > 0,
+        "retained metadata opens into a visible block");
+      const originalCopySend = send;
+      const commands = [];
+      try {
+        send = (command) => commands.push(command);
+        document.querySelector("#messages .copy-message").click();
+        check(commands[0]?.text.includes("系統回應正常") && commands[0]?.text.includes("100%") &&
+          commands[0]?.text.includes("未涉及任何實際的文件分析"), "copy retains all inline reply sections");
+      } finally { send = originalCopySend; }
+      replyFixture.messages.push({ role: "user", content: "下一題" });
+      LMUI.receive(replyFixture);
+      check(document.querySelector("#messages details").open, "retained original stays expanded after redraw");
     }
     LMUI.receive(fixture);
     check(document.querySelector(".attachment-help").hidden, "attachment help hidden while validation remains active");

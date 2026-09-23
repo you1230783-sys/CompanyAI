@@ -306,6 +306,9 @@ pub fn apply_reply(archive: &mut crate::history::Archive, task: &Task) -> AppRes
     let mut message = remote.reply()?;
     if task.mail_analysis {
         message = Message::assistant(crate::outlook::format_analysis(remote.reply_text()?));
+    } else {
+        // REST 的明確欄位優先；缺欄位可從同一 request 的串流補回，其他原文另存供展開。
+        protocol::preserve_received_reply(&mut message, &task.partial, true);
     }
     message.request_id = Some(task.request_id.clone());
     if let Some(existing) = conversation
@@ -819,7 +822,13 @@ mod tests {
         assert!(!apply_reply(&mut archive, &task).unwrap());
         assert!(!retain_partial(&mut archive, &task).unwrap());
         assert_eq!(archive.conversations[0].messages.len(), 2);
-        assert_eq!(archive.conversations[0].messages[1].content, "完整答案");
+        let completed = &archive.conversations[0].messages[1];
+        assert_eq!(
+            completed.response_payload.as_ref().unwrap().answer,
+            "完整答案"
+        );
+        assert_eq!(completed.received_replies[0].text, task.partial);
+        assert!(completed.content.contains(&task.partial));
         assert!(!archive.conversations[0].messages[1].incomplete);
         let old_message: Message =
             serde_json::from_value(json!({"role":"assistant","content":"舊答案"})).unwrap();
@@ -887,6 +896,51 @@ mod tests {
                 .content
                 .contains("目前沒有具體的技術問題需要解答。"));
             // 只移除本測試在隨機目錄建立的單一檔案及空目錄。
+            fs::remove_file(root.join("history.dpapi")).unwrap();
+            fs::remove_dir(root).unwrap();
+        }
+    }
+
+    #[test]
+    fn body_only_completion_preserves_inline_sections_through_encrypted_history() {
+        let original = include_str!("../ui/fixtures/inline-reply.txt");
+        let answer = "您好！這是一個測試訊息。我已準備好為您提供協助。";
+        for mode in ["background", "stream"] {
+            let mut user = Message::user("test");
+            user.request_id = Some("inline-request".into());
+            let mut archive = crate::history::Archive::default();
+            let conversation_id = archive.insert(vec![user]).unwrap();
+            let mut task: Task = serde_json::from_value(json!({
+                "request_id":"inline-request", "conversation_id":conversation_id,
+                "request":{}, "mode":mode, "title":"test", "created_at":0,
+                "remote":null, "applied":false,
+                "partial":if mode == "stream" { original } else { "" }
+            }))
+            .unwrap();
+            if mode == "stream" {
+                assert!(retain_partial(&mut archive, &task).unwrap());
+            }
+            // 背景原文在 result，串流原文在 partial；完成 payload 都只有正文。
+            let remote: TaskStatus = serde_json::from_value(json!({
+                "task_id":"inline-task", "client_request_id":"inline-request", "state":"completed",
+                "response_payload_json":{"answer":answer,"sections":{}},
+                "result":{"choices":[{"message":{"content":if mode == "background" { original } else { answer }}}]}
+            })).unwrap();
+            remote.validate().unwrap();
+            task.apply_status(remote).unwrap();
+            assert!(apply_reply(&mut archive, &task).unwrap());
+            assert!(!apply_reply(&mut archive, &task).unwrap());
+            let root = std::env::temp_dir().join(format!("lm-ai-inline-{conversation_id}"));
+            crate::history::save(&root, &archive).unwrap();
+            let restored = crate::history::load(&root).unwrap();
+            let messages = &restored.conversations[0].messages;
+            assert_eq!(messages.len(), 2);
+            let reply = messages[1].response_payload.as_ref().unwrap();
+            assert_eq!(reply.answer, answer);
+            assert_eq!(reply.sections.key_points.len(), 2);
+            assert_eq!(reply.sections.confidence.as_deref(), Some("100%"));
+            assert!(messages[1].content.contains("未涉及任何實際的文件分析"));
+            assert!(messages[1].received_replies.is_empty());
             fs::remove_file(root.join("history.dpapi")).unwrap();
             fs::remove_dir(root).unwrap();
         }

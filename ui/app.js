@@ -135,13 +135,13 @@ function replySectionName(element) {
  * 只收合已辨識的來源、信心及限制章節。回答與重點不論先後順序都保留在外。
  * 無法確認是制式回覆時完整顯示；不修改訊息原文，複製與歷史保存仍使用原文。
  */
-function renderAssistantReply(text, payload = null) {
+function renderAssistantReply(text, payload = null, receivedReplies = []) {
   // 完成結果以欄位為準，不再從 answer 的文字內容猜測章節邊界。
   if (payload && typeof payload.answer === "string" && payload.answer.trim()) {
-    return renderStructuredReply(payload);
+    return renderStructuredReply(payload, receivedReplies);
   }
   const root = document.createElement("div");
-  const originalHtml = renderMarkdown(text);
+  const originalHtml = renderMarkdown(normalizeReplyHeadings(text));
   root.innerHTML = originalHtml;
   const blocks = [];
   for (const child of [...root.childNodes]) {
@@ -207,7 +207,7 @@ function renderAssistantReply(text, payload = null) {
 }
 
 /** 結構化回答的正文與重點固定可見；空欄位不產生空標題或空的收合區。 */
-function renderStructuredReply(payload) {
+function renderStructuredReply(payload, receivedReplies = []) {
   const root = document.createElement("div");
   const answer = document.createElement("div");
   answer.className = "answer-body";
@@ -251,12 +251,42 @@ function renderStructuredReply(payload) {
     }
     content.append(list);
   }
+  for (const received of receivedReplies) {
+    content.append(node("h3", "", received.from_stream ? "串流期間收到的原文" : "完整原始回覆"));
+    // 尚無法安全對齊的文字明確另列，使用者仍能一鍵展開，不當成完成答案的新欄位。
+    content.append(node("pre", "citation-data", received.text));
+  }
   if (content.children.length) {
     const details = node("details", "answer-details");
-    details.append(node("summary", "", "來源、信心與限制"), content);
+    details.append(node("summary", "", receivedReplies.length ? "來源、信心、限制與原文" : "來源、信心與限制"), content);
     root.append(details);
   }
   return root.innerHTML;
+}
+
+/** 舊回覆可能將五段 Markdown 壓在同一行；僅拆完整的固定五段，保護程式碼範例。 */
+function normalizeReplyHeadings(text) {
+  let fence = null;
+  return text.split("\n").map((line) => {
+    const marker = line.trimStart().match(/^(`{3,}|~{3,})/)?.[0][0];
+    if (fence || marker) {
+      if (fence === marker) fence = null;
+      else if (!fence) fence = marker;
+      return line;
+    }
+    if (line.includes("`")) return line;
+    const pattern = /(?:^|\s)(#{1,6}\s+\d+[.)、]\s+(Answer|Key points|Sources|Confidence|Limitations))(?=\s|[:：]|$)/gi;
+    const headings = [...line.matchAll(pattern)];
+    if (headings.length === 5 && headings[0].index === 0 &&
+        headings.map((entry) => entry[2].toLowerCase()).join(",") === "answer,key points,sources,confidence,limitations") {
+      return headings.map((entry, index) => {
+        const body = line.slice(entry.index + entry[0].length, headings[index + 1]?.index ?? line.length).replace(/^\s*[:：]?\s*/, "");
+        return entry[1] + "\n\n" + body;
+      }).join("\n\n");
+    }
+    // 一般分行回覆也允許標題後直接接正文；限實際的 Markdown 編號標題。
+    return line.replace(/^(#{1,6}\s+\d+[.)、]\s+(?:Answer|Key points|Sources|Confidence|Limitations))\s+(.+)$/i, "$1\n\n$2");
+  }).join("\n");
 }
 function node(tag, className, text) {
   const el = document.createElement(tag);
@@ -356,7 +386,7 @@ function renderMessages() {
       "bubble" + (message.role === "assistant" ? " markdown" : ""),
     );
     if (message.role === "assistant") {
-      bubble.innerHTML = renderAssistantReply(message.content, message.response_payload);
+      bubble.innerHTML = renderAssistantReply(message.content, message.response_payload, message.received_replies);
       if (expanded.has(String(index))) bubble.querySelector(".answer-details")?.setAttribute("open", "");
       bubble.querySelectorAll("table").forEach((table) => {
         const wrapper = node("div", "table-wrap");

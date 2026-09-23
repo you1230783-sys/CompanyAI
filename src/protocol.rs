@@ -2,8 +2,16 @@
 use crate::{config::MAX_SESSION_SECONDS, AppResult};
 use serde::{Deserialize, Serialize};
 
+mod legacy_reply;
 mod reply;
-pub use reply::{assistant_message, assistant_text, ReplyPayload};
+pub use reply::{assistant_message, assistant_text, preserve_received_reply, ReplyPayload};
+
+/// 保留不能安全併入完成結果的原始文字，讓使用者仍能展開查看。
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ReceivedReply {
+    pub text: String,
+    pub from_stream: bool,
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Message {
@@ -19,6 +27,8 @@ pub struct Message {
     /// 正規化的結構化回答；本機保存及畫面使用，不當成 API 工具或指令。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response_payload: Option<ReplyPayload>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub received_replies: Vec<ReceivedReply>,
 }
 
 impl Message {
@@ -30,6 +40,7 @@ impl Message {
             attachments: Vec::new(),
             incomplete: false,
             response_payload: None,
+            received_replies: Vec::new(),
         }
     }
     pub fn assistant(content: String) -> Self {
@@ -40,6 +51,7 @@ impl Message {
             attachments: Vec::new(),
             incomplete: false,
             response_payload: None,
+            received_replies: Vec::new(),
         }
     }
 }
