@@ -6,7 +6,7 @@ use crate::{
     history::{self, Archive},
     notifications::{self, Inbox},
     outlook::{self, MailPreview},
-    protocol::{self, DeviceGrant, Message},
+    protocol::{DeviceGrant, Message},
     selection::{self, Hotkey},
     service::{self, ModelCatalog, VersionState},
     storage::{self, Session},
@@ -648,7 +648,16 @@ impl App {
                 self.ready = true;
                 self.publish();
                 if self.smoke {
-                    self.view.post(&json!({"type":"self_test"}))?;
+                    // 自檢樣本經正式 Rust 解析後，透過既有訊息橋傳給畫面。
+                    // 前端禁止自行連網，不為測試放寬 CSP 或開放 fetch。
+                    let payload: serde_json::Value =
+                        serde_json::from_str(include_str!("../ui/fixtures/structured-reply.json"))
+                            .map_err(|_| "內建結構化回覆測試資料無效。")?;
+                    let message = crate::protocol::assistant_message(&payload)?;
+                    self.view.post(&json!({
+                        "type":"self_test",
+                        "reply_fixture":{"payload":payload,"message":message}
+                    }))?;
                 }
             }
             Command::SelfTestResult { ok, detail } => {

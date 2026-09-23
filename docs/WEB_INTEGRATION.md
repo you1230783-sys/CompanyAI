@@ -6,6 +6,14 @@
 
 > **0.5 新功能請先實作 [DESKTOP_0_5_CONTRACT.md](DESKTOP_0_5_CONTRACT.md)**：附件規則路由、文件／圖片上傳、串流、持久背景任務與通知（歷史估時功能已於 0.8.4 移除）。此處保留既有登入／版本／模型／通知基礎；驗證範圍見各版驗收文件。
 
+## 0.8.10 結構化回覆與章節收合修正
+
+桌面舊格式顯示改為按編號章節辨識中英文正文、回答重點、來源、信心與限制；標籤依使用者提供的網頁規則，只收合後三者，避免把 Sources 後再次出現的正文或回答重點一起藏起來。沒有編號或格式無法確認時維持完整 Markdown，原始訊息不刪減。串流與完成訊息共用相同顯示規則。規則與測試範圍見 [介面與串流](UI_AND_STREAMING.md)。
+
+依使用者提供的背景回覆範例，桌面新增結構化優先解析：正文 `answer`、字串陣列 `sections.key_points / sources / limitations`、字串 `sections.confidence`、陣列 `citations`；無有效結構化欄位時才解析舊格式。支援結果直接是 payload，以及任務／result／message 上的 `response_payload_json` 物件或 JSON 字串。修正原先只讀 `result.choices[0].message.content` 而漏掉其他欄位的問題。背景與串流完成共用同一解析，串流 delta 及任務 REST 路由不變；完整欄位保存到本機歷史，也包含在複製回答與後續對話文字中。外層 `confidence: medium` 不覆寫 `sections.confidence: High (高)`。詳細支援形式及非顯示欄位界線見 [結構化回覆契約](STRUCTURED_REPLY_CONTRACT.md)。
+
+使用者已要求打包並推送。本次進版 0.8.10，使用 `Build.ps1 -EmptyCargoCache -IncludeInstaller` 交付 `LM_AI.exe`／`update-manifest-exe.json` 與 `LM_AI_Setup.exe`／`update-manifest.json`；各組檔案必須成對部署。網站可公告 `latest_version: 0.8.10`，本次修正不需要提高 minimum_version。既有同版本優先選 EXE 的規則不變：若要使用 NSIS 自動安裝，所有探索來源應只公告新版 NSIS 清單，不能只更換下載檔。驗證範圍見 [0.8.10 驗收](VALIDATION_0_8_10.md)。歷史離線 ZIP 不重製，Git 推送不等於內網網站已部署。
+
 ## 0.8.9 三花貓圖示發行
 
 本版只更新使用者提供的圖示並進版 0.8.9，不改動聊天、附件、Outlook 或 VNC API。交付 `LM_AI.exe`／`update-manifest-exe.json` 與 `LM_AI_Setup.exe`／`update-manifest.json`，每組檔案必須成對部署，網站可公告 `latest_version: 0.8.9`，一般圖示更新無須提高最低版本。

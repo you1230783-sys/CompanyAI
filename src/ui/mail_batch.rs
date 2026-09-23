@@ -306,13 +306,7 @@ impl App {
                                 batch::check_cancel(&cancel)?;
                                 match jobs::task_status(&config, &session, &triage) {
                                     Ok(status) if status.state == "completed" => {
-                                        let reply = protocol::assistant_text(
-                                            &status
-                                                .result
-                                                .as_ref()
-                                                .ok_or("初篩缺少結果。")?
-                                                .to_string(),
-                                        )?;
+                                        let reply = status.reply_text()?;
                                         let _ = tx.send(Event::Work(
                                             generation,
                                             work::WorkEvent::Polled(

@@ -2,6 +2,9 @@
 use crate::{config::MAX_SESSION_SECONDS, AppResult};
 use serde::{Deserialize, Serialize};
 
+mod reply;
+pub use reply::{assistant_message, assistant_text, ReplyPayload};
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Message {
     pub role: String,
@@ -13,6 +16,9 @@ pub struct Message {
     /// 本機串流中斷標記；不加入對外 Chat Completions 的訊息欄位。
     #[serde(default)]
     pub incomplete: bool,
+    /// 正規化的結構化回答；本機保存及畫面使用，不當成 API 工具或指令。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_payload: Option<ReplyPayload>,
 }
 
 impl Message {
@@ -23,6 +29,7 @@ impl Message {
             request_id: None,
             attachments: Vec::new(),
             incomplete: false,
+            response_payload: None,
         }
     }
     pub fn assistant(content: String) -> Self {
@@ -32,6 +39,7 @@ impl Message {
             request_id: None,
             attachments: Vec::new(),
             incomplete: false,
+            response_payload: None,
         }
     }
 }
@@ -63,32 +71,6 @@ pub fn chat_json(model: &str, messages: &[Message]) -> AppResult<String> {
         stream: false,
     })
     .map_err(|error| error.to_string())
-}
-
-#[derive(Deserialize)]
-pub struct ChatResponse {
-    choices: Vec<Choice>,
-}
-#[derive(Deserialize)]
-struct Choice {
-    message: ResponseMessage,
-}
-#[derive(Deserialize)]
-struct ResponseMessage {
-    content: Option<String>,
-}
-
-pub fn assistant_text(body: &str) -> AppResult<String> {
-    let response: ChatResponse = serde_json::from_str(body).map_err(|_| {
-        "API 回傳不是 Chat Completions JSON；請檢查路由與 choices[0].message.content。".to_string()
-    })?;
-    response
-        .choices
-        .into_iter()
-        .next()
-        .and_then(|choice| choice.message.content)
-        .filter(|text| !text.trim().is_empty())
-        .ok_or_else(|| "API 沒有回傳文字；本版尚未支援 tool_calls、圖片與串流。".into())
 }
 
 #[derive(Clone, Deserialize)]

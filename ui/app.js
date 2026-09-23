@@ -106,28 +106,79 @@ function renderMarkdown(text) {
     return `<p>${md.utils.escapeHtml(text)}</p>`;
   }
 }
-/** 僅折疊明確的 Answer → Key points → Sources 格式；保留原文與完整 Markdown 渲染。 */
-function renderAssistantReply(text) {
-  const root = document.createElement("div");
-  root.innerHTML = renderMarkdown(text);
-  const sections = [];
-  function sectionName(element) {
-    // 只辨識最外層標題／段落／清單項，不把程式碼、引用或巢狀條列當成制式章節。
-    const first = element.tagName === "LI" ? [...element.childNodes].find((node) => node.textContent.trim()) : element;
-    const line = (first?.textContent || "").trim().split("\n")[0]
-      .replace(/^\s*[1-5][.)、]\s*/, "").replace(/[：:]\s*$/, "").trim().toLowerCase();
-    return ["answer", "key points", "sources", "confidence", "limitations"].includes(line) ? line : null;
+/** 舊格式只辨識編號章節，標籤與網頁端一致，避免正文出現關鍵字就被收合。 */
+function replySectionName(element) {
+  let title = element;
+  if (element.tagName === "LI") {
+    title = [...element.childNodes].find((child) => child.textContent.trim());
   }
-  for (const child of root.children) {
-    const elements = child.tagName === "OL" ? [...child.children] :
-      /^(H[1-6]|P)$/.test(child.tagName) ? [child] : [];
-    for (const element of elements) {
-      const name = sectionName(element);
-      if (name) sections.push({ name, element });
+  if (!title || (title.nodeType === Node.ELEMENT_NODE &&
+      !/^(H[1-6]|P|STRONG|EM|SPAN)$/.test(title.tagName))) return null;
+  // Markdown 編號可能已變成 <ol><li>，也可能仍在標題／粗體段落的文字內。
+  const line = title.textContent.trim().split("\n")[0];
+  const numbered = line.match(/^(?:\d+[.)、．]|[（(]\d+[）)])\s*(.*)$/);
+  if (element.tagName !== "LI" && !numbered) return null;
+  // 冒號後可直接接正文；必須先完整命中標籤，不接受「來源相關說明」等部分匹配。
+  const name = (numbered ? numbered[1] : line).split(/[：:]/)[0]
+    .replace(/\s+/g, " ").trim().toLowerCase();
+  const aliases = {
+    answer: "answer", content: "answer", "回答": "answer", "內容": "answer",
+    keypoint: "key_points", "key points": "key_points", keypoints: "key_points", "回答重點": "key_points",
+    source: "sources", sources: "sources", references: "sources", "引用資料庫": "sources", "內容引用處": "sources", "來源": "sources", "來源摘要": "sources",
+    confidence: "confidence", "信心度": "confidence",
+    limitation: "limitations", limitations: "limitations", "限制": "limitations", "回答限制": "limitations",
+  };
+  return Object.hasOwn(aliases, name) ? aliases[name] : null;
+}
+
+/**
+ * 只收合已辨識的來源、信心及限制章節。回答與重點不論先後順序都保留在外。
+ * 無法確認是制式回覆時完整顯示；不修改訊息原文，複製與歷史保存仍使用原文。
+ */
+function renderAssistantReply(text, payload = null) {
+  // 完成結果以欄位為準，不再從 answer 的文字內容猜測章節邊界。
+  if (payload && typeof payload.answer === "string" && payload.answer.trim()) {
+    return renderStructuredReply(payload);
+  }
+  const root = document.createElement("div");
+  const originalHtml = renderMarkdown(text);
+  root.innerHTML = originalHtml;
+  const blocks = [];
+  for (const child of [...root.childNodes]) {
+    if (child.nodeType !== Node.ELEMENT_NODE) {
+      blocks.push({ element: child, name: null, level: 0 });
+      continue;
+    }
+    // 編號清單可把多個章節包在同一個 <ol>；依章節拆開並保留原始編號。
+    // 未命名的清單項繼續留在原章節，巢狀清單不參與章節辨識。
+    if (child.tagName === "OL" && [...child.children].some(replySectionName)) {
+      let group;
+      let number = Number(child.getAttribute("start") || 1);
+      for (const item of [...child.children]) {
+        if (item.hasAttribute("value")) number = Number(item.getAttribute("value"));
+        const name = replySectionName(item);
+        if (!group || name) {
+          group = child.cloneNode(false);
+          group.start = number;
+          blocks.push({ element: group, name, level: 0 });
+        }
+        group.append(item);
+        number += 1;
+      }
+    } else {
+      const heading = /^H[1-6]$/.test(child.tagName);
+      blocks.push({
+        element: child,
+        name: heading || child.tagName === "P" ? replySectionName(child) : null,
+        level: heading ? Number(child.tagName.slice(1)) : 0,
+      });
     }
   }
-  if (sections[0]?.name !== "answer" || sections[1]?.name !== "key points" || sections[2]?.name !== "sources") {
-    return root.innerHTML;
+  // 有正文及重點才啟用制式章節收合，避免普通文章的 Sources 標題被誤藏。
+  const names = new Set(blocks.map((block) => block.name));
+  if (!names.has("answer") || !names.has("key_points") ||
+      !["sources", "confidence", "limitations"].some((name) => names.has(name))) {
+    return originalHtml;
   }
   const details = document.createElement("details");
   details.className = "answer-details";
@@ -137,22 +188,74 @@ function renderAssistantReply(text) {
   const content = document.createElement("div");
   content.className = "answer-details-content";
   details.append(content);
-  const source = sections[2].element;
-  let following;
-  if (source.tagName === "LI") {
-    const originalList = source.parentElement;
-    const tail = originalList.cloneNode(false);
-    tail.start = (Number(originalList.getAttribute("start")) || 1) + [...originalList.children].indexOf(source);
-    following = originalList.nextSibling;
-    let next = source;
-    while (next) { const after = next.nextSibling; tail.append(next); next = after; }
-    content.append(tail);
-    if (!originalList.children.length) originalList.remove();
-  } else {
-    following = source;
+  root.replaceChildren();
+  let secondary = false;
+  let sectionLevel = 0;
+  for (const block of blocks) {
+    if (block.name) {
+      secondary = ["sources", "confidence", "limitations"].includes(block.name);
+      sectionLevel = block.level;
+    } else if (block.level && (!sectionLevel || block.level <= sectionLevel)) {
+      // 同級／上級的新標題結束前一章節；未知章節保持可見，避免吞掉補充正文。
+      secondary = false;
+      sectionLevel = block.level;
+    }
+    (secondary ? content : root).append(block.element);
   }
-  while (following) { const after = following.nextSibling; content.append(following); following = after; }
-  root.append(details);
+  if (content.children.length) root.append(details);
+  return root.innerHTML;
+}
+
+/** 結構化回答的正文與重點固定可見；空欄位不產生空標題或空的收合區。 */
+function renderStructuredReply(payload) {
+  const root = document.createElement("div");
+  const answer = document.createElement("div");
+  answer.className = "answer-body";
+  answer.innerHTML = renderMarkdown(payload.answer);
+  root.append(answer);
+  const sections = payload.sections || {};
+  function appendList(parent, title, values) {
+    const items = (values || []).filter((value) => typeof value === "string" && value.trim());
+    if (!items.length) return;
+    parent.append(node("h3", "", title));
+    const list = document.createElement("ul");
+    for (const value of items) {
+      const item = document.createElement("li");
+      item.innerHTML = renderMarkdown(value);
+      list.append(item);
+    }
+    parent.append(list);
+  }
+  appendList(root, "回答重點", sections.key_points);
+  const content = node("div", "answer-details-content");
+  appendList(content, "來源摘要", sections.sources);
+  if (sections.confidence?.trim()) {
+    content.append(node("h3", "", "信心度"));
+    const confidence = document.createElement("div");
+    confidence.innerHTML = renderMarkdown(sections.confidence);
+    content.append(confidence);
+  }
+  appendList(content, "回答限制", sections.limitations);
+  if (payload.citations?.length) {
+    content.append(node("h3", "", "引用文件"));
+    const list = document.createElement("ul");
+    for (const citation of payload.citations) {
+      const item = document.createElement("li");
+      if (typeof citation === "string") {
+        item.innerHTML = renderMarkdown(citation);
+      } else {
+        // 引用物件的 schema 尚未限定；完整唯讀呈現，禁止當成 HTML、路徑或指令執行。
+        item.append(node("pre", "citation-data", JSON.stringify(citation, null, 2)));
+      }
+      list.append(item);
+    }
+    content.append(list);
+  }
+  if (content.children.length) {
+    const details = node("details", "answer-details");
+    details.append(node("summary", "", "來源、信心與限制"), content);
+    root.append(details);
+  }
   return root.innerHTML;
 }
 function node(tag, className, text) {
@@ -253,7 +356,7 @@ function renderMessages() {
       "bubble" + (message.role === "assistant" ? " markdown" : ""),
     );
     if (message.role === "assistant") {
-      bubble.innerHTML = renderAssistantReply(message.content);
+      bubble.innerHTML = renderAssistantReply(message.content, message.response_payload);
       if (expanded.has(String(index))) bubble.querySelector(".answer-details")?.setAttribute("open", "");
       bubble.querySelectorAll("table").forEach((table) => {
         const wrapper = node("div", "table-wrap");
@@ -828,7 +931,7 @@ if (bridge) {
     else if (event.data.type === "show_tasks") showView("tasks");
     else if (event.data.type === "model_notice") window.BehaviorUI?.modelNotice(event.data.text);
     else if (event.data.type === "toast") toast(event.data.text);
-    else if (event.data.type === "self_test") window.runSelfTest?.();
+    else if (event.data.type === "self_test") window.runSelfTest?.(event.data.reply_fixture);
     else {
       receiveHotkeyMessage(event.data);
       window.WorkUI?.receive(event.data);

@@ -54,6 +54,9 @@ pub struct TaskStatus {
     pub queue_position: Option<u32>,
     #[serde(default)]
     pub result: Option<Value>,
+    /// 相容網站將結構化回覆放在任務最外層的形式；舊任務缺少此欄位仍可讀取。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_payload_json: Option<Value>,
     #[serde(default)]
     pub error_message: String,
 }
@@ -72,15 +75,24 @@ impl TaskStatus {
             return Err("任務回應格式不正確。".into());
         }
         if self.state == "completed" {
-            protocol::assistant_text(
-                &self
-                    .result
-                    .as_ref()
-                    .ok_or("已完成任務缺少 result。")?
-                    .to_string(),
-            )?;
+            self.reply()?;
         }
         Ok(())
+    }
+    /// 背景與串流完成後共用同一結果解析；外層 payload 與 result 皆保留供備援。
+    pub fn reply(&self) -> AppResult<Message> {
+        protocol::assistant_message(&json!({
+            "response_payload_json": self.response_payload_json,
+            "result": self.result,
+        }))
+    }
+    /// 標題與 Outlook 工具初篩只需要正文，不能將顯示用章節混入其專用協定。
+    pub fn reply_text(&self) -> AppResult<String> {
+        let message = self.reply()?;
+        Ok(match message.response_payload {
+            Some(payload) => payload.answer,
+            None => message.content,
+        })
     }
     pub fn terminal(&self) -> bool {
         matches!(self.state.as_str(), "completed" | "failed" | "cancelled")
@@ -291,12 +303,10 @@ pub fn apply_reply(archive: &mut crate::history::Archive, task: &Task) -> AppRes
     {
         return Err("任務缺少對應的使用者訊息，不會加入其他對話。".into());
     }
-    let mut reply =
-        protocol::assistant_text(&remote.result.as_ref().ok_or("缺少回覆。")?.to_string())?;
+    let mut message = remote.reply()?;
     if task.mail_analysis {
-        reply = crate::outlook::format_analysis(reply);
+        message = Message::assistant(crate::outlook::format_analysis(remote.reply_text()?));
     }
-    let mut message = Message::assistant(reply);
     message.request_id = Some(task.request_id.clone());
     if let Some(existing) = conversation
         .messages
@@ -802,6 +812,7 @@ mod tests {
             result: Some(
                 json!({"choices":[{"message":{"role":"assistant","content":"完整答案"}}]}),
             ),
+            response_payload_json: None,
             error_message: String::new(),
         });
         assert!(apply_reply(&mut archive, &task).unwrap());
@@ -814,6 +825,73 @@ mod tests {
             serde_json::from_value(json!({"role":"assistant","content":"舊答案"})).unwrap();
         assert!(!old_message.incomplete);
     }
+    #[test]
+    fn background_and_stream_results_preserve_structured_sections_after_reload() {
+        let payload: Value =
+            serde_json::from_str(include_str!("../ui/fixtures/structured-reply.json")).unwrap();
+        for mode in ["background", "stream"] {
+            let mut user = Message::user("test");
+            user.request_id = Some("structured-request".into());
+            let mut archive = crate::history::Archive::default();
+            let conversation_id = archive.insert(vec![user]).unwrap();
+            let mut task = Task {
+                request_id: "structured-request".into(),
+                conversation_id: conversation_id.clone(),
+                request: json!({}),
+                mode: mode.into(),
+                title: "test".into(),
+                created_at: 0,
+                remote: None,
+                applied: false,
+                message: String::new(),
+                mail_analysis: false,
+                title_generation: false,
+                tool_events: Vec::new(),
+                partial: "串流中的正文".into(),
+            };
+            if mode == "stream" {
+                assert!(retain_partial(&mut archive, &task).unwrap());
+            }
+            let mut status = json!({
+                "task_id":"structured-task", "client_request_id":task.request_id,
+                "state":"completed", "result":{"choices":[{"message":{"content":"僅有正文"}}]}
+            });
+            if mode == "background" {
+                status["result"]["response_payload_json"] = payload.clone();
+            } else {
+                status["response_payload_json"] = json!(payload.to_string());
+            }
+            let remote: TaskStatus = serde_json::from_value(status).unwrap();
+            remote.validate().unwrap();
+            task.apply_status(remote).unwrap();
+            assert!(apply_reply(&mut archive, &task).unwrap());
+            assert!(!apply_reply(&mut archive, &task).unwrap());
+            let root = std::env::temp_dir().join(format!("lm-ai-structured-{conversation_id}"));
+            crate::history::save(&root, &archive).unwrap();
+            let restored = crate::history::load(&root).unwrap();
+            let messages = &restored.conversations[0].messages;
+            assert_eq!(messages.len(), 2);
+            assert!(!messages[1].incomplete);
+            assert_eq!(
+                messages[1]
+                    .response_payload
+                    .as_ref()
+                    .unwrap()
+                    .sections
+                    .key_points
+                    .len(),
+                2
+            );
+            assert!(messages[1].content.contains("High (高)"));
+            assert!(messages[1]
+                .content
+                .contains("目前沒有具體的技術問題需要解答。"));
+            // 只移除本測試在隨機目錄建立的單一檔案及空目錄。
+            fs::remove_file(root.join("history.dpapi")).unwrap();
+            fs::remove_dir(root).unwrap();
+        }
+    }
+
     #[test]
     fn sse_handles_utf8_boundaries_heartbeats_multiline_and_done() {
         let source=": heartbeat\r\nevent: status\r\ndata: {\r\ndata: \"state\":\"中文\"}\r\n\r\ndata: [DONE]\n\n";
@@ -841,6 +919,7 @@ mod tests {
             progress: None,
             queue_position: None,
             result: None,
+            response_payload_json: None,
             error_message: "failed".into(),
         };
         let mut task = Task {
@@ -914,6 +993,7 @@ mod tests {
                     progress: None,
                     queue_position: None,
                     result: None,
+                    response_payload_json: None,
                     error_message: String::new(),
                 }),
             });

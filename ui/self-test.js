@@ -6,13 +6,22 @@ window.addEventListener("error", (event) => {
   window.chrome?.webview?.postMessage({type: "self_test_result", ok: false,
     detail: `UI script error: ${event.message} (${event.filename}:${event.lineno})`});
 });
-window.runSelfTest = async () => {
+window.runSelfTest = async (structuredFixture) => {
   const checks = [];
   function check(condition, name) {
     if (!condition) throw new Error(name);
     checks.push(name);
   }
   const frame = () => new Promise((resolve) => setTimeout(resolve, 80));
+  // Rust 訊息橋為非同步；等實際狀態回覆，避免固定等兩幀就在慢速主機誤報失敗。
+  // 有明確上限且保留原斷言，真正未回覆仍會使自檢失敗。
+  async function waitFor(condition, name) {
+    const deadline = performance.now() + 5000;
+    while (!condition()) {
+      if (performance.now() >= deadline) throw new Error(`Timed out: ${name}`);
+      await frame();
+    }
+  }
   try {
     const sample =
       '# Markdown 測試\n\n| 名稱 | 數值 |\n| --- | --- |\n| 快速 | 42 |\n\n- [x] 已完成\n\n行內公式 $E=mc^2$\n\n$$\\int_0^1 x^2\\,dx=\\frac{1}{3}$$\n\n```rust\nfn main() { println!("hello"); }\n```\n\n註腳[^1]\n\n[^1]: 補充說明\n\n<script>alert(1)</script>\n\n![外部圖片](https://example.com/private.png)\n\n[危險連結](javascript:alert(1))';
@@ -280,8 +289,7 @@ window.runSelfTest = async () => {
     );
     document.getElementById("settings-button").click();
     document.getElementById("record-hotkey").click();
-    await frame();
-    await frame();
+    await waitFor(() => document.getElementById("hotkey").classList.contains("recording"), "recording start acknowledgement");
     check(
       document.getElementById("hotkey").classList.contains("recording"),
       "recording started through Rust bridge",
@@ -295,8 +303,8 @@ window.runSelfTest = async () => {
         cancelable: true,
       }),
     );
-    await frame();
-    await frame();
+    await waitFor(() => document.getElementById("hotkey").value === "Win+Esc" &&
+      !document.getElementById("save-hotkey").disabled, "recorded shortcut acknowledgement");
     check(
       document.getElementById("hotkey").value === "Win+Esc",
       "recorded shortcut canonical name",
@@ -306,11 +314,9 @@ window.runSelfTest = async () => {
       "recording waits for explicit apply",
     );
     document.getElementById("record-hotkey").click();
-    await frame();
-    await frame();
+    await waitFor(() => document.getElementById("hotkey").classList.contains("recording"), "second recording start acknowledgement");
     document.getElementById("cancel-hotkey").click();
-    await frame();
-    await frame();
+    await waitFor(() => !document.getElementById("hotkey").classList.contains("recording"), "recording cancellation acknowledgement");
     check(
       !document.getElementById("hotkey").classList.contains("recording"),
       "recording cancel restores normal mode",
@@ -507,16 +513,151 @@ window.runSelfTest = async () => {
     for (const answer of [
       "1. Answer\n主要回答。\n\n2. Key points\n重點。\n\n3. Sources\n來源內容。\n\n4. Confidence\nHigh\n\n5. Limitations\n限制內容。",
       "## 1. Answer\n主要回答。\n\n## 2. Key points\n重點。\n\n## 3. Sources\n來源內容。\n\n## 4. Confidence\nHigh\n\n## 5. Limitations\n限制內容。",
-      "**Answer**\n\n主要回答。\n\n**Key points**\n\n重點。\n\n**Sources**\n\n來源內容。\n\n**Confidence**\n\nHigh\n\n**Limitations**\n\n限制內容。",
+      "**1. Answer**\n\n主要回答。\n\n**2. Key points**\n\n重點。\n\n**3. Sources**\n\n來源內容。\n\n**4. Confidence**\n\nHigh\n\n**5. Limitations**\n\n限制內容。",
+      "## 1. 回答\n主要回答。\n\n## 2. 回答重點\n重點。\n\n## 3. 來源\n來源內容。\n\n## 4. 信心度\nHigh\n\n## 5. 限制\n限制內容。",
+      "## (1) ANSWER:\n主要回答。\n\n## (2) KEY   POINTS：\n重點。\n\n## (3) SOURCES:\n來源內容。\n\n## (4) CONFIDENCE:\nHigh\n\n## (5) LIMITATIONS:\n限制內容。",
+      // 快速模型可能先給來源再補重點，或在來源後再次補上正文／重點。
+      "## 1. Answer\n主要回答。\n\n## 2. Sources\n來源內容。\n\n## 3. Key points\n重點。\n\n## 4. Confidence\nHigh\n\n## 5. Limitations\n限制內容。",
+      "## 1. Answer\n主要回答。\n\n## 2. Key points\n初步摘要。\n\n## 3. Sources\n來源內容。\n\n## 4. Key points\n重點。\n\n## 5. Answer\n補充正文。\n\n## 6. Confidence\nHigh\n\n## 7. Limitations\n限制內容。",
+      "1. Answer\n主要回答。\n\n2. Key points\n初步摘要。\n\n3. Sources\n來源內容。\n\n4. Key points\n重點。\n\n5. Confidence\nHigh\n\n6. Limitations\n限制內容。",
+      "**1. content：主要回答。**\n\n**2. keypoints：重點。**\n\n**3. references：來源內容。**\n\n**4. confidence：High**\n\n**5. limitation：限制內容。**",
     ]) {
       const reply = document.createElement("div");
       reply.innerHTML = LMUI.renderAssistantReply(answer);
       const details = reply.querySelector("details.answer-details");
-      check(details && !details.open && details.textContent.includes("限制內容"), "structured answer secondary sections collapsed");
+      check(details && !details.open && ["來源內容", "High", "限制內容"].every((text) => details.textContent.includes(text)), "structured answer secondary sections collapsed");
+      check(!details.textContent.includes("重點。") && !details.textContent.includes("補充正文"), "primary sections never enter collapsed details");
+      details.open = true;
+      check(details.open && details.querySelector(".answer-details-content"), "secondary sections can be expanded");
       details.remove();
       check(reply.textContent.includes("主要回答") && reply.textContent.includes("重點") && !reply.textContent.includes("來源內容"), "Answer and Key points stay visible");
     }
+    // 逐一涵蓋網頁端提供的全部舊格式標籤，且冒號後同一行的內容也要保留。
+    const legacyLabels = [
+      ["answer", "content", "回答", "內容"],
+      ["keypoint", "key points", "keypoints", "回答重點"],
+      ["source", "sources", "references", "引用資料庫", "內容引用處", "來源", "來源摘要"],
+      ["confidence", "信心度"],
+      ["limitation", "limitations", "限制", "回答限制"],
+    ];
+    const legacyBodies = ["主要回答。", "重點。", "來源內容。", "High", "限制內容。"];
+    for (const [sectionIndex, labels] of legacyLabels.entries()) {
+      for (const label of labels) {
+        const text = legacyLabels.map((names, index) =>
+          `## ${index + 1}. ${index === sectionIndex ? label : names[0]}：${legacyBodies[index]}`
+        ).join("\n\n");
+        const reply = document.createElement("div");
+        reply.innerHTML = LMUI.renderAssistantReply(text);
+        const details = reply.querySelector("details");
+        check(details && ["來源內容。", "High", "限制內容。"].every((body) => details.textContent.includes(body)), `legacy alias is recognized: ${label}`);
+        details.remove();
+        check(reply.textContent.includes("主要回答。") && reply.textContent.includes("重點。"), `legacy alias preserves primary text: ${label}`);
+      }
+    }
     check(!LMUI.renderAssistantReply("```text\n1. Answer\n2. Key points\n3. Sources\n```\n\n一般回覆。").includes("answer-details"), "code and ordinary replies are not folded");
+    for (const ordinary of [
+      "## Sources\n一般文章的來源章節。",
+      "> Answer\n>\n> Key points\n>\n> Sources",
+      "1. 一般清單\n   1. Answer\n   2. Key points\n   3. Sources",
+      "**Answer**\n正文。\n\n**Key points**\n重點。",
+      "## Answer\n正文。\n\n## Key points\n重點。\n\n## Sources\n來源。",
+      "**Answer**\n正文。\n\n**Key points**\n重點。\n\n**Sources**\n來源。",
+      "1. 回答包含 answer 關鍵字。\n\n2. 回答重點只是正文的一部分。\n\n3. sources 並非獨立標題。",
+    ]) {
+      check(LMUI.renderAssistantReply(ordinary) === LMUI.renderMarkdown(ordinary), "unrecognized structure retains original Markdown");
+    }
+    const structuredReply = "## 1. Answer\n主要回答。\n\n## 2. Key points\n初步摘要。\n\n## 3. Sources\n來源內容。\n\n### 資料庫\n來源的子章節。\n\n## 4. 回答重點\n重點。\n\n## 5. Confidence\nHigh\n\n## 6. Limitations\n限制內容。\n\n## 後續建議\n補充正文。";
+    const boundaries = document.createElement("div");
+    boundaries.innerHTML = LMUI.renderAssistantReply(structuredReply);
+    const secondary = boundaries.querySelector("details");
+    check(secondary.textContent.includes("來源的子章節") && !secondary.textContent.includes("補充正文"), "only subordinate headings stay in secondary sections");
+    secondary.remove();
+    check(boundaries.textContent.includes("重點。") && boundaries.textContent.includes("補充正文"), "later primary and unknown sections stay visible");
+
+    // 經過正式的串流與完成訊息渲染入口，防止只測獨立函式卻漏掉完成後的重繪。
+    const replyFixture = {
+      ...fixture,
+      active_id: "reply-sections",
+      conversations: [{ id: "reply-sections", title: "章節回歸測試", updated_at: 1 }],
+      messages: [],
+      work: { ...fixture.work, attachments: [], tasks: [{
+        id: "reply-task", conversation_id: "reply-sections", state: "running",
+        active: true, partial: structuredReply,
+      }] },
+    };
+    LMUI.receive(replyFixture);
+    const liveReply = document.querySelector("#live-task .bubble");
+    check(liveReply && !liveReply.querySelector("details").textContent.includes("重點。"), "stream keeps key points outside details");
+    replyFixture.work.tasks = [];
+    replyFixture.messages = [{ role: "assistant", content: structuredReply }];
+    LMUI.receive(replyFixture);
+    const savedReply = document.querySelector("#messages .bubble");
+    check(savedReply.innerHTML === liveReply.innerHTML, "completed response preserves all streamed sections");
+    const savedDetails = savedReply.querySelector("details");
+    savedDetails.querySelector("summary").click();
+    check(savedDetails.open, "completed response details expand by click");
+    replyFixture.messages.push({ role: "user", content: "下一題" });
+    LMUI.receive(replyFixture);
+    check(document.querySelector("#messages details").open, "expanded sections survive message redraw");
+    check(LMUI.getState().messages[0].content === structuredReply, "display folding preserves complete original message");
+
+    // 與 Rust 協定測試共用使用者提供的 JSON 範例，核對結構化欄位優先及完成切換。
+    check(structuredFixture?.payload && structuredFixture.message?.response_payload,
+      "structured reply fixture is parsed by Rust and delivered through the bridge");
+    const payload = structuredFixture.payload;
+    const structured = document.createElement("div");
+    structured.innerHTML = LMUI.renderAssistantReply("舊正文不應顯示", payload);
+    const payloadDetails = structured.querySelector("details");
+    check(payloadDetails && !payloadDetails.open && payloadDetails.textContent.includes("High (高)") &&
+      !structured.textContent.includes("medium") && !structured.textContent.includes("舊正文不應顯示"),
+      "structured sections override legacy content and top-level confidence");
+    check(payloadDetails.textContent.includes(payload.sections.sources[0]) &&
+      payloadDetails.textContent.includes(payload.sections.limitations[0]), "structured sources and limitations are retained");
+    payloadDetails.remove();
+    check(payload.sections.key_points.every((point) => structured.textContent.includes(point)) &&
+      structured.querySelector("code")?.textContent === "robocopy", "structured answer and both key points remain visible");
+    const emptyPayload = { answer: "只有正文", sections: {}, citations: [] };
+    check(!LMUI.renderAssistantReply("", emptyPayload).includes("answer-details"), "empty sections produce no empty disclosure");
+    const hostilePayload = {
+      answer: "## 1. Sources\n這段仍屬於正文。", sections: { key_points: ["<script>bad()</script>"], confidence: "High" },
+      citations: ["[不安全連結](javascript:alert(1))", { title: "<img src=x onerror=bad()>", page: 2 }],
+    };
+    const safeReply = document.createElement("div");
+    safeReply.innerHTML = LMUI.renderAssistantReply("", hostilePayload);
+    check(safeReply.querySelector(".answer-body").textContent.includes("這段仍屬於正文") &&
+      !safeReply.querySelector("script,img,iframe") &&
+      ![...safeReply.querySelectorAll("a")].some((a) => a.getAttribute("href")?.startsWith("javascript:")),
+      "structured fields retain boundaries and sanitize Markdown and citation text");
+    check(safeReply.querySelector("details").textContent.includes("引用文件") &&
+      safeReply.querySelector(".citation-data").textContent.includes("page"), "citation objects are retained as inert text");
+
+    const completeText = structuredFixture.message.content;
+    check([...payload.sections.key_points, ...payload.sections.sources, payload.sections.confidence,
+      ...payload.sections.limitations].every((value) => completeText.includes(value)),
+      "Rust prepares complete copy text including every structured section");
+    for (const mode of ["background", "stream"]) {
+      replyFixture.messages = [];
+      replyFixture.work.tasks = [{ id: "payload-task", conversation_id: replyFixture.active_id,
+        state: "running", active: true, mode, partial: mode === "stream" ? payload.answer : "" }];
+      LMUI.receive(replyFixture);
+      replyFixture.work.tasks = [];
+      replyFixture.messages = [structuredFixture.message];
+      LMUI.receive(replyFixture);
+      const completed = document.querySelector("#messages .bubble");
+      check(completed.querySelector(".answer-body") && completed.querySelector("details"), `${mode} completion uses structured result`);
+      const visible = completed.cloneNode(true);
+      visible.querySelector("details").remove();
+      check(payload.sections.key_points.every((point) => visible.textContent.includes(point)), `${mode} completion keeps every key point visible`);
+      const originalCopySend = send;
+      const copyCommands = [];
+      try {
+        send = (command) => copyCommands.push(command);
+        document.querySelector("#messages .copy-message").click();
+        check(copyCommands.length === 1 && copyCommands[0].type === "copy" && copyCommands[0].text === completeText,
+          `${mode} copy includes the complete response`);
+      } finally { send = originalCopySend; }
+    }
+    LMUI.receive(fixture);
     check(document.querySelector(".attachment-help").hidden, "attachment help hidden while validation remains active");
     check(document.querySelector(".topbar").getBoundingClientRect().height <= 50, "compact app header");
 

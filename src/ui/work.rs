@@ -1158,9 +1158,7 @@ impl App {
             if remote.state == "completed" {
                 let mut archive = self.archive.clone();
                 if task.title_generation {
-                    let reply = protocol::assistant_text(
-                        &remote.result.as_ref().ok_or("缺少標題結果。")?.to_string(),
-                    )?;
+                    let reply = remote.reply_text()?;
                     if let Some(c) = archive
                         .conversations
                         .iter_mut()

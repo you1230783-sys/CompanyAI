@@ -38,6 +38,7 @@ select { font: inherit; max-width: 100%; padding: 7px; border: 1px solid var(--l
 .answer-details { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 10px; }
 .answer-details summary { color: var(--muted); cursor: pointer; font-size: 0.88rem; }
 .answer-details-content { padding-top: 12px; }
+.citation-data { white-space: pre-wrap; overflow-wrap: anywhere; }
 .incomplete-warning { color: var(--warning); border-left: 3px solid var(--warning); padding: 6px 10px; font-size: 0.86rem; }
 .tool-status { background: var(--soft); color: var(--accent); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 8px 0; overflow-wrap: anywhere; font-size: 0.86rem; }
 :root[data-theme="dark"] .hljs { color: #d6e3ee; background: transparent; }
