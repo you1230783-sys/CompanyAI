@@ -161,6 +161,8 @@ fn viewer_arguments_preserve_python_order_and_password_argument_boundary() {
 
 #[test]
 fn server_rejects_commands_but_accepts_legacy_host_forms() {
+    // 沒有 IP 的機台可先保存；connection_args 仍拒絕啟動空位址。
+    assert!(validate_machine("A", "尚未設定 IP", "", "1234").is_ok());
     for server in [
         "192.168.1.101",
         "machine-1",
@@ -171,7 +173,6 @@ fn server_rejects_commands_but_accepts_legacy_host_forms() {
         assert!(validate_machine("A", "機台", server, "").is_ok());
     }
     for server in [
-        "",
         "/listen",
         "-listen",
         "host /password x",

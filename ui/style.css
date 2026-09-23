@@ -1249,6 +1249,17 @@ output {
 .vnc-manager-list table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
 .vnc-manager-list th, .vnc-manager-list td { padding: 8px; border-bottom: 1px solid var(--line); text-align: left; overflow-wrap: anywhere; }
 .vnc-editor { display: flex; flex-direction: column; gap: 8px; }
+.vnc-sync-controls { border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin: 16px 0; }
+.vnc-sync-controls summary { cursor: pointer; margin-bottom: 12px; }
+.vnc-login-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.vnc-login-fields label, .vnc-sync-paths label { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+.vnc-sync-controls input:not([type="checkbox"]) { width: 100%; min-width: 0; }
+#vnc-import-groups { max-height: 420px; overflow: auto; }
+.vnc-import-group { border-bottom: 1px solid var(--line); padding: 12px 0; }
+.vnc-import-machine { padding-left: 24px; overflow-wrap: anywhere; }
+.vnc-import-machine span { flex: 1; min-width: 0; }
+.vnc-category-row { background: var(--soft); }
+.vnc-batch-actions { margin: 12px 0; flex-wrap: wrap; }
 .vnc-editor input:not([type="checkbox"]) { width: 100%; }
 .vnc-machine:hover { border-color: var(--accent); background: var(--soft); }
 .vnc-manager-list td:last-child { white-space: nowrap; }

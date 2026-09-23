@@ -857,7 +857,7 @@ window.runSelfTest = async (structuredFixture) => {
       document.getElementById("vnc-viewonly").dispatchEvent(new Event("change"));
       check(vncCommands.at(-1).command.viewonly && vncCommands.at(-1).command.autoscaling, "VNC options sent independently of chat");
       document.getElementById("vnc-manage").click();
-      const rowButtons = document.querySelectorAll("#vnc-manager-rows tr:first-child button");
+      const rowButtons = document.querySelectorAll("#vnc-manager-rows .vnc-machine-row button");
       check(rowButtons[1].disabled && !rowButtons[2].disabled, "VNC manual move respects group boundaries");
       rowButtons[2].click();
       check(vncCommands.at(-1).command.action === "move_machine" && vncCommands.at(-1).command.direction === "down", "VNC manual order command");
@@ -870,10 +870,55 @@ window.runSelfTest = async (structuredFixture) => {
       document.getElementById("vnc-clear-password").checked = true;
       document.getElementById("vnc-machine-form").dispatchEvent(new Event("submit", { cancelable: true }));
       check(vncCommands.at(-1).command.password === "", "VNC password clear is explicit");
+      const groupSelection = document.querySelector(".vnc-category-select");
+      groupSelection.click();
+      check(document.querySelectorAll(".vnc-machine-row input:checked").length === 2, "VNC category selects all machines");
+      document.getElementById("vnc-groups-up").click();
+      check(vncCommands.at(-1).command.operation === "groups_up" && vncCommands.at(-1).command.selection.groups[0] === "測試分類", "VNC batch category order command");
+      document.querySelector(".vnc-machine-row input").click();
+      document.getElementById("vnc-batch-down").click();
+      check(vncCommands.at(-1).command.selection.machines.length === 1 && !vncCommands.at(-1).command.selection.groups.length, "VNC partial selection moves only selected machines");
+      const originalConfirm = window.confirm;
+      try {
+        window.confirm = () => true;
+        document.getElementById("vnc-batch-delete").click();
+        check(vncCommands.at(-1).command.operation === "delete", "VNC batch delete requires confirmation");
+      } finally { window.confirm = originalConfirm; }
+      document.getElementById("vnc-manager-close").click();
+
+      fixture.vnc.sync_settings = { root:"http://example.invalid/root", home:"?p=map", login:"login.php", logout:"logout.php",
+        endpoints:["api/one", "api/two", ...Array(8).fill("")], username:"saved-user", has_password:true };
+      fixture.vnc.settings_revision = 1;
+      const beforeSyncRender = vncCommands.length;
+      LMUI.receive(fixture);
+      check(vncCommands.length === beforeSyncRender, "VNC rendering does not auto synchronize");
+      check(document.querySelectorAll("#vnc-sync-endpoints input").length === 10 && document.getElementById("vnc-sync-user").value === "saved-user" &&
+        document.getElementById("vnc-sync-password").value === "", "VNC remembers account and offers ten APIs without exposing saved password");
+      document.getElementById("vnc-sync-password").value = "test-sync-password";
+      document.getElementById("vnc-sync-start").click();
+      check(vncCommands.at(-1).command.start && vncCommands.at(-1).command.settings.password === "test-sync-password" &&
+        document.getElementById("vnc-sync-password").value === "", "VNC manual sync sends password once and clears input");
+      fixture.vnc.syncing = true;
+      LMUI.receive(fixture);
+      check(document.getElementById("vnc-sync-start").disabled && !document.getElementById("vnc-sync-cancel").disabled, "VNC duplicate sync disabled with cancellation available");
+      fixture.vnc.syncing = false;
+      fixture.vnc.preview = { id:"preview-1", machines:[
+        {group:"選擇分類",name:"無IP<script>",ip:""}, {group:"選擇分類",name:"正常機台",ip:"192.0.2.5"},
+        {group:"捨棄分類",name:"不要匯入",ip:"192.0.2.6"}] };
+      LMUI.receive(fixture);
+      check(!document.getElementById("vnc-import-preview").hidden && document.querySelectorAll(".vnc-import-machine").length === 3 &&
+        !document.querySelector("#vnc-import-groups script") && document.getElementById("vnc-import-apply").disabled, "VNC staged import includes blank IP and requires selection");
+      document.querySelector(".vnc-import-category").click();
+      document.getElementById("vnc-import-apply").click();
+      check(JSON.stringify(vncCommands.at(-1).command.indices) === "[0,1]" && vncCommands.at(-1).command.preview_id === "preview-1", "VNC imports selected category only");
+      document.getElementById("vnc-import-discard").click();
+      check(vncCommands.at(-1).command.action === "discard_import", "VNC can discard staged import");
       fixture.config.vnc_enabled = false;
       LMUI.receive(fixture);
       check(document.getElementById("show-vnc").hidden && document.getElementById("vnc-view").hidden && !document.getElementById("vnc-manager-dialog").open, "VNC disabling closes and hides tools");
       check(!document.getElementById("vnc-manager-rows").children.length, "VNC disabling clears machine editor");
+      check(document.getElementById("vnc-sync-controls").hidden && document.getElementById("vnc-sync-user").value === "" &&
+        document.getElementById("vnc-import-preview").hidden, "VNC disabling hides synchronization and clears credentials in UI");
     } finally { send = vncSend; }
     fixture.update_required = true;
     fixture.update_busy = true;
@@ -886,7 +931,7 @@ window.runSelfTest = async (structuredFixture) => {
     fixture.update_busy = false;
     fixture.update_ready = true;
     LMUI.receive(fixture);
-    check(document.getElementById("required-update-download").textContent === "安裝並重新啟動", "downloaded update awaits second action");
+    check(document.getElementById("required-update-download").textContent === "安裝並重新啟動 LM_AI", "downloaded update awaits second action");
     fixture.update_kind = "exe";
     LMUI.receive(fixture);
     check(document.getElementById("required-update-download").textContent === "開啟下載資料夾", "portable update offers manual replacement");

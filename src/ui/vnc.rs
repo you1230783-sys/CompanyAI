@@ -1,6 +1,6 @@
 //! VNC 頁面命令。所有檔案位置由原生層決定，連線只接受已載入機台的分類與索引。
 use super::*;
-use crate::vnc::{self, Manager, Options};
+use crate::vnc::{self, sync, MachineKey, Manager, Options, Selection};
 use windows::{
     core::w,
     Win32::{
@@ -16,6 +16,25 @@ use windows::{
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(super) enum VncCommand {
+    SyncSettings {
+        settings: sync::Settings,
+        clear_password: bool,
+        start: bool,
+    },
+    CancelSync,
+    DiscardImport {
+        preview_id: String,
+    },
+    Import {
+        revision: u64,
+        preview_id: String,
+        indices: Vec<usize>,
+    },
+    Batch {
+        revision: u64,
+        selection: Selection,
+        operation: String,
+    },
     MoveMachine {
         revision: u64,
         group: String,
@@ -53,12 +72,6 @@ pub(super) enum VncCommand {
 }
 
 #[derive(Deserialize)]
-pub(super) struct MachineKey {
-    group: String,
-    index: usize,
-}
-
-#[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum MoveDirection {
     Up,
@@ -71,6 +84,19 @@ pub(super) struct VncRuntime {
     revision: u64,
     search_id: Option<String>,
     status: String,
+    settings: Option<sync::Settings>,
+    settings_revision: u64,
+    sync_id: Option<String>,
+    cancel: Option<Arc<AtomicBool>>,
+    preview: Option<(String, sync::Download)>,
+}
+
+impl VncRuntime {
+    pub(super) fn cancel_sync(&self) {
+        if let Some(cancel) = &self.cancel {
+            cancel.store(true, Ordering::Relaxed);
+        }
+    }
 }
 
 /// 原生檔案選擇器僅允許選 Viewer；不接收網頁提供的任意執行檔路徑。
@@ -118,6 +144,9 @@ impl App {
         json!({
             "loaded": manager.is_some(), "revision": self.vnc.revision,
             "searching": self.vnc.search_id.is_some(), "status": self.vnc.status,
+            "syncing":self.vnc.sync_id.is_some(), "sync_settings":self.vnc.settings.as_ref().map(sync::Settings::public),
+            "settings_revision":self.vnc.settings_revision,
+            "preview":self.vnc.preview.as_ref().map(|(id, result)| json!({"id":id,"machines":result.machines})),
             "machines_path": manager.map(|m| m.path.to_string_lossy()),
             "viewer_path": manager.map(|m| &m.config.vnc_path),
             "options": manager.map(|m| json!({"fullscreen":m.config.options.fullscreen,
@@ -152,6 +181,107 @@ impl App {
 
     fn vnc_dispatch(&mut self, command: VncCommand) -> AppResult<()> {
         match command {
+            VncCommand::SyncSettings {
+                mut settings,
+                clear_password,
+                start,
+            } => {
+                if self.vnc.sync_id.is_some() {
+                    return Err("清單取得中，請等待完成或按停止。".into());
+                }
+                let previous = self
+                    .vnc
+                    .settings
+                    .as_ref()
+                    .ok_or("請先開啟 VNC 頁面讀取設定。")?;
+                if clear_password {
+                    settings.password.clear();
+                } else if settings.password.is_empty() {
+                    if settings.base()?.origin() != previous.base()?.origin()
+                        && !previous.password.is_empty()
+                    {
+                        return Err("網站主機已變更，請重新輸入該網站的密碼。".into());
+                    }
+                    settings.password.clone_from(&previous.password);
+                }
+                settings.save(&self.root)?;
+                self.vnc.settings = Some(settings.clone());
+                self.vnc.settings_revision += 1;
+                self.vnc.status = "網站登入與連結設定已儲存；只在按更新時連線。".into();
+                if start {
+                    if settings.username.trim().is_empty() || settings.password.is_empty() {
+                        return Err("請輸入機台網站的帳號與密碼。".into());
+                    }
+                    let id = crate::jobs::new_id()?;
+                    let cancel = Arc::new(AtomicBool::new(false));
+                    self.vnc.cancel = Some(cancel.clone());
+                    self.vnc.sync_id = Some(id.clone());
+                    self.vnc.preview = None;
+                    self.vnc.status = "正在登入並取得機台清單，完成後會登出…".into();
+                    let tx = self.tx.clone();
+                    thread::spawn(move || {
+                        let _ = tx.send(Event::VncSync(id, sync::download(&settings, &cancel)));
+                    });
+                }
+            }
+            VncCommand::CancelSync => {
+                self.vnc.cancel_sync();
+                self.vnc.status = "正在停止取得清單並嘗試登出…".into();
+            }
+            VncCommand::DiscardImport { preview_id } => {
+                if self
+                    .vnc
+                    .preview
+                    .as_ref()
+                    .is_some_and(|(id, _)| id == &preview_id)
+                {
+                    self.vnc.preview = None;
+                    self.vnc.status = "已捨棄暫存清單，本機機台未變更。".into();
+                }
+            }
+            VncCommand::Import {
+                revision,
+                preview_id,
+                indices,
+            } => {
+                if revision != self.vnc.revision {
+                    return Err("機台清單已變更，請重新確認要匯入的項目。".into());
+                }
+                let (_, download) = self
+                    .vnc
+                    .preview
+                    .as_ref()
+                    .filter(|(id, _)| id == &preview_id)
+                    .ok_or("匯入預覽已失效，請重新取得清單。")?;
+                let count = self
+                    .vnc
+                    .manager
+                    .as_mut()
+                    .ok_or("請先讀取機台設定。")?
+                    .import(download, &indices)?;
+                self.vnc.preview = None;
+                self.vnc.revision += 1;
+                self.vnc.status =
+                    format!("已匯入或更新 {count} 台機台，原有密碼與手動機台已保留。");
+                self.view.post(&json!({"type":"vnc_saved"}))?;
+            }
+            VncCommand::Batch {
+                revision,
+                selection,
+                operation,
+            } => {
+                let manager = self.vnc_manager(revision)?;
+                match operation.as_str() {
+                    "groups_up" | "groups_down" => {
+                        manager.move_groups(&selection.groups, operation == "groups_up")?
+                    }
+                    "up" | "down" | "delete" => manager.batch_machines(&selection, &operation)?,
+                    _ => return Err("批次操作無效。".into()),
+                }
+                self.vnc.revision += 1;
+                self.vnc.status = "批次機台操作已儲存。".into();
+                self.view.post(&json!({"type":"vnc_saved"}))?;
+            }
             VncCommand::MoveMachine {
                 revision,
                 group,
@@ -174,11 +304,16 @@ impl App {
                 self.view.post(&json!({"type":"vnc_saved"}))?;
             }
             VncCommand::Open | VncCommand::Reload => {
+                if self.vnc.sync_id.is_some() {
+                    return Err("取得清單中，請先等候完成。".into());
+                }
                 // Reload 失敗時丟棄舊快照，避免仍可操作已損壞或已被替換的設定。
                 self.vnc.manager = None;
                 self.vnc.search_id = None;
                 self.vnc.revision += 1;
                 self.vnc.manager = Some(Manager::load(Manager::default_path()?)?);
+                self.vnc.settings = Some(sync::Settings::load(&self.root)?);
+                self.vnc.settings_revision += 1;
                 self.vnc.status = "已讀取機台設定。連線只會在點擊機台後啟動。".into();
                 let manager = self.vnc.manager.as_ref().ok_or("尚未載入 VNC 設定。")?;
                 if vnc::validate_viewer(std::path::Path::new(&manager.config.vnc_path)).is_err() {
@@ -330,5 +465,27 @@ impl App {
             Err(error) => self.vnc.status = error,
         }
         Ok(())
+    }
+
+    pub(super) fn vnc_sync_result(&mut self, id: String, result: AppResult<sync::Download>) {
+        if !self.config.vnc_enabled || self.vnc.sync_id.as_ref() != Some(&id) {
+            return;
+        }
+        self.vnc.sync_id = None;
+        self.vnc.cancel = None;
+        match result {
+            Ok(download) => {
+                self.vnc.status = if download.warning.is_empty() {
+                    "已取得清單並登出，請勾選要匯入的分類或機台。".into()
+                } else {
+                    download.warning.clone()
+                };
+                if download.machines.is_empty() {
+                    self.vnc.status.push_str(" 本次沒有可匯入的機台。");
+                }
+                self.vnc.preview = Some((id, download));
+            }
+            Err(error) => self.vnc.status = error,
+        }
     }
 }

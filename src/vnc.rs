@@ -14,6 +14,10 @@ use std::{
 
 const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
+mod selection;
+pub mod sync;
+pub use selection::{MachineKey, Selection};
+
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Machine {
     pub name: String,
@@ -53,6 +57,8 @@ impl Default for Options {
 pub struct UserConfig {
     pub vnc_path: String,
     pub options: Options,
+    /// 分類的手動順序獨立保存，machines.json 仍維持原本的分類物件格式。
+    pub group_order: Vec<String>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -153,9 +159,10 @@ impl Manager {
     /// WebView 僅取得名稱、位址及是否有密碼，既有密碼不回傳 JavaScript。
     pub fn public_groups(&self) -> Value {
         Value::Array(
-            self.machines
+            self.ordered_groups()
                 .iter()
-                .map(|(group, machines)| {
+                .map(|group| {
+                    let machines = &self.machines[group];
                     json!({
                         "name": group,
                         "machines": machines.iter().enumerate().map(|(index, machine)| json!({
@@ -166,6 +173,16 @@ impl Manager {
                 })
                 .collect(),
         )
+    }
+
+    pub fn ordered_groups(&self) -> Vec<String> {
+        let mut groups = Vec::new();
+        for group in self.config.group_order.iter().chain(self.machines.keys()) {
+            if self.machines.contains_key(group) && !groups.contains(group) {
+                groups.push(group.clone());
+            }
+        }
+        groups
     }
 
     pub fn machine(&self, group: &str, index: usize) -> AppResult<&Machine> {
@@ -212,8 +229,7 @@ pub fn validate_machine(group: &str, name: &str, server: &str, password: &str) -
     }) {
         return Err("分類與機台名稱必須填寫，且不可含控制字元或超過 256 bytes。".into());
     }
-    if server.is_empty()
-        || server.len() > 512
+    if server.len() > 512
         || server.starts_with('-')
         || !server
             .bytes()
@@ -245,6 +261,9 @@ pub fn validate_viewer(path: &Path) -> AppResult<()> {
 /// 沿用原工具參數及順序；逐個傳遞參數，不組 shell 字串，也不輸出密碼。
 pub fn connection_args(machine: &Machine, options: &Options) -> AppResult<Vec<String>> {
     let server = machine.ip.trim();
+    if server.is_empty() {
+        return Err("此機台尚未設定 IP，請先在機台管理補上位址。".into());
+    }
     validate_machine("連線", &machine.name, server, &machine.password)?;
     let mut args = Vec::new();
     if !machine.password.is_empty() {

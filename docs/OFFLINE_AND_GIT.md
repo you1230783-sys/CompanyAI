@@ -1,6 +1,6 @@
 # 離線交付與 Git 工作流程
 
-> 0.8.12 支援 choices 正文搭配同層 sections／citations 的統一完成結果，沿用三花貓圖示。最新 NSIS 只安裝 LM_AI，不檢查或安裝 WebView2，一般安裝不自動啟動；Runtime 由公司另外提供 Git dist 中保留的獨立安裝程式。SFX 測試包已撤下。交付：`LM_AI.exe`、`LM_AI_Setup.exe`、EXE／NSIS 更新清單、原始碼與文件，建置為 `Build.ps1 -EmptyCargoCache -IncludeInstaller`。請查看 exe-verification.json、installer-verification.json 與 docs/VALIDATION_0_8_12.md。離線 ZIP／verification.json 仍為歷史版本，未重新製作；vnc-verification.json 保留 0.8.6 的 Viewer 測試，不代表本版重測。
+> 0.8.13 新增 VNC 手動網站同步、勾選匯入及機台／分類多選管理，併入「重新啟動 LM_AI 應用程式」的更新提示用詞。依使用者要求，先以 `Build.ps1 -EmptyCargoCache` 交付 `LM_AI.exe`、EXE 更新清單、原始碼與文件；實測成功後才製作 NSIS。請查看 offline/exe-verification.json 與 docs/VALIDATION_0_8_13.md。NSIS、NSIS 更新清單及 installer-verification.json 保留 0.8.12；離線 ZIP／verification.json 仍為歷史版本，未重新製作；vnc-verification.json 保留 0.8.6 的 Viewer 測試，不代表本版重測。Git 推送不代表公司內網網站已部署。
 
 ## 專案包含的內容
 

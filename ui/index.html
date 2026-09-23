@@ -167,6 +167,30 @@
             <div><h2>VNC 快速連線</h2><p>選擇機台，以本機安裝的 UltraVNC Viewer 開啟連線。</p></div>
             <button id="vnc-manage" class="secondary-button" disabled>機台管理</button>
           </div>
+          <fieldset id="vnc-sync-controls" class="vnc-sync-controls">
+            <legend>從網站更新機台清單</legend>
+            <div class="vnc-login-fields">
+              <label>帳號<input id="vnc-sync-user" autocomplete="username" maxlength="256" /></label>
+              <label>密碼<input id="vnc-sync-password" type="password" autocomplete="off" maxlength="1024" placeholder="輸入網站登入密碼" /></label>
+            </div>
+            <label class="check-row"><input id="vnc-sync-clear-password" type="checkbox" />清除已記住的登入密碼</label>
+            <p class="subtle">記住登入資料；僅在按「更新機台清單」時登入，取得資料後登出。密碼留空會沿用已存值。</p>
+            <details><summary>詳細設定：網站根目錄與連結</summary>
+              <div class="vnc-sync-paths">
+                <label>網站根目錄<input id="vnc-sync-root" maxlength="2048" /></label>
+                <label>首頁連結<input id="vnc-sync-home" maxlength="2048" /></label>
+                <label>登入連結<input id="vnc-sync-login" maxlength="2048" /></label>
+                <label>登出連結<input id="vnc-sync-logout" maxlength="2048" /></label>
+                <p class="subtle">連結填相對路徑，可包含查詢參數。空白的機台 API 欄位不會送出請求。</p>
+                <div id="vnc-sync-endpoints"></div>
+              </div>
+            </details>
+            <div class="button-row">
+              <button id="vnc-sync-save" class="secondary-button">儲存登入與連結設定</button>
+              <button id="vnc-sync-start" class="primary-button">更新機台清單</button>
+              <button id="vnc-sync-cancel" class="secondary-button" hidden>停止取得清單</button>
+            </div>
+          </fieldset>
           <fieldset class="vnc-options">
             <legend>連線選項</legend>
             <label class="check-row"><input id="vnc-fullscreen" type="checkbox" disabled />全螢幕模式</label>
@@ -181,6 +205,12 @@
           <p class="subtle vnc-path">UltraVNC：<span id="vnc-viewer-path">尚未指定</span></p>
           <p class="subtle vnc-path">機台設定：<span id="vnc-machines-path">LM_AI.exe 同一資料夾的 machines.json</span></p>
           <p id="vnc-status" role="status">正在讀取設定…</p>
+          <section id="vnc-import-preview" class="vnc-sync-controls" hidden>
+            <h3>選擇要匯入的分類與機台</h3>
+            <p class="subtle">勾選整個分類，或只勾選需要的機台。未勾選項目會捨棄，不會刪除本機機台。新機台密碼預設為 1234，匯入後可在機台管理更改；空白 IP 可稍後補填。</p>
+            <div id="vnc-import-groups"></div>
+            <div class="button-row"><button id="vnc-import-apply" class="primary-button" disabled>匯入已選項目</button><button id="vnc-import-discard" class="secondary-button">捨棄本次清單</button></div>
+          </section>
           <div id="vnc-groups" class="vnc-groups" role="group" aria-label="機台分類"></div>
           <div id="vnc-machines" class="vnc-machines"></div>
         </section>
@@ -455,16 +485,25 @@
     <dialog id="vnc-manager-dialog" aria-labelledby="vnc-manager-title">
       <div class="section-heading"><h2 id="vnc-manager-title">機台管理</h2><button id="vnc-manager-close" class="secondary-button">關閉</button></div>
       <p class="subtle">編輯機台保留原位置；可用上移、下移自行排列，順序會直接儲存。</p>
+      <div class="button-row vnc-batch-actions">
+        <span id="vnc-selection-count">尚未選取</span>
+        <button id="vnc-batch-up" class="secondary-button" disabled>機台上移</button>
+        <button id="vnc-batch-down" class="secondary-button" disabled>機台下移</button>
+        <button id="vnc-groups-up" class="secondary-button" disabled>分類上移</button>
+        <button id="vnc-groups-down" class="secondary-button" disabled>分類下移</button>
+        <button id="vnc-batch-delete" class="secondary-button" disabled>刪除已選項目</button>
+      </div>
+      <p class="subtle">分類勾選框可全選該類機台。機台上／下移調整類內順序；分類上／下移調整整個頁籤順序。</p>
       <div class="vnc-manager-layout">
         <div class="vnc-manager-list"><table>
-          <thead><tr><th>分類</th><th>機台名稱</th><th>IP / Server</th><th>密碼</th><th>操作</th></tr></thead>
+          <thead><tr><th>選取</th><th>分類</th><th>機台名稱</th><th>IP / Server</th><th>密碼</th><th>操作</th></tr></thead>
           <tbody id="vnc-manager-rows"></tbody>
         </table></div>
         <form id="vnc-machine-form" class="vnc-editor">
           <label for="vnc-group">頁籤 / 分類</label><input id="vnc-group" list="vnc-group-names" maxlength="256" required />
           <datalist id="vnc-group-names"></datalist>
           <label for="vnc-name">機台名稱</label><input id="vnc-name" maxlength="256" required />
-          <label for="vnc-ip">IP / Server</label><input id="vnc-ip" maxlength="512" placeholder="192.168.1.101 或 host::5900" required />
+          <label for="vnc-ip">IP / Server</label><input id="vnc-ip" maxlength="512" placeholder="可留空，連線前請補上位址" />
           <label for="vnc-password">密碼</label><input id="vnc-password" type="password" maxlength="1024" autocomplete="new-password" />
           <label class="check-row"><input id="vnc-clear-password" type="checkbox" />清除已存密碼</label>
           <p class="subtle">編輯時密碼留空會保留原值。設定檔維持原工具的明文密碼格式。</p>
@@ -493,5 +532,6 @@
     <script src="mail.js"></script>
     <script src="behavior.js"></script>
     <script src="vnc.js"></script>
+    <script src="vnc-sync.js"></script>
   </body>
 </html>

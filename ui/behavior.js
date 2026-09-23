@@ -44,7 +44,7 @@
     render() {
       $("update-status").textContent = state.update_status || "";
       $("download").textContent = state.update_ready
-        ? (state.update_kind === "exe" ? "開啟下載資料夾" : "安裝並重新啟動")
+        ? (state.update_kind === "exe" ? "開啟下載資料夾" : "安裝並重新啟動 LM_AI")
         : "下載更新";
       $("download").disabled = !!state.update_busy;
       $("required-update-status").textContent = state.update_status || state.version_status || "請下載並安裝新版。";

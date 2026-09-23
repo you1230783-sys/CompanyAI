@@ -136,6 +136,7 @@ enum Command {
     },
 }
 enum Event {
+    VncSync(String, AppResult<crate::vnc::sync::Download>),
     VncSearch(String, AppResult<PathBuf>),
     Site(u64, site::SiteEvent),
     MailBatch(u64, u64, mail_batch::MailEvent),
@@ -729,6 +730,7 @@ impl App {
                 }
                 if !vnc_enabled {
                     // 停用即清除記憶體中的機台與密碼；背景搜尋結果也不再套用。
+                    self.vnc.cancel_sync();
                     self.vnc = vnc::VncRuntime::default();
                 }
             }
@@ -1023,6 +1025,7 @@ impl App {
                 self.work_event(event)?
             }
             Event::VncSearch(id, result) => self.vnc_search_result(id, result)?,
+            Event::VncSync(id, result) => self.vnc_sync_result(id, result),
             Event::Services(generation, version, models) if generation == self.generation => {
                 self.services_loading = false;
                 self.version_status = match self.versions.apply(version) {
@@ -1133,7 +1136,7 @@ impl App {
                         self.update_status = if plan.artifact.kind == "exe" {
                             format!("{} 獨立 EXE 已下載並驗證。請開啟下載資料夾，從系統托盤離開 LM_AI 後手動更換檔案；個人資料會保留。", plan.artifact.version)
                         } else {
-                            format!("{} 安裝包已下載並驗證。請按「安裝並重新啟動」確認；退出不會自動安裝。", plan.artifact.version)
+                            format!("{} 安裝包已下載並驗證。請按「安裝並重新啟動 LM_AI」確認；退出不會自動安裝。", plan.artifact.version)
                         };
                         self.update_ready = Some(plan);
                         self.toast(&self.update_status.clone());
@@ -1400,7 +1403,7 @@ impl App {
         }
         if unsafe {
             MessageBoxW(self.window,
-            wide("新版已下載且驗證完成。是否現在保存草稿、關閉 LM_AI、安裝並重新啟動？安裝位置為目前使用者的 Programs\\LM_AI；正在執行的本機郵件操作將停止。取消則保留待安裝狀態。").as_ptr(),
+            wide("新版已下載且驗證完成。是否現在保存草稿、關閉 LM_AI，並安裝更新？\n\n安裝完成後會重新啟動 LM_AI 應用程式，不會重新啟動電腦。\n\n安裝位置為 C:\\largan\\LM_AI；正在執行的本機郵件操作將停止。取消則保留待安裝狀態。").as_ptr(),
             wide("安裝 LM_AI 更新").as_ptr(), MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION)
         } != IDYES
         {
