@@ -14,6 +14,8 @@ use std::{
 
 const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
+mod ordering;
+use ordering::{group_cmp, natural_cmp};
 mod selection;
 pub mod sync;
 pub use selection::{MachineKey, Selection};
@@ -177,7 +179,9 @@ impl Manager {
 
     pub fn ordered_groups(&self) -> Vec<String> {
         let mut groups = Vec::new();
-        for group in self.config.group_order.iter().chain(self.machines.keys()) {
+        let mut defaults: Vec<_> = self.machines.keys().collect();
+        defaults.sort_by(|a, b| group_cmp(a, b));
+        for group in self.config.group_order.iter().chain(defaults) {
             if self.machines.contains_key(group) && !groups.contains(group) {
                 groups.push(group.clone());
             }

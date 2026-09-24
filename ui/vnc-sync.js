@@ -4,6 +4,7 @@
   const command = value => send({ type: "vnc", command: value });
   let settingsRevision = null;
   let previewId = null;
+  let comparedRevision = null;
   const selected = new Set();
   const endpointInputs = [];
   for (let i = 0; i < 10; i++) {
@@ -32,6 +33,9 @@
     if ($("vnc-sync-clear-password").checked) $("vnc-sync-password").value = "";
   };
   $("vnc-import-discard").onclick = () => command({ action: "discard_import", preview_id: previewId });
+  $("vnc-import-refresh").onclick = () => {
+    if (!state.vnc?.syncing && previewId) command({ action: "refresh_import", preview_id: previewId });
+  };
   $("vnc-import-apply").onclick = () => {
     if (!selected.size) return;
     command({ action: "import", revision: state.vnc.revision, preview_id: previewId, indices: [...selected] });
@@ -50,21 +54,31 @@
       const all = document.createElement("input"); all.type = "checkbox"; all.className = "vnc-import-category";
       label.append(all, node("strong", "", `${name}（${machines.length} 台）`)); section.append(label);
       const boxes = [];
+      const available = machines.filter(m => m.comparison !== "same");
+      all.disabled = !available.length;
       function changed() {
-        const count = machines.filter(m => selected.has(m.index)).length;
-        all.checked = count === machines.length;
-        all.indeterminate = count > 0 && count < machines.length;
+        const count = available.filter(m => selected.has(m.index)).length;
+        all.checked = !!available.length && count === available.length;
+        all.indeterminate = count > 0 && count < available.length;
         $("vnc-import-apply").disabled = !selected.size;
         $("vnc-import-apply").textContent = selected.size ? `匯入已選 ${selected.size} 台` : "匯入已選項目";
       }
       for (const machine of machines) {
         const row = node("label", "check-row vnc-import-machine");
         const checkbox = document.createElement("input"); checkbox.type = "checkbox";
+        checkbox.disabled = machine.comparison === "same";
         checkbox.onchange = () => { if (checkbox.checked) selected.add(machine.index); else selected.delete(machine.index); changed(); };
         row.append(checkbox, node("span", "", machine.name), node("span", "subtle", machine.ip));
+        if (machine.comparison === "same" || machine.comparison === "changed") {
+          row.classList.add(`vnc-compare-${machine.comparison}`);
+          row.append(node("span", "vnc-comparison", machine.comparison === "same" ? "與現有設定一致" : "與現有設定不相符"));
+        }
         section.append(row); boxes.push(checkbox);
       }
-      all.onchange = () => { machines.forEach((m, i) => { boxes[i].checked = all.checked; if (all.checked) selected.add(m.index); else selected.delete(m.index); }); changed(); };
+      all.onchange = () => { machines.forEach((m, i) => {
+        boxes[i].checked = !boxes[i].disabled && all.checked;
+        if (boxes[i].checked) selected.add(m.index); else selected.delete(m.index);
+      }); changed(); };
       $("vnc-import-groups").append(section);
     }
     $("vnc-import-apply").disabled = true;
@@ -79,7 +93,7 @@
       $("vnc-sync-controls").hidden = !enabled;
       if (!enabled) {
         $("vnc-sync-user").value = $("vnc-sync-password").value = "";
-        settingsRevision = previewId = null; selected.clear(); renderPreview(null);
+        settingsRevision = previewId = comparedRevision = null; selected.clear(); renderPreview(null);
         $("vnc-import-preview").hidden = true;
         return;
       }
@@ -92,16 +106,20 @@
         for (const name of ["root", "home", "login", "logout"]) $("vnc-sync-" + name).value = settings[name];
         endpointInputs.forEach((input, i) => input.value = settings.endpoints[i] || "");
       }
-      for (const input of $("vnc-sync-controls").querySelectorAll("input,button")) input.disabled = !settings || !!data.syncing;
+      for (const input of $("vnc-sync-controls").querySelectorAll("input,button")) input.disabled = !settings || !!data.syncing || !!data.session_open;
       $("vnc-sync-password").disabled ||= $("vnc-sync-clear-password").checked;
-      $("vnc-sync-cancel").hidden = !data.syncing;
-      $("vnc-sync-cancel").disabled = !data.syncing;
+      $("vnc-sync-cancel").hidden = !data.syncing || !!data.closing;
+      $("vnc-sync-cancel").disabled = !data.syncing || !!data.closing;
       $("vnc-reload").disabled = !!data.syncing;
+      $("vnc-import-refresh").disabled = !!data.syncing || !data.preview;
+      $("vnc-import-discard").disabled = !!data.syncing;
       $("vnc-import-preview").hidden = !data.preview;
-      if ((data.preview?.id ?? null) !== previewId) {
+      if ((data.preview?.id ?? null) !== previewId || data.revision !== comparedRevision) {
         previewId = data.preview?.id ?? null;
+        comparedRevision = data.revision;
         selected.clear(); renderPreview(data.preview);
       }
+      if (data.syncing) $("vnc-import-apply").disabled = true;
     },
   };
 })();

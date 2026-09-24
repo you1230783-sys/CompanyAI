@@ -1,6 +1,6 @@
 # 離線交付與 Git 工作流程
 
-> 0.8.13 新增 VNC 手動網站同步、勾選匯入及機台／分類多選管理，併入「重新啟動 LM_AI 應用程式」的更新提示用詞。依使用者要求，先以 `Build.ps1 -EmptyCargoCache` 交付 `LM_AI.exe`、EXE 更新清單、原始碼與文件；實測成功後才製作 NSIS。請查看 offline/exe-verification.json 與 docs/VALIDATION_0_8_13.md。NSIS、NSIS 更新清單及 installer-verification.json 保留 0.8.12；離線 ZIP／verification.json 仍為歷史版本，未重新製作；vnc-verification.json 保留 0.8.6 的 Viewer 測試，不代表本版重測。Git 推送不代表公司內網網站已部署。
+> 0.8.14 更新 VNC 自然排序、同名／IP 比對及延後登出的預覽重取流程。使用 `Build.ps1 -EmptyCargoCache`，只交付 EXE、EXE 更新清單、原始碼與文件，NSIS 待使用者實測成功後才製作。請查看 offline/exe-verification.json 與 docs/VALIDATION_0_8_14.md。NSIS、NSIS 清單及 installer-verification.json 保留 0.8.12；離線 ZIP 與真實 Viewer 測試紀錄仍為歷史版本，本輪不重製。Git 推送不代表內網已部署。
 
 ## 專案包含的內容
 

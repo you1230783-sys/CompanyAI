@@ -913,6 +913,31 @@ window.runSelfTest = async (structuredFixture) => {
       check(JSON.stringify(vncCommands.at(-1).command.indices) === "[0,1]" && vncCommands.at(-1).command.preview_id === "preview-1", "VNC imports selected category only");
       document.getElementById("vnc-import-discard").click();
       check(vncCommands.at(-1).command.action === "discard_import", "VNC can discard staged import");
+      fixture.vnc.session_open = true;
+      fixture.vnc.preview = { id:"preview-2", machines:[
+        {group:"A01",name:"A01-01",ip:"192.0.2.1",comparison:"same"},
+        {group:"A01",name:"A01-02",ip:"192.0.2.2",comparison:"changed"},
+        {group:"A01",name:"A01-AB",ip:"192.0.2.3",comparison:"new"},
+        {group:"B01",name:"B01-01",ip:"",comparison:"same"}] };
+      LMUI.receive(fixture);
+      const equalRow = document.querySelector(".vnc-compare-same");
+      check(equalRow.querySelector("input").disabled && !equalRow.querySelector("input").checked && equalRow.textContent.includes("與現有設定一致"), "VNC identical entries are marked and disabled");
+      check(document.querySelector(".vnc-compare-changed").textContent.includes("與現有設定不相符") && !document.querySelector(".vnc-compare-changed input").disabled, "VNC conflicting IP remains selectable");
+      check(document.querySelectorAll(".vnc-import-category")[1].disabled, "VNC all-identical category cannot be selected");
+      document.querySelector(".vnc-import-category").click();
+      document.getElementById("vnc-import-apply").click();
+      check(JSON.stringify(vncCommands.at(-1).command.indices) === "[1,2]", "VNC category selection skips identical entries");
+      check(document.getElementById("vnc-sync-start").disabled && document.getElementById("vnc-sync-user").disabled, "VNC active session locks login settings");
+      document.getElementById("vnc-import-refresh").click();
+      check(vncCommands.at(-1).command.action === "refresh_import" && vncCommands.at(-1).command.preview_id === "preview-2", "VNC refresh uses current preview session");
+      fixture.vnc.preview.id = "preview-3";
+      LMUI.receive(fixture);
+      check(!document.querySelector(".vnc-compare-changed input").checked && document.getElementById("vnc-import-apply").disabled, "VNC refreshed snapshot resets selection");
+      document.querySelector(".vnc-compare-changed input").click();
+      fixture.vnc.revision += 1;
+      fixture.vnc.preview.machines[1].comparison = "same";
+      LMUI.receive(fixture);
+      check(document.getElementById("vnc-import-apply").disabled && document.querySelectorAll(".vnc-compare-same").length === 3, "VNC local edits recompute comparisons and clear stale selection");
       fixture.config.vnc_enabled = false;
       LMUI.receive(fixture);
       check(document.getElementById("show-vnc").hidden && document.getElementById("vnc-view").hidden && !document.getElementById("vnc-manager-dialog").open, "VNC disabling closes and hides tools");

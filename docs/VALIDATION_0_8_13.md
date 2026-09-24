@@ -45,3 +45,11 @@
 - `dist/LM_AI_Setup.exe`、`dist/update-manifest.json`、`offline/installer-verification.json` 保留 0.8.12，未製作 0.8.13 NSIS，也未重新驗收安裝流程。
 - 未重製歷史離線 ZIP；本次空快取驗證使用工作目錄內既有 vendor 與鎖定檔。
 - 提交／推送至 Git 供下載測試，不代表公司內網下載路由已切換到 0.8.13。
+
+## 2026-09-24：預覽 IP 間歇性空白的追查
+
+使用者回報兩個 API 中，較大的回應在匯入預覽只有名稱、IP 空白；F12 使用相同帳號與完整網址時，單筆資料的 machine_ip 有值且層級符合契約。之後再次按更新已恢復正常。沒有取得失敗那一次由 LM_AI 實際收到的原始回應，因此根因尚未確認，不能把後續 F12 的內容視為前一次 LM_AI 收到的內容。
+
+新增回歸測試 `large_and_small_api_responses_preserve_every_ip_through_preview_and_import`，以使用者提供的欄位結構建立 300 台／70 台的兩個回應（8,112 行／200,613 bytes，以及 1,902 行／46,803 bytes）。在 v142 x64 環境下，以本機 HTTP 伺服器經真正 WinHTTP 執行首頁、登入、兩個 API、登出，再逐筆核對預覽資料 JSON 及匯入後重新載入的設定：370 台 IP 全部保留。這項測試不涉及真實公司網站，也不等同大型清單的實際畫面驗收。
+
+本次追查只新增測試與本段紀錄，未更動正式解析行為、版本或發布成品；原始碼驗證使用 `Build.ps1 -EmptyCargoCache -ValidateOnly`，dist 與原有發行驗證紀錄保持不變。尚無證據支持放寬大小限制、改讀其他 IP 欄位或增加自動重試。

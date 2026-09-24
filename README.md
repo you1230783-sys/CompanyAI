@@ -1,7 +1,13 @@
-# LM_AI 0.8.13 — Windows 工作助理
+# LM_AI 0.8.14 — Windows 工作助理
 
 Rust 桌面程式，提供公司瀏覽器登入、文字／附件對話、串流、持久背景任務、選字快捷鍵、網站通知及 Classic Outlook 唯讀助理。
 介面使用 WebView2、內嵌 HTML/CSS 與離線 Markdown 套件；不需 Node、Python 或外部 CDN。
+
+## 0.8.14 VNC 匯入預覽
+
+- 分類與機台採自然排序，未分類最後；同名同 IP 標綠且不可勾選，IP 不同標紅供選擇。
+- 保留登入供預覽重取，匯入／捨棄才登出；首次未分類達 50% 時自動重取一次，之後只接受手動重取。
+- 本版只更新 EXE 與 EXE 清單，NSIS 保留 0.8.12，待實測確認。操作見 [VNC 說明](docs/VNC_QUICK_CONNECT.md)，驗證見 [0.8.14 驗收](docs/VALIDATION_0_8_14.md)。
 
 ## 0.8.13 VNC 手動同步
 

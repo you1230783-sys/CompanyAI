@@ -174,7 +174,7 @@
               <label>密碼<input id="vnc-sync-password" type="password" autocomplete="off" maxlength="1024" placeholder="輸入網站登入密碼" /></label>
             </div>
             <label class="check-row"><input id="vnc-sync-clear-password" type="checkbox" />清除已記住的登入密碼</label>
-            <p class="subtle">記住登入資料；僅在按「更新機台清單」時登入，取得資料後登出。密碼留空會沿用已存值。</p>
+            <p class="subtle">記住登入資料；僅在按「更新機台清單」時登入，匯入或捨棄清單後登出。密碼留空會沿用已存值。</p>
             <details><summary>詳細設定：網站根目錄與連結</summary>
               <div class="vnc-sync-paths">
                 <label>網站根目錄<input id="vnc-sync-root" maxlength="2048" /></label>
@@ -207,7 +207,8 @@
           <p id="vnc-status" role="status">正在讀取設定…</p>
           <section id="vnc-import-preview" class="vnc-sync-controls" hidden>
             <h3>選擇要匯入的分類與機台</h3>
-            <p class="subtle">勾選整個分類，或只勾選需要的機台。未勾選項目會捨棄，不會刪除本機機台。新機台密碼預設為 1234，匯入後可在機台管理更改；空白 IP 可稍後補填。</p>
+            <p class="subtle">勾選整個分類，或只勾選需要的機台。未勾選項目會捨棄，不會刪除已儲存的機台。</p>
+            <div class="button-row"><button id="vnc-import-refresh" class="secondary-button">再次取得更新清單</button></div>
             <div id="vnc-import-groups"></div>
             <div class="button-row"><button id="vnc-import-apply" class="primary-button" disabled>匯入已選項目</button><button id="vnc-import-discard" class="secondary-button">捨棄本次清單</button></div>
           </section>

@@ -22,6 +22,9 @@ pub(super) enum VncCommand {
         start: bool,
     },
     CancelSync,
+    RefreshImport {
+        preview_id: String,
+    },
     DiscardImport {
         preview_id: String,
     },
@@ -89,12 +92,37 @@ pub(super) struct VncRuntime {
     sync_id: Option<String>,
     cancel: Option<Arc<AtomicBool>>,
     preview: Option<(String, sync::Download)>,
+    preview_revision: u64,
+    busy: bool,
+    closing: bool,
+    commands: Option<std::sync::mpsc::Sender<sync::SessionCommand>>,
+    workers: Vec<thread::JoinHandle<()>>,
 }
 
 impl VncRuntime {
     pub(super) fn cancel_sync(&self) {
         if let Some(cancel) = &self.cancel {
             cancel.store(true, Ordering::Relaxed);
+        }
+        if let Some(commands) = &self.commands {
+            let _ = commands.send(sync::SessionCommand::Close);
+        }
+    }
+
+    /// 停用立即清除 UI 資料，但保留背景工作控制柄，真正退出時可等候登出完成。
+    pub(super) fn disable(&mut self) {
+        self.cancel_sync();
+        let workers = std::mem::take(&mut self.workers);
+        *self = Self {
+            workers,
+            ..Self::default()
+        };
+    }
+
+    pub(super) fn shutdown(&mut self) {
+        self.cancel_sync();
+        for worker in self.workers.drain(..) {
+            let _ = worker.join();
         }
     }
 }
@@ -144,9 +172,14 @@ impl App {
         json!({
             "loaded": manager.is_some(), "revision": self.vnc.revision,
             "searching": self.vnc.search_id.is_some(), "status": self.vnc.status,
-            "syncing":self.vnc.sync_id.is_some(), "sync_settings":self.vnc.settings.as_ref().map(sync::Settings::public),
+            "syncing":self.vnc.busy, "session_open":self.vnc.sync_id.is_some(), "closing":self.vnc.closing,
+            "sync_settings":self.vnc.settings.as_ref().map(sync::Settings::public),
             "settings_revision":self.vnc.settings_revision,
-            "preview":self.vnc.preview.as_ref().map(|(id, result)| json!({"id":id,"machines":result.machines})),
+            "preview":self.vnc.preview.as_ref().map(|(id, result)| json!({"id":id,"machines":result.machines.iter().map(|m| {
+                let mut value = json!(m);
+                value["comparison"] = json!(manager.map(|manager| manager.comparison(m)).unwrap_or("new"));
+                value
+            }).collect::<Vec<_>>()})),
             "machines_path": manager.map(|m| m.path.to_string_lossy()),
             "viewer_path": manager.map(|m| &m.config.vnc_path),
             "options": manager.map(|m| json!({"fullscreen":m.config.options.fullscreen,
@@ -187,7 +220,7 @@ impl App {
                 start,
             } => {
                 if self.vnc.sync_id.is_some() {
-                    return Err("清單取得中，請等待完成或按停止。".into());
+                    return Err("請先匯入或捨棄本次清單，再修改連線設定或重新登入。".into());
                 }
                 let previous = self
                     .vnc
@@ -216,27 +249,53 @@ impl App {
                     let cancel = Arc::new(AtomicBool::new(false));
                     self.vnc.cancel = Some(cancel.clone());
                     self.vnc.sync_id = Some(id.clone());
+                    self.vnc.busy = true;
+                    self.vnc.closing = false;
                     self.vnc.preview = None;
-                    self.vnc.status = "正在登入並取得機台清單，完成後會登出…".into();
+                    self.vnc.status = "正在登入並取得機台清單…".into();
                     let tx = self.tx.clone();
-                    thread::spawn(move || {
-                        let _ = tx.send(Event::VncSync(id, sync::download(&settings, &cancel)));
-                    });
+                    let (commands, receiver) = std::sync::mpsc::channel();
+                    self.vnc.commands = Some(commands);
+                    self.vnc.workers.retain(|worker| !worker.is_finished());
+                    self.vnc.workers.push(thread::spawn(move || {
+                        sync::run_session(&settings, &cancel, receiver, |event| {
+                            tx.send(Event::VncSync(id.clone(), event)).is_ok()
+                        });
+                    }));
                 }
             }
             VncCommand::CancelSync => {
-                self.vnc.cancel_sync();
-                self.vnc.status = "正在停止取得清單並嘗試登出…".into();
+                self.vnc_end_sync("正在停止取得清單並嘗試登出…");
+            }
+            VncCommand::RefreshImport { preview_id } => {
+                if self.vnc.busy
+                    || self
+                        .vnc
+                        .preview
+                        .as_ref()
+                        .is_none_or(|(id, _)| id != &preview_id)
+                {
+                    return Err("清單忙碌或預覽已變更，請等待完成後重試。".into());
+                }
+                self.vnc
+                    .commands
+                    .as_ref()
+                    .ok_or("網站登入已結束，請重新更新。")?
+                    .send(sync::SessionCommand::Refresh)
+                    .map_err(|_| "網站登入已結束，請重新更新。")?;
+                self.vnc.preview = None;
+                self.vnc.busy = true;
+                self.vnc.status = "正在使用本次登入重新取得清單…".into();
             }
             VncCommand::DiscardImport { preview_id } => {
-                if self
-                    .vnc
-                    .preview
-                    .as_ref()
-                    .is_some_and(|(id, _)| id == &preview_id)
+                if !self.vnc.busy
+                    && self
+                        .vnc
+                        .preview
+                        .as_ref()
+                        .is_some_and(|(id, _)| id == &preview_id)
                 {
-                    self.vnc.preview = None;
-                    self.vnc.status = "已捨棄暫存清單，本機機台未變更。".into();
+                    self.vnc_end_sync("已捨棄暫存清單，本機機台未變更。正在登出…");
                 }
             }
             VncCommand::Import {
@@ -244,7 +303,7 @@ impl App {
                 preview_id,
                 indices,
             } => {
-                if revision != self.vnc.revision {
+                if self.vnc.busy || revision != self.vnc.revision {
                     return Err("機台清單已變更，請重新確認要匯入的項目。".into());
                 }
                 let (_, download) = self
@@ -259,10 +318,10 @@ impl App {
                     .as_mut()
                     .ok_or("請先讀取機台設定。")?
                     .import(download, &indices)?;
-                self.vnc.preview = None;
                 self.vnc.revision += 1;
-                self.vnc.status =
-                    format!("已匯入或更新 {count} 台機台，原有密碼與手動機台已保留。");
+                self.vnc_end_sync(&format!(
+                    "已匯入或更新 {count} 台機台，原有密碼與手動機台已保留。正在登出…"
+                ));
                 self.view.post(&json!({"type":"vnc_saved"}))?;
             }
             VncCommand::Batch {
@@ -304,7 +363,7 @@ impl App {
                 self.view.post(&json!({"type":"vnc_saved"}))?;
             }
             VncCommand::Open | VncCommand::Reload => {
-                if self.vnc.sync_id.is_some() {
+                if self.vnc.busy {
                     return Err("取得清單中，請先等候完成。".into());
                 }
                 // Reload 失敗時丟棄舊快照，避免仍可操作已損壞或已被替換的設定。
@@ -467,25 +526,56 @@ impl App {
         Ok(())
     }
 
-    pub(super) fn vnc_sync_result(&mut self, id: String, result: AppResult<sync::Download>) {
+    fn vnc_end_sync(&mut self, status: &str) {
+        self.vnc.cancel_sync();
+        self.vnc.preview = None;
+        self.vnc.busy = self.vnc.sync_id.is_some();
+        self.vnc.closing = self.vnc.busy;
+        self.vnc.status = status.into();
+    }
+
+    pub(super) fn vnc_sync_result(&mut self, id: String, event: sync::SessionEvent) {
         if !self.config.vnc_enabled || self.vnc.sync_id.as_ref() != Some(&id) {
             return;
         }
-        self.vnc.sync_id = None;
-        self.vnc.cancel = None;
-        match result {
-            Ok(download) => {
-                self.vnc.status = if download.warning.is_empty() {
-                    "已取得清單並登出，請勾選要匯入的分類或機台。".into()
-                } else {
-                    download.warning.clone()
-                };
+        match event {
+            sync::SessionEvent::Ready(download) => {
+                // 使用者可能在背景完成與 UI 收到事件之間按停止，不能重新開啟預覽。
+                if self.vnc.closing {
+                    return;
+                }
+                self.vnc.busy = false;
+                self.vnc.preview_revision += 1;
+                self.vnc.status = format!(
+                    "已取得清單，請勾選要匯入的分類或機台；匯入或捨棄後會登出。 {}",
+                    download.warning
+                );
                 if download.machines.is_empty() {
                     self.vnc.status.push_str(" 本次沒有可匯入的機台。");
                 }
-                self.vnc.preview = Some((id, download));
+                self.vnc.preview = Some((format!("{id}-{}", self.vnc.preview_revision), download));
             }
-            Err(error) => self.vnc.status = error,
+            sync::SessionEvent::Finished(result) => {
+                self.vnc.sync_id = None;
+                self.vnc.cancel = None;
+                self.vnc.commands = None;
+                self.vnc.preview = None;
+                self.vnc.busy = false;
+                match result {
+                    Ok(()) => {
+                        self.vnc.status = self
+                            .vnc
+                            .status
+                            .replace("正在登出…", "已登出。")
+                            .replace("正在停止取得清單並嘗試登出…", "已停止並登出。")
+                    }
+                    Err(error) if self.vnc.closing => {
+                        self.vnc.status.push_str(&format!(" {error}"))
+                    }
+                    Err(error) => self.vnc.status = error,
+                }
+                self.vnc.closing = false;
+            }
         }
     }
 }

@@ -1,4 +1,4 @@
-//! 使用者手動要求時才登入、取得清單、登出。帳密以目前 Windows 使用者的 DPAPI 保存。
+//! 手動登入並保留 Session 供預覽重取，匯入／捨棄後登出；帳密以 DPAPI 保存。
 //! 下載結果只暫存在記憶體；使用者勾選後才合併 machines.json，不刪除手動機台。
 use super::*;
 use std::{
@@ -200,145 +200,86 @@ fn send(
     crate::transport::vnc::request(&settings.endpoint(path)?, method, body, cookie)
 }
 
-pub fn download(settings: &Settings, cancelled: &AtomicBool) -> AppResult<Download> {
-    settings.validate()?;
-    if settings.username.trim().is_empty() || settings.password.is_empty() {
-        return Err("請先輸入機台網站的帳號與密碼。".into());
-    }
-    let mut cookie = None;
-    let received = (|| {
-        let check = || {
-            if cancelled.load(Ordering::Relaxed) {
-                Err("已停止取得機台清單。".to_string())
-            } else {
-                Ok(())
-            }
-        };
-        check()?;
-        let home = send(settings, &settings.home, "GET", "", &mut cookie)?;
-        if !(200..400).contains(&home.status) || cookie.is_none() {
-            return Err("首頁未提供 PHPSESSID，請檢查首頁連結。".into());
-        }
-        check()?;
-        let before = cookie.clone();
-        let form = url::form_urlencoded::Serializer::new(String::new())
-            .extend_pairs([
-                ("uid", settings.username.as_str()),
-                ("pwd", settings.password.as_str()),
-                ("type", "1"),
-            ])
-            .finish();
-        let login = send(settings, &settings.login, "POST", &form, &mut cookie)?;
-        let denied = serde_json::from_str::<Value>(&login.body)
-            .ok()
-            .is_some_and(|v| v["ok"] == false);
-        if !(200..400).contains(&login.status) || denied || cookie.is_none() || cookie == before {
-            return Err("登入未取得新的 PHPSESSID，請確認帳密及登入連結。".into());
-        }
-        let mut machines: Vec<RemoteMachine> = Vec::new();
-        for path in settings.endpoints.iter().filter(|p| !p.trim().is_empty()) {
-            check()?;
-            let response = send(settings, path, "GET", "", &mut cookie)?;
-            if response.status != 200 {
-                return Err(format!(
-                    "機台 API 回報 HTTP {}，本機清單未變更。",
-                    response.status
-                ));
-            }
-            for machine in parse_machines(&response.body)? {
-                let old = machines.iter().find(|m| {
-                    if !machine.id.is_empty() {
-                        m.id == machine.id
-                    } else {
-                        m.id.is_empty() && m.group == machine.group && m.name == machine.name
-                    }
-                });
-                if let Some(old) = old {
-                    if old.group != machine.group
-                        || old.name != machine.name
-                        || old.ip != machine.ip
-                    {
-                        return Err("不同 API 的相同機台資料有衝突，請檢查查詢連結。".into());
-                    }
-                } else {
-                    machines.push(machine);
-                }
-                if machines.len() > 10_000 {
-                    return Err("合併的機台清單超過 10,000 筆。".into());
-                }
-            }
-        }
-        check()?;
-        Ok(machines)
-    })();
-    // 已取得 session 後，任何成功／失敗／取消路徑都嘗試登出；不持久保存 Cookie。
-    let logout = if cookie.is_some() {
-        send(settings, &settings.logout, "POST", "", &mut cookie).and_then(|r| {
-            if (200..400).contains(&r.status) {
-                Ok(())
-            } else {
-                Err("登出未成功。".into())
-            }
-        })
-    } else {
-        Ok(())
-    };
-    let warning = if logout.is_err() {
-        "網站登出未成功，請至網站確認登入狀態。".to_string()
-    } else {
-        String::new()
-    };
-    match received {
-        Ok(_) if cancelled.load(Ordering::Relaxed) => {
-            Err(format!("已停止取得機台清單。 {warning}"))
-        }
-        Ok(machines) => Ok(Download {
-            machines,
-            source: settings.base()?.to_string(),
-            warning,
-        }),
-        Err(error) => Err(if warning.is_empty() {
-            error
-        } else {
-            format!("{error} {warning}")
-        }),
-    }
-}
+mod session;
+#[cfg(test)]
+use session::download;
+pub use session::{run_session, SessionCommand, SessionEvent};
 
 impl Manager {
-    /// 新機台密碼預設 1234；同來源 ID 優先，舊檔則以分類＋唯一名稱對應。
-    /// 再同步保留既有密碼、個人分類及順序；未勾選或手動新增的項目不刪除。
+    /// 依名稱跨分類比對；同名多筆必須全部 IP 相同才可標記一致，避免掩蓋衝突。
+    pub fn comparison(&self, remote: &RemoteMachine) -> &'static str {
+        let matches: Vec<_> = self
+            .machines
+            .values()
+            .flatten()
+            .filter(|m| m.name == remote.name)
+            .collect();
+        if matches.is_empty() {
+            "new"
+        } else if matches.iter().all(|m| m.ip == remote.ip) {
+            "same"
+        } else {
+            "changed"
+        }
+    }
+
+    /// 新機台密碼預設 1234；同來源 ID 優先，找不到識別碼時以全域唯一名稱對應。
+    /// 再同步保留既有密碼與個人分類，受影響分類依名稱排序；未勾選或手動新增的項目不刪除。
     pub fn import(&mut self, download: &Download, indices: &[usize]) -> AppResult<usize> {
         let chosen: BTreeSet<_> = indices.iter().copied().collect();
         if chosen.is_empty() {
             return Err("請勾選要匯入的分類或機台。".into());
         }
         let mut machines = self.machines.clone();
+        let mut affected = BTreeSet::new();
+        let mut updated = BTreeSet::new();
+        let mut imported = 0;
         for index in &chosen {
             let remote = download
                 .machines
                 .get(*index)
                 .ok_or("匯入預覽已變更，請重新取得清單。")?;
-            let matches: Vec<_> = machines
+            // UI 的 disabled 不是唯一防線；偽造或過期的選取也不能重匯完全相同機台。
+            if self.comparison(remote) == "same" {
+                continue;
+            }
+            let identity_matches: Vec<_> = machines
                 .iter()
                 .flat_map(|(group, list)| {
                     list.iter().enumerate().filter_map(move |(i, m)| {
                         let same_id = !remote.id.is_empty()
                             && m.extra.get("_lm_sync_id") == Some(&json!(remote.id))
                             && m.extra.get("_lm_sync_source") == Some(&json!(download.source));
-                        let legacy = m.extra.get("_lm_sync_id").is_none()
-                            && group == &remote.group
-                            && m.name == remote.name;
-                        (same_id || legacy).then(|| (group.clone(), i))
+                        same_id.then(|| (group.clone(), i))
                     })
                 })
                 .collect();
+            // 沒有穩定識別碼時，以全域唯一名稱更新，對應預覽的名稱比對規則。
+            let matches: Vec<_> = if identity_matches.is_empty() {
+                // 名稱備援只比對匯入前的清單，不能把這一批剛新增的同名機台互相覆蓋。
+                self.machines
+                    .iter()
+                    .flat_map(|(group, list)| {
+                        list.iter()
+                            .enumerate()
+                            .filter(|(_, m)| m.name == remote.name)
+                            .map(|(i, _)| (group.clone(), i))
+                    })
+                    .collect()
+            } else {
+                identity_matches
+            };
             if matches.len() > 1 {
                 return Err("本機有多筆相同名稱或識別碼，請先整理重複機台再匯入。".into());
             }
             let machine = if let Some((group, i)) = matches.first() {
+                if !updated.insert((group.clone(), *i)) {
+                    return Err("本次有多台機台對應到同一筆設定，請分別確認後匯入。".into());
+                }
+                affected.insert(group.clone());
                 &mut machines.get_mut(group).ok_or("分類已不存在。")?[*i]
             } else {
+                affected.insert(remote.group.clone());
                 let list = machines.entry(remote.group.clone()).or_default();
                 list.push(Machine {
                     name: String::new(),
@@ -348,6 +289,7 @@ impl Manager {
                 });
                 list.last_mut().ok_or("無法建立機台。")?
             };
+            imported += 1;
             machine.name.clone_from(&remote.name);
             machine.ip.clone_from(&remote.ip);
             if !remote.id.is_empty() {
@@ -357,8 +299,17 @@ impl Manager {
                     .insert("_lm_sync_source".into(), json!(download.source));
             }
         }
-        self.save_machines(machines)?;
-        Ok(chosen.len())
+        // 明確匯入時排序受影響分類；之後的手動上／下移仍照原方式保存。
+        for group in affected {
+            machines
+                .get_mut(&group)
+                .ok_or("分類已不存在。")?
+                .sort_by(|a, b| natural_cmp(&a.name, &b.name));
+        }
+        if imported > 0 {
+            self.save_machines(machines)?;
+        }
+        Ok(imported)
     }
 }
 

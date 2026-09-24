@@ -136,7 +136,7 @@ enum Command {
     },
 }
 enum Event {
-    VncSync(String, AppResult<crate::vnc::sync::Download>),
+    VncSync(String, crate::vnc::sync::SessionEvent),
     VncSearch(String, AppResult<PathBuf>),
     Site(u64, site::SiteEvent),
     MailBatch(u64, u64, mail_batch::MailEvent),
@@ -211,6 +211,7 @@ struct App {
 }
 impl Drop for App {
     fn drop(&mut self) {
+        self.vnc.shutdown();
         let _ = self.preserve_draft();
         self.mail_flow.cancel.store(true, Ordering::Relaxed);
         self.cancelled.store(true, Ordering::Relaxed);
@@ -730,8 +731,7 @@ impl App {
                 }
                 if !vnc_enabled {
                     // 停用即清除記憶體中的機台與密碼；背景搜尋結果也不再套用。
-                    self.vnc.cancel_sync();
-                    self.vnc = vnc::VncRuntime::default();
+                    self.vnc.disable();
                 }
             }
             Command::RenameChat { id, title } => {
