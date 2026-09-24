@@ -10,7 +10,7 @@
 
 VNC 使用相同路由與欄位，改為匯入／捨棄後才登出。首次未分類達 50% 自動重取一輪且上限一次；手動重取只 GET 已設定 API，不重登入、不另外觸發自動重取。自然排序與同名／IP 比對規則見 [VNC 說明](VNC_QUICK_CONNECT.md)。Cookie 保留於原生背景工作，從不送至前端或 AI。
 
-依使用者要求進版 0.8.14，`Build.ps1 -EmptyCargoCache` 交付 EXE、EXE 更新清單與原始碼至 main。NSIS 與其清單保留 0.8.12，待公司實測後再打包；Git 推送不代表內網下載路由已更新。驗證見 [0.8.14 驗收](VALIDATION_0_8_14.md)。
+使用者已回報 0.8.14 測試成功並要求 NSIS 交付，維持版本 0.8.14，`Build.ps1 -EmptyCargoCache -IncludeInstaller` 交付 EXE、NSIS、兩份更新清單與原始碼至 main。EXE／NSIS 必須各與自己的已簽署清單成對部署；Git 推送不代表內網下載路由已更新。驗證見 [0.8.14 驗收](VALIDATION_0_8_14.md)。
 
 ## 0.8.13 VNC 手動同步與 EXE 交付
 

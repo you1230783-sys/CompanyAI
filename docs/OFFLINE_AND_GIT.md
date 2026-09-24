@@ -1,6 +1,6 @@
 # 離線交付與 Git 工作流程
 
-> 0.8.14 更新 VNC 自然排序、同名／IP 比對及延後登出的預覽重取流程。使用 `Build.ps1 -EmptyCargoCache`，只交付 EXE、EXE 更新清單、原始碼與文件，NSIS 待使用者實測成功後才製作。請查看 offline/exe-verification.json 與 docs/VALIDATION_0_8_14.md。NSIS、NSIS 清單及 installer-verification.json 保留 0.8.12；離線 ZIP 與真實 Viewer 測試紀錄仍為歷史版本，本輪不重製。Git 推送不代表內網已部署。
+> 0.8.14 更新 VNC 自然排序、同名／IP 比對及延後登出的預覽重取流程。使用者已回報測試成功；使用 `Build.ps1 -EmptyCargoCache -IncludeInstaller`，交付 0.8.14 EXE、NSIS、兩份已簽署更新清單、原始碼與文件。請查看 offline/exe-verification.json 與 docs/VALIDATION_0_8_14.md。NSIS 安裝／更新／解除安裝驗證見 offline/installer-verification.json；離線 ZIP 與真實 Viewer 測試紀錄仍為歷史版本，本輪不重製。Git 推送不代表內網已部署。
 
 ## 專案包含的內容
 

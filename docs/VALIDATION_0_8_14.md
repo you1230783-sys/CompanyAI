@@ -1,6 +1,6 @@
-# 0.8.14 EXE 驗證紀錄
+# 0.8.14 EXE／NSIS 驗證紀錄
 
-驗證日期：2026-09-24。依使用者要求先交付 EXE，NSIS 等公司實測確認後再製作。
+驗證日期：2026-09-24。先交付 EXE 後，使用者已回報測試成功並授權製作 NSIS；本次維持 0.8.14，補齊安裝包及更新清單。
 
 ## 本版行為
 
@@ -15,7 +15,7 @@
 
 ## 驗證方式
 
-執行 `scripts/Build.ps1 -EmptyCargoCache`，使用專案 Cargo.lock、vendor 與 .cargo/config.toml；未指定 IncludeInstaller。
+執行 `scripts/Build.ps1 -EmptyCargoCache -IncludeInstaller`，使用專案 Cargo.lock、vendor 與 .cargo/config.toml；EXE 與 NSIS 使用相同版本及原始碼。
 
 - MSVC v142 x64：14.29.30133，實際編譯探針 `_MSC_FULL_VER=192930159`。
 - Rust 1.98.1，Windows SDK 10.0.19041.0。
@@ -29,8 +29,12 @@
 
 ## 交付界線
 
-交付 `dist/LM_AI.exe`（0.8.14.0）、`dist/update-manifest-exe.json` 與對應原始碼／文件。實際 SHA256、編譯器及結果見 [EXE 驗證 JSON](../offline/exe-verification.json) 與 [編譯環境](../offline/environment.txt)。
+NSIS 驗證已通過：新目錄安裝、既有目錄與使用者檔案保留、固定安裝路徑、捷徑與登錄、等待舊程序退出、更新替換及應用程式重新啟動、檔案鎖定時保留舊版、解除安裝保留未知檔案及 VNC 設定。另以真正交付的 Setup 安裝至 `C:\largan\LM_AI`，核對安裝後 EXE 雜湊、執行 WebView2 自檢並解除安裝；安裝器仍不檢查或安裝 WebView2。紀錄見 [NSIS 驗證 JSON](../offline/installer-verification.json)。
 
-未連線真實公司網站、未使用真實帳密；公司 Session 行為、真實資料及操作結果仍待使用者實測。未重測真實 VNC Viewer 或擷取介面外觀截圖。先前 IP 間歇性空白的根因仍未確定，本版提供一次自動重取及手動重取，不宣稱已證實或修復網站根因。
+NSIS 大小 2,053,456 bytes，SHA256 為 `ab08cb5851faf00568e21b4800eabbe386b8af5c4e4422cade525f991914bd23`。內含 EXE 的 SHA256 維持 `da78dece066bd9d006b55b03af9ae7896946b31c3fae3759f97dd3c5984903a2`，與前次使用者測試成功的交付相同；兩份更新清單均已簽署並經原生更新驗證器檢查。
 
-本輪未製作 NSIS／ZIP，NSIS 及其更新清單／驗證紀錄仍為 0.8.12。Git 推送只交付檔案，不代表公司內網下載路由已更新。
+交付 `dist/LM_AI.exe`、`dist/LM_AI_Setup.exe`（皆為 0.8.14.0）、`dist/update-manifest-exe.json`、`dist/update-manifest.json` 與對應原始碼／文件。實際 SHA256、編譯器及結果見 [EXE 驗證 JSON](../offline/exe-verification.json) 與 [編譯環境](../offline/environment.txt)。
+
+使用者已回報測試成功；本機自動驗證仍未連線真實公司網站或使用真實帳密，不將使用者回報列為代理程式親自執行的測試。未重測真實 VNC Viewer 或擷取介面外觀截圖。先前 IP 間歇性空白的根因仍未確定，本版提供一次自動重取及手動重取，不宣稱已證實或修復網站根因。
+
+本輪補齊 0.8.14 NSIS 及其更新清單／驗證紀錄，未重製歷史離線 ZIP。Git 推送只交付檔案，不代表公司內網下載路由已更新。
