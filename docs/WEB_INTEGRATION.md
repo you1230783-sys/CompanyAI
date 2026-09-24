@@ -1,5 +1,9 @@
 # LM_AI：網站／API 串接契約
 
+## 0.8.15 登入門檻與彈窗關閉
+
+原始碼已改為獨立「登入」入口，登入後隱藏；未登入時包含 Outlook、VNC、偏好設定在內的其他控制與原生命令均停用。仍有效的保存授權視為已登入，不要求每次重開瀏覽器。登入路由及網站契約不變；VNC 網站登入仍使用獨立 Cookie，不與 AI 授權共用。所有 HTML dialog 支援外部點擊關閉，更新提示關閉不解除版本門檻。此變更納入 0.8.15 EXE 與 NSIS，檢查範圍見 [0.8.15 驗收](VALIDATION_0_8_15.md)。
+
 > **0.8.1 更新流程以 [UPDATE_0_8_1_CONTRACT.md](UPDATE_0_8_1_CONTRACT.md) 為準**：支援 EXE／NSIS 簽署 JSON，合法最高版本優先、同版選 EXE。EXE 手動更換，NSIS 保留原生安裝；聊天與 SSE 以 0.7 契約為準。
 
 > **0.6 新功能請見 [DESKTOP_0_6_CONTRACT.md](DESKTOP_0_6_CONTRACT.md)**：依模型的附件規則、全站鈴鐺同步／已讀／刪除及 Outlook MSG 自動補充。本頁以下保留既有相容契約。

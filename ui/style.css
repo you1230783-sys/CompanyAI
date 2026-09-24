@@ -1261,6 +1261,7 @@ output {
 .vnc-compare-same, .vnc-compare-same .subtle { color: #166534; }
 .vnc-compare-changed, .vnc-compare-changed .subtle { color: #b91c1c; }
 .vnc-comparison { font-size: 0.86rem; }
+.login-panel { margin: 16px 24px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); }
 :root[data-theme="dark"] .vnc-compare-same, :root[data-theme="dark"] .vnc-compare-same .subtle { color: #86efac; }
 :root[data-theme="dark"] .vnc-compare-changed, :root[data-theme="dark"] .vnc-compare-changed .subtle { color: #fca5a5; }
 .vnc-category-row { background: var(--soft); }

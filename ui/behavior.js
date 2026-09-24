@@ -22,6 +22,9 @@
     $("rename-title").select();
   }
   $("rename-cancel").onclick = () => $("rename-dialog").close();
+  $("rename-dialog").addEventListener("close", () => {
+    if (!$("rename-dialog").open) { renameId = null; $("rename-title").value = ""; }
+  });
   $("rename-save").onclick = () => {
     const title = $("rename-title").value.trim();
     if (!title) return;
@@ -33,8 +36,10 @@
   notice.hidden = true;
   $("model-button").parentElement.append(notice);
   let noticeTimer;
-  // 強制更新不能用 Escape 或關閉設定解除；仍提供退出與重試。
+  // 關閉提示不解除原生版本限制；使用者可回設定下載更新，不因狀態推播反覆彈出。
   const updateGate = $("required-update-dialog");
+  let updateDismissed = false;
+  updateGate.addEventListener("backdrop-dismiss", () => { updateDismissed = true; });
   updateGate.addEventListener("cancel", event => event.preventDefault());
   $("required-update-exit").onclick = () => send({type:"exit"});
   $("required-update-refresh").onclick = () => send({type:"refresh"});
@@ -50,8 +55,9 @@
       $("required-update-status").textContent = state.update_status || state.version_status || "請下載並安裝新版。";
       $("required-update-download").textContent = $("download").textContent;
       $("required-update-download").disabled = !!state.update_busy;
-      if (state.update_required && !updateGate.open) updateGate.showModal();
-      if (!state.update_required && updateGate.open) updateGate.close();
+      if (!state.logged_in || !state.update_required) updateDismissed = false;
+      if (state.logged_in && state.update_required && !updateDismissed && !updateGate.open) updateGate.showModal();
+      if ((!state.logged_in || !state.update_required) && updateGate.open) updateGate.close();
       const c = state.config;
       $("hotkey-enabled").checked = c.hotkey_enabled !== false;
       $("selection-icon").checked = !!c.selection_icon;

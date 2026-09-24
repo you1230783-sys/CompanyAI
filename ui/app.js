@@ -27,6 +27,7 @@ let hotkeyRecording = false,
   hotkeyDraft = null;
 const bridge = window.chrome?.webview;
 function send(command) {
+  if (window.AuthUI && !window.AuthUI.canSend(command)) return;
   if (bridge) bridge.postMessage(command);
   else if (window.previewHost) window.previewHost(command);
 }
@@ -54,6 +55,11 @@ $("confirm-cancel").onclick = () => {
   $("confirm-dialog").close();
   confirmAction = null;
 };
+$("confirm-dialog").addEventListener("backdrop-dismiss", () => { confirmAction = null; });
+$("confirm-dialog").addEventListener("cancel", () => { confirmAction = null; });
+$("confirm-dialog").addEventListener("close", () => {
+  if (!$("confirm-dialog").open) confirmAction = null;
+});
 const md = window.markdownit({
   html: false,
   linkify: true,
@@ -321,6 +327,7 @@ document.fonts?.ready.then(() => {
 });
 
 function showView(view) {
+  if (!state.logged_in) view = "chat";
   if (view === "vnc" && !state.config.vnc_enabled) view = "chat";
   // receive() 會重繪目前頁面，只有真正跨頁才觸發一次離開操作。
   const previous = activeView;
@@ -592,6 +599,7 @@ function renderMail() {
   $("mail-preview").replaceChildren(card);
 }
 function receive(next) {
+  window.AuthUI?.beforeRender();
   state = next;
   document.documentElement.dataset.theme = state.config.dark_mode ? "dark" : "light";
   $("dark-mode").checked = !!state.config.dark_mode;
@@ -617,13 +625,7 @@ function receive(next) {
     .forEach((button) => (button.disabled = !state.can_send));
   $("new-chat").disabled = state.busy !== "none";
   $("prompt").disabled = state.busy === "chat";
-  $("login").disabled = state.busy !== "none" || state.update_required;
   $("logout").disabled = state.busy !== "none" || !state.logged_in;
-  $("cancel-login").hidden = state.busy !== "login";
-  $("reopen-login").hidden = state.busy !== "login" || !state.login_code;
-  $("login-code").textContent = state.login_code
-    ? "請核對登入碼：" + state.login_code
-    : "";
   $("font-size").value = state.config.font_size;
   $("font-value").textContent = state.config.font_size + " px";
   if (!hotkeyRecording) $("hotkey").value = hotkeyDraft ?? state.config.hotkey;
@@ -650,7 +652,8 @@ function receive(next) {
   window.MailUI?.render();
   window.BehaviorUI?.render();
   window.VncUI?.render();
-  if (next.focus_draft) {
+  window.AuthUI?.apply();
+  if (next.focus_draft && state.logged_in) {
     showView("chat");
     $("prompt").focus();
     $("prompt").setSelectionRange(
@@ -837,10 +840,8 @@ $("hotkey").addEventListener("keydown", (event) => {
       : { type: "recorded_hotkey", ...binding },
   );
 });
-for (const id of ["login", "logout", "refresh", "download"])
+for (const id of ["logout", "refresh", "download"])
   $(id).onclick = () => send({ type: id });
-$("cancel-login").onclick = () => send({ type: "cancel_login" });
-$("reopen-login").onclick = () => send({ type: "reopen_login" });
 $("model-button").onclick = () => {
   const open = $("model-menu").hidden;
   $("model-menu").hidden = !open;
@@ -986,28 +987,6 @@ window.LMUI = {
     stickToBottom = value;
   },
 };
-
-// 只處理真正的背景點擊，點內容留白或從內容拖到外面不誤關閉。
-let settingsBackdropDown = false;
-function outsideSettings(event) {
-  const dialog = $("settings-dialog"),
-    box = dialog.getBoundingClientRect();
-  return (
-    event.target === dialog &&
-    (event.clientX < box.left ||
-      event.clientX > box.right ||
-      event.clientY < box.top ||
-      event.clientY > box.bottom)
-  );
-}
-$("settings-dialog").addEventListener("pointerdown", (event) => {
-  settingsBackdropDown = outsideSettings(event);
-});
-$("settings-dialog").addEventListener("click", (event) => {
-  if (settingsBackdropDown && outsideSettings(event))
-    $("settings-dialog").close();
-  settingsBackdropDown = false;
-});
 
 $("read-all-events").onclick = () => {
   send({ type: "all_events", dismiss: false });

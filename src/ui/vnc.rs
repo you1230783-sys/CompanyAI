@@ -165,7 +165,7 @@ fn choose_viewer(window: HWND) -> AppResult<Option<PathBuf>> {
 
 impl App {
     pub(super) fn vnc_state(&self) -> serde_json::Value {
-        if !self.config.vnc_enabled {
+        if !self.logged_in() || !self.config.vnc_enabled {
             return json!({"loaded":false});
         }
         let manager = self.vnc.manager.as_ref();
@@ -199,6 +199,9 @@ impl App {
     }
 
     pub(super) fn vnc_command(&mut self, command: VncCommand) -> AppResult<()> {
+        if !self.logged_in() {
+            return Err("請先完成瀏覽器登入，再使用 VNC。".into());
+        }
         if !self.config.vnc_enabled {
             return Err("請先在設定中啟用 VNC 快速連線功能。".into());
         }
@@ -515,7 +518,8 @@ impl App {
         id: String,
         result: AppResult<PathBuf>,
     ) -> AppResult<()> {
-        if !self.config.vnc_enabled || self.vnc.search_id.as_ref() != Some(&id) {
+        if !self.logged_in() || !self.config.vnc_enabled || self.vnc.search_id.as_ref() != Some(&id)
+        {
             return Ok(());
         }
         self.vnc.search_id = None;
@@ -535,7 +539,7 @@ impl App {
     }
 
     pub(super) fn vnc_sync_result(&mut self, id: String, event: sync::SessionEvent) {
-        if !self.config.vnc_enabled || self.vnc.sync_id.as_ref() != Some(&id) {
+        if !self.logged_in() || !self.config.vnc_enabled || self.vnc.sync_id.as_ref() != Some(&id) {
             return;
         }
         match event {

@@ -32,6 +32,7 @@ use windows_sys::Win32::{
     System::LibraryLoader::GetModuleHandleW,
     UI::{HiDpi::*, Shell::*, WindowsAndMessaging::*},
 };
+mod access;
 mod mail_batch;
 mod site;
 mod vnc;
@@ -148,7 +149,7 @@ enum Event {
     ),
     Grant(u64, AppResult<DeviceGrant>),
     Login(u64, AppResult<Session>),
-    Capture(AppResult<String>),
+    Capture(u64, AppResult<String>),
     UpdateReady(AppResult<crate::deployment::ReadyUpdate>),
     SelectionRect(Option<crate::selection_popup::SelectionRect>),
     Mail(u64, AppResult<MailPreview>),
@@ -335,7 +336,11 @@ impl App {
         history::save(&self.root, &self.archive)
     }
     fn restore_window(&mut self) {
-        if self.config.always_new_chat && self.work.incoming.is_none() && !self.versions.blocked() {
+        if self.logged_in()
+            && self.config.always_new_chat
+            && self.work.incoming.is_none()
+            && !self.versions.blocked()
+        {
             self.new_chat();
         }
         self.publish();
@@ -374,7 +379,7 @@ impl App {
             self.stop_recording()?;
         }
         selection::unregister(self.window);
-        if let Err(e) = if self.config.hotkey_enabled {
+        if let Err(e) = if self.config.hotkey_enabled && self.logged_in() {
             selection::register(self.window, next)
         } else {
             Ok(())
@@ -393,7 +398,7 @@ impl App {
             }
             return Err(e);
         }
-        self.hotkey = self.config.hotkey_enabled.then_some(next);
+        self.hotkey = (self.config.hotkey_enabled && self.logged_in()).then_some(next);
         self.config = config;
         Ok(())
     }
@@ -519,6 +524,13 @@ impl App {
         }
     }
     fn logout(&mut self) -> AppResult<()> {
+        self.vnc.disable();
+        self.mail_flow.cancel.store(true, Ordering::Relaxed);
+        self.selection_popup.enabled.store(false, Ordering::Relaxed);
+        self.selection_popup.update(None);
+        selection::unregister(self.window);
+        self.hotkey = None;
+        let _ = self.stop_recording();
         self.site = site::SiteRuntime::default();
         self.mail_flow = mail_batch::MailRuntime::default();
         self.cancelled.store(true, Ordering::Relaxed);
@@ -603,20 +615,7 @@ impl App {
         Ok(())
     }
     fn command(&mut self, command: Command) -> AppResult<()> {
-        // 不只停用按鈕：所有進入原生層的功能命令一律受版本門檻約束。
-        if self.versions.blocked()
-            && !matches!(
-                command,
-                Command::Ready
-                    | Command::Draft { .. }
-                    | Command::Refresh
-                    | Command::Download
-                    | Command::Exit
-                    | Command::SelfTestResult { .. }
-            )
-        {
-            return Err("此版本已停止支援，安裝更新完成前無法使用功能。".into());
-        }
+        command.check_access(self.logged_in(), self.versions.blocked(), self.smoke)?;
         match command {
             Command::Vnc { command } => self.vnc_command(command)?,
             Command::SiteAction { command } => self.site_action(command)?,
@@ -881,8 +880,8 @@ impl App {
                 }
             }
             Command::Login => {
-                if self.busy != "none" || self.versions.blocked() {
-                    return Err("請先完成目前操作或更新版本。".into());
+                if self.busy != "none" {
+                    return Err("請先完成目前操作。".into());
                 }
                 self.busy = "login";
                 self.grant = None;
@@ -1007,7 +1006,11 @@ impl App {
         Ok(())
     }
     fn event(&mut self, event: Event) -> AppResult<()> {
-        if self.versions.blocked() && !matches!(event, Event::Services(..) | Event::UpdateReady(..))
+        if self.versions.blocked()
+            && !matches!(
+                event,
+                Event::Services(..) | Event::UpdateReady(..) | Event::Grant(..) | Event::Login(..)
+            )
         {
             // 停止以舊版繼續串接自動郵件／附件流程，已提交的伺服器任務留給新版恢復。
             return Ok(());
@@ -1073,7 +1076,10 @@ impl App {
                 if self.versions.blocked() {
                     self.versions.save(&self.root)?;
                     self.mail_flow.cancel.store(true, Ordering::Relaxed);
-                    self.cancelled.store(true, Ordering::Relaxed);
+                    // 登入是未登入時唯一可用入口；背景版本檢查不得中止正在進行的授權。
+                    if self.busy != "login" {
+                        self.cancelled.store(true, Ordering::Relaxed);
+                    }
                     self.socket_cancel.store(true, Ordering::Relaxed);
                     self.selection_popup.update(None);
                     self.selection_popup.enabled.store(false, Ordering::Relaxed);
@@ -1110,6 +1116,12 @@ impl App {
                 }
                 self.generation += 1;
                 self.session = Some(session);
+                if let Err(error) = self.apply_hotkey(self.config.hotkey.clone()) {
+                    self.toast(&error);
+                }
+                self.selection_popup
+                    .enabled
+                    .store(self.config.selection_icon && !self.smoke, Ordering::Relaxed);
                 self.work = work::WorkRuntime::default();
                 self.services_loading = false;
                 self.notifications_loading = false;
@@ -1147,14 +1159,18 @@ impl App {
                 }
             }
             Event::SelectionRect(rect) => {
-                self.selection_popup
-                    .update(if self.busy == "none" && !self.versions.blocked() {
+                self.selection_popup.update(
+                    if self.logged_in() && self.busy == "none" && !self.versions.blocked() {
                         rect
                     } else {
                         None
-                    });
+                    },
+                );
             }
-            Event::Capture(result) => {
+            // 登出前啟動的擷取不得寫入下一次登入的草稿。
+            Event::Capture(generation, result)
+                if generation == self.generation && self.logged_in() =>
+            {
                 self.busy = "none";
                 let text = result?;
                 if self.config.always_new_chat {
@@ -1262,8 +1278,14 @@ impl App {
     }
     fn tick(&mut self) {
         let mut changed = false;
-        if !self.versions.blocked() {
-            changed = self.site_tick();
+        // 先處理到期，再接受 UI 命令或背景結果，不能因本機工作忙碌而繼續使用過期授權。
+        if !self.smoke && self.session.is_some() && !self.logged_in() && self.busy != "login" {
+            let _ = self.logout();
+            self.fail("登入已到期，請重新登入。".into());
+            changed = true;
+        }
+        if self.logged_in() && !self.versions.blocked() {
+            changed |= self.site_tick();
             match self.mail_batch_tick() {
                 Ok(updated) => changed |= updated,
                 Err(e) => {
@@ -1305,13 +1327,8 @@ impl App {
             }
         }
         if !self.smoke {
-            if !self.versions.blocked() {
+            if self.logged_in() && !self.versions.blocked() {
                 self.poll_work(false);
-            }
-            if self.session.is_some() && !self.logged_in() && self.busy == "none" {
-                let _ = self.logout();
-                self.fail("登入已到期，請重新登入。".into());
-                changed = true;
             }
             if self.last_events.elapsed() > Duration::from_secs(60) {
                 self.last_events = Instant::now();
@@ -1424,7 +1441,11 @@ impl App {
         Ok(())
     }
     fn capture(&mut self) {
-        if self.versions.blocked() || self.recording_since.is_some() || self.suppress_hotkey {
+        if !self.logged_in()
+            || self.versions.blocked()
+            || self.recording_since.is_some()
+            || self.suppress_hotkey
+        {
             return;
         }
         if self.busy != "none" {
@@ -1434,9 +1455,13 @@ impl App {
         if let Some(hotkey) = self.hotkey {
             let source = unsafe { GetForegroundWindow() } as usize;
             let tx = self.tx.clone();
+            let generation = self.generation;
             self.busy = "capture";
             thread::spawn(move || {
-                let _ = tx.send(Event::Capture(selection::capture(source as HWND, hotkey)));
+                let _ = tx.send(Event::Capture(
+                    generation,
+                    selection::capture(source as HWND, hotkey),
+                ));
             });
         }
     }
@@ -1576,16 +1601,23 @@ unsafe extern "system" fn window_proc(
                 crate::selection_popup::CLICK_MESSAGE => {
                     let source = app.selection_popup.source;
                     app.selection_popup.update(None);
-                    if source != 0 && app.busy == "none" && !app.versions.blocked() {
+                    if source != 0
+                        && app.logged_in()
+                        && app.busy == "none"
+                        && !app.versions.blocked()
+                    {
                         let tx = app.tx.clone();
+                        let generation = app.generation;
                         app.busy = "capture";
                         thread::spawn(move || {
                             let hotkey = Hotkey {
                                 modifiers: 0,
                                 key: 0,
                             };
-                            let _ =
-                                tx.send(Event::Capture(selection::capture(source as HWND, hotkey)));
+                            let _ = tx.send(Event::Capture(
+                                generation,
+                                selection::capture(source as HWND, hotkey),
+                            ));
                         });
                     }
                     return 0;
@@ -1819,9 +1851,12 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
         let selection_popup = crate::selection_popup::Popup::new(window, move |rect| {
             let _ = selection_tx.send(Event::SelectionRect(rect));
         })?;
-        selection_popup
-            .enabled
-            .store(config.selection_icon && !smoke, Ordering::Relaxed);
+        selection_popup.enabled.store(
+            config.selection_icon
+                && !smoke
+                && session.as_ref().is_some_and(|s| s.valid_for(&config)),
+            Ordering::Relaxed,
+        );
         let mut app = App {
             vnc: vnc::VncRuntime::default(),
             site: site::SiteRuntime::default(),

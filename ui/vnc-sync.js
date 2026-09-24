@@ -87,7 +87,7 @@
 
   window.VncSyncUI = {
     render() {
-      const enabled = !!state.config.vnc_enabled;
+      const enabled = !!state.config.vnc_enabled && !!state.logged_in;
       const data = state.vnc || {};
       const settings = data.sync_settings;
       $("vnc-sync-controls").hidden = !enabled;

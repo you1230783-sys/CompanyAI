@@ -961,10 +961,63 @@ window.runSelfTest = async (structuredFixture) => {
     LMUI.receive(fixture);
     check(document.getElementById("required-update-download").textContent === "開啟下載資料夾", "portable update offers manual replacement");
     check(document.getElementById("required-update-dialog").open, "portable download does not unlock mandatory update");
+    // 共用外部點擊規則：依真正排版後的邊界送出按下與放開事件。
+    function dismissOutside(dialog) {
+      const box = dialog.getBoundingClientRect();
+      const position = { bubbles: true, clientX: box.left - 8, clientY: box.top - 8, button: 0 };
+      dialog.dispatchEvent(new PointerEvent("pointerdown", position));
+      dialog.dispatchEvent(new MouseEvent("click", position));
+    }
+    dismissOutside(document.getElementById("required-update-dialog"));
+    LMUI.receive(fixture);
+    check(!document.getElementById("required-update-dialog").open && state.update_required,
+      "update backdrop closes prompt without clearing version restriction or reopening on push");
     fixture.update_kind = "nsis";
     fixture.update_required = false;
     LMUI.receive(fixture);
     check(!document.getElementById("required-update-dialog").open, "supported version has no update gate");
+    for (const dialog of document.querySelectorAll("dialog")) {
+      dialog.showModal();
+      dismissOutside(dialog);
+      check(!dialog.open, `${dialog.id} supports backdrop dismissal`);
+    }
+    let confirmed = false;
+    confirmAction = () => { confirmed = true; };
+    document.getElementById("confirm-dialog").showModal();
+    dismissOutside(document.getElementById("confirm-dialog"));
+    document.getElementById("confirm-ok").click();
+    check(!confirmed && confirmAction === null, "backdrop cancels pending confirmation");
+    await frame();
+    fixture.logged_in = false;
+    fixture.can_send = false;
+    fixture.config.vnc_enabled = true;
+    fixture.update_required = true;
+    LMUI.receive(fixture);
+    check(!document.getElementById("login-panel").hidden &&
+      document.getElementById("login-entry").textContent === "登入" &&
+      !document.getElementById("login-entry").disabled, "standalone login remains available before authentication");
+    check(!document.querySelector("dialog[open]"), "unauthenticated update gate cannot cover login");
+    const loginIds = new Set(["login-entry", "login-entry-cancel", "login-entry-reopen"]);
+    check([...document.querySelectorAll("button,input,select,textarea")]
+      .every(element => loginIds.has(element.id) || element.disabled), "all non-login controls are disabled");
+    const dynamicButton = document.createElement("button");
+    document.body.append(dynamicButton);
+    await frame();
+    check(dynamicButton.disabled, "new controls inherit authentication lock");
+    fixture.busy = "login";
+    fixture.login_code = "TEST-CODE";
+    LMUI.receive(fixture);
+    check(document.getElementById("login-entry").disabled &&
+      !document.getElementById("login-entry-cancel").hidden &&
+      !document.getElementById("login-entry-reopen").hidden, "pending login keeps cancel and reopen available");
+    fixture.busy = "none";
+    fixture.login_code = "";
+    fixture.logged_in = true;
+    fixture.update_required = false;
+    LMUI.receive(fixture);
+    check(document.getElementById("login-panel").hidden && !dynamicButton.disabled,
+      "authenticated UI hides login panel and restores controls");
+    dynamicButton.remove();
     window.chrome?.webview?.postMessage({
       type: "self_test_result",
       ok: true,

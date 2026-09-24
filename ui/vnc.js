@@ -166,8 +166,8 @@
   window.VncUI = {
     render() {
       window.VncSyncUI?.render();
-      const enabled = !!state.config.vnc_enabled;
-      $("show-vnc").hidden = !enabled;
+      const enabled = !!state.config.vnc_enabled && !!state.logged_in;
+      $("show-vnc").hidden = !state.config.vnc_enabled;
       if (!enabled) {
         if (activeView === "vnc") showView("chat");
         if (dialog.open) dialog.close();

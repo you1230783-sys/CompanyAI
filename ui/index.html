@@ -71,6 +71,15 @@
           </div>
         </header>
         <div id="status" class="status" role="status">正在準備工作空間…</div>
+        <section id="login-panel" class="login-panel" aria-label="登入公司服務">
+          <p>尚未登入時無法使用其他功能</p>
+          <div class="button-row">
+            <button id="login-entry" class="primary-button">登入</button>
+            <button id="login-entry-cancel" class="secondary-button" hidden>取消登入</button>
+            <button id="login-entry-reopen" class="secondary-button" hidden>重開登入頁</button>
+          </div>
+          <p id="login-entry-code" class="subtle" aria-live="polite"></p>
+        </section>
         <section id="chat-view" class="view">
           <div id="transcript" tabindex="0" aria-label="聊天內容">
             <div id="messages"></div>
@@ -352,15 +361,8 @@
           <h3>帳號</h3>
           <p id="settings-account">尚未登入</p>
           <div class="button-row">
-            <button id="login" class="primary-button">瀏覽器登入</button
-            ><button id="logout" class="secondary-button">登出</button
-            ><button id="cancel-login" class="secondary-button" hidden>
-              取消登入</button
-            ><button id="reopen-login" class="secondary-button" hidden>
-              重開登入頁
-            </button>
+            <button id="logout" class="secondary-button">登出</button>
           </div>
-          <p id="login-code" class="subtle"></p>
         </section>
         <section>
           <h3>外觀</h3>
@@ -534,5 +536,7 @@
     <script src="behavior.js"></script>
     <script src="vnc.js"></script>
     <script src="vnc-sync.js"></script>
+    <script src="dialogs.js"></script>
+    <script src="auth-gate.js"></script>
   </body>
 </html>
