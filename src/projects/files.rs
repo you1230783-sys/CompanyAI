@@ -526,6 +526,17 @@ impl Broker {
         self.server_pdf = Some(super::server_pdf::Reader::new(config, session)?);
         Ok(())
     }
+    /// 續接只能引用實際存在的工作副本與版本，不使用 AI 筆記重建檔案狀態。
+    pub fn progress_snapshot(&self) -> Value {
+        json!(self
+            .copies
+            .iter()
+            .map(|(id, copy)| json!({
+                "copy_id":id,"name":copy.name,"revision":text::revision(&copy.text),
+                "saved_revision":copy.saved_revision,"paths":copy.paths
+            }))
+            .collect::<Vec<_>>())
+    }
     pub fn published(&self) -> &[String] {
         &self.published
     }

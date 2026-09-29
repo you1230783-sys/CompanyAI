@@ -1,7 +1,9 @@
 //! 專案資料與固定工具契約。授權及副本所有權由桌面保存，不由模型文字決定。
 pub mod files;
+mod model;
 pub mod office;
 mod pdf;
+mod progress;
 pub mod reply;
 pub mod runner;
 pub mod sandbox;

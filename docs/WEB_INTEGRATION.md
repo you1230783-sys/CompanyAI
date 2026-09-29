@@ -1,3 +1,5 @@
+> **0.8.22：** 專案以既有背景路由與 `skills:false` 傳送筆記、真實工具進度及續接提示，新增內容都在 messages，不新增 HTTP 欄位。請保留桌面提供的 messages，勿另附目的技能或重複拼接歷史。專案較長工具歷程可超過一般聊天 40 則訊息，桌面另設 204 則／240,000 UTF-8 bytes 內容上限；後端實際模型上下文限制仍須公司驗證。已完成但空白的模型結果可有限修復，身分／取消／結果未知不自動重送。詳見 [0.8.22 契約](DESKTOP_0_8_22_CONTRACT.md)。
+
 > **0.8.21：** 新增專案 PDF 同步 multipart 轉換。正式路由 `/lm_server/api/desktop/documents/pdf-to-markdown`，Bearer 桌面 Token＋X-Client-Version；200 為 UTF-8 Markdown bytes，錯誤為既有 JSON。詳見 [0.8.21 契約](DESKTOP_0_8_21_CONTRACT.md)。聊天 skills 與一般附件 API 不變。
 
 > **0.8.20：** 路由與 skills 不變；專案 `ask_user`／`finish` 同樣可附說明文字，桌面按單一完整 JSON 處理。MSG 暫存副本與 COM 診斷由桌面完成。詳見 [0.8.20 契約](DESKTOP_0_8_20_CONTRACT.md)。

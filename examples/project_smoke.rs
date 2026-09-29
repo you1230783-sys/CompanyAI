@@ -1,4 +1,6 @@
 //! 使用真正的 AppContainer EXE 驗證文件工具。僅在指定測試資料夾建立測試檔，不操作使用者文件。
+#[path = "project_smoke/continuation.rs"]
+mod continuation;
 #[path = "project_smoke/pdf.rs"]
 mod pdf;
 #[path = "project_smoke/roundtrip.rs"]
@@ -129,6 +131,7 @@ fn run() -> AppResult<()> {
     println!("PASS: AppContainer handshake, OS file/network isolation, Unicode edit, replay, source protection, publish/readback, path escape and hardlink rejection. Fixture: {}", root.display());
     drop(worker);
     roundtrip::verify(&root)?;
+    continuation::verify(&root)?;
     pdf::verify(&exe, &root)?;
     server_pdf::verify(&exe, &root)?;
     Ok(())

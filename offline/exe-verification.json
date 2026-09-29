@@ -1,6 +1,6 @@
 {
-  "recorded_at": "2026-09-29T21:00:59.3236469+08:00",
-  "version": "0.8.21.0",
+  "recorded_at": "2026-09-30T06:25:53.6604858+08:00",
+  "version": "0.8.22.0",
   "result": "PASS",
   "msvc": "14.29.30133",
   "compiler_report": [
@@ -8,7 +8,7 @@
     "Verified _MSC_FULL_VER=192930159 x64"
   ],
   "empty_cargo_cache": true,
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-1d3f484add904879ba626846a3755676",
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-45a7b107d3cb4607bd296ecf025d0dd6",
   "checks": [
     "v142 x64 compiler probe",
     "fmt",
@@ -20,7 +20,7 @@
     "project copy/edit/publish integration",
     "HTTP skills/tool loops with bounded JSON repair and activity history"
   ],
-  "exe_sha256": "e2c7919f61f1b56f8166ea25696b9f52e64b6886149bd6bcae70f40733f89113",
+  "exe_sha256": "d173dbc995d1edefb63370dbbd88e72615f0a356ea60db881109f9d5eeac6acb",
   "installer_built": false,
   "real_vnc_tested": false,
   "real_office_tested": false,

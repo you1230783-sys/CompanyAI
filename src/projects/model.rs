@@ -1,0 +1,74 @@
+//! 專案模型查詢：已完成的空白／壞格式結果不能被誤當斷線而反覆輪詢。
+use super::runner::Run;
+use crate::{
+    jobs::{self, Task},
+    AppResult,
+};
+use std::time::{Duration, Instant};
+
+pub(super) enum Reply {
+    Text(String),
+    Invalid { reason: String, raw: String },
+}
+
+pub(super) fn receive(run: &Run, task: &mut Task, deadline: Instant) -> AppResult<Reply> {
+    super::runner::check(&run.cancel, deadline)?;
+    let submit = jobs::project_submit(&run.config, &run.session, task);
+    let submit_failed = submit.is_err();
+    let mut submitted_status = submit.ok();
+    let mut connection_errors = 0;
+    loop {
+        super::runner::check(&run.cancel, deadline)?;
+        // POST 有可解析狀態便立即核對；不丟棄錯誤身分再以後續 GET 掩蓋它。
+        let received = match submitted_status.take() {
+            Some(status) => Ok(status),
+            None => jobs::project_task_status(&run.config, &run.session, task),
+        };
+        match received {
+            Ok(status) => {
+                // 身分／未知狀態是契約錯誤，不能當成模型正文錯誤而重新送出工作。
+                status.validate_envelope()?;
+                if status.client_request_id != task.request_id
+                    || task
+                        .remote
+                        .as_ref()
+                        .is_some_and(|r| r.task_id != status.task_id)
+                {
+                    return Err("任務回應識別碼不一致，已停止。".into());
+                }
+                connection_errors = 0;
+                task.remote = Some(status.clone());
+                if status.state == "completed" {
+                    return Ok(match status.reply_text() {
+                        Ok(text) => Reply::Text(text),
+                        Err(error) => Reply::Invalid {
+                            reason: format!("伺服器已完成，但模型正文無效：{error}"),
+                            raw: serde_json::to_string(&status.result)
+                                .unwrap_or_default()
+                                .replace(&run.session.access_token, "[已隱藏]")
+                                .chars()
+                                .take(16_000)
+                                .collect(),
+                        },
+                    });
+                }
+                if status.terminal() {
+                    return Err(format!("模型任務未完成：{}", status.error_message));
+                }
+            }
+            Err(error) => {
+                connection_errors += 1;
+                if submit_failed || connection_errors >= 3 {
+                    return Err(format!(
+                        "無法確認原請求 {} 的結果，未另建請求或重播工具：{error}",
+                        task.request_id
+                    ));
+                }
+            }
+        }
+        for _ in 0..10 {
+            super::runner::check(&run.cancel, deadline)?;
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+}

@@ -22,7 +22,7 @@ use std::{
     time::Duration,
 };
 
-fn request(stream: &mut TcpStream) -> AppResult<(String, Value)> {
+pub(super) fn request(stream: &mut TcpStream) -> AppResult<(String, Value)> {
     stream.set_nonblocking(false).map_err(|e| e.to_string())?;
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))

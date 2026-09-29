@@ -1,4 +1,4 @@
-Recorded: 2026-09-29T21:00:58.6404803+08:00
+Recorded: 2026-09-30T06:25:53.3306228+08:00
 Host OS: Microsoft Windows NT 10.0.26200.0
 Visual Studio: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools
 MSVC: 14.29.30133
@@ -9,8 +9,8 @@ Windows SDK: 10.0.19041.0\
 Target: x86_64-pc-windows-msvc
 CRT: static
 Rust binaries: Y:\Rust\.tools\rustup\toolchains\1.98.1-x86_64-pc-windows-msvc\bin
-Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-1d3f484add904879ba626846a3755676
-EXE SHA256: E2C7919F61F1B56F8166EA25696B9F52E64B6886149BD6BCAE70F40733F89113
+Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-45a7b107d3cb4607bd296ecf025d0dd6
+EXE SHA256: D173DBC995D1EDEFB63370DBBD88E72615F0A356EA60DB881109F9D5EEAC6ACB
 
 rustc 1.98.1 (48a229cea 2026-09-01)
 binary: rustc
@@ -32,22 +32,22 @@ File Type: EXECUTABLE IMAGE
   Image has the following dependencies:
 
     bcryptprimitives.dll
-    kernel32.dll
     user32.dll
+    kernel32.dll
+    oleaut32.dll
     ole32.dll
     shell32.dll
     combase.dll
-    oleaut32.dll
     shlwapi.dll
     propsys.dll
     winhttp.dll
+    gdi32.dll
     bcrypt.dll
     crypt32.dll
     api-ms-win-core-synch-l1-2-0.dll
     dwmapi.dll
     advapi32.dll
     userenv.dll
-    gdi32.dll
     ADVAPI32.dll
     KERNEL32.dll
     ntdll.dll
@@ -56,9 +56,9 @@ File Type: EXECUTABLE IMAGE
   Summary
 
         3000 .data
-       2B000 .pdata
-      373000 .rdata
+       2C000 .pdata
+      376000 .rdata
         7000 .reloc
        3D000 .rsrc
-      3FA000 .text
+      40A000 .text
         1000 _RDATA

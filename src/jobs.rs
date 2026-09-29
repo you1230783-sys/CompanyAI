@@ -61,7 +61,8 @@ pub struct TaskStatus {
     pub error_message: String,
 }
 impl TaskStatus {
-    pub fn validate(&self) -> AppResult<()> {
+    /// 先驗證任務身分及狀態；專案代理可另外修復已完成但無效的模型正文。
+    pub(crate) fn validate_envelope(&self) -> AppResult<()> {
         validate_id(&self.task_id)?;
         validate_id(&self.client_request_id)?;
         if !matches!(
@@ -74,6 +75,10 @@ impl TaskStatus {
         {
             return Err("任務回應格式不正確。".into());
         }
+        Ok(())
+    }
+    pub fn validate(&self) -> AppResult<()> {
+        self.validate_envelope()?;
         if self.state == "completed" {
             self.reply()?;
         }
@@ -442,6 +447,29 @@ pub fn reserve_attachment(
     status.validate()?;
     Ok(status)
 }
+/// 僅供專案代理分開處理「傳輸成功、模型結果無效」；一般聊天保持原驗證行為。
+pub(crate) fn project_submit(
+    config: &Config,
+    session: &Session,
+    task: &Task,
+) -> AppResult<TaskStatus> {
+    // 由專案執行器分別檢查身分、終態與模型正文，避免空白完成被誤當網路錯誤。
+    post(config, session, CHAT_PATH, &task.request)
+}
+
+/// 查詢原有請求；識別碼及正文由專案執行器分層驗證。
+pub(crate) fn project_task_status(
+    config: &Config,
+    session: &Session,
+    task: &Task,
+) -> AppResult<TaskStatus> {
+    let path = match &task.remote {
+        Some(r) => format!("{PREFIX}/tasks/{}", r.task_id),
+        None => format!("{PREFIX}/tasks/by-request/{}", task.request_id),
+    };
+    get(config, session, &path)
+}
+
 pub fn task_status(config: &Config, session: &Session, task: &Task) -> AppResult<TaskStatus> {
     let path = match &task.remote {
         Some(r) => format!("{PREFIX}/tasks/{}", r.task_id),
@@ -460,13 +488,46 @@ pub fn chat_request(
     mode: &str,
     tokens: Vec<String>,
 ) -> AppResult<Value> {
+    execution_request(
+        protocol::chat_json(model, messages)?,
+        conversation,
+        request_id,
+        mode,
+        tokens,
+    )
+}
+
+/// 專案只使用背景往返及桌面技能；允許較長的受控工具歷程。
+pub(crate) fn project_chat_request(
+    model: &str,
+    messages: &[Message],
+    conversation: &str,
+    request_id: &str,
+) -> AppResult<Value> {
+    let mut request = execution_request(
+        protocol::project_chat_json(model, messages)?,
+        conversation,
+        request_id,
+        "background",
+        vec![],
+    )?;
+    set_skills(&mut request, false);
+    Ok(request)
+}
+
+fn execution_request(
+    body: String,
+    conversation: &str,
+    request_id: &str,
+    mode: &str,
+    tokens: Vec<String>,
+) -> AppResult<Value> {
     validate_id(conversation)?;
     validate_id(request_id)?;
     if !matches!(mode, "stream" | "background") {
         return Err("聊天僅支援一般（串流）或背景處理。".into());
     }
-    let mut value: Value = serde_json::from_str(&protocol::chat_json(model, messages)?)
-        .map_err(|_| "聊天資料不正確。")?;
+    let mut value: Value = serde_json::from_str(&body).map_err(|_| "聊天資料不正確。")?;
     value["conversation_id"] = json!(conversation);
     value["client_request_id"] = json!(request_id);
     value["execution_mode"] = json!(mode);
