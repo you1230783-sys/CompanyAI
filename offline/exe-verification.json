@@ -1,24 +1,27 @@
-﻿{
-    "recorded_at":  "2026-09-24T14:14:18.4842377+08:00",
-    "version":  "0.8.15.0",
-    "result":  "PASS",
-    "msvc":  "14.29.30133",
-    "compiler_report":  [
-                            "v142.c",
-                            "Verified _MSC_FULL_VER=192930159 x64"
-                        ],
-    "empty_cargo_cache":  true,
-    "cargo_home":  "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-209f8d64be3543cf8246e31a2845d3ca",
-    "checks":  [
-                   "v142 x64 compiler probe",
-                   "fmt",
-                   "Clippy",
-                   "workspace tests",
-                   "cargo build --release --frozen",
-                   "WebView2 DOM self-check"
-               ],
-    "exe_sha256":  "3f4ba1190b085e78fa41b6e4c683aacdad1b0b00f9d27e6fdd3ea50bf4360dbb",
-    "installer_built":  true,
-    "real_vnc_tested":  false,
-    "offline_zip_built":  false
+{
+  "recorded_at": "2026-09-29T12:03:36.6290624+08:00",
+  "version": "0.8.16.0",
+  "result": "PASS",
+  "msvc": "14.29.30133",
+  "compiler_report": [
+    "v142.c",
+    "Verified _MSC_FULL_VER=192930159 x64"
+  ],
+  "empty_cargo_cache": true,
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-0d6efb68ea1342c5973fd352f176a238",
+  "checks": [
+    "v142 x64 compiler probe",
+    "fmt",
+    "Clippy",
+    "workspace tests",
+    "cargo build --release --frozen",
+    "WebView2 DOM self-check",
+    "AppContainer OS file/network isolation",
+    "project copy/edit/publish integration",
+    "five-round local HTTP skills/tool loop"
+  ],
+  "exe_sha256": "fee748dc7000146f1db366f1caacc013807a2bf8947e92497e538cbdbdb350e1",
+  "installer_built": false,
+  "real_vnc_tested": false,
+  "offline_zip_built": false
 }

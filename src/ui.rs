@@ -34,6 +34,7 @@ use windows_sys::Win32::{
 };
 mod access;
 mod mail_batch;
+mod projects;
 mod site;
 mod vnc;
 mod work;
@@ -43,6 +44,9 @@ const TRAY_MESSAGE: u32 = WM_APP + 4;
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Command {
+    Project {
+        command: projects::ProjectCommand,
+    },
     Vnc {
         command: vnc::VncCommand,
     },
@@ -137,6 +141,7 @@ enum Command {
     },
 }
 enum Event {
+    Project(projects::ProjectEvent),
     VncSync(String, crate::vnc::sync::SessionEvent),
     VncSearch(String, AppResult<PathBuf>),
     Site(u64, site::SiteEvent),
@@ -159,6 +164,7 @@ enum Event {
     AllRead(u64, usize),
 }
 struct App {
+    projects: projects::ProjectRuntime,
     vnc: vnc::VncRuntime,
     site: site::SiteRuntime,
     mail_flow: mail_batch::MailRuntime,
@@ -184,6 +190,8 @@ struct App {
     version_status: String,
     update_ready: Option<crate::deployment::ReadyUpdate>,
     update_busy: bool,
+    /// 僅當次啟動、指定版本的下載及安裝同意；不跨重啟保存。
+    update_consent: Option<String>,
     update_status: String,
     services_loading: bool,
     generation: u64,
@@ -212,6 +220,7 @@ struct App {
 }
 impl Drop for App {
     fn drop(&mut self) {
+        self.projects.cancel();
         self.vnc.shutdown();
         let _ = self.preserve_draft();
         self.mail_flow.cancel.store(true, Ordering::Relaxed);
@@ -234,6 +243,7 @@ impl App {
     fn can_send(&self) -> bool {
         self.logged_in()
             && self.busy == "none"
+            && !self.projects.active(self.active_id.as_deref())
             && self.work_ready()
             && !self.versions.blocked()
             && self
@@ -242,6 +252,9 @@ impl App {
                 .is_some_and(|c| c.models.iter().any(|m| m.id == self.config.model))
     }
     fn publish(&mut self) {
+        if !self.logged_in() || self.versions.blocked() {
+            self.projects.cancel();
+        }
         if !self.ready {
             return;
         }
@@ -259,7 +272,7 @@ impl App {
             .archive
             .conversations
             .iter()
-            .map(|c| json!({"id":c.id,"title":c.title,"updated_at":c.updated_at,"pinned":c.pinned}))
+            .map(|c| json!({"id":c.id,"title":c.title,"updated_at":c.updated_at,"pinned":c.pinned,"project_id":self.projects.store.conversations.get(&c.id)}))
             .collect();
         let mut events:Vec<serde_json::Value>=self.inbox.events.iter().filter(|e|!e.expired()&&!e.dismissed&&e.visible_ai()).map(|e|json!({
             "id":e.id,"source":"ai","type":e.kind,"title":e.title,"summary":e.summary,"created_at":e.created_at,"read_at":e.read_at,"notification_key":format!("ai:{}",e.id)
@@ -276,11 +289,12 @@ impl App {
                 })
         });
         let _=self.view.post(&json!({"type":"state","state":{
+            "update_available":self.versions.known.as_ref().is_some_and(|info| info.available()),
             "update_status":self.update_status,"update_ready":self.update_ready.is_some(),"update_busy":self.update_busy,
             "update_kind":self.update_ready.as_ref().map(|ready|ready.artifact.kind.as_str()),
             "version":service::CURRENT_VERSION,"config":self.config,"status":self.status,"error":self.error,
             "busy":self.busy,"logged_in":self.logged_in(),"can_send":self.can_send(),"update_required":self.versions.blocked(),
-            "models":models,"conversations":conversations,"active_id":self.active_id,"messages":self.messages,
+            "projects":self.project_state(),"models":models,"conversations":conversations,"active_id":self.active_id,"messages":self.messages,
             "draft":self.draft,"draft_revision":self.draft_revision,"focus_draft":self.focus_draft,
             "notifications":events,"notification_status":self.notification_status,"unread_count":self.inbox.unread_count()+self.site.cache.unread_count,"site_status":self.site.status,"site_loading":self.site.loading,"site_mutating":self.site.mutating,"notifications_loading":self.notifications_loading,
             "mail":self.mail,"mail_busy":self.mail_busy,"mail_batch":self.mail_batch_state(),"history_error":self.history_error,
@@ -524,6 +538,7 @@ impl App {
         }
     }
     fn logout(&mut self) -> AppResult<()> {
+        self.projects.cancel();
         self.vnc.disable();
         self.mail_flow.cancel.store(true, Ordering::Relaxed);
         self.selection_popup.enabled.store(false, Ordering::Relaxed);
@@ -582,7 +597,19 @@ impl App {
         if messages.len() >= 40 {
             return Err("此對話已達 20 輪，請新增對話。".into());
         }
-        self.begin_work_chat(messages, action)
+        if self
+            .active_id
+            .as_deref()
+            .and_then(|id| self.projects.store.project_for(id))
+            .is_some()
+        {
+            if action == "mail" {
+                return Err("請在 Outlook 助理或一般對話分析郵件，專案對話只使用專案資料。".into());
+            }
+            self.begin_project_chat(messages)
+        } else {
+            self.begin_work_chat(messages, action)
+        }
     }
     fn read_mail(&mut self, body: bool) -> AppResult<()> {
         if self.mail_busy {
@@ -617,6 +644,7 @@ impl App {
     fn command(&mut self, command: Command) -> AppResult<()> {
         command.check_access(self.logged_in(), self.versions.blocked(), self.smoke)?;
         match command {
+            Command::Project { command } => self.project_command(command)?,
             Command::Vnc { command } => self.vnc_command(command)?,
             Command::SiteAction { command } => self.site_action(command)?,
             Command::MailBatch { command } => self.mail_batch_command(command)?,
@@ -796,8 +824,16 @@ impl App {
                 if self.update_busy {
                     return Ok(());
                 }
-                if self.update_ready.is_some() {
+                if self
+                    .update_ready
+                    .as_ref()
+                    .is_some_and(|ready| ready.artifact.kind == "exe")
+                {
                     self.apply_ready_update()?;
+                } else if self.update_ready.is_some() {
+                    if self.confirm_update()? {
+                        self.apply_ready_update()?;
+                    }
                 } else {
                     self.start_update_download()?;
                 }
@@ -842,6 +878,9 @@ impl App {
                 }
             }
             Command::DeleteChat { id } => {
+                if self.projects.active(Some(&id)) {
+                    return Err("請先停止此專案任務再刪除對話。".into());
+                }
                 if self.mail_flow.phase != "idle"
                     && self.mail_flow.conversation.as_ref() == Some(&id)
                 {
@@ -1009,7 +1048,11 @@ impl App {
         if self.versions.blocked()
             && !matches!(
                 event,
-                Event::Services(..) | Event::UpdateReady(..) | Event::Grant(..) | Event::Login(..)
+                Event::Project(..)
+                    | Event::Services(..)
+                    | Event::UpdateReady(..)
+                    | Event::Grant(..)
+                    | Event::Login(..)
             )
         {
             // 停止以舊版繼續串接自動郵件／附件流程，已提交的伺服器任務留給新版恢復。
@@ -1130,6 +1173,7 @@ impl App {
                 self.refresh_services();
                 self.start_notifications();
             }
+            Event::Project(event) => self.project_event(event)?,
             Event::UpdateReady(result) => {
                 self.update_busy = false;
                 match result {
@@ -1148,10 +1192,22 @@ impl App {
                         self.update_status = if plan.artifact.kind == "exe" {
                             format!("{} 獨立 EXE 已下載並驗證。請開啟下載資料夾，從系統托盤離開 LM_AI 後手動更換檔案；個人資料會保留。", plan.artifact.version)
                         } else {
-                            format!("{} 安裝包已下載並驗證。請按「安裝並重新啟動 LM_AI」確認；退出不會自動安裝。", plan.artifact.version)
+                            format!(
+                                "{} 安裝包已下載並驗證。請點擊更新入口繼續；退出不會自動安裝。",
+                                plan.artifact.version
+                            )
                         };
+                        let auto_install = plan.artifact.kind == "nsis"
+                            && self.update_consent.as_deref()
+                                == Some(plan.artifact.version.as_str());
                         self.update_ready = Some(plan);
-                        self.toast(&self.update_status.clone());
+                        if auto_install {
+                            self.update_status = "更新已驗證，正在保存並重新啟動 LM_AI…".into();
+                            self.apply_ready_update()?;
+                        } else {
+                            self.update_consent = None;
+                            self.toast(&self.update_status.clone());
+                        }
                     }
                     Err(e) => {
                         self.update_status = e;
@@ -1347,6 +1403,28 @@ impl App {
             self.publish();
         }
     }
+    /// 下載前一次告知關閉與重新開啟；同意只適用當時看到的版本。
+    fn confirm_update(&mut self) -> AppResult<bool> {
+        let info = self.versions.known.as_ref().ok_or("尚未取得版本資訊。")?;
+        if !info.available() {
+            return Ok(false);
+        }
+        let version = info.latest_version.clone();
+        let text = format!("是否要自動下載更新並安裝 {version}？\n\n提示：會暫時關閉 LM_AI，並在安裝完成後再次開啟，不會重新啟動電腦。正在執行的本機操作將停止。\n\n若此版本僅提供獨立 EXE，下載後會顯示手動更換方式。") ;
+        if unsafe {
+            MessageBoxW(
+                self.window,
+                wide(&text).as_ptr(),
+                wide("更新 LM_AI").as_ptr(),
+                MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION,
+            )
+        } != IDYES
+        {
+            return Ok(false);
+        }
+        self.update_consent = Some(version);
+        Ok(true)
+    }
     fn start_update_download(&mut self) -> AppResult<()> {
         if self.update_busy || self.update_ready.is_some() {
             return Ok(());
@@ -1361,20 +1439,7 @@ impl App {
             return Ok(());
         }
         let latest = info.latest_version.clone();
-        let message = if self.versions.blocked() {
-            "此版本已停止支援，必須更新後才能繼續使用。現在下載新版？EXE 需手動更換，安裝包會另行詢問安裝。"
-        } else {
-            "找到新版。是否下載更新檔？EXE 下載後由您手動更換；安裝包則會再次詢問，取得同意才關閉及安裝。"
-        };
-        if unsafe {
-            MessageBoxW(
-                self.window,
-                wide(message).as_ptr(),
-                wide("下載 LM_AI 更新").as_ptr(),
-                MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION,
-            )
-        } != IDYES
-        {
+        if !self.confirm_update()? {
             return Ok(());
         }
         let config = self.config.clone();
@@ -1418,13 +1483,8 @@ impl App {
             }
             return Ok(());
         }
-        if unsafe {
-            MessageBoxW(self.window,
-            wide("新版已下載且驗證完成。是否現在保存草稿、關閉 LM_AI，並安裝更新？\n\n安裝完成後會重新啟動 LM_AI 應用程式，不會重新啟動電腦。\n\n安裝位置為 C:\\largan\\LM_AI；正在執行的本機郵件操作將停止。取消則保留待安裝狀態。").as_ptr(),
-            wide("安裝 LM_AI 更新").as_ptr(), MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION)
-        } != IDYES
-        {
-            return Ok(());
+        if self.update_consent.as_deref() != Some(ready.artifact.version.as_str()) {
+            return Err("更新版本已改變，請重新點擊下載箭頭確認。".into());
         }
         self.preserve_draft()?;
         crate::deployment::launch_update(
@@ -1433,6 +1493,7 @@ impl App {
             &latest,
         )?;
         self.update_busy = true;
+        self.projects.cancel();
         self.mail_flow.cancel.store(true, Ordering::Relaxed);
         self.cancelled.store(true, Ordering::Relaxed);
         unsafe {
@@ -1858,6 +1919,7 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
             Ordering::Relaxed,
         );
         let mut app = App {
+            projects: projects::ProjectRuntime::load(&root),
             vnc: vnc::VncRuntime::default(),
             site: site::SiteRuntime::default(),
             mail_flow: mail_batch::MailRuntime::default(),
@@ -1883,6 +1945,7 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
             version_status: "正在檢查版本".into(),
             update_ready: None,
             update_busy: false,
+            update_consent: None,
             update_status: String::new(),
             services_loading: false,
             generation: 0,
@@ -1909,6 +1972,11 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
             ready: false,
             smoke_result: None,
         };
+        if !smoke {
+            if let Err(error) = app.recover_project_history() {
+                app.fail(error);
+            }
+        }
         if !smoke && !app.config.always_new_chat {
             if let Some(c) = app
                 .archive

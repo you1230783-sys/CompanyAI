@@ -1,7 +1,16 @@
-# LM_AI 0.8.15 — Windows 工作助理
+# LM_AI 0.8.16 — Windows 工作助理
 
 Rust 桌面程式，提供公司瀏覽器登入、文字／附件對話、串流、持久背景任務、選字快捷鍵、網站通知及 Classic Outlook 唯讀助理。
 介面使用 WebView2、內嵌 HTML/CSS 與離線 Markdown 套件；不需 Node、Python 或外部 CDN。
+
+## 0.8.16 專案文件工具測試版
+
+- 專案位於 VNC 下、最近對話上；指定本機資料夾，專案對話才提供固定文件工具，仍自動產生標題。
+- TXT／MD 原檔唯讀、修改獨立副本，成果保存到 `_AI_Output/<任務>/`。一般成果 TXT，TXT 不轉 MD。
+- 無網路能力的 AppContainer 子程序處理文字，主程序核對文件授權；不開放 PowerShell。加密文件若無法直接讀取，可匯入公司核准記事本顯示的文字快照。
+- API 改送 `skills`；Outlook 自動補充內文流程從初篩起固定品質模型。
+- 有更新時設定旁顯示下載箭頭；一次確認下載與安裝，同版優先 NSIS，僅有較新 EXE 時提示手動更換。
+- **本次僅交付 EXE 與 EXE 清單；NSIS 保留 0.8.15，歷史離線 ZIP 不重製。** [使用與契約](docs/DESKTOP_0_8_16_CONTRACT.md)、[驗收紀錄](docs/VALIDATION_0_8_16.md)。
 
 ## 0.8.15 登入入口與彈窗關閉
 

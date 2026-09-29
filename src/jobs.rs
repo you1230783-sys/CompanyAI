@@ -472,18 +472,17 @@ pub fn chat_request(
     value["execution_mode"] = json!(mode);
     value["stream"] = json!(mode == "stream");
     value["attachment_tokens"] = json!(tokens);
-    set_purpose(&mut value, false, false)?;
+    set_skills(&mut value, true);
     Ok(value)
 }
 
-/// 用途旗標互斥：Outlook 初篩與標題產生不可同時啟用。
-pub fn set_purpose(request: &mut Value, outlook: bool, title: bool) -> AppResult<()> {
-    if outlook && title {
-        return Err("Outlook 初篩不可同時要求產生對話標題。".into());
+/// 只控制網站附加的提示詞／技能；桌面自訂技能仍完整保留在 messages。
+pub fn set_skills(request: &mut Value, enabled: bool) {
+    if let Some(object) = request.as_object_mut() {
+        object.remove("outlook_triage");
+        object.remove("auto_generate_title");
     }
-    request["outlook_triage"] = json!(outlook);
-    request["auto_generate_title"] = json!(title);
-    Ok(())
+    request["skills"] = json!(enabled);
 }
 
 /// SSE 可以在任意位元組中斷（包括 UTF-8 字元）；先累積完整行再解碼。
@@ -711,7 +710,7 @@ mod tests {
     }
 
     #[test]
-    fn purpose_flags_are_exclusive_and_chat_modes_stay_consistent() {
+    fn skills_replace_purpose_flags_and_chat_modes_stay_consistent() {
         let mut value = chat_request(
             "fast",
             &[Message::user("問題")],
@@ -723,10 +722,10 @@ mod tests {
         .unwrap();
         assert_eq!(value["stream"], true);
         assert_eq!(value["execution_mode"], "stream");
-        set_purpose(&mut value, true, false).unwrap();
-        assert_eq!(value["outlook_triage"], true);
-        assert_eq!(value["auto_generate_title"], false);
-        assert!(set_purpose(&mut value, true, true).is_err());
+        set_skills(&mut value, false);
+        assert_eq!(value["skills"], false);
+        assert!(value.get("outlook_triage").is_none());
+        assert!(value.get("auto_generate_title").is_none());
         let background = chat_request(
             "fast",
             &[Message::user("問題")],

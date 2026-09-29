@@ -191,11 +191,12 @@ impl App {
                     }
                 }
                 // 初篩也留有本機對話，不會把結果加到使用者後來切換的另一個對話。
-                if !self
-                    .work
-                    .caps
-                    .as_ref()
-                    .is_some_and(|c| c.supports("background"))
+                if !allow_export
+                    && !self
+                        .work
+                        .caps
+                        .as_ref()
+                        .is_some_and(|c| c.supports("background"))
                 {
                     return Err("Outlook 初篩需要網站支援背景處理。".into());
                 }
@@ -227,16 +228,22 @@ impl App {
                     self.demo,
                 );
                 let principal = self.work.store.principal_id.clone();
+                // 自動補充內文的整條流程固定品質模型；不改使用者的一般聊天偏好。
+                let triage_model = if allow_export {
+                    batch::ANALYSIS_MODEL
+                } else {
+                    &config.model
+                };
                 let prompt = batch::prompt(&mails, allow_export, 20)?;
                 let mut request = jobs::chat_request(
-                    &config.model,
+                    triage_model,
                     &[Message::user(&prompt)],
                     &local,
                     &request_id,
                     "background",
                     vec![],
                 )?;
-                jobs::set_purpose(&mut request, true, false)?;
+                jobs::set_skills(&mut request, false);
                 let triage = jobs::Task {
                     request_id,
                     conversation_id: local.clone(),

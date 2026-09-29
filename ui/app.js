@@ -443,7 +443,7 @@ function renderHistory() {
   if (signature === historySignature) return;
   historySignature = signature;
   list.replaceChildren();
-  const conversations = [...state.conversations].sort(
+  const conversations = state.conversations.filter(c => !c.project_id).sort(
     (a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.updated_at - a.updated_at,
   );
   for (const c of conversations) {
@@ -643,6 +643,7 @@ function receive(next) {
     resizePrompt();
   }
   renderHistory();
+  window.ProjectUI?.render();
   renderModels();
   renderMessages();
   renderNotifications();
@@ -840,6 +841,7 @@ $("hotkey").addEventListener("keydown", (event) => {
       : { type: "recorded_hotkey", ...binding },
   );
 });
+$("update-shortcut").onclick = () => send({type: "download"});
 for (const id of ["logout", "refresh", "download"])
   $(id).onclick = () => send({ type: id });
 $("model-button").onclick = () => {

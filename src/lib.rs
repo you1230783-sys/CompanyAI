@@ -10,6 +10,7 @@ pub mod hotkey;
 pub mod jobs;
 pub mod notifications;
 pub mod outlook;
+pub mod projects;
 pub mod protocol;
 pub mod selection;
 pub mod selection_popup;

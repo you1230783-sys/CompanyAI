@@ -1,3 +1,5 @@
+> **0.8.16 更新優先：** 新請求移除 outlook_triage／auto_generate_title，改用 skills 布林值。一般聊天與 Outlook 附件最終整理 true；初篩、標題與專案工具 false。詳細格式與狀態語意見 [0.8.16 契約](DESKTOP_0_8_16_CONTRACT.md)。下文舊版欄位僅記錄歷史行為。
+
 # LM_AI：網站／API 串接契約
 
 ## 0.8.15 登入門檻與彈窗關閉

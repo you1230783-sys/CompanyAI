@@ -60,6 +60,12 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         }
         if ($smokeCheck.ExitCode -ne 0) { throw ('Executable UI smoke check failed: ' + $smokeCheck.StandardError.ReadToEnd()) }
     } finally { $smokeCheck.Dispose() }
+    # 真正啟動隔離 EXE，驗證 OS 邊界及副本編輯；失敗不可發布看似可用的文件功能。
+    & cargo build --example project_smoke --frozen
+    if ($LASTEXITCODE -ne 0) { throw 'Project integration harness build failed.' }
+    $projectProbe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\project_smoke.exe'
+    & $projectProbe $exe (Join-Path $projectRoot '.build\project-smoke')
+    if ($LASTEXITCODE -ne 0) { throw 'Real AppContainer/project file integration failed.' }
     # 明確選用才啟動本機已安裝的 Viewer；一般自檢不會接觸 VNC。
     if ($TestVnc) {
         & cargo build --example vnc_smoke --frozen
@@ -152,7 +158,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         compiler_report = $compilerReport
         empty_cargo_cache = [bool]$EmptyCargoCache
         cargo_home = $env:CARGO_HOME
-        checks = @('v142 x64 compiler probe','fmt','Clippy','workspace tests','cargo build --release --frozen','WebView2 DOM self-check')
+        checks = @('v142 x64 compiler probe','fmt','Clippy','workspace tests','cargo build --release --frozen','WebView2 DOM self-check','AppContainer OS file/network isolation','project copy/edit/publish integration','five-round local HTTP skills/tool loop')
         exe_sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
         installer_built = [bool]$IncludeInstaller
         real_vnc_tested = [bool]$TestVnc

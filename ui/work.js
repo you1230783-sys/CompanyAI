@@ -158,7 +158,8 @@ function renderWork() {
     files = work.attachments || [],
     tasks = work.tasks || [],
     rules = work.rules;
-  const available = state.logged_in && rules?.enabled && work.mode !== "sync";
+  const projectChat = state.conversations.some(c => c.id === state.active_id && c.project_id);
+  const available = state.logged_in && rules?.enabled && work.mode !== "sync" && !projectChat;
   $("add-attachment").disabled =
     !available || fileBatchBusy || work.pending || state.update_required;
   $("attachment-input").accept = rules?.allowed_extensions?.join(",") || "";
@@ -174,7 +175,7 @@ function renderWork() {
     );
     $("execution-" + mode).disabled = fileBatchBusy;
   }
-  $("work-status").textContent = work.draft_error || work.status || "";
+  $("work-status").textContent = projectChat ? "專案模式：使用授權資料夾內的 TXT／MD；修改另存副本。" : (work.draft_error || work.status || "");
   $("work-status").hidden = !$("work-status").textContent;
   $("attachment-list").replaceChildren();
   for (const file of files) {

@@ -1357,3 +1357,19 @@ output {
 .batch-mail-row p {
   margin: 4px 0;
 }
+
+/* 更新入口與設定並列；無更新時 hidden 完全移除占位。 */
+.update-shortcut { background: #dcefe4; color: #176a42; border: 1px solid #94c9a9; font-size: 23px; font-weight: 700; flex-shrink: 0; }
+[data-theme="dark"] .update-shortcut { background: #234c37; color: #b4f1cc; }
+
+.project-section { flex: 0 1 auto; min-height: 45px; max-height: 40%; overflow: auto; }
+.project-card { margin: 4px 0; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.project-heading { display: flex; align-items: center; gap: 5px; }
+.project-heading strong { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.project-actions { display: flex; flex-wrap: wrap; gap: 4px; margin: 5px 0; }
+.project-actions button { font-size: 11px; padding: 3px 5px; }
+.project-path { font-size: 11px; overflow-wrap: anywhere; color: var(--muted); }
+#project-progress { position: fixed; bottom: 10px; right: 20px; z-index: 20; max-width: 65vw; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 3px 15px #0002; }
+#project-progress-text { margin-right: 10px; }
+#project-import-text { width: 100%; min-height: 200px; }
+body.collapsed .project-section { overflow: visible; }

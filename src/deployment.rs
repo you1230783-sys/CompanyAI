@@ -130,9 +130,12 @@ pub fn validate_artifact(config: &Config, a: &UpdateArtifact, latest: &str) -> A
     Ok(())
 }
 
-/// 數字版本優先；同版優先 EXE，方便現階段手動測試，未來較新 NSIS 仍會勝出。
+/// 數字版本優先；同版優先 NSIS，才能履行使用者一次同意的自動安裝。
 fn preference(a: &UpdateArtifact) -> AppResult<([u32; 3], bool)> {
-    Ok((crate::service::version_number(&a.version)?, a.kind == "exe"))
+    Ok((
+        crate::service::version_number(&a.version)?,
+        a.kind == "nsis",
+    ))
 }
 
 /// 各來源可回單份清單或最多 16 份的 JSON 陣列；每一份獨立驗證。

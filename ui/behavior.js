@@ -47,6 +47,9 @@
   window.BehaviorUI = {
     renameChat,
     render() {
+      $("update-shortcut").hidden = !state.update_available;
+      $("update-shortcut").disabled = !!state.update_busy;
+      $("update-shortcut").title = state.update_busy ? "正在下載並驗證更新" : "下載並安裝更新";
       $("update-status").textContent = state.update_status || "";
       $("download").textContent = state.update_ready
         ? (state.update_kind === "exe" ? "開啟下載資料夾" : "安裝並重新啟動 LM_AI")

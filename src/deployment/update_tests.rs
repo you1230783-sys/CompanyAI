@@ -11,7 +11,7 @@ fn fixture(kind: &str) -> UpdateArtifact {
 }
 
 #[test]
-fn valid_manifests_choose_exe_on_tie_and_ignore_forged_latest() {
+fn valid_manifests_choose_nsis_on_tie_and_ignore_forged_latest() {
     let config = Config::default();
     let exe = fixture("exe");
     let nsis = fixture("nsis");
@@ -21,7 +21,7 @@ fn valid_manifests_choose_exe_on_tie_and_ignore_forged_latest() {
         vec![nsis.clone(), exe.clone(), forged.clone()],
         vec![exe.clone(), forged, nsis.clone()],
     ] {
-        assert_eq!(select_latest(&config, candidates).unwrap().kind, "exe");
+        assert_eq!(select_latest(&config, candidates).unwrap().kind, "nsis");
     }
     assert_eq!(select_latest(&config, vec![nsis]).unwrap().kind, "nsis");
     assert!(validate_artifact(&config, &exe, "0.8.1").is_err());
@@ -43,7 +43,7 @@ fn numeric_version_precedes_package_preference() {
     exe.version = "1.0.0".into();
     assert!(preference(&exe).unwrap() > preference(&nsis).unwrap());
     nsis.version = exe.version.clone();
-    assert!(preference(&exe).unwrap() > preference(&nsis).unwrap());
+    assert!(preference(&nsis).unwrap() > preference(&exe).unwrap());
 }
 
 #[test]
@@ -88,7 +88,7 @@ fn discovery_checks_all_sources_without_credentials_or_binary_download() {
         server_url: format!("http://{address}"),
         ..Config::default()
     };
-    assert_eq!(discover_latest(&config).unwrap().kind, "exe");
+    assert_eq!(discover_latest(&config).unwrap().kind, "nsis");
     assert_eq!(server.join().unwrap(), crate::config::UPDATE_MANIFEST_PATHS);
 }
 

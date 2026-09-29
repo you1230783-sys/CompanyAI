@@ -278,6 +278,16 @@ impl App {
                 mime_type,
             } => {
                 let result = (|| {
+                    if self
+                        .active_id
+                        .as_deref()
+                        .and_then(|id| self.projects.store.project_for(id))
+                        .is_some()
+                    {
+                        return Err(
+                            "專案文件請放入授權資料夾，或使用匯入文字；此處不提供網站附件。".into(),
+                        );
+                    }
                     if (self.mail_flow.phase != "idle"
                         && self.mail_flow.conversation == self.active_id)
                         || self.work.capability_loading
@@ -554,7 +564,7 @@ impl App {
             &self.work.mode,
             tokens,
         )?;
-        jobs::set_purpose(&mut request, action == "mail", false)?;
+        jobs::set_skills(&mut request, action != "mail");
         if self.work.store.tasks.iter().filter(|t| t.active()).count() >= 8 {
             return Err("最多同時追蹤 8 個聊天任務，請先等待部分任務完成。".into());
         }
@@ -601,7 +611,7 @@ impl App {
         Ok(())
     }
     /// 標題是獨立背景工作，不混入使用者聊天訊息；手動改名永遠優先。
-    fn queue_title(&mut self, local: &str) -> AppResult<()> {
+    pub(super) fn queue_title(&mut self, local: &str) -> AppResult<()> {
         if self.work.store.tasks.iter().filter(|t| t.active()).count() >= 8 {
             return Ok(());
         }
@@ -628,7 +638,7 @@ impl App {
             "background",
             vec![],
         )?;
-        jobs::set_purpose(&mut request, false, true)?;
+        jobs::set_skills(&mut request, false);
         let task = Task {
             request_id: id,
             conversation_id: local.into(),

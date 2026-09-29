@@ -945,6 +945,20 @@ window.runSelfTest = async (structuredFixture) => {
       check(document.getElementById("vnc-sync-controls").hidden && document.getElementById("vnc-sync-user").value === "" &&
         document.getElementById("vnc-import-preview").hidden, "VNC disabling hides synchronization and clears credentials in UI");
     } finally { send = vncSend; }
+    // 0.8.16：專案與一般對話分區，更新入口只在有新版時出現。
+    const savedConversations = fixture.conversations;
+    fixture.projects = {items:[{id:"project-test",name:"測試專案",root:"C:\\測試",import_count:0}],running:false,status:""};
+    fixture.conversations = [...savedConversations, {id:"project-chat",project_id:"project-test",title:"專案標題",updated_at:1}];
+    fixture.update_available = true;
+    LMUI.receive(fixture);
+    check(!$("update-shortcut").hidden, "update arrow appears for available release");
+    check($("project-list").textContent.includes("專案標題"), "project conversation appears inside project");
+    check(!$("history-list").textContent.includes("專案標題"), "project conversation excluded from recent list");
+    check(!!($("show-vnc").compareDocumentPosition($("project-list")) & Node.DOCUMENT_POSITION_FOLLOWING), "projects follow VNC");
+    check(!!($("project-list").compareDocumentPosition($("history-list")) & Node.DOCUMENT_POSITION_FOLLOWING), "projects precede recent history");
+    fixture.update_available = false; fixture.projects = {items:[]}; fixture.conversations = savedConversations;
+    LMUI.receive(fixture);
+    check($("update-shortcut").hidden, "update arrow hidden without newer release");
     fixture.update_required = true;
     fixture.update_busy = true;
     LMUI.receive(fixture);
@@ -956,7 +970,7 @@ window.runSelfTest = async (structuredFixture) => {
     fixture.update_busy = false;
     fixture.update_ready = true;
     LMUI.receive(fixture);
-    check(document.getElementById("required-update-download").textContent === "安裝並重新啟動 LM_AI", "downloaded update awaits second action");
+    check(document.getElementById("required-update-download").textContent === "安裝並重新啟動 LM_AI", "downloaded update retains recovery action");
     fixture.update_kind = "exe";
     LMUI.receive(fixture);
     check(document.getElementById("required-update-download").textContent === "開啟下載資料夾", "portable update offers manual replacement");

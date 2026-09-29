@@ -34,6 +34,10 @@
         <button id="show-vnc" class="nav-button" title="VNC 快速連線" hidden>
           <span data-icon="monitor"></span><span class="nav-label">VNC 快速連線</span>
         </button>
+        <section class="project-section" aria-label="專案">
+          <div class="section-caption"><span class="nav-label">專案</span><button id="new-project" class="text-button" title="新增專案"><span data-icon="plus"></span><span class="nav-label">新增專案</span></button></div>
+          <div id="project-list" class="nav-label"></div>
+        </section>
         <div class="history-section">
           <div class="section-caption">
             <span class="nav-label">最近對話</span>
@@ -46,7 +50,7 @@
         <div class="sidebar-bottom">
           <span id="account-dot" class="account-dot"></span
           ><span id="account-label" class="nav-label">尚未登入</span
-          ><button
+          ><button id="update-shortcut" class="icon-button update-shortcut" title="下載並安裝更新" aria-label="下載並安裝更新" hidden>↓</button><button
             id="settings-button"
             class="icon-button"
             title="設定"
@@ -517,6 +521,20 @@
       </div>
       <p id="vnc-manager-status" role="status"></p>
     </dialog>
+    <dialog id="project-dialog">
+      <h2>新增專案</h2><p>選擇本機資料夾，讓此專案的對話讀取 TXT／MD。原始文件唯讀，修改另存至 _AI_Output。</p>
+      <label>專案名稱<input id="project-name" maxlength="60" autocomplete="off" /></label>
+      <p class="subtle">公司加密文件若无法直接讀取，可在專案中匯入記事本顯示的文字。第一版一次執行一個專案任務。</p>
+      <div class="dialog-actions"><button id="project-cancel">取消</button><button id="project-create" class="primary">選擇資料夾並建立</button></div>
+    </dialog>
+    <dialog id="project-import-dialog">
+      <h2>匯入已解密文字</h2><p>請先用公司核准的記事本開啟文件，確認文字正確後複製到這裡。只保存明文快照，不修改原檔。</p>
+      <label>專案內相對檔名<input id="project-import-path" placeholder="資料／報告.txt" /></label>
+      <label>文件全文<textarea id="project-import-text" rows="12"></textarea></label>
+      <p class="subtle">匯入內容僅以 DPAPI 保存；原檔改變後需重新匯入或清除快照。來源編碼不明，修訂副本使用 UTF-8。</p>
+      <div class="dialog-actions"><button id="project-import-cancel">取消</button><button id="project-import-save" class="primary">確認文字並匯入</button></div>
+    </dialog>
+    <div id="project-progress" role="status" hidden><span id="project-progress-text"></span><button id="project-stop">停止專案任務</button></div>
     <div id="toast" role="status" hidden></div>
     <script src="vendor/markdown-it.min.js"></script>
     <script src="vendor/footnote.min.js"></script>
@@ -536,6 +554,7 @@
     <script src="behavior.js"></script>
     <script src="vnc.js"></script>
     <script src="vnc-sync.js"></script>
+    <script src="projects.js"></script>
     <script src="dialogs.js"></script>
     <script src="auth-gate.js"></script>
   </body>

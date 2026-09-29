@@ -17,6 +17,12 @@ fn main() {
         }
         return;
     }
+    if arguments.as_slice() == ["--project-worker"] {
+        if company_ai::projects::sandbox::run_worker().is_err() {
+            std::process::exit(1);
+        }
+        return;
+    }
     let smoke = arguments.iter().any(|argument| argument == "--self-check");
     let result: AppResult<()> = (|| {
         if arguments
