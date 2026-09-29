@@ -136,10 +136,10 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
                 }
             };
             check(&run.cancel, deadline)?;
-            // 文字包住工具 JSON 時，要求模型修正格式；本輪不執行任何工具。
+            // 完整工具 JSON 可附說明；僅不完整物件需要修正，不重複執行。
             let parsed = super::reply::parse(&reply)?;
             run.messages.push(Message::assistant(reply));
-            let Some(decision) = parsed else {
+            let Some(parsed) = parsed else {
                 if format_retries >= 2 {
                     return Err(
                         "工具回覆格式重試兩次仍不正確，已停止；可按「重新再試一次」。".into(),
@@ -157,7 +157,14 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
                 record["format_retries"] = json!(format_retries);
                 continue;
             };
-            match decision {
+            if !parsed.commentary.is_empty() {
+                report(
+                    &mut activity,
+                    &mut progress,
+                    format!("AI 說明：{}", parsed.commentary),
+                );
+            }
+            match parsed.decision {
                 Decision::Tool {
                     operation_id,
                     request,
@@ -268,7 +275,7 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
 }
 /// 重複輪詢訊息不重複加入，歷程有明確大小上限，不保存文件全文。
 fn report(activity: &mut Vec<String>, progress: &mut impl FnMut(String), message: String) {
-    let message: String = message.chars().take(300).collect();
+    let message: String = message.chars().take(2048).collect();
     if activity.last() == Some(&message) {
         return;
     }
@@ -297,7 +304,7 @@ pub fn recover_activity(root: &Path, id: &str) -> AppResult<Vec<String>> {
         .flatten()
         .take(120)
         .filter_map(|value| value.as_str())
-        .map(|text| text.chars().take(300).collect())
+        .map(|text| text.chars().take(2048).collect())
         .collect())
 }
 

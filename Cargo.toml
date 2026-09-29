@@ -1,6 +1,6 @@
 [package]
 name = "company-ai"
-version = "0.8.18"
+version = "0.8.19"
 edition = "2021"
 rust-version = "1.98"
 
@@ -16,6 +16,8 @@ strip = "debuginfo"
 windows-core = "=0.62.2"
 
 [dependencies]
+# PDF 文字擷取編入 EXE，在既有 AppContainer 執行，不依賴 Python。
+pdf-extract = "=0.12.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 url = "2.5"

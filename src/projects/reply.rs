@@ -1,31 +1,57 @@
-//! 僅辨識可要求模型修正的包裝文字；不直接執行從散文擷取出的工具。
+//! 分離模型說明與單一操作；工具仍須通過完整結構及 broker 授權檢查。
 use super::Decision;
 use crate::AppResult;
 
-/// 純 JSON 直接驗證。若只有一個完整且合法的工具物件被文字包住，
-/// 回傳 None 讓呼叫者請模型重新輸出；完成結果、多份物件及未知工具均不猜測。
-pub fn parse(text: &str) -> AppResult<Option<Decision>> {
+pub struct Parsed {
+    pub decision: Decision,
+    pub commentary: String,
+}
+
+/// 接受純 JSON 或說明包住的一個工具 JSON；不猜測多個操作的執行順序。
+/// 不完整 JSON 才要求修正；未知操作、陣列與多份物件直接停止。
+pub fn parse(text: &str) -> AppResult<Option<Parsed>> {
     let text = text.trim();
-    if let Ok(decision) = serde_json::from_str::<Decision>(text) {
-        return Ok(Some(decision));
+    if text.len() > 64_000 {
+        return Err("模型操作超過大小限制。".into());
     }
-    if text.len() <= 64_000 {
-        if let Some(start) = text.find('{') {
-            let mut stream =
-                serde_json::Deserializer::from_str(&text[start..]).into_iter::<serde_json::Value>();
-            if let Some(Ok(value)) = stream.next() {
+    if let Ok(decision) = serde_json::from_str::<Decision>(text) {
+        return Ok(Some(Parsed {
+            decision,
+            commentary: String::new(),
+        }));
+    }
+    if let Some(start) = text.find('{') {
+        let prefix = &text[..start];
+        if prefix.contains(['[', ']']) {
+            return Err("不接受陣列包裝的工具操作。".into());
+        }
+        let mut stream =
+            serde_json::Deserializer::from_str(&text[start..]).into_iter::<serde_json::Value>();
+        match stream.next() {
+            Some(Ok(value)) => {
                 let suffix = &text[start + stream.byte_offset()..];
-                // 保守拒絕其他 JSON／陣列，不能挑其中一個當作操作意圖。
-                if !text[..start].contains(['[', ']'])
-                    && !suffix.contains(['{', '}', '[', ']'])
-                    && matches!(
-                        serde_json::from_value::<Decision>(value),
-                        Ok(Decision::Tool { .. })
-                    )
-                {
-                    return Ok(None);
+                if !suffix.contains(['{', '}', '[', ']']) {
+                    if let Ok(decision @ Decision::Tool { .. }) =
+                        serde_json::from_value::<Decision>(value)
+                    {
+                        let commentary = [prefix, suffix]
+                            .iter()
+                            .flat_map(|part| part.lines())
+                            .map(str::trim)
+                            .filter(|line| {
+                                !line.is_empty() && !line.starts_with("```") && *line != "工具："
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        return Ok(Some(Parsed {
+                            decision,
+                            commentary,
+                        }));
+                    }
                 }
             }
+            Some(Err(error)) if error.is_eof() => return Ok(None),
+            _ => {}
         }
     }
     Err("模型未回傳可辨識的單一操作，已停止；可按「重新再試一次」。".into())
@@ -35,28 +61,27 @@ pub fn parse(text: &str) -> AppResult<Option<Decision>> {
 mod tests {
     use super::*;
     const TOOL: &str = r#"{"action":"tool","operation_id":"op_001","request":{"tool":"read_file","path":"colab_download_models.txt","offset":0}}"#;
-
     #[test]
-    fn wrapped_tool_requires_model_repair_instead_of_execution() {
-        assert!(matches!(parse(TOOL).unwrap(), Some(Decision::Tool { .. })));
-        for text in [
-            format!("工具：{TOOL}"),
-            format!("```json\n{TOOL}\n```"),
-            format!("請執行 {TOOL}。"),
-        ] {
-            assert!(parse(&text).unwrap().is_none());
-        }
-        let braces = TOOL.replace("colab_download_models.txt", r#"a{\"b}.txt"#);
-        assert!(parse(&format!("工具：{braces}")).unwrap().is_none());
+    fn executes_complete_wrapped_tool_and_preserves_commentary() {
+        assert!(matches!(
+            parse(TOOL).unwrap().unwrap().decision,
+            Decision::Tool { .. }
+        ));
+        let parsed = parse(&format!("現在儲存副本。\n{TOOL}")).unwrap().unwrap();
+        assert_eq!(parsed.commentary, "現在儲存副本。");
+        assert!(parse(&format!("```json\n{TOOL}\n```"))
+            .unwrap()
+            .unwrap()
+            .commentary
+            .is_empty());
+        assert!(parse("工具：{\"action\":\"tool\"").unwrap().is_none());
     }
-
     #[test]
-    fn does_not_repair_results_multiple_objects_or_unknown_operations() {
+    fn refuses_ambiguous_or_unknown_commands() {
         for text in [
             format!("{TOOL}\n{TOOL}"),
             format!("[{TOOL}]"),
             TOOL.replace("read_file", "shell"),
-            "工具：{\"action\":\"tool\"".into(),
             "結果：{\"action\":\"finish\",\"message\":\"完成\",\"artifacts\":[]}".into(),
         ] {
             assert!(parse(&text).is_err(), "{text}");

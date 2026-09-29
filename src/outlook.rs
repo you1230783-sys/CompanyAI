@@ -1,6 +1,7 @@
 //! Classic Outlook 的唯讀 COM 橋接。只在明確操作時連接已開啟的 Outlook。
 //! 不寄信、不修改信箱；多封流程經使用者授權後可匯出 MSG 副本。
 pub mod batch;
+pub mod msg;
 use crate::{wide, AppResult};
 use serde::Serialize;
 use windows::{

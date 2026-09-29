@@ -387,6 +387,14 @@ function renderProjectActivity(details, events) {
   details.append(list);
 }
 
+/** 說明直接顯示在對話中；工具歷程仍可收合，文字不作 HTML 執行。 */
+function renderProjectNarration(container, events) {
+  container.replaceChildren();
+  const notes = (events || []).filter(text => typeof text === "string" && text.startsWith("AI 說明："));
+  container.hidden = !notes.length;
+  for (const note of notes) container.append(node("p", "project-narration", note.slice(6)));
+}
+
 /** 通知只顯示短摘要；保留原資料與原本的開啟／已讀動作。 */
 function notificationPreview(text) {
   const value = String(text || "").replace(/\s+/gu, " ").trim();
@@ -420,12 +428,12 @@ function linkProjectArtifacts(bubble) {
   }
   for (const text of plain) {
     const lines = text.textContent.split("\n");
-    if (!lines.some(line => /^_AI_Output[/\\].+\.(txt|md|docx|xlsx|pptx)$/iu.test(line.trim()))) continue;
+    if (!lines.some(line => /^_AI_Output[/\\].+\.(txt|md|docx|doc|docm|xlsx|xls|xlsm|xlsb|pptx|ppt|pptm)$/iu.test(line.trim()))) continue;
     const fragment = document.createDocumentFragment();
     lines.forEach((line,index) => {
       if (index) fragment.append(document.createTextNode("\n"));
       const path = line.trim();
-      if (/^_AI_Output[/\\].+\.(txt|md|docx|xlsx|pptx)$/iu.test(path)) {
+      if (/^_AI_Output[/\\].+\.(txt|md|docx|doc|docm|xlsx|xls|xlsm|xlsb|pptx|ppt|pptm)$/iu.test(path)) {
         const link = node("a","project-artifact",path);
         link.href = "#"; link.dataset.path = path; link.dataset.conversation = state.active_id;
         link.title = "在檔案總管中顯示"; fragment.append(link);
@@ -495,6 +503,9 @@ function renderMessages() {
         );
     }
     if (message.project_activity?.length) {
+      const narration = node("div", "project-narrations");
+      renderProjectNarration(narration, message.project_activity);
+      content.append(narration);
       const details = document.createElement("details");
       details.open = activityExpanded.has(String(index));
       renderProjectActivity(details, message.project_activity);

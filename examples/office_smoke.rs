@@ -10,7 +10,36 @@ fn run() -> AppResult<()> {
     let root = PathBuf::from(args.get(2).ok_or("需要固定測試檔資料夾。")?);
     let cancel = AtomicBool::new(false);
     let mut worker = Worker::start(&exe, &cancel)?;
-    for ext in ["docx", "xlsx", "pptx"] {
+    // Word 實際輸出的繁體中文 PDF，驗證嵌入字型／ToUnicode，不只測 ASCII fixture。
+    let mut pdf = Broker::new(
+        Project {
+            id: "office-pdf".into(),
+            name: "PDF".into(),
+            root: root.clone(),
+            imports: BTreeMap::new(),
+        },
+        "pdf".into(),
+    )?;
+    let read = pdf.execute(
+        "read",
+        &Tool::ReadFile {
+            path: "source.pdf".into(),
+            offset: 0,
+        },
+        &mut worker,
+        &cancel,
+    )?;
+    let content = read["result"]["text"]
+        .as_str()
+        .ok_or_else(|| read.to_string())?;
+    assert!(
+        content.contains("原始文字") && content.contains("第二段"),
+        "{content}"
+    );
+    println!("PASS PDF: Chinese Word-exported PDF via AppContainer.");
+    for ext in [
+        "docx", "doc", "docm", "xlsx", "xls", "xlsm", "xlsb", "pptx", "ppt", "pptm",
+    ] {
         let source = format!("source.{ext}");
         let before = std::fs::read(root.join(&source)).map_err(|e| e.to_string())?;
         let project = Project {
@@ -60,7 +89,7 @@ fn run() -> AppResult<()> {
                 replacement: "修改😀內容".into(),
             },
         )?;
-        if ext == "xlsx" {
+        if ext.starts_with("xls") {
             assert!(call(
                 "formula",
                 Tool::EditOffice {
@@ -116,7 +145,7 @@ fn run() -> AppResult<()> {
                 copy_id: id.clone(),
                 revision: edited["revision"].as_str().unwrap().into(),
                 block_id: first,
-                expected: if ext == "xlsx" {
+                expected: if ext.starts_with("xls") {
                     "=1+1"
                 } else {
                     "修改😀內容"

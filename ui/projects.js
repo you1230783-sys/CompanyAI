@@ -94,6 +94,7 @@
       if (key !== activityKey) activity.open = false;
       activityKey = key; activitySignature = nextActivity;
       renderProjectActivity(activity, events);
+      renderProjectNarration($("project-narration"), events);
       if (showActivity && stickToBottom) bottom();
     }
     $("new-project").disabled = !!projects.running || state.busy !== "none" || !!state.work?.incoming;

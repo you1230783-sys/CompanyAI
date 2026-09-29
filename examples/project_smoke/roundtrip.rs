@@ -75,7 +75,7 @@ pub fn verify(root: &Path) -> AppResult<()> {
     Ok(())
 }
 
-/// 0：正常；1：編輯前回傳一次包裝 JSON；2：持續回傳包裝 JSON，必須有限停止。
+/// 0：正常；1：編輯前回傳一次包裝 JSON；2：持續回傳不完整 JSON，必須有限停止。
 fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
     let run_id = format!("roundtrip_{mode}");
     let workspace = root.join(&run_id);
@@ -121,7 +121,7 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
                 assert_eq!(body["messages"][0]["role"], "system");
                 assert_eq!(body["model"], "quality");
                 assert!(request_ids.insert(body["client_request_id"].as_str().unwrap().to_string()));
-                if step == 2 && repair_sent {
+                if mode == 2 && step == 2 && repair_sent {
                     assert!(
                         body["messages"].as_array().unwrap().last().unwrap()["content"]
                             .as_str()
@@ -173,13 +173,17 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
                     }
                     _ => return Err("不應出現額外模型請求。".into()),
                 };
-                let wrapped = step == 2 && (mode == 2 || (mode == 1 && !repair_sent));
-                let content = if wrapped {
+                let content = if step == 2 && mode == 2 {
                     repair_sent = true;
-                    format!("工具：{decision}")
+                    "工具：{\"action\":\"tool\"".into()
                 } else {
+                    let content = if mode == 1 && step == 2 {
+                        format!("現在修改工作副本。\n{decision}")
+                    } else {
+                        decision.to_string()
+                    };
                     step += 1;
-                    decision.to_string()
+                    content
                 };
                 rounds += 1;
                 last_status = json!({"task_id":format!("task_{rounds}"),"client_request_id":body["client_request_id"],"state":"completed","result":{"choices":[{"message":{"role":"assistant","content":content}}]}});
@@ -232,7 +236,12 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
     } else {
         let answer = result?;
         assert_eq!(runner::recover(&root.join("app-data"), &run_id)?, answer);
-        assert_eq!(rounds, if mode == 1 { 6 } else { 5 });
+        assert_eq!(rounds, 5);
+        if mode == 1 {
+            assert!(activity
+                .iter()
+                .any(|text| text == "AI 說明：現在修改工作副本。"));
+        }
         assert!(answer.contains("本機測試已完成修訂"));
         assert_eq!(
             activity

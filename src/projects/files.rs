@@ -111,7 +111,8 @@ pub fn relative(value: &str) -> AppResult<PathBuf> {
             _ => return Err("不可使用絕對路徑或 .. 跳出專案。".into()),
         }
     }
-    Ok(path.to_path_buf())
+    // 由元件重建 Windows 路徑，避免 Shell 收到混用 / 與 \ 的字串。
+    Ok(path.components().collect())
 }
 fn extension(path: &Path) -> AppResult<String> {
     let ext = path
@@ -119,22 +120,23 @@ fn extension(path: &Path) -> AppResult<String> {
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    if !matches!(ext.as_str(), "txt" | "md" | "docx" | "xlsx" | "pptx") {
-        return Err("支援 TXT、MD、DOCX、XLSX、PPTX。".into());
+    if !matches!(ext.as_str(), "txt" | "md" | "pdf" | "msg") && !office::supported(path) {
+        return Err("支援 TXT、MD、PDF、MSG 及 Word／Excel／PowerPoint 文件。".into());
     }
     Ok(ext)
 }
 
 pub fn read(project: &Project, path: &str) -> AppResult<(String, Encoding)> {
-    read_cancel(project, path, &AtomicBool::new(false))
+    read_cancel(project, path, &AtomicBool::new(false), None)
 }
 fn read_cancel(
     project: &Project,
     path: &str,
     cancel: &AtomicBool,
+    worker: Option<&mut Worker>,
 ) -> AppResult<(String, Encoding)> {
     let rel = relative(path)?;
-    extension(&rel)?;
+    let ext = extension(&rel)?;
     let target = project.root.join(&rel);
     let _guards = pin(target.parent().ok_or("缺少來源資料夾。")?)?;
     let mut file = OpenOptions::new()
@@ -162,6 +164,29 @@ fn read_cancel(
     if let Some(text) = project.imports.get(&key) {
         text::validate(text)?;
         return Ok((text.clone(), Encoding::Utf8(true)));
+    }
+    if ext == "pdf" || ext == "msg" {
+        let limit = if ext == "pdf" {
+            super::pdf::MAX_PDF as u64
+        } else {
+            50_000_000
+        };
+        if file.metadata().map_err(|e| e.to_string())?.len() > limit {
+            return Err(format!("{ext} 檔案超過 {} MB 上限。", limit / 1_000_000));
+        }
+        let content = if ext == "msg" {
+            crate::outlook::msg::read(&target, cancel)?
+        } else {
+            let mut bytes = Vec::new();
+            file.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+            if let Some(worker) = worker {
+                worker.extract_pdf(&bytes, cancel)?
+            } else {
+                let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+                Worker::start(&exe, cancel)?.extract_pdf(&bytes, cancel)?
+            }
+        };
+        return Ok((content, Encoding::Utf8(true)));
     }
     if file.metadata().map_err(|e| e.to_string())?.len() > text::MAX_TEXT as u64 {
         return Err("文件超過第一版 200 KB 上限。".into());
@@ -251,20 +276,45 @@ pub fn reveal(project: &Project, value: &str) -> AppResult<()> {
             UI::Shell::{SHOpenFolderAndSelectItems, SHParseDisplayName},
         },
     };
-    unsafe {
+    let selected = unsafe {
         let mut item = std::ptr::null_mut();
-        SHParseDisplayName(
+        match SHParseDisplayName(
             PCWSTR(crate::wide(&target.to_string_lossy()).as_ptr()),
             None,
             &mut item,
             0,
             None,
-        )
-        .map_err(|e| e.to_string())?;
-        let result = SHOpenFolderAndSelectItems(item, None, 0).map_err(|e| e.to_string());
-        CoTaskMemFree(Some(item.cast()));
-        result
+        ) {
+            Ok(()) => {
+                let result = SHOpenFolderAndSelectItems(item, None, 0);
+                CoTaskMemFree(Some(item.cast()));
+                result
+            }
+            Err(error) => Err(error),
+        }
+    };
+    if selected.is_ok() {
+        return Ok(());
     }
+    // 某些企業 Shell 未註冊定位介面。直接啟動系統 Explorer，不依赖檔案關聯或任意命令。
+    let mut windows_dir = [0u16; 32768];
+    let length = unsafe {
+        windows_sys::Win32::System::SystemInformation::GetWindowsDirectoryW(
+            windows_dir.as_mut_ptr(),
+            windows_dir.len() as u32,
+        )
+    } as usize;
+    if length == 0 || length >= windows_dir.len() {
+        return Err("無法取得 Windows 目錄。".into());
+    }
+    let explorer =
+        PathBuf::from(String::from_utf16_lossy(&windows_dir[..length])).join("explorer.exe");
+    use std::os::windows::process::CommandExt;
+    std::process::Command::new(explorer)
+        .raw_arg(format!("/select,\"{}\"", target.display()))
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("無法開啟檔案總管：{e}；成果位置：{}", target.display()))
 }
 
 /// 固定開啟方式同時保護原檔、發布暫存，拒絕連結及操作期間的替換。
@@ -412,7 +462,12 @@ impl Broker {
         self.results.insert(id.into(), (request, result.clone()));
         Ok(result)
     }
-    fn content(&mut self, path: &str, cancel: &AtomicBool) -> AppResult<String> {
+    fn content(
+        &mut self,
+        path: &str,
+        cancel: &AtomicBool,
+        worker: &mut Worker,
+    ) -> AppResult<String> {
         if let Some(copy) = self.copies.get(path) {
             if extension(Path::new(&copy.name))? != "md" {
                 self.txt_context = true;
@@ -422,7 +477,7 @@ impl Broker {
         if extension(Path::new(path))? != "md" {
             self.txt_context = true;
         }
-        read_cancel(&self.project, path, cancel).map(|(text, _)| text)
+        read_cancel(&self.project, path, cancel, Some(worker)).map(|(text, _)| text)
     }
     fn perform(
         &mut self,
@@ -456,7 +511,7 @@ impl Broker {
                 Ok(json!({"entries":entries,"truncated":truncated}))
             }
             Tool::ReadFile { path, offset } => {
-                let content = self.content(path, cancel)?;
+                let content = self.content(path, cancel, worker)?;
                 let total = content.chars().count();
                 if *offset > total {
                     return Err("讀取位置超過全文。".into());
@@ -471,7 +526,7 @@ impl Broker {
                 if needle.is_empty() {
                     return Err("搜尋文字不可空白。".into());
                 }
-                let content = self.content(path, cancel)?;
+                let content = self.content(path, cancel, worker)?;
                 let positions: Vec<_> = content
                     .match_indices(needle)
                     .take(101)
@@ -490,14 +545,23 @@ impl Broker {
                     return Err("工作副本只填檔名，不含資料夾。".into());
                 }
                 let ext = extension(&rel)?;
+                if matches!(ext.as_str(), "pdf" | "msg") {
+                    return Err("PDF／MSG 只支援 TXT 文字副本。".into());
+                }
                 let (content, encoding) = if let Some(source) = source {
                     if ext != "md" {
                         self.txt_context = true;
                     }
-                    if extension(Path::new(source))? != ext {
-                        return Err("副本需保留來源文件格式。".into());
+                    let source_ext = extension(Path::new(source))?;
+                    let expected_ext = if matches!(source_ext.as_str(), "pdf" | "msg") {
+                        "txt"
+                    } else {
+                        &source_ext
+                    };
+                    if ext != expected_ext {
+                        return Err("副本需保留來源格式；PDF／MSG 只建立 TXT 文字副本。".into());
                     }
-                    read_cancel(&self.project, source, cancel)?
+                    read_cancel(&self.project, source, cancel, Some(worker))?
                 } else {
                     if ext != "txt" {
                         return Err("新的一般成果只建立 TXT；MD 僅允許既有 MD 的修訂副本。".into());
@@ -670,7 +734,7 @@ impl Broker {
                         .map_err(|e| format!("可能有部分輸出 {relative}，未交付：{e}"))?;
                 }
                 drop(output);
-                let verified = read_cancel(&self.project, &relative, cancel).map_err(|e| format!("已建立 {relative}，但無法驗證加密後內容，尚未交付。請用對應應用程式檢查：{e}"))?.0;
+                let verified = read_cancel(&self.project, &relative, cancel, Some(worker)).map_err(|e| format!("已建立 {relative}，但無法驗證加密後內容，尚未交付。請用對應應用程式檢查：{e}"))?.0;
                 if verified != copy.text {
                     return Err(format!("已建立 {relative}，讀回內容不一致，尚未交付。"));
                 }
@@ -713,7 +777,7 @@ impl Broker {
             if cancel.load(std::sync::atomic::Ordering::Relaxed) {
                 return Err("成果檢查已取消。".into());
             }
-            if read_cancel(&self.project, path, cancel)?.0 != copy.text {
+            if read_cancel(&self.project, path, cancel, None)?.0 != copy.text {
                 return Err("成果交付前已變更，請重新確認。".into());
             }
             paths.push(path.clone());
@@ -848,6 +912,9 @@ mod tests {
         ] {
             assert!(relative(value).is_err(), "{value}");
         }
-        assert!(relative("資料/文件.txt").is_ok());
+        assert_eq!(
+            relative("資料/文件.txt").unwrap().to_str().unwrap(),
+            r"資料\文件.txt"
+        );
     }
 }

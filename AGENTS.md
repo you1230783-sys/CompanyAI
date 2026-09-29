@@ -67,6 +67,14 @@
 - 使用者明確要求先提供網頁契約時，可先獨立提交／推送契約文件供同步開發；必須標示程式尚未驗收，其他原始碼及 EXE 待完整交付驗證後再提交。
 - 修改功能時同步更新 docs/WEB_INTEGRATION.md 與相應驗收說明。沒有實際操作 Word／Outlook 或取得外觀截圖時，不能宣稱這些驗收通過。
 
+## 0.8.19 文件相容性與工具說明（最新使用者指示）
+
+- 修正成果定位路徑，完整單一工具 JSON 可附說明並繼續執行；說明直接呈現在對話中，不再要求重送完整合法工具。歧義／未知工具停止，不完整 JSON 最多修正兩次。
+- PDF 以內嵌 pdf-extract 在 AppContainer 讀取；MSG 以已開啟的 Classic Outlook OpenSharedItem 讀取。兩者只支援文字閱讀及 TXT 衍生副本，不編輯原始格式、不做 OCR／附件解析。
+- Office 支援 DOC/DOCX/DOCM、XLS/XLSX/XLSM/XLSB、PPT/PPTX/PPTM，副本保留原格式；仍只修改既有文字區塊，不新增表格／列欄／版面。
+- 使用者已詢問 Word 表格能力並獲告知：既有表格文字可修訂，尚無新增表格工具；本輪不擴充表格結構操作。
+- 本輪交付 0.8.19 EXE、清單與原始碼，執行 `Build.ps1 -EmptyCargoCache -TestOffice`，沿用 main 推送授權；不打 NSIS／歷史 ZIP。MSG／公司加密未實测通過不得宣稱驗收。
+
 ## 0.8.18 成果與 Office（最新使用者指示）
 
 - 使用者要求成果可定位 Explorer、輸出保留可讀檔名、任務資料夾以時間命名，並試用 Word／Excel／PowerPoint；完成後編譯 EXE 並推送既有 main。

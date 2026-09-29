@@ -110,7 +110,7 @@ fn pipe() -> AppResult<(File, File)> {
         bInheritHandle: 1,
         lpSecurityDescriptor: ptr::null_mut(),
     };
-    // 管線容量大於單一允許訊息，避免先写再讀時因填滿管線卡住。
+    // 容量可容納一般文字訊息；大型 PDF 由已就緒的子程序持續讀取輸入後才解析。
     if unsafe { CreatePipe(&mut read, &mut write, &sa, 1_048_576) } == 0 {
         return Err(error("無法建立隔離管線"));
     }
@@ -322,6 +322,19 @@ impl Worker {
             .map_err(|_| "子程序回覆格式不正確。".to_string())?
     }
 
+    /// PDF 使用固定二進位訊息，避免 JSON 數字陣列膨脹；解析仍在無檔案權限的子程序。
+    pub fn extract_pdf(&mut self, bytes: &[u8], cancel: &AtomicBool) -> AppResult<String> {
+        if bytes.len() > super::pdf::MAX_PDF || cancel.load(Ordering::Relaxed) {
+            return Err("PDF 過大或任務已取消。".into());
+        }
+        let mut data = Vec::with_capacity(bytes.len() + 4);
+        data.extend_from_slice(b"PDF\0");
+        data.extend_from_slice(bytes);
+        write_frame(&mut self.input, &data)?;
+        serde_json::from_slice::<AppResult<String>>(&self.receive(cancel)?)
+            .map_err(|_| "PDF 子程序回覆格式不正確。".to_string())?
+    }
+
     /// 以真實外部檔案與本機監聽埠驗證 OS 邊界，供建置驗收程式使用。
     pub fn inspect_isolation(
         &mut self,
@@ -345,6 +358,10 @@ impl Worker {
         let mut received = Vec::new();
         loop {
             if cancel.load(Ordering::Relaxed) || Instant::now() >= deadline {
+                // 終止後不再接受遲到回覆，避免將前一操作的結果誤配給下一操作。
+                unsafe {
+                    TerminateJobObject(self.job.0, 1);
+                }
                 return Err("子程序已取消或回應逾時。".into());
             }
             let mut available = 0;
@@ -425,12 +442,17 @@ pub fn run_worker() -> AppResult<()> {
             return Ok(());
         }
         let length = u32::from_le_bytes(header) as usize;
-        if length > 800_000 {
+        if length > super::pdf::MAX_PDF + 4 {
             return Err("操作資料過大。".into());
         }
         let mut bytes = vec![0; length];
         input.read_exact(&mut bytes).map_err(|e| e.to_string())?;
-        let result: AppResult<String> = serde_json::from_slice::<Request>(&bytes)
+        let result: AppResult<String> = if let Some(pdf) = bytes.strip_prefix(b"PDF\0") {
+            super::pdf::extract(pdf)
+        } else if bytes.len() > 800_000 {
+            Err("文字操作資料過大。".into())
+        } else {
+            serde_json::from_slice::<Request>(&bytes)
             .map_err(|_| "未知文字操作。".into())
             .and_then(|request| match request {
                 Request::Edit { edit: e } => super::text::edit(&e.content, &e.revision, e.start, &e.expected, &e.replacement),
@@ -440,7 +462,8 @@ pub fn run_worker() -> AppResult<()> {
                     let denied_network = std::net::TcpStream::connect_timeout(&std::net::SocketAddr::from(([127,0,0,1], port)), Duration::from_secs(2)).is_err();
                     Ok(serde_json::json!({"read_denied":denied_read,"write_denied":denied_write,"network_denied":denied_network}).to_string())
                 }
-            });
+            })
+        };
         write_frame(
             &mut output,
             &serde_json::to_vec(&result).map_err(|e| e.to_string())?,

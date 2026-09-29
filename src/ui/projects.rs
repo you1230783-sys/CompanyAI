@@ -105,8 +105,8 @@ fn choose_path(owner: HWND, project_root: Option<&std::path::Path>) -> AppResult
                 .map_err(|e| e.to_string())?;
             dialog
                 .SetFileTypes(&[COMDLG_FILTERSPEC {
-                    pszName: w!("文字文件（TXT、MD）"),
-                    pszSpec: w!("*.txt;*.md"),
+                    pszName: w!("文字匯入來源（TXT、MD、PDF、MSG）"),
+                    pszSpec: w!("*.txt;*.md;*.pdf;*.msg"),
                 }])
                 .map_err(|e| e.to_string())?;
             let folder: IShellItem =
@@ -242,7 +242,7 @@ impl App {
                     // 選擇器可以瀏覽其他目錄，但只有專案內檔案可被接受。
                     let relative = path
                         .strip_prefix(&project.root)
-                        .map_err(|_| "請選擇此專案資料夾內的 TXT 或 MD 檔案。")?;
+                        .map_err(|_| "請選擇此專案資料夾內的 TXT、MD、PDF 或 MSG 檔案。")?;
                     let key = relative.to_string_lossy().replace('\\', "/");
                     projects::files::relative(&key)?;
                     // 不嘗試解碼加密內容，只沿用 broker 驗證格式、連結與檔案身分。

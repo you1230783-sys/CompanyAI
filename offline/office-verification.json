@@ -1,10 +1,10 @@
 {
-  "version": "0.8.18.0",
+  "version": "0.8.19.0",
   "result": "PASS",
   "office_version": "16.0.20326.20158",
-  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\office-test-7f0a6af214d94eae8c6d510e34f2b777",
+  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\office-test-e7c33b7beb1e457cae61b62fb966002a",
   "checks": [
-    "DOCX/XLSX/PPTX COM read/edit/save/reopen",
+    "DOC/DOCX/DOCM/XLS/XLSX/XLSM/XLSB/PPT/PPTX/PPTM COM read/edit/save/reopen",
     "source bytes unchanged",
     "readable filename and numbered second revision",
     "duplicate save idempotent",

@@ -1,4 +1,4 @@
-//! Office 的固定 COM 介面。只處理 DOCX 正文段落、XLSX 儲存格、PPTX 一般文字框。
+//! Office 的固定 COM 介面。處理 Word 正文段落、Excel 儲存格、PowerPoint 一般文字框。
 //! 模型拿到區塊 ID，不可指定 COM 方法。原件以唯讀開啟，套用經核對的修改後另存。
 use crate::{wide, AppResult};
 use serde::{Deserialize, Serialize};
@@ -71,8 +71,25 @@ pub fn supported(path: &Path) -> bool {
             .unwrap_or("")
             .to_ascii_lowercase()
             .as_str(),
-        "docx" | "xlsx" | "pptx"
+        "docx" | "doc" | "docm" | "xlsx" | "xls" | "xlsm" | "xlsb" | "pptx" | "ppt" | "pptm"
     )
+}
+
+/// 保持來源容器格式，避免將舊版或巨集文件誤存成一般 Open XML。
+fn save_format(ext: &str) -> AppResult<i32> {
+    Ok(match ext {
+        "doc" => 0,
+        "docx" => 12,
+        "docm" => 13,
+        "xls" => 56,
+        "xlsx" => 51,
+        "xlsm" => 52,
+        "xlsb" => 50,
+        "ppt" => 1,
+        "pptx" => 24,
+        "pptm" => 25,
+        _ => return Err("不支援此 Office 格式。".into()),
+    })
 }
 
 /// 呼叫名稱都在此模組內固定，參數在此統一反轉成 IDispatch 規則。
@@ -153,13 +170,13 @@ struct Session {
 impl Drop for Session {
     fn drop(&mut self) {
         if let Some(doc) = self.document.take() {
-            if self.ext == "pptx" {
+            if self.collection == "Presentations" {
                 let _ = set(&doc, "Saved", (-1i32).into());
             }
             let _ = invoke(
                 &doc,
                 "Close",
-                if self.ext == "pptx" {
+                if self.collection == "Presentations" {
                     vec![]
                 } else {
                     vec![false.into()]
@@ -188,15 +205,15 @@ impl Session {
             .unwrap_or("")
             .to_ascii_lowercase();
         let (prog, collection) = match ext.as_str() {
-            "docx" => ("Word.Application", "Documents"),
-            "xlsx" => ("Excel.Application", "Workbooks"),
-            "pptx" => ("PowerPoint.Application", "Presentations"),
-            _ => return Err("Office 試用版支援 DOCX、XLSX、PPTX。".into()),
+            "docx" | "doc" | "docm" => ("Word.Application", "Documents"),
+            "xlsx" | "xls" | "xlsm" | "xlsb" => ("Excel.Application", "Workbooks"),
+            "pptx" | "ppt" | "pptm" => ("PowerPoint.Application", "Presentations"),
+            _ => return Err("不支援此 Office 副檔名。".into()),
         };
         let class = unsafe { CLSIDFromProgID(PCWSTR(wide(prog).as_ptr())) }
             .map_err(|_| format!("請先安裝 {prog} 對應的桌面版 Office。"))?;
         // PowerPoint 是單一實例；避免改變使用者現有簡報或共用的巨集設定。
-        if ext == "pptx" {
+        if collection == "Presentations" {
             let mut active = None;
             if unsafe { windows::Win32::System::Ole::GetActiveObject(&class, None, &mut active) }
                 .is_ok()
@@ -220,25 +237,25 @@ impl Session {
         session.setting(
             session.app.clone(),
             "DisplayAlerts",
-            if session.ext == "pptx" {
+            if session.collection == "Presentations" {
                 1i32.into()
             } else {
                 0i32.into()
             },
         )?;
-        if session.ext == "docx" {
+        if session.collection == "Documents" {
             session.setting(
                 child(&session.app, "Options")?,
                 "UpdateLinksAtOpen",
                 false.into(),
             )?;
-        } else if session.ext == "xlsx" {
+        } else if session.collection == "Workbooks" {
             session.setting(session.app.clone(), "EnableEvents", false.into())?;
             session.setting(session.app.clone(), "AskToUpdateLinks", false.into())?;
         }
         let path = VARIANT::from(path.to_string_lossy().as_ref());
         let args = match session.ext.as_str() {
-            "docx" => vec![
+            "docx" | "doc" | "docm" => vec![
                 path,
                 false.into(),
                 true.into(),
@@ -252,7 +269,7 @@ impl Session {
                 missing(),
                 false.into(),
             ],
-            "xlsx" => vec![
+            "xlsx" | "xls" | "xlsm" | "xlsb" => vec![
                 path,
                 0i32.into(),
                 true.into(),
@@ -275,22 +292,20 @@ impl Session {
             args,
             false,
         )?)?);
-        if session.ext == "pptx" {
-            if bool::try_from(&get(session.document()?, "HasVBProject")?).unwrap_or(true) {
-                return Err("不支援包含 VBA 的簡報。".into());
-            }
-        } else {
+        if session.collection != "Presentations" {
             let actual = integer(
                 session.document()?,
-                if session.ext == "docx" {
+                if session.collection == "Documents" {
                     "SaveFormat"
                 } else {
                     "FileFormat"
                 },
             )?;
-            let required = if session.ext == "docx" { 12 } else { 51 };
+            let required = save_format(&session.ext)?;
             if actual != required {
-                return Err("文件實際格式與副檔名不同，請先用 Office 轉存標準 DOCX／XLSX。".into());
+                return Err(
+                    "文件實際格式與副檔名不同，請先用 Office 轉存與副檔名相符的文件。".into(),
+                );
             }
         }
         Ok(session)
@@ -335,7 +350,7 @@ impl Session {
             Ok(())
         };
         let scope = match self.ext.as_str() {
-            "docx" => {
+            "docx" | "doc" | "docm" => {
                 let paragraphs = child(document, "Paragraphs")?;
                 for i in 1..=integer(&paragraphs, "Count")? {
                     let range = child(&item(&paragraphs, i)?, "Range")?;
@@ -357,7 +372,7 @@ impl Session {
                 }
                 "Word 正文段落（含表格文字）；不含頁首頁尾、文字方塊、註解；特殊欄位唯讀。"
             }
-            "xlsx" => {
+            "xlsx" | "xls" | "xlsm" | "xlsb" => {
                 let sheets = child(document, "Worksheets")?;
                 for s in 1..=integer(&sheets, "Count")? {
                     let sheet = item(&sheets, s)?;
@@ -473,7 +488,7 @@ pub fn process(
                 return Err("Office 區塊身分不符。".into());
             }
             match (session.ext.as_str(), old.kind.as_str()) {
-                ("xlsx", "number") => set(
+                ("xlsx" | "xls" | "xlsm" | "xlsb", "number") => set(
                     target,
                     "Value2",
                     new.text
@@ -481,7 +496,7 @@ pub fn process(
                         .map_err(|_| "數字格式不正確。")?
                         .into(),
                 )?,
-                ("xlsx", "text") => {
+                ("xlsx" | "xls" | "xlsm" | "xlsb", "text") => {
                     // 前置單引號要求 Excel 儲存字面文字，不能把 =cmd 等內容當成公式。
                     set(
                         target,
@@ -505,17 +520,17 @@ pub fn process(
         if cancel.load(Ordering::Relaxed) {
             return Err("Office 儲存已取消。".into());
         }
-        let (method, format) = match session.ext.as_str() {
-            "docx" => ("SaveAs2", 12),
-            "xlsx" => ("SaveAs", 51),
-            _ => ("SaveCopyAs", 24),
+        let method = match session.ext.as_str() {
+            "docx" | "doc" | "docm" => "SaveAs2",
+            "xlsx" | "xls" | "xlsm" | "xlsb" => "SaveAs",
+            _ => "SaveCopyAs",
         };
         invoke(
             session.document()?,
             method,
             vec![
                 VARIANT::from(output.to_string_lossy().as_ref()),
-                format.into(),
+                save_format(&session.ext)?.into(),
             ],
             false,
         )?;
@@ -547,12 +562,12 @@ mod tests {
         assert_eq!(value.blocks[0].text, "24");
     }
     #[test]
-    fn word_structure_and_macro_formats_are_not_editable() {
+    fn word_structure_is_preserved_and_legacy_formats_are_recognized() {
         let mut value = sample("text");
         value.scope = "Word 正文".into();
         assert!(value.edit("s1:$A$1", "12", "first\nsecond").is_err());
         for ext in ["docm", "xlsm", "pptm", "doc", "xls", "ppt"] {
-            assert!(!supported(Path::new(&format!("file.{ext}"))));
+            assert!(supported(Path::new(&format!("file.{ext}"))));
         }
     }
 }
