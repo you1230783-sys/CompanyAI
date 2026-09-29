@@ -43,6 +43,7 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
     let mut record = json!({"project_id":run.project.id,"conversation_id":run.conversation,"state":"starting","requests":[],"operations":[],"outputs":[]});
     checkpoint(&journal, &record)?;
     let mut broker = Broker::new(run.project.clone(), run.id.clone())?;
+    broker.enable_server_pdf(run.config.clone(), run.session.clone())?;
     let result = (|| {
         let mut worker = Worker::start(
             &std::env::current_exe().map_err(|e| e.to_string())?,
@@ -169,7 +170,19 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
                     operation_id,
                     request,
                 } => {
-                    let label = request.label();
+                    let pdf_source = match &request {
+                        super::Tool::ReadFile { path, .. } | super::Tool::FindText { path, .. } => {
+                            Some(path)
+                        }
+                        super::Tool::CreateWorkingCopy { source, .. } => source.as_ref(),
+                        _ => None,
+                    };
+                    let label =
+                        if pdf_source.is_some_and(|p| p.to_ascii_lowercase().ends_with(".pdf")) {
+                            "讀取 PDF 文字"
+                        } else {
+                            request.label()
+                        };
                     report(&mut activity, &mut progress, format!("{label}…"));
                     record["activity"] = json!(activity);
                     record["state"] = json!("executing_tool");

@@ -3,6 +3,8 @@
 mod pdf;
 #[path = "project_smoke/roundtrip.rs"]
 mod roundtrip;
+#[path = "project_smoke/server_pdf.rs"]
+mod server_pdf;
 
 use company_ai::{
     projects::{files::Broker, sandbox::Worker, text, Project, Tool},
@@ -128,6 +130,7 @@ fn run() -> AppResult<()> {
     drop(worker);
     roundtrip::verify(&root)?;
     pdf::verify(&exe, &root)?;
+    server_pdf::verify(&exe, &root)?;
     Ok(())
 }
 fn main() {

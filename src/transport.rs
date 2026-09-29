@@ -6,6 +6,7 @@ use std::{ffi::c_void, ptr};
 use url::Url;
 use windows_sys::Win32::Networking::WinHttp::*;
 
+pub(crate) mod pdf;
 pub(crate) mod vnc;
 
 pub struct HttpResponse {

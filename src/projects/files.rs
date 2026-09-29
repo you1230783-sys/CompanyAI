@@ -127,13 +127,14 @@ fn extension(path: &Path) -> AppResult<String> {
 }
 
 pub fn read(project: &Project, path: &str) -> AppResult<(String, Encoding)> {
-    read_cancel(project, path, &AtomicBool::new(false), None)
+    read_cancel(project, path, &AtomicBool::new(false), None, None)
 }
 fn read_cancel(
     project: &Project,
     path: &str,
     cancel: &AtomicBool,
     worker: Option<&mut Worker>,
+    server_pdf: Option<&mut super::server_pdf::Reader>,
 ) -> AppResult<(String, Encoding)> {
     let rel = relative(path)?;
     let ext = extension(&rel)?;
@@ -164,6 +165,17 @@ fn read_cancel(
     if let Some(text) = project.imports.get(&key) {
         text::validate(text)?;
         return Ok((text.clone(), Encoding::Utf8(true)));
+    }
+    if ext == "pdf" {
+        if let Some(reader) = server_pdf {
+            let name = rel
+                .file_name()
+                .and_then(|s| s.to_str())
+                .ok_or("PDF 檔名無效。")?;
+            return reader
+                .read(&mut file, name, cancel)
+                .map(|text| (text, Encoding::Utf8(true)));
+        }
     }
     if ext == "pdf" || ext == "msg" {
         let limit = if ext == "pdf" {
@@ -482,6 +494,7 @@ struct Copy {
     paths: Vec<String>,
 }
 pub struct Broker {
+    server_pdf: Option<super::server_pdf::Reader>,
     project: Project,
     output_folder: Option<String>,
     copies: BTreeMap<String, Copy>,
@@ -495,6 +508,7 @@ impl Broker {
     pub fn new(project: Project, _task: String) -> AppResult<Self> {
         validate_root(&project.root)?;
         Ok(Self {
+            server_pdf: None,
             project,
             output_folder: None,
             copies: BTreeMap::new(),
@@ -502,6 +516,15 @@ impl Broker {
             published: Vec::new(),
             txt_context: false,
         })
+    }
+    /// 正式代理任務啟用伺服器 PDF；本機診斷測試仍可使用原生解析器。
+    pub fn enable_server_pdf(
+        &mut self,
+        config: crate::config::Config,
+        session: crate::storage::Session,
+    ) -> AppResult<()> {
+        self.server_pdf = Some(super::server_pdf::Reader::new(config, session)?);
+        Ok(())
     }
     pub fn published(&self) -> &[String] {
         &self.published
@@ -543,7 +566,14 @@ impl Broker {
         if extension(Path::new(path))? != "md" {
             self.txt_context = true;
         }
-        read_cancel(&self.project, path, cancel, Some(worker)).map(|(text, _)| text)
+        read_cancel(
+            &self.project,
+            path,
+            cancel,
+            Some(worker),
+            self.server_pdf.as_mut(),
+        )
+        .map(|(text, _)| text)
     }
     fn perform(
         &mut self,
@@ -627,7 +657,13 @@ impl Broker {
                     if ext != expected_ext {
                         return Err("副本需保留來源格式；PDF／MSG 只建立 TXT 文字副本。".into());
                     }
-                    read_cancel(&self.project, source, cancel, Some(worker))?
+                    read_cancel(
+                        &self.project,
+                        source,
+                        cancel,
+                        Some(worker),
+                        self.server_pdf.as_mut(),
+                    )?
                 } else {
                     if ext != "txt" {
                         return Err("新的一般成果只建立 TXT；MD 僅允許既有 MD 的修訂副本。".into());
@@ -800,7 +836,7 @@ impl Broker {
                         .map_err(|e| format!("可能有部分輸出 {relative}，未交付：{e}"))?;
                 }
                 drop(output);
-                let verified = read_cancel(&self.project, &relative, cancel, Some(worker)).map_err(|e| format!("已建立 {relative}，但無法驗證加密後內容，尚未交付。請用對應應用程式檢查：{e}"))?.0;
+                let verified = read_cancel(&self.project, &relative, cancel, Some(worker), None).map_err(|e| format!("已建立 {relative}，但無法驗證加密後內容，尚未交付。請用對應應用程式檢查：{e}"))?.0;
                 if verified != copy.text {
                     return Err(format!("已建立 {relative}，讀回內容不一致，尚未交付。"));
                 }
@@ -843,7 +879,7 @@ impl Broker {
             if cancel.load(std::sync::atomic::Ordering::Relaxed) {
                 return Err("成果檢查已取消。".into());
             }
-            if read_cancel(&self.project, path, cancel, None)?.0 != copy.text {
+            if read_cancel(&self.project, path, cancel, None, None)?.0 != copy.text {
                 return Err("成果交付前已變更，請重新確認。".into());
             }
             paths.push(path.clone());

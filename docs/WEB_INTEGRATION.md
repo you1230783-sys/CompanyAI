@@ -1,3 +1,5 @@
+> **0.8.21：** 新增專案 PDF 同步 multipart 轉換。正式路由 `/lm_server/api/desktop/documents/pdf-to-markdown`，Bearer 桌面 Token＋X-Client-Version；200 為 UTF-8 Markdown bytes，錯誤為既有 JSON。詳見 [0.8.21 契約](DESKTOP_0_8_21_CONTRACT.md)。聊天 skills 與一般附件 API 不變。
+
 > **0.8.20：** 路由與 skills 不變；專案 `ask_user`／`finish` 同樣可附說明文字，桌面按單一完整 JSON 處理。MSG 暫存副本與 COM 診斷由桌面完成。詳見 [0.8.20 契約](DESKTOP_0_8_20_CONTRACT.md)。
 
 > **0.8.19：** 網站路由與 `skills` 不變。專案工具往返仍為 false；桌面可解析說明文字＋單一完整工具 JSON，說明只作文字顯示。PDF／MSG／舊版 Office 處理由桌面固定工具完成，網站不需分流。詳見 [0.8.19 契約](DESKTOP_0_8_19_CONTRACT.md)。

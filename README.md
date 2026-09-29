@@ -1,7 +1,15 @@
-# LM_AI 0.8.20 — Windows 工作助理
+# LM_AI 0.8.21 — Windows 工作助理
 
 Rust 桌面程式，提供公司瀏覽器登入、文字／附件對話、串流、持久背景任務、選字快捷鍵、網站通知及 Classic Outlook 唯讀助理。
 介面使用 WebView2、內嵌 HTML/CSS 與離線 Markdown 套件；不需 Node、Python 或外部 CDN。
+
+## 0.8.21 專案 PDF 伺服器轉換
+
+- 專案讀取 PDF 改用公司 PDF→Markdown 路由，支援最多 50 MiB，上傳及等待期間可取消。
+- 同一次任務重用轉換文字；來源內容變更後重新轉換。不保存明文 MD 快取，原始 PDF 不修改；衍生副本仍使用 TXT。
+- 伺服器不擷取圖片；不能假設 Markdown 完整保留原頁碼與版面。沿用全文 200 KB、每次讀取 6000 字上限，過大時明確提示拆分。
+- HTTP 錯誤保留 error_code、message、request_id；取消／逾時不自動重送。
+- 使用者已確認 MSG 在公司測試成功。新的專案 PDF 路由待公司實測；僅發布 EXE，NSIS 維持 0.8.15。[契約](docs/DESKTOP_0_8_21_CONTRACT.md)／[驗證](docs/VALIDATION_0_8_21.md)。
 
 ## 0.8.20 詢問與文件讀取修正
 

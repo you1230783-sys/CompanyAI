@@ -201,6 +201,13 @@ impl Config {
         Ok(url)
     }
 
+    /// PDF API 與登入端點同屬 desktop；保留實際部署子路徑，不以根路徑覆蓋。
+    pub fn pdf_endpoint(&self) -> AppResult<Url> {
+        self.endpoint(&self.token_path)?
+            .join("../documents/pdf-to-markdown")
+            .map_err(|_| "PDF 轉換路由無效。".into())
+    }
+
     /// 憑證綁定解析後的實際路由及 Header；避免只改網站子目錄卻沿用舊 Key。
     /// 模型名稱不影響憑證綁定，因此可以在同一 API 下切換模型。
     pub fn binding(&self) -> AppResult<String> {
@@ -253,6 +260,22 @@ pub fn validate_url(url: &Url, allow_http: bool) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pdf_route_keeps_the_desktop_deployment_prefix() {
+        assert_eq!(
+            Config::default().pdf_endpoint().unwrap().as_str(),
+            "http://lp2-en-server/lm_server/api/desktop/documents/pdf-to-markdown"
+        );
+        let config = Config {
+            server_url: "http://localhost:8000/company/".into(),
+            token_path: "api/desktop/oauth/token".into(),
+            ..Config::default()
+        };
+        assert_eq!(
+            config.pdf_endpoint().unwrap().as_str(),
+            "http://localhost:8000/company/api/desktop/documents/pdf-to-markdown"
+        );
+    }
     #[test]
     fn behavior_preferences_round_trip_with_safe_legacy_defaults() {
         let old: Config = serde_json::from_str("{}").unwrap();

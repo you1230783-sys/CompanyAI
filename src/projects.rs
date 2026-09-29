@@ -5,6 +5,7 @@ mod pdf;
 pub mod reply;
 pub mod runner;
 pub mod sandbox;
+mod server_pdf;
 pub mod text;
 
 use crate::{jobs, storage, AppResult};

@@ -67,6 +67,14 @@
 - 使用者明確要求先提供網頁契約時，可先獨立提交／推送契約文件供同步開發；必須標示程式尚未驗收，其他原始碼及 EXE 待完整交付驗證後再提交。
 - 修改功能時同步更新 docs/WEB_INTEGRATION.md 與相應驗收說明。沒有實際操作 Word／Outlook 或取得外觀截圖時，不能宣稱這些驗收通過。
 
+## 0.8.21 伺服器 PDF 轉換（最新）
+
+- 使用者已確認 0.8.20 MSG 在公司測試成功，PDF 一般附件伺服器轉檔可正常閱讀；不把此回報當成新路由已驗收。
+- 專案 PDF 正式任務改用 POST /api/desktop/documents/pdf-to-markdown，保留部署前綴（公司 /lm_server）；Bearer 桌面 Token、X-Client-Version、單一 multipart file，50 MiB 上限；200 回原始 UTF-8 Markdown，不是 JSON。
+- 不传 extract_images；Server 已固定 false。同步等待，不輪詢；WinHTTP 非同步 I/O 支援取消，receive 180 秒／整次 300 秒，不自動重送。原檔鎖、專案邊界與 TXT 成果規則保留。
+- 相同任務依來源 SHA256 重用記憶體快取；不寫明文 MD、不把伺服器 filename 當磁碟路徑。全文仍為 200 KB 上限，不靜默截斷。
+- 交付 0.8.21 EXE 與簽署清單、原始碼與文件，Build.ps1 -EmptyCargoCache；沿用 main 推送授權，不製作 NSIS／ZIP。真實新路由仍待公司測試。
+
 ## 0.8.20 詢問與讀取修正（最新）
 
 - 使用者回報 PDF／MSG 都可手動開啟，但工具失敗；說明＋ask_user 被誤拒絕。统一 Decision 解析與等待補充狀態。
