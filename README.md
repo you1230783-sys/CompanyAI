@@ -1,7 +1,14 @@
-# LM_AI 0.8.19 — Windows 工作助理
+# LM_AI 0.8.20 — Windows 工作助理
 
 Rust 桌面程式，提供公司瀏覽器登入、文字／附件對話、串流、持久背景任務、選字快捷鍵、網站通知及 Classic Outlook 唯讀助理。
 介面使用 WebView2、內嵌 HTML/CSS 與離線 Markdown 套件；不需 Node、Python 或外部 CDN。
+
+## 0.8.20 詢問與文件讀取修正
+
+- `ask_user`／`finish` 也接受說明文字＋單一完整 JSON；需要補充時正確顯示詢問及等待狀態。
+- MSG 改用獨立暫存副本交給 Classic Outlook，原件繼續保護。讀取成功但暫存被占用時附清理提醒；COM 失敗保留 Outlook／Office 詳細原因。
+- **加密 PDF 自動讀取尚未解決**。Adobe 可開啟時，可複製文字後由專案齒輪「匯入文字」提供內容，再送訊息繼續。未加入本機測試卡住的 Word PDF 備援。
+- 僅發布 EXE；NSIS 維持 0.8.15。詳見 [契約](docs/DESKTOP_0_8_20_CONTRACT.md)、[驗證](docs/VALIDATION_0_8_20.md)。
 
 ## 0.8.19 文件相容性與工具說明
 

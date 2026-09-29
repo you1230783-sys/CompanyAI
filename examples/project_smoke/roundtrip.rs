@@ -69,13 +69,13 @@ fn request(stream: &mut TcpStream) -> AppResult<(String, Value)> {
 }
 
 pub fn verify(root: &Path) -> AppResult<()> {
-    for mode in 0..=2 {
+    for mode in 0..=3 {
         verify_case(root, mode)?;
     }
     Ok(())
 }
 
-/// 0：正常；1：編輯前回傳一次包裝 JSON；2：持續回傳不完整 JSON，必須有限停止。
+/// 0：正常；1：包裝工具；2：不完整 JSON 有限停止；3：說明＋ask_user 等待補充。
 fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
     let run_id = format!("roundtrip_{mode}");
     let workspace = root.join(&run_id);
@@ -150,34 +150,40 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
                 if step >= 1 {
                     assert_eq!(previous["ok"], true, "{previous}");
                 }
-                let decision = match step {
-                    0 => {
-                        json!({"action":"tool","operation_id":"read1","request":{"tool":"read_file","path":"source.txt","offset":0}})
+                let decision = if mode == 3 && step == 1 {
+                    json!({"action":"ask_user","message":"請匯入兩篇 PDF 的文字。"})
+                } else {
+                    match step {
+                        0 => {
+                            json!({"action":"tool","operation_id":"read1","request":{"tool":"read_file","path":"source.txt","offset":0}})
+                        }
+                        1 => {
+                            assert_eq!(previous["result"]["text"], "原始文字");
+                            json!({"action":"tool","operation_id":"copy1","request":{"tool":"create_working_copy","source":"source.txt","name":"修改.txt"}})
+                        }
+                        2 => {
+                            copy_id = previous["result"]["copy_id"]
+                                .as_str()
+                                .ok_or("缺少副本 ID。")?
+                                .into();
+                            json!({"action":"tool","operation_id":"edit1","request":{"tool":"edit_text","copy_id":copy_id,"revision":previous["result"]["revision"],"start":0,"expected":"原始","replacement":"修訂"}})
+                        }
+                        3 => {
+                            json!({"action":"tool","operation_id":"save1","request":{"tool":"save_copy","copy_id":copy_id,"revision":previous["result"]["revision"]}})
+                        }
+                        4 => {
+                            json!({"action":"finish","message":"本機測試已完成修訂。","artifacts":[copy_id]})
+                        }
+                        _ => return Err("不應出現額外模型請求。".into()),
                     }
-                    1 => {
-                        assert_eq!(previous["result"]["text"], "原始文字");
-                        json!({"action":"tool","operation_id":"copy1","request":{"tool":"create_working_copy","source":"source.txt","name":"修改.txt"}})
-                    }
-                    2 => {
-                        copy_id = previous["result"]["copy_id"]
-                            .as_str()
-                            .ok_or("缺少副本 ID。")?
-                            .into();
-                        json!({"action":"tool","operation_id":"edit1","request":{"tool":"edit_text","copy_id":copy_id,"revision":previous["result"]["revision"],"start":0,"expected":"原始","replacement":"修訂"}})
-                    }
-                    3 => {
-                        json!({"action":"tool","operation_id":"save1","request":{"tool":"save_copy","copy_id":copy_id,"revision":previous["result"]["revision"]}})
-                    }
-                    4 => {
-                        json!({"action":"finish","message":"本機測試已完成修訂。","artifacts":[copy_id]})
-                    }
-                    _ => return Err("不應出現額外模型請求。".into()),
                 };
                 let content = if step == 2 && mode == 2 {
                     repair_sent = true;
                     "工具：{\"action\":\"tool\"".into()
                 } else {
-                    let content = if mode == 1 && step == 2 {
+                    let content = if mode == 3 && step == 1 {
+                        format!("文件尚缺 PDF 文字，需要請你協助：\n{decision}")
+                    } else if mode == 1 && step == 2 {
                         format!("現在修改工作副本。\n{decision}")
                     } else {
                         decision.to_string()
@@ -227,6 +233,14 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
     stopped.store(true, Ordering::Relaxed);
     let rounds = server.join().map_err(|_| "測試伺服器失敗。")??;
     let activity = runner::recover_activity(&root.join("app-data"), &run_id)?;
+    if mode == 3 {
+        assert_eq!(result?, "需要你的補充：請匯入兩篇 PDF 的文字。");
+        assert_eq!(rounds, 2);
+        assert!(activity.iter().any(|step| step.contains("文件尚缺 PDF")));
+        assert!(!workspace.join("_AI_Output").exists());
+        println!("PASS: wrapped ask_user displayed without JSON retry or false failure.");
+        return Ok(());
+    }
     assert!(activity.iter().any(|step| step == "建立副本：完成"));
     if mode == 2 {
         assert!(result.unwrap_err().contains("重試兩次"));

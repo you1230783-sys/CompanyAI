@@ -23,7 +23,7 @@ pub fn extract(bytes: &[u8]) -> AppResult<String> {
         return Err("PDF 上限為 20 MB。".into());
     }
     let doc = pdf_extract::Document::load_mem(bytes).map_err(|error| {
-        format!("無法解析 PDF（{error}），檔案可能受公司加密保護、損壞或格式不支援；請匯入閱讀器顯示的文字。")
+        format!("本程式無法解析讀到的 PDF 資料（{error}）。即使 Adobe 可以開啟，也不代表本程式取得的是解密後內容；這個錯誤不能直接判定檔案損壞。請用 ask_user 請使用者從 Adobe 複製所需文字，再透過專案「匯入文字」提供內容。")
     })?;
     if doc.is_encrypted() {
         return Err("此 PDF 需要解密，請以核准的閱讀器開啟後匯入文字。".into());

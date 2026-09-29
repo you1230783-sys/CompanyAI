@@ -67,6 +67,13 @@
 - 使用者明確要求先提供網頁契約時，可先獨立提交／推送契約文件供同步開發；必須標示程式尚未驗收，其他原始碼及 EXE 待完整交付驗證後再提交。
 - 修改功能時同步更新 docs/WEB_INTEGRATION.md 與相應驗收說明。沒有實際操作 Word／Outlook 或取得外觀截圖時，不能宣稱這些驗收通過。
 
+## 0.8.20 詢問與讀取修正（最新）
+
+- 使用者回報 PDF／MSG 都可手動開啟，但工具失敗；說明＋ask_user 被誤拒絕。统一 Decision 解析與等待補充狀態。
+- MSG 獨立暫存副本協調 Outlook 共享需求，不放寬原件寫入保護；保留 COM EXCEPINFO。公司加密仍待實測。
+- 使用者確認公司免費 Acrobat Reader 可正常開啟，但 Word 讀 PDF 是亂碼。Word PDF 備援本機測試未正常返回，不納入；PDF 改進原因說明及 ask_user 匯入流程，不宣稱自動解密已修好。
+- 沿用 EXE／main 推送授權，交付 0.8.20，使用 Build.ps1 -EmptyCargoCache -TestOffice；不重製 NSIS／ZIP。詳見 docs/DESKTOP_0_8_20_CONTRACT.md。
+
 ## 0.8.19 文件相容性與工具說明（最新使用者指示）
 
 - 修正成果定位路徑，完整單一工具 JSON 可附說明並繼續執行；說明直接呈現在對話中，不再要求重送完整合法工具。歧義／未知工具停止，不完整 JSON 最多修正兩次。

@@ -1,3 +1,5 @@
+> **0.8.20：** 路由與 skills 不變；專案 `ask_user`／`finish` 同樣可附說明文字，桌面按單一完整 JSON 處理。MSG 暫存副本與 COM 診斷由桌面完成。詳見 [0.8.20 契約](DESKTOP_0_8_20_CONTRACT.md)。
+
 > **0.8.19：** 網站路由與 `skills` 不變。專案工具往返仍為 false；桌面可解析說明文字＋單一完整工具 JSON，說明只作文字顯示。PDF／MSG／舊版 Office 處理由桌面固定工具完成，網站不需分流。詳見 [0.8.19 契約](DESKTOP_0_8_19_CONTRACT.md)。
 
 > **0.8.16 更新優先：** 新請求移除 outlook_triage／auto_generate_title，改用 skills 布林值。一般聊天與 Outlook 附件最終整理 true；初篩、標題與專案工具 false。詳細格式與狀態語意見 [0.8.16 契約](DESKTOP_0_8_16_CONTRACT.md)。下文舊版欄位僅記錄歷史行為。

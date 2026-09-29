@@ -38,6 +38,7 @@ fn get(object: &IDispatch, name: &str, arguments: &mut [VARIANT]) -> AppResult<V
     let name_pointer = PCWSTR(wide_name.as_ptr());
     let mut id = 0;
     let mut result = VARIANT::default();
+    let mut exception = crate::com_error::DispatchException::default();
     let params = DISPPARAMS {
         rgvarg: arguments.as_mut_ptr(),
         cArgs: arguments.len() as u32,
@@ -54,16 +55,11 @@ fn get(object: &IDispatch, name: &str, arguments: &mut [VARIANT]) -> AppResult<V
                     DISPATCH_PROPERTYGET | DISPATCH_METHOD,
                     &params,
                     Some(&mut result),
-                    None,
+                    Some(&mut exception.0),
                     None,
                 )
             })
-            .map_err(|e| {
-                format!(
-                    "Classic Outlook 無法讀取 {name}（{}）；請確認沒有等待回應的 Outlook 對話框。",
-                    e.code()
-                )
-            })?;
+            .map_err(|e| exception.describe(&format!("Classic Outlook 無法讀取 {name}"), &e))?;
     }
     Ok(result)
 }

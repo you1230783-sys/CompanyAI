@@ -7,7 +7,7 @@ pub struct Parsed {
     pub commentary: String,
 }
 
-/// 接受純 JSON 或說明包住的一個工具 JSON；不猜測多個操作的執行順序。
+/// 接受純 JSON 或說明包住的一個 Decision JSON；不猜測多個操作的執行順序。
 /// 不完整 JSON 才要求修正；未知操作、陣列與多份物件直接停止。
 pub fn parse(text: &str) -> AppResult<Option<Parsed>> {
     let text = text.trim();
@@ -31,15 +31,15 @@ pub fn parse(text: &str) -> AppResult<Option<Parsed>> {
             Some(Ok(value)) => {
                 let suffix = &text[start + stream.byte_offset()..];
                 if !suffix.contains(['{', '}', '[', ']']) {
-                    if let Ok(decision @ Decision::Tool { .. }) =
-                        serde_json::from_value::<Decision>(value)
-                    {
+                    if let Ok(decision) = serde_json::from_value::<Decision>(value) {
                         let commentary = [prefix, suffix]
                             .iter()
                             .flat_map(|part| part.lines())
                             .map(str::trim)
                             .filter(|line| {
-                                !line.is_empty() && !line.starts_with("```") && *line != "工具："
+                                !line.is_empty()
+                                    && !line.starts_with("```")
+                                    && !matches!(*line, "工具：" | "詢問：" | "結果：" | "完成：")
                             })
                             .collect::<Vec<_>>()
                             .join("\n");
@@ -77,12 +77,27 @@ mod tests {
         assert!(parse("工具：{\"action\":\"tool\"").unwrap().is_none());
     }
     #[test]
+    fn wrapped_questions_and_finish_are_valid_decisions() {
+        let ask = r#"週報已讀取，但 PDF 無法解析。請協助匯入文字：
+{"action":"ask_user","message":"兩篇 PDF 需要匯入。\n請提供文字。"}"#;
+        let result = parse(ask).unwrap().unwrap();
+        assert!(
+            matches!(result.decision, Decision::AskUser { ref message } if message.contains("\n請提供文字"))
+        );
+        assert!(result.commentary.contains("週報已讀取"));
+        let finish = parse(r#"已完成。{"action":"finish","message":"已整理","artifacts":[]}"#)
+            .unwrap()
+            .unwrap();
+        assert!(matches!(finish.decision, Decision::Finish { .. }));
+        assert!(parse(&format!("{ask}\n{TOOL}")).is_err());
+    }
+
+    #[test]
     fn refuses_ambiguous_or_unknown_commands() {
         for text in [
             format!("{TOOL}\n{TOOL}"),
             format!("[{TOOL}]"),
             TOOL.replace("read_file", "shell"),
-            "結果：{\"action\":\"finish\",\"message\":\"完成\",\"artifacts\":[]}".into(),
         ] {
             assert!(parse(&text).is_err(), "{text}");
         }

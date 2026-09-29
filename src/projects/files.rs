@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
-    io::{Read, Write},
+    io::{Read, Seek, Write},
     os::windows::{
         fs::{MetadataExt, OpenOptionsExt},
         io::AsRawHandle,
@@ -175,7 +175,14 @@ fn read_cancel(
             return Err(format!("{ext} 檔案超過 {} MB 上限。", limit / 1_000_000));
         }
         let content = if ext == "msg" {
-            crate::outlook::msg::read(&target, cancel)?
+            let (mut content, warning) = with_reader_copy(project, &mut file, "msg", |copy| {
+                crate::outlook::msg::read(copy, cancel)
+            })?;
+            if let Some(warning) = warning {
+                content.push_str(&format!("\n\n[讀取注意：{warning}]"));
+            }
+            text::validate(&content)?;
+            content
         } else {
             let mut bytes = Vec::new();
             file.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
@@ -194,6 +201,65 @@ fn read_cancel(
     let mut data = Vec::new();
     file.read_to_end(&mut data).map_err(|e| e.to_string())?;
     text::decode(&data)
+}
+
+/// 用獨立暫存副本協調 Outlook 的開檔需求，原件仍維持拒絕寫入的 handle。
+/// 不放寬來源的共享模式；副本保持讀取 handle、不分享 DELETE，避免開檔前被替換。
+fn with_reader_copy<T>(
+    project: &Project,
+    source: &mut File,
+    ext: &str,
+    read: impl FnOnce(&Path) -> AppResult<T>,
+) -> AppResult<(T, Option<String>)> {
+    let _root = pin(&project.root)?;
+    let base = project.root.join("_AI_Output");
+    match fs::create_dir(&base) {
+        Ok(()) => (),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => (),
+        Err(e) => return Err(format!("無法建立閱讀暫存目錄：{e}")),
+    }
+    let _base = pin(&base)?;
+    let stage = base.join(format!(".read_{}", crate::jobs::new_id()?));
+    fs::create_dir(&stage).map_err(|e| e.to_string())?;
+    let guard = pin_stage(&stage)?;
+    let copy = stage.join(format!("source.{ext}"));
+    let result = (|| {
+        let mut output = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .open(&copy)
+            .map_err(|e| e.to_string())?;
+        source.rewind().map_err(|e| e.to_string())?;
+        std::io::copy(source, &mut output).map_err(|e| e.to_string())?;
+        output.sync_all().map_err(|e| e.to_string())?;
+        let _held = OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(&copy)
+            .map_err(|e| e.to_string())?;
+        drop(output);
+        read(&copy)
+    })();
+    // Outlook 可能暫留 MSG handle；只清除本次建立的檔案，不遞迴刪除其他內容。
+    let cleanup = fs::remove_file(&copy);
+    drop(guard);
+    let folder_cleanup = fs::remove_dir(&stage);
+    let warning = (cleanup.is_err() || folder_cleanup.is_err()).then(|| {
+        format!(
+            "閱讀暫存尚未能清除：{}。請關閉該信件後清理此暫存資料夾；這不是交付成果。",
+            stage.display()
+        )
+    });
+    match result {
+        Ok(content) => Ok((content, warning)),
+        Err(error) => Err(match warning {
+            Some(warning) => format!("{error}\n{warning}"),
+            None => error,
+        }),
+    }
 }
 
 /// 使用本機時間命名；create_dir 本身決定是否撞名，同秒任務不共用目錄。
@@ -796,6 +862,65 @@ impl Broker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn reader_copy_allows_reader_write_access_without_unlocking_original() {
+        let root = std::env::current_dir()
+            .unwrap()
+            .join(".build")
+            .join(format!("reader-copy-{}", crate::jobs::new_id().unwrap()));
+        fs::create_dir_all(&root).unwrap();
+        let original = root.join("source.msg");
+        fs::write(&original, b"original bytes").unwrap();
+        let mut source = checked_file(&original).unwrap();
+        let project = Project {
+            id: "copy-test".into(),
+            name: "copy-test".into(),
+            root: root.clone(),
+            imports: BTreeMap::new(),
+        };
+        let (result, warning) = with_reader_copy(&project, &mut source, "msg", |copy| {
+            assert!(OpenOptions::new().write(true).open(&original).is_err());
+            assert!(fs::rename(copy, copy.with_extension("moved")).is_err());
+            let mut writer = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .share_mode(FILE_SHARE_READ)
+                .open(copy)
+                .map_err(|e| e.to_string())?;
+            writer.write_all(b"updated").map_err(|e| e.to_string())?;
+            Ok(copy.to_path_buf())
+        })
+        .unwrap();
+        assert!(warning.is_none());
+        assert!(!result.exists());
+        assert_eq!(fs::read(&original).unwrap(), b"original bytes");
+        let error = with_reader_copy(&project, &mut source, "msg", |_| {
+            Err::<(), _>("reader failed".into())
+        })
+        .unwrap_err();
+        assert_eq!(error, "reader failed");
+        // 模擬 Outlook 在讀取成功後暫留 handle：回傳正文與提醒，不誤報整次失敗。
+        let ((held, copy), warning) = with_reader_copy(&project, &mut source, "msg", |copy| {
+            let held = OpenOptions::new()
+                .read(true)
+                .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+                .open(copy)
+                .map_err(|e| e.to_string())?;
+            Ok((held, copy.to_path_buf()))
+        })
+        .unwrap();
+        assert!(warning.unwrap().contains("閱讀暫存尚未能清除"));
+        assert!(copy.exists());
+        drop(held);
+        fs::remove_file(&copy).unwrap();
+        fs::remove_dir(copy.parent().unwrap()).unwrap();
+        assert_eq!(fs::read_dir(root.join("_AI_Output")).unwrap().count(), 0);
+        drop(source);
+        fs::remove_file(original).unwrap();
+        fs::remove_dir(root.join("_AI_Output")).unwrap();
+        fs::remove_dir(root).unwrap();
+    }
+
     #[test]
     fn names_collide_without_overwrite_and_directory_pins_still_block_changes() {
         let root = std::env::current_dir()

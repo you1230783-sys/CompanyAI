@@ -97,6 +97,7 @@ fn invoke(object: &IDispatch, name: &str, mut args: Vec<VARIANT>, put: bool) -> 
     let key = wide(name);
     let mut id = 0;
     let mut result = VARIANT::default();
+    let mut exception = crate::com_error::DispatchException::default();
     args.reverse();
     let mut property = -3; // DISPID_PROPERTYPUT
     let params = DISPPARAMS {
@@ -110,11 +111,25 @@ fn invoke(object: &IDispatch, name: &str, mut args: Vec<VARIANT>, put: bool) -> 
         cNamedArgs: u32::from(put),
     };
     unsafe {
-        object.GetIDsOfNames(&GUID::zeroed(), &PCWSTR(key.as_ptr()), 1, 0, &mut id)
-            .and_then(|()| object.Invoke(id, &GUID::zeroed(), 0,
-                if put { DISPATCH_PROPERTYPUT } else { DISPATCH_METHOD | DISPATCH_PROPERTYGET },
-                &params, Some(&mut result), None, None))
-            .map_err(|e| format!("Office 操作 {name} 失敗（{}）。請確認 Office 已啟用、文件可開啟且沒有待回應視窗。", e.code()))?;
+        object
+            .GetIDsOfNames(&GUID::zeroed(), &PCWSTR(key.as_ptr()), 1, 0, &mut id)
+            .and_then(|()| {
+                object.Invoke(
+                    id,
+                    &GUID::zeroed(),
+                    0,
+                    if put {
+                        DISPATCH_PROPERTYPUT
+                    } else {
+                        DISPATCH_METHOD | DISPATCH_PROPERTYGET
+                    },
+                    &params,
+                    Some(&mut result),
+                    Some(&mut exception.0),
+                    None,
+                )
+            })
+            .map_err(|e| exception.describe(&format!("Office 操作 {name} 失敗"), &e))?;
     }
     Ok(result)
 }

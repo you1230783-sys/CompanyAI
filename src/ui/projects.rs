@@ -480,7 +480,12 @@ impl App {
                     .take()
                     .map(|run| run.activity)
                     .unwrap_or_default();
-                self.projects.status = if result.is_ok() {
+                self.projects.status = if result
+                    .as_ref()
+                    .is_ok_and(|text| text.starts_with("需要你的補充："))
+                {
+                    "等待你的補充。"
+                } else if result.is_ok() {
                     "專案任務已完成。"
                 } else {
                     "專案任務未完成，請查看對話。"
