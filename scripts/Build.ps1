@@ -158,7 +158,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         compiler_report = $compilerReport
         empty_cargo_cache = [bool]$EmptyCargoCache
         cargo_home = $env:CARGO_HOME
-        checks = @('v142 x64 compiler probe','fmt','Clippy','workspace tests','cargo build --release --frozen','WebView2 DOM self-check','AppContainer OS file/network isolation','project copy/edit/publish integration','five-round local HTTP skills/tool loop')
+        checks = @('v142 x64 compiler probe','fmt','Clippy','workspace tests','cargo build --release --frozen','WebView2 DOM self-check','AppContainer OS file/network isolation','project copy/edit/publish integration','HTTP skills/tool loops with bounded JSON repair and activity history')
         exe_sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
         installer_built = [bool]$IncludeInstaller
         real_vnc_tested = [bool]$TestVnc

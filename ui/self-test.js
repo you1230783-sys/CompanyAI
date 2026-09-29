@@ -819,9 +819,9 @@ window.runSelfTest = async (structuredFixture) => {
       check(!document.getElementById("execution-sync"), "old synchronous reply control removed");
       check(document.getElementById("execution-stream").textContent === "一般", "stream label is general");
       BehaviorUI.modelNotice("本次已自動切換為快速模型");
-      check(!document.querySelector(".model-notice").hidden, "automatic model notice shown");
-      await new Promise(resolve => setTimeout(resolve,1800));
-      check(document.querySelector(".model-notice").hidden, "automatic model notice fades after 1.5 seconds");
+      check(!document.getElementById("toast").hidden, "automatic model notice shown");
+      await new Promise(resolve => setTimeout(resolve,3100));
+      check(document.getElementById("toast").hidden, "automatic model notice uses shared three-second toast");
     } finally { send = behaviorSend; }
     // VNC 只測試本機頁面命令；攔截傳送，不讀取真實機台檔、不啟動 Viewer。
     const vncSend = send;
@@ -956,6 +956,48 @@ window.runSelfTest = async (structuredFixture) => {
     check(!$("history-list").textContent.includes("專案標題"), "project conversation excluded from recent list");
     check(!!($("show-vnc").compareDocumentPosition($("project-list")) & Node.DOCUMENT_POSITION_FOLLOWING), "projects follow VNC");
     check(!!($("project-list").compareDocumentPosition($("history-list")) & Node.DOCUMENT_POSITION_FOLLOWING), "projects precede recent history");
+    const savedActive = fixture.active_id, savedMessages = fixture.messages, savedNotifications = fixture.notifications;
+    const savedSend = send, retryCommands = [];
+    try {
+      send = command => retryCommands.push(command);
+      fixture.active_id = "project-chat";
+      fixture.messages = [{role:"user",content:"請修訂",request_id:"request-one"}];
+      fixture.retry = {user_index:0,message_count:1,request_id:"request-one",enabled:false};
+      fixture.projects.running = true; fixture.projects.running_id = "run-one";
+      fixture.projects.running_conversation = "project-chat";
+      fixture.projects.activity = ["讀取檔案清單：完成", "建立副本…"];
+      LMUI.receive(fixture); LMUI.showView("chat");
+      check(!$("project-context").hidden && $("project-context").textContent === "C:\\測試", "project path moved below title");
+      check(!$("project-activity").open && $("project-activity").querySelector("summary").textContent === "建立副本…", "activity collapsed with latest step");
+      $("project-activity").open = true;
+      fixture.projects.activity.push("編輯文字：完成"); LMUI.receive(fixture);
+      check($("project-activity").open && $("project-activity").querySelectorAll("li").length === 3, "progress preserves expanded history");
+      check(document.querySelector(".retry-message").disabled, "retry disabled while running");
+      fixture.projects.running = false;
+      fixture.messages.push({role:"assistant",content:"本次未完成",project_activity:[...fixture.projects.activity]});
+      fixture.retry = {...fixture.retry,message_count:2,enabled:true}; LMUI.receive(fixture);
+      check($("project-activity").hidden && document.querySelector("#messages .project-activity summary").textContent === "編輯文字：完成", "finished activity kept with reply");
+      const button = document.querySelector(".retry-message");button.click();button.click();
+      check(retryCommands.filter(command => command.type === "retry_chat").length === 1 && retryCommands.at(-1).request_id === "request-one" && retryCommands.at(-1).message_count === 2, "retry button binds original request and suppresses double click");
+      LMUI.receive(fixture);check(!document.querySelector(".retry-message").disabled, "rejected retry can be used again after state refresh");
+      fixture.notifications = [{id:"long",source:"ai",title:"長通知",summary:"中".repeat(60)+"👨‍👩‍👧‍👦",created_at:new Date().toISOString()}];
+      LMUI.receive(fixture);
+      check(document.querySelector(".notification-card p").textContent === "中".repeat(50)+"…" && fixture.notifications[0].summary.length > 60, "notification preview truncates without changing source");
+      check(notificationPreview("👨‍👩‍👧‍👦".repeat(51)) === "👨‍👩‍👧‍👦".repeat(50)+"…", "notification preview preserves emoji graphemes");
+      document.querySelector(".project-heading .icon-button").click();
+      $("project-settings-import").click();await frame();
+      check($("project-import-path").readOnly && $("project-import-text").placeholder && parseFloat(getComputedStyle($("project-import-text")).borderTopWidth)>0, "import picker and visible paste field");
+      $("project-import-dialog").close();await frame();
+      document.querySelector(".project-heading .icon-button").click();$("project-remove-open").click();await frame();
+      check($("project-remove-dialog").open && !retryCommands.some(command=>command.command?.action === "remove"), "removal waits for conversation choice");
+      $("project-remove-move").click();await frame();
+      check(retryCommands.at(-1).command.delete_chats === false, "move conversations selected explicitly");
+      toast("三秒提示"); await new Promise(resolve=>setTimeout(resolve,3100));
+      check($("toast").hidden, "toast expires after three seconds");
+    } finally {
+      send = savedSend; fixture.active_id = savedActive; fixture.messages = savedMessages;
+      fixture.notifications = savedNotifications; delete fixture.retry;
+    }
     fixture.update_available = false; fixture.projects = {items:[]}; fixture.conversations = savedConversations;
     LMUI.receive(fixture);
     check($("update-shortcut").hidden, "update arrow hidden without newer release");
@@ -1039,11 +1081,11 @@ window.runSelfTest = async (structuredFixture) => {
     });
     window.selfTestResult = { ok: true, checks };
   } catch (error) {
-    window.selfTestResult = { ok: false, detail: String(error) };
+    window.selfTestResult = { ok: false, detail: error.stack || String(error) };
     window.chrome?.webview?.postMessage({
       type: "self_test_result",
       ok: false,
-      detail: String(error),
+      detail: error.stack || String(error),
     });
   }
 };

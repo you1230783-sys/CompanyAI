@@ -69,7 +69,16 @@ fn request(stream: &mut TcpStream) -> AppResult<(String, Value)> {
 }
 
 pub fn verify(root: &Path) -> AppResult<()> {
-    let workspace = root.join("roundtrip");
+    for mode in 0..=2 {
+        verify_case(root, mode)?;
+    }
+    Ok(())
+}
+
+/// 0：正常；1：編輯前回傳一次包裝 JSON；2：持續回傳包裝 JSON，必須有限停止。
+fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
+    let run_id = format!("roundtrip_{mode}");
+    let workspace = root.join(&run_id);
     std::fs::create_dir(&workspace).map_err(|e| e.to_string())?;
     std::fs::write(workspace.join("source.txt"), "原始文字").map_err(|e| e.to_string())?;
     let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
@@ -86,6 +95,9 @@ pub fn verify(root: &Path) -> AppResult<()> {
     let stop = stopped.clone();
     let server = std::thread::spawn(move || -> AppResult<usize> {
         let mut rounds = 0;
+        let mut step = 0;
+        let mut repair_sent = false;
+        let mut request_ids = std::collections::HashSet::new();
         let mut last_status = json!({});
         let mut copy_id = String::new();
         while !stop.load(Ordering::Relaxed) {
@@ -108,10 +120,26 @@ pub fn verify(root: &Path) -> AppResult<()> {
                 assert!(body.get("auto_generate_title").is_none());
                 assert_eq!(body["messages"][0]["role"], "system");
                 assert_eq!(body["model"], "quality");
-                let previous: Value = if rounds >= 1 {
+                assert!(request_ids.insert(body["client_request_id"].as_str().unwrap().to_string()));
+                if step == 2 && repair_sent {
+                    assert!(
+                        body["messages"].as_array().unwrap().last().unwrap()["content"]
+                            .as_str()
+                            .unwrap()
+                            .contains("上一則工具要求尚未執行")
+                    );
+                }
+                let previous: Value = if step >= 1 {
                     let content = body["messages"]
                         .as_array()
-                        .and_then(|m| m.last())
+                        .and_then(|m| {
+                            m.iter().rev().find(|message| {
+                                message["role"] == "user"
+                                    && message["content"]
+                                        .as_str()
+                                        .is_some_and(|s| s.starts_with("工具結果"))
+                            })
+                        })
                         .and_then(|m| m["content"].as_str())
                         .ok_or("缺少工具結果。")?;
                     serde_json::from_str(content.split_once('\n').ok_or("工具結果格式錯誤。")?.1)
@@ -119,10 +147,10 @@ pub fn verify(root: &Path) -> AppResult<()> {
                 } else {
                     json!({})
                 };
-                if rounds >= 1 {
+                if step >= 1 {
                     assert_eq!(previous["ok"], true, "{previous}");
                 }
-                let decision = match rounds {
+                let decision = match step {
                     0 => {
                         json!({"action":"tool","operation_id":"read1","request":{"tool":"read_file","path":"source.txt","offset":0}})
                     }
@@ -145,8 +173,16 @@ pub fn verify(root: &Path) -> AppResult<()> {
                     }
                     _ => return Err("不應出現額外模型請求。".into()),
                 };
+                let wrapped = step == 2 && (mode == 2 || (mode == 1 && !repair_sent));
+                let content = if wrapped {
+                    repair_sent = true;
+                    format!("工具：{decision}")
+                } else {
+                    step += 1;
+                    decision.to_string()
+                };
                 rounds += 1;
-                last_status = json!({"task_id":format!("task_{rounds}"),"client_request_id":body["client_request_id"],"state":"completed","result":{"choices":[{"message":{"role":"assistant","content":decision.to_string()}}]}});
+                last_status = json!({"task_id":format!("task_{rounds}"),"client_request_id":body["client_request_id"],"state":"completed","result":{"choices":[{"message":{"role":"assistant","content":content}}]}});
                 last_status.clone()
             } else if route.contains("/tasks/") {
                 last_status.clone()
@@ -168,7 +204,7 @@ pub fn verify(root: &Path) -> AppResult<()> {
     )?;
     let result = runner::run(
         Run {
-            id: "roundtrip".into(),
+            id: run_id.clone(),
             project: Project {
                 id: "test".into(),
                 name: "測試".into(),
@@ -186,17 +222,37 @@ pub fn verify(root: &Path) -> AppResult<()> {
     );
     stopped.store(true, Ordering::Relaxed);
     let rounds = server.join().map_err(|_| "測試伺服器失敗。")??;
-    let answer = result?;
-    assert_eq!(
-        runner::recover(&root.join("app-data"), "roundtrip")?,
-        answer
-    );
-    assert_eq!(rounds, 5);
-    assert!(answer.contains("本機測試已完成修訂"));
+    let activity = runner::recover_activity(&root.join("app-data"), &run_id)?;
+    assert!(activity.iter().any(|step| step == "建立副本：完成"));
+    if mode == 2 {
+        assert!(result.unwrap_err().contains("重試兩次"));
+        assert_eq!(rounds, 5);
+        assert!(!activity.iter().any(|step| step == "編輯文字：完成"));
+        assert!(!workspace.join("_AI_Output").exists());
+    } else {
+        let answer = result?;
+        assert_eq!(runner::recover(&root.join("app-data"), &run_id)?, answer);
+        assert_eq!(rounds, if mode == 1 { 6 } else { 5 });
+        assert!(answer.contains("本機測試已完成修訂"));
+        assert_eq!(
+            activity
+                .iter()
+                .filter(|step| step.as_str() == "編輯文字：完成")
+                .count(),
+            1
+        );
+        assert_eq!(
+            activity
+                .iter()
+                .filter(|step| step.as_str() == "儲存副本：完成")
+                .count(),
+            1
+        );
+    }
     assert_eq!(
         std::fs::read_to_string(workspace.join("source.txt")).map_err(|e| e.to_string())?,
         "原始文字"
     );
-    println!("PASS: five-round HTTP/skills/tool loop, verified artifact and original preserved.");
+    println!("PASS: HTTP/skills/tool loop case {mode}, bounded JSON repair, activity history and original preserved.");
     Ok(())
 }

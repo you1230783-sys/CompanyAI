@@ -1,8 +1,10 @@
 /* 專案工具只在明確建立的專案對話啟用；所有權限與檔案操作由原生層核對。 */
 "use strict";
 (() => {
-  let signature = "", importProject = null;
+  let signature = "", importProject = null, settingsProject = null, removeProject = null;
+  let lastNotice = "", pickerRequest = 0, activityKey = "", activitySignature = "";
   const command = value => send({type: "project", command: value});
+  const findProject = id => state.projects?.items?.find(project => project.id === id);
   $("new-project").onclick = () => { $("project-name").value = ""; $("project-dialog").showModal(); $("project-name").focus(); };
   $("project-cancel").onclick = () => $("project-dialog").close();
   $("project-create").onclick = () => {
@@ -10,26 +12,104 @@
     if (!name) { toast("請輸入專案名稱"); return; }
     $("project-dialog").close(); showView("chat"); command({action:"create", name});
   };
+  function openSettings(project) {
+    settingsProject = project.id;
+    $("project-edit-name").value = project.name;
+    $("project-clear-imports").hidden = !project.import_count;
+    $("project-settings-dialog").showModal();
+  }
+  $("project-settings-close").onclick = () => $("project-settings-dialog").close();
+  $("project-settings-dialog").addEventListener("close", () => { settingsProject = null; });
+  $("project-rename-save").onclick = () => {
+    const name = $("project-edit-name").value.trim();
+    if (!name) { toast("請輸入專案名稱"); return; }
+    if (settingsProject) command({action:"rename", id:settingsProject, name});
+    $("project-settings-dialog").close();
+  };
+  $("project-settings-import").onclick = () => {
+    importProject = settingsProject;
+    $("project-settings-dialog").close();
+    $("project-import-path").value = "";
+    $("project-import-text").value = "";
+    $("project-import-save").disabled = true;
+    $("project-import-dialog").showModal();
+  };
+  $("project-clear-imports").onclick = () => {
+    const id = settingsProject;
+    $("project-settings-dialog").close();
+    ask("清除匯入文字？", "下次將重新讀取檔案。", () => command({action:"clear_imports", id}));
+  };
+  $("project-remove-open").onclick = () => {
+    removeProject = settingsProject;
+    const project = findProject(removeProject);
+    $("project-settings-dialog").close();
+    $("project-remove-message").textContent = `移除「${project?.name || "專案"}」後，要如何處理其中的對話？`;
+    $("project-remove-dialog").showModal();
+  };
+  $("project-remove-cancel").onclick = () => $("project-remove-dialog").close();
+  $("project-remove-dialog").addEventListener("close", () => { removeProject = null; });
+  for (const [choice, deleteChats] of [["move", false], ["delete", true]]) {
+    $("project-remove-" + choice).onclick = () => {
+      if (removeProject) command({action:"remove", id:removeProject, delete_chats:deleteChats});
+      $("project-remove-dialog").close();
+    };
+  }
+  $("project-import-choose").onclick = () => {
+    if (importProject) command({action:"choose_import_file", id:importProject, request_id:++pickerRequest});
+  };
   $("project-import-cancel").onclick = () => $("project-import-dialog").close();
   $("project-import-save").onclick = () => {
-    const path = $("project-import-path").value.trim(), text = $("project-import-text").value;
-    if (!importProject || !path) { toast("請填寫專案內的相對檔名"); return; }
+    const path = $("project-import-path").value, text = $("project-import-text").value;
+    if (!importProject || !path) { toast("請先選擇檔案"); return; }
     command({action:"import", id:importProject, path, text});
     $("project-import-dialog").close();
   };
-  $("project-import-dialog").addEventListener("close", () => { $("project-import-text").value = ""; importProject = null; });
+  $("project-import-dialog").addEventListener("close", () => {
+    $("project-import-text").value = ""; $("project-import-path").value = "";
+    importProject = null; pickerRequest++;
+  });
   $("project-stop").onclick = () => command({action:"stop"});
 
   function button(label, action, disabled) {
     const result = node("button", "text-button", label); result.type = "button";
     result.disabled = disabled; result.onclick = action; return result;
   }
-  window.ProjectUI = {render() {
+  window.ProjectUI = {
+    receive(message) {
+      // 原生選檔取消不改欄位；延遲回覆不能寫入另一個專案或已關閉的視窗。
+      if (message.type !== "project_import_file" || !$("project-import-dialog").open ||
+          message.id !== importProject || message.request_id !== pickerRequest) return;
+      $("project-import-path").value = message.path;
+      $("project-import-save").disabled = false;
+      $("project-import-text").focus();
+    },
+    render() {
     const projects = state.projects || {items:[]};
+    const showActivity = state.logged_in && projects.running && projects.running_conversation === state.active_id;
+    const key = showActivity ? projects.running_id : "";
+    const events = showActivity ? (projects.activity || [projects.status]) : [];
+    const nextActivity = JSON.stringify([key, events]);
+    const activity = $("project-activity");
+    if (nextActivity !== activitySignature) {
+      if (key !== activityKey) activity.open = false;
+      activityKey = key; activitySignature = nextActivity;
+      renderProjectActivity(activity, events);
+      if (showActivity && stickToBottom) bottom();
+    }
     $("new-project").disabled = !!projects.running || state.busy !== "none" || !!state.work?.incoming;
-    $("project-progress").hidden = !projects.status && !projects.error;
-    $("project-progress-text").textContent = projects.error || projects.status || "";
+    const notice = JSON.stringify([projects.error || projects.status || "", !!projects.error]);
+    if (notice !== lastNotice) {
+      lastNotice = notice;
+      toast(projects.error || projects.status);
+    }
     $("project-stop").hidden = !projects.running;
+    $("project-stop").disabled = false;
+    // 設定開啟後若任務開始，不保留可操作的舊設定視窗。
+    if (projects.running) {
+      for (const id of ["project-settings-dialog", "project-remove-dialog", "project-import-dialog"]) {
+        if ($(id).open) $(id).close();
+      }
+    }
     const next = JSON.stringify([projects.items, projects.running, state.conversations, state.active_id, state.busy, state.work?.incoming]);
     if (next === signature) return;
     signature = next;
@@ -37,19 +117,16 @@
     for (const project of projects.items || []) {
       const disabled = !!projects.running || state.busy !== "none" || !!state.work?.incoming;
       const card = node("div", "project-card"), heading = node("div", "project-heading");
-      heading.append(node("strong", "", project.name), button("＋", () => {
+      const title = node("strong", "", project.name); title.title = project.name;
+      const newChat = button("＋ 新對話", () => {
         showView("chat"); command({action:"new_chat", id:project.id});
-      }, disabled));
-      heading.lastChild.title = "新增專案對話";
-      card.append(heading, node("div", "project-path", project.root));
-      const actions = node("div", "project-actions");
-      actions.append(button("匯入文字", () => {
-        importProject = project.id; $("project-import-path").value = ""; $("project-import-text").value = "";
-        $("project-import-dialog").showModal();
-      }, disabled));
-      if (project.import_count) actions.append(button(`清除快照 (${project.import_count})`, () => ask("清除匯入快照？", "原始文件不變；下次會重新嘗試讀取檔案。", () => command({action:"clear_imports", id:project.id})), disabled));
-      actions.append(button("移除專案", () => ask("移除專案授權？", "原始文件與成果不會刪除；專案對話會移到最近對話，並停止使用文件工具。", () => command({action:"remove", id:project.id})), disabled));
-      card.append(actions);
+      }, disabled);
+      newChat.title = "新增專案對話";
+      const settings = node("button", "icon-button"); settings.type = "button";
+      settings.innerHTML = icon("settings"); settings.title = "專案設定";
+      settings.setAttribute("aria-label", `${project.name}：專案設定`);
+      settings.disabled = disabled; settings.onclick = () => openSettings(project);
+      heading.append(title, newChat, settings); card.append(heading);
       const conversations = state.conversations.filter(c => c.project_id === project.id).sort((a,b) => Number(!!b.pinned)-Number(!!a.pinned) || b.updated_at-a.updated_at);
       for (const c of conversations) {
         const row = node("div", "history-row" + (c.id === state.active_id ? " selected" : ""));

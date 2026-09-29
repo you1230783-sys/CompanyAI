@@ -537,6 +537,7 @@ impl App {
             })
             .collect::<AppResult<_>>()?;
         let names: Vec<_> = files.iter().map(|a| a.name.clone()).collect();
+        let attachment_ids = files.iter().map(|a| a.id.clone()).collect();
         let mut messages = messages;
         let last = messages.last_mut().ok_or("缺少使用者訊息。")?;
         last.request_id = Some(request_id.clone());
@@ -556,6 +557,15 @@ impl App {
         {
             return Err("目前帳號沒有快速模型權限；請改選維持目前模型。".into());
         }
+        messages
+            .last_mut()
+            .ok_or("缺少使用者訊息。")?
+            .retry_settings = Some(crate::protocol::RetrySettings {
+            model: model.into(),
+            mode: self.work.mode.clone(),
+            skills: action != "mail",
+            attachment_ids,
+        });
         let mut request = jobs::chat_request(
             model,
             &messages,

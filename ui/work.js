@@ -175,7 +175,7 @@ function renderWork() {
     );
     $("execution-" + mode).disabled = fileBatchBusy;
   }
-  $("work-status").textContent = projectChat ? "專案模式：使用授權資料夾內的 TXT／MD；修改另存副本。" : (work.draft_error || work.status || "");
+  $("work-status").textContent = projectChat ? "" : (work.draft_error || work.status || "");
   $("work-status").hidden = !$("work-status").textContent;
   $("attachment-list").replaceChildren();
   for (const file of files) {

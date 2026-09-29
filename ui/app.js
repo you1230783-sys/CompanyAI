@@ -23,6 +23,7 @@ let activeView = "chat",
   stickToBottom = true,
   confirmAction = null;
 let draftTimer, toastTimer;
+let lastStatusNotice = "";
 let hotkeyRecording = false,
   hotkeyDraft = null;
 const bridge = window.chrome?.webview;
@@ -31,13 +32,22 @@ function send(command) {
   if (bridge) bridge.postMessage(command);
   else if (window.previewHost) window.previewHost(command);
 }
+// 共用三秒通知，狀態重繪不重設計時；對話框開啟時也能看見錯誤。
 function toast(text) {
-  $("toast").textContent = text;
-  $("toast").hidden = false;
+  if (!text) return;
+  const notice = $("toast");
+  notice.textContent = text;
+  notice.hidden = false;
+  if (notice.showPopover) {
+    // 若中途開了模態框，重新加入 top layer，避免新的錯誤提示被遮住。
+    if (notice.matches(":popover-open")) notice.hidePopover();
+    notice.showPopover();
+  }
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
-    $("toast").hidden = true;
-  }, 2600);
+    if (notice.hidePopover && notice.matches(":popover-open")) notice.hidePopover();
+    notice.hidden = true;
+  }, 3000);
 }
 function ask(title, message, action) {
   $("confirm-title").textContent = title;
@@ -356,16 +366,48 @@ function showView(view) {
           ? "工作任務"
           : view === "vnc" ? "VNC 快速連線" : "Outlook 助理";
   $("save-label").hidden = view !== "chat";
+  const project = view === "chat" && state.logged_in
+    ? state.projects?.items?.find(item => item.id === conversation?.project_id) : null;
+  $("project-context").textContent = project?.root || "";
+  $("project-context").title = project?.root || "";
+  $("project-context").hidden = !project;
   // 只在真正進入助理頁時更新，狀態推播重繪不重複查詢。
   if (previous !== view && view === "outlook") window.MailUI?.enter();
 }
+/** 進度只作文字呈現；不把模型輸出當成 HTML。summary 永遠顯示最新一步。 */
+function renderProjectActivity(details, events) {
+  const history = (events || []).filter(text => typeof text === "string").slice(-120);
+  details.className = "project-activity";
+  details.replaceChildren();
+  if (!history.length) { details.hidden = true; return; }
+  details.hidden = false;
+  details.append(node("summary", "", history.at(-1)));
+  const list = node("ol", "project-activity-history");
+  for (const text of history) list.append(node("li", "", text));
+  details.append(list);
+}
+
+/** 通知只顯示短摘要；保留原資料與原本的開啟／已讀動作。 */
+function notificationPreview(text) {
+  const value = String(text || "").replace(/\s+/gu, " ").trim();
+  const characters = typeof Intl.Segmenter === "function"
+    ? [...new Intl.Segmenter("zh-TW", {granularity:"grapheme"}).segment(value)].map(part => part.segment)
+    : Array.from(value);
+  return characters.slice(0, 50).join("") + (characters.length > 50 ? "…" : "");
+}
+
 function renderMessages() {
   const signature = JSON.stringify([
     state.active_id,
     state.messages,
     state.busy === "chat",
+    state.retry,
   ]);
-  if (signature === messageSignature) return;
+  if (signature === messageSignature) {
+    const retry = document.querySelector("#messages .retry-message");
+    if (retry) retry.disabled = !state.retry?.enabled;
+    return;
+  }
   const changed = lastConversation !== state.active_id;
   const shouldFollow = changed || stickToBottom || atBottom();
   const oldTop = $("transcript").scrollTop;
@@ -373,6 +415,7 @@ function renderMessages() {
   messageSignature = signature;
   const container = $("messages");
   const expanded = new Set(changed ? [] : [...container.querySelectorAll(".answer-details[open]")].map((details) => details.closest("article").dataset.index));
+  const activityExpanded = new Set(changed ? [] : [...container.querySelectorAll(".project-activity[open]")].map(details => details.closest("article").dataset.index));
   container.replaceChildren();
   if (!state.messages.length && state.busy !== "chat") {
     const welcome = node("div", "welcome");
@@ -411,6 +454,12 @@ function renderMessages() {
           ),
         );
     }
+    if (message.project_activity?.length) {
+      const details = document.createElement("details");
+      details.open = activityExpanded.has(String(index));
+      renderProjectActivity(details, message.project_activity);
+      content.append(details);
+    }
     content.append(bubble);
     if (message.incomplete) content.append(node("p", "incomplete-warning", "回覆中斷，後續內容未收到；這裡保留已收到的部分。"));
     const tools = node("div", "message-tools");
@@ -419,6 +468,17 @@ function renderMessages() {
     copy.innerHTML = icon("copy") + "複製";
     copy.title = "複製原文";
     tools.append(copy);
+    if (state.retry && index === state.messages.length - 1) {
+      const retry = node("button", "retry-message", "重新再試一次");
+      retry.innerHTML = icon("refresh") + "重新再試一次";
+      retry.disabled = !state.retry.enabled;
+      retry.title = retry.disabled ? "請先等待目前工作結束或確認原請求狀態" : "使用原提問重新嘗試，保留這次回覆";
+      retry.dataset.conversation = state.active_id;
+      retry.dataset.index = state.retry.user_index;
+      retry.dataset.count = state.retry.message_count;
+      retry.dataset.request = state.retry.request_id || "";
+      tools.append(retry);
+    }
     content.append(tools);
     article.append(avatar, content);
     container.append(article);
@@ -522,8 +582,8 @@ function renderNotifications() {
         "subtle",
         event.source === "site" ? `網站 · ${event.origin || "全站"}` : "AI",
       ),
-      node("h3", "", event.title),
-      node("p", "", event.summary),
+      node("h3", "", notificationPreview(event.title)),
+      node("p", "", notificationPreview(event.summary)),
       node(
         "time",
         "subtle",
@@ -612,8 +672,11 @@ function receive(next) {
     ? "展開側欄"
     : "收合側欄";
   $("collapse").setAttribute("aria-label", $("collapse").title);
-  $("status").textContent = state.status || "";
-  $("status").classList.toggle("error", !!state.error);
+  const statusNotice = JSON.stringify([state.status || "", !!state.error]);
+  if (statusNotice !== lastStatusNotice) {
+    lastStatusNotice = statusNotice;
+    toast(state.status);
+  }
   $("account-label").textContent = state.logged_in ? "已登入" : "尚未登入";
   $("settings-account").textContent = state.logged_in
     ? "登入授權有效"
@@ -879,6 +942,13 @@ document.addEventListener("click", (event) => {
     showView("chat");
     send({ type: "select_chat", id: history.dataset.id });
   }
+  const retry = event.target.closest(".retry-message");
+  if (retry && !retry.disabled) {
+    retry.disabled = true;
+    send({type:"retry_chat", conversation_id:retry.dataset.conversation,
+      user_index:Number(retry.dataset.index), message_count:Number(retry.dataset.count),
+      request_id:retry.dataset.request || null});
+  }
   const copy = event.target.closest(".copy-message");
   if (copy) {
     send({
@@ -967,6 +1037,7 @@ if (bridge) {
     else if (event.data.type === "self_test") window.runSelfTest?.(event.data.reply_fixture);
     else {
       receiveHotkeyMessage(event.data);
+      window.ProjectUI?.receive(event.data);
       window.WorkUI?.receive(event.data);
       window.VncUI?.receive(event.data);
     }

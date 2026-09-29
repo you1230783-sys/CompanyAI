@@ -1,5 +1,6 @@
 //! 專案資料與固定工具契約。授權及副本所有權由桌面保存，不由模型文字決定。
 pub mod files;
+pub mod reply;
 pub mod runner;
 pub mod sandbox;
 pub mod text;
@@ -104,6 +105,22 @@ pub enum Tool {
     DeleteCopy {
         copy_id: String,
     },
+}
+
+impl Tool {
+    /// 使用者可讀的操作名稱，避免將 JSON 或文件全文當進度訊息。
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::ListFiles { .. } => "讀取檔案清單",
+            Self::ReadFile { .. } => "閱讀檔案",
+            Self::FindText { .. } => "尋找文字",
+            Self::CreateWorkingCopy { source: None, .. } => "建立新檔案",
+            Self::CreateWorkingCopy { .. } => "建立副本",
+            Self::EditText { .. } => "編輯文字",
+            Self::SaveCopy { .. } => "儲存副本",
+            Self::DeleteCopy { .. } => "刪除工作副本",
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

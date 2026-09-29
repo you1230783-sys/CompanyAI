@@ -35,6 +35,7 @@ use windows_sys::Win32::{
 mod access;
 mod mail_batch;
 mod projects;
+mod retry;
 mod site;
 mod vnc;
 mod work;
@@ -72,6 +73,12 @@ enum Command {
     Chat {
         text: String,
         action: String,
+    },
+    RetryChat {
+        conversation_id: String,
+        user_index: usize,
+        message_count: usize,
+        request_id: Option<String>,
     },
     NewChat,
     Behavior {
@@ -294,7 +301,7 @@ impl App {
             "update_kind":self.update_ready.as_ref().map(|ready|ready.artifact.kind.as_str()),
             "version":service::CURRENT_VERSION,"config":self.config,"status":self.status,"error":self.error,
             "busy":self.busy,"logged_in":self.logged_in(),"can_send":self.can_send(),"update_required":self.versions.blocked(),
-            "projects":self.project_state(),"models":models,"conversations":conversations,"active_id":self.active_id,"messages":self.messages,
+            "retry":self.retry_state(),"projects":self.project_state(),"models":models,"conversations":conversations,"active_id":self.active_id,"messages":self.messages,
             "draft":self.draft,"draft_revision":self.draft_revision,"focus_draft":self.focus_draft,
             "notifications":events,"notification_status":self.notification_status,"unread_count":self.inbox.unread_count()+self.site.cache.unread_count,"site_status":self.site.status,"site_loading":self.site.loading,"site_mutating":self.site.mutating,"notifications_loading":self.notifications_loading,
             "mail":self.mail,"mail_busy":self.mail_busy,"mail_batch":self.mail_batch_state(),"history_error":self.history_error,
@@ -725,6 +732,19 @@ impl App {
                 }
             }
             Command::Chat { text, action } => self.begin_chat(text, &action)?,
+            Command::RetryChat {
+                conversation_id,
+                user_index,
+                message_count,
+                request_id,
+            } => {
+                self.retry_chat(
+                    &conversation_id,
+                    user_index,
+                    message_count,
+                    request_id.as_deref(),
+                )?;
+            }
             Command::NewChat => {
                 if self.busy == "none" && self.work.incoming.is_none() {
                     self.new_chat();

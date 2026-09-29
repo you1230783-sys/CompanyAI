@@ -13,6 +13,15 @@ pub(super) enum ProjectCommand {
     },
     Remove {
         id: String,
+        delete_chats: bool,
+    },
+    Rename {
+        id: String,
+        name: String,
+    },
+    ChooseImportFile {
+        id: String,
+        request_id: u64,
     },
     Import {
         id: String,
@@ -31,6 +40,7 @@ pub(super) enum ProjectEvent {
 pub(super) struct Running {
     id: String,
     conversation: String,
+    activity: Vec<String>,
     cancel: Arc<AtomicBool>,
 }
 #[derive(Default)]
@@ -67,15 +77,17 @@ impl Drop for ProjectRuntime {
     }
 }
 
-fn choose_folder(owner: HWND) -> AppResult<Option<PathBuf>> {
+/// 共用原生選擇器；選文件時從專案根目錄開始，回傳後仍驗證授權邊界。
+fn choose_path(owner: HWND, project_root: Option<&std::path::Path>) -> AppResult<Option<PathBuf>> {
     use windows::{
-        core::w,
+        core::{w, HSTRING},
         Win32::{
             Foundation::{ERROR_CANCELLED, HWND as WinHwnd},
             System::Com::{CoCreateInstance, CoTaskMemFree, CLSCTX_INPROC_SERVER},
             UI::Shell::{
-                FileOpenDialog, IFileOpenDialog, FOS_FORCEFILESYSTEM, FOS_PATHMUSTEXIST,
-                FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
+                Common::COMDLG_FILTERSPEC, FileOpenDialog, IFileOpenDialog, IShellItem,
+                SHCreateItemFromParsingName, FOS_FILEMUSTEXIST, FOS_FORCEFILESYSTEM,
+                FOS_PATHMUSTEXIST, FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
             },
         },
     };
@@ -83,12 +95,28 @@ fn choose_folder(owner: HWND) -> AppResult<Option<PathBuf>> {
     unsafe {
         let dialog: IFileOpenDialog = CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER)
             .map_err(|e| e.to_string())?;
-        dialog
-            .SetTitle(w!("選擇專案資料夾（原檔唯讀，成果另存副本）"))
-            .map_err(|e| e.to_string())?;
-        dialog
-            .SetOptions(FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST)
-            .map_err(|e| e.to_string())?;
+        let options = if let Some(root) = project_root {
+            dialog
+                .SetTitle(w!("選擇專案文件"))
+                .map_err(|e| e.to_string())?;
+            dialog
+                .SetFileTypes(&[COMDLG_FILTERSPEC {
+                    pszName: w!("文字文件（TXT、MD）"),
+                    pszSpec: w!("*.txt;*.md"),
+                }])
+                .map_err(|e| e.to_string())?;
+            let folder: IShellItem =
+                SHCreateItemFromParsingName(&HSTRING::from(root.as_os_str()), None)
+                    .map_err(|e| e.to_string())?;
+            dialog.SetFolder(&folder).map_err(|e| e.to_string())?;
+            FOS_FILEMUSTEXIST | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST
+        } else {
+            dialog
+                .SetTitle(w!("選擇專案資料夾"))
+                .map_err(|e| e.to_string())?;
+            FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST
+        };
+        dialog.SetOptions(options).map_err(|e| e.to_string())?;
         if let Err(error) = dialog.Show(Some(WinHwnd(owner))) {
             if error.code() == windows::core::HRESULT::from_win32(ERROR_CANCELLED.0) {
                 return Ok(None);
@@ -131,6 +159,8 @@ impl App {
                 continue;
             };
             let mut message = Message::assistant(projects::runner::recover(&self.root, &id)?);
+            message.project_activity =
+                projects::runner::recover_activity(&self.root, &id).unwrap_or_default();
             message.request_id = Some(id);
             conversation.messages.push(message);
             changed = true;
@@ -143,7 +173,7 @@ impl App {
     }
     pub(super) fn project_state(&self) -> serde_json::Value {
         json!({"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len()})).collect::<Vec<_>>(),
-            "running":self.projects.running.is_some(),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
+            "running":self.projects.running.is_some(),"running_id":self.projects.running.as_ref().map(|r|&r.id),"activity":self.projects.running.as_ref().map(|r|&r.activity),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
     }
     pub(super) fn project_command(&mut self, command: ProjectCommand) -> AppResult<()> {
         if let Some(error) = &self.projects.error {
@@ -156,9 +186,12 @@ impl App {
         if self.projects.running.is_some() {
             return Err("請先完成或停止專案任務，再修改專案設定。".into());
         }
+        if self.busy != "none" || self.work.incoming.is_some() {
+            return Err("請先完成目前操作。".into());
+        }
         match command {
             ProjectCommand::Create { name } => {
-                if let Some(root) = choose_folder(self.window)? {
+                if let Some(root) = choose_path(self.window, None)? {
                     let mut store = self.projects.store.clone();
                     let id = store.add(&name, root)?;
                     store.save(&self.root)?;
@@ -167,14 +200,49 @@ impl App {
                 }
             }
             ProjectCommand::NewChat { id } => self.new_project_chat(&id)?,
-            ProjectCommand::Remove { id } => {
+            ProjectCommand::Rename { id, name } => {
+                let name = name.trim();
+                if name.is_empty() || name.chars().count() > 60 {
+                    return Err("專案名稱需為 1–60 字。".into());
+                }
                 let mut store = self.projects.store.clone();
-                store.projects.retain(|p| p.id != id);
-                store.conversations.retain(|_, p| p != &id);
+                store
+                    .projects
+                    .iter_mut()
+                    .find(|p| p.id == id)
+                    .ok_or("找不到專案。")?
+                    .name = name.into();
                 store.save(&self.root)?;
                 self.projects.store = store;
-                self.projects.status =
-                    "已移除專案授權；原始文件、成果及對話保留，對話改列於最近對話。".into();
+                self.toast("已更新專案名稱");
+            }
+            ProjectCommand::ChooseImportFile { id, request_id } => {
+                let mut project = self
+                    .projects
+                    .store
+                    .projects
+                    .iter()
+                    .find(|p| p.id == id)
+                    .cloned()
+                    .ok_or("找不到專案。")?;
+                projects::files::validate_root(&project.root)?;
+                if let Some(path) = choose_path(self.window, Some(&project.root))? {
+                    // 選擇器可以瀏覽其他目錄，但只有專案內檔案可被接受。
+                    let relative = path
+                        .strip_prefix(&project.root)
+                        .map_err(|_| "請選擇此專案資料夾內的 TXT 或 MD 檔案。")?;
+                    let key = relative.to_string_lossy().replace('\\', "/");
+                    projects::files::relative(&key)?;
+                    // 不嘗試解碼加密內容，只沿用 broker 驗證格式、連結與檔案身分。
+                    project.imports.insert(key.clone(), String::new());
+                    projects::files::read(&project, &key)?;
+                    self.view
+                        .post(&json!({"type":"project_import_file","id":id,
+                        "request_id":request_id,"path":key}))?;
+                }
+            }
+            ProjectCommand::Remove { id, delete_chats } => {
+                self.remove_project(&id, delete_chats)?;
             }
             ProjectCommand::Import { id, path, text } => {
                 projects::text::validate(&text)?;
@@ -192,9 +260,7 @@ impl App {
                 project.imports.insert(key, text);
                 store.save(&self.root)?;
                 self.projects.store = store;
-                self.projects.status =
-                    "已保存使用者匯入的明文快照（DPAPI）；後續讀取此檔使用快照，原檔未修改。"
-                        .into();
+                self.toast("已匯入文字");
             }
             ProjectCommand::ClearImports { id } => {
                 let mut store = self.projects.store.clone();
@@ -207,12 +273,91 @@ impl App {
                     .clear();
                 store.save(&self.root)?;
                 self.projects.store = store;
-                self.projects.status = "已清除匯入快照，下一次重新讀取原始文件。".into();
+                self.toast("已清除匯入文字");
             }
             ProjectCommand::Stop => (),
         }
         Ok(())
     }
+    /// 只刪除本機對話紀錄，絕不對專案根目錄或成果路徑呼叫檔案刪除。
+    fn remove_project(&mut self, id: &str, delete_chats: bool) -> AppResult<()> {
+        if self.history_error.is_some() {
+            return Err("本機對話紀錄目前無法保存，請稍後再試。".into());
+        }
+        let mut store = self.projects.store.clone();
+        if !store.projects.iter().any(|project| project.id == id) {
+            return Err("找不到專案。".into());
+        }
+        let chats: std::collections::HashSet<String> = store
+            .conversations
+            .iter()
+            .filter(|(_, project)| project.as_str() == id)
+            .map(|(chat, _)| chat.clone())
+            .collect();
+        if delete_chats {
+            if chats.iter().any(|chat| self.work.store.pending(Some(chat)))
+                || self
+                    .work
+                    .store
+                    .attachments
+                    .iter()
+                    .any(|a| chats.contains(&a.conversation_id) && !a.sent && !a.removed)
+                || (self.mail_flow.phase != "idle"
+                    && self
+                        .mail_flow
+                        .conversation
+                        .as_ref()
+                        .is_some_and(|chat| chats.contains(chat)))
+            {
+                return Err("專案對話仍有工作或附件，請先完成或取消後再刪除。".into());
+            }
+            let mut archive = self.archive.clone();
+            archive
+                .conversations
+                .retain(|chat| !chats.contains(&chat.id));
+            history::save(&self.root, &archive)?;
+            self.archive = archive;
+            // 即使後續另一份管理紀錄儲存失敗，也不可用舊畫面把已刪對話存回去。
+            if self
+                .active_id
+                .as_ref()
+                .is_some_and(|chat| chats.contains(chat))
+            {
+                self.active_id = None;
+                self.messages.clear();
+                self.set_draft(String::new());
+                self.focus_draft = true;
+            }
+            self.work
+                .store
+                .tasks
+                .retain(|task| !chats.contains(&task.conversation_id));
+            self.work
+                .store
+                .attachments
+                .retain(|file| !chats.contains(&file.conversation_id));
+            self.work
+                .store
+                .conversations
+                .retain(|chat, _| !chats.contains(chat));
+            if !self.work.store.principal_id.is_empty() {
+                self.work.store.save(&self.root, &self.config)?;
+            }
+        } else {
+            self.preserve_draft()?;
+        }
+        store.projects.retain(|project| project.id != id);
+        store.conversations.retain(|_, project| project != id);
+        store.save(&self.root)?;
+        self.projects.store = store;
+        self.toast(if delete_chats {
+            "已移除專案與對話"
+        } else {
+            "已移除專案，對話已移到一般對話"
+        });
+        Ok(())
+    }
+
     fn new_project_chat(&mut self, project_id: &str) -> AppResult<()> {
         if self.busy != "none" || self.work.incoming.is_some() {
             return Err("請先完成目前操作。".into());
@@ -266,7 +411,7 @@ impl App {
             id: id.clone(),
             project,
             conversation: conversation.clone(),
-            messages,
+            messages: super::retry::context(&messages)?,
             config: self.config.clone(),
             session: self.session.clone().ok_or("請先登入。")?,
             root: self.root.clone(),
@@ -275,6 +420,7 @@ impl App {
         self.projects.running = Some(Running {
             id: id.clone(),
             conversation: conversation.clone(),
+            activity: vec!["準備專案任務…".into()],
             cancel,
         });
         self.set_draft(String::new());
@@ -301,7 +447,13 @@ impl App {
     pub(super) fn project_event(&mut self, event: ProjectEvent) -> AppResult<()> {
         match event {
             ProjectEvent::Progress(id, text) => {
-                if self.projects.running.as_ref().is_some_and(|r| r.id == id) {
+                if let Some(run) = self.projects.running.as_mut().filter(|r| r.id == id) {
+                    if run.activity.last() != Some(&text) {
+                        if run.activity.len() >= 120 {
+                            run.activity.remove(0);
+                        }
+                        run.activity.push(text.clone());
+                    }
                     self.projects.status = text;
                 }
             }
@@ -309,11 +461,16 @@ impl App {
                 if !self.projects.running.as_ref().is_some_and(|r| r.id == id) {
                     return Ok(());
                 }
-                self.projects.running = None;
+                let activity = self
+                    .projects
+                    .running
+                    .take()
+                    .map(|run| run.activity)
+                    .unwrap_or_default();
                 self.projects.status = if result.is_ok() {
-                    "本次執行已結束，子程序已釋放。"
+                    "專案任務已完成。"
                 } else {
-                    "任務未完成，子程序已釋放；請查看對話說明。"
+                    "專案任務未完成，請查看對話。"
                 }
                 .into();
                 let text = result.unwrap_or_else(|error| format!("本次任務未完成：{error}"));
@@ -324,6 +481,7 @@ impl App {
                     .find(|c| c.id == conversation)
                     .ok_or("專案對話已不存在。")?;
                 let mut message = Message::assistant(text);
+                message.project_activity = activity;
                 message.request_id = Some(id);
                 c.messages.push(message);
                 c.updated_at = crate::unix_now();

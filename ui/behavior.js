@@ -31,11 +31,6 @@
     send({ type: "rename_chat", id: renameId, title });
     $("rename-dialog").close();
   };
-  const notice = node("div", "model-notice");
-  notice.setAttribute("role", "status");
-  notice.hidden = true;
-  $("model-button").parentElement.append(notice);
-  let noticeTimer;
   // 關閉提示不解除原生版本限制；使用者可回設定下載更新，不因狀態推播反覆彈出。
   const updateGate = $("required-update-dialog");
   let updateDismissed = false;
@@ -84,14 +79,7 @@
       $("hotkey-hint").hidden = c.hotkey_enabled === false;
     },
     modelNotice(text) {
-      clearTimeout(noticeTimer);
-      notice.textContent = text;
-      notice.hidden = false;
-      notice.classList.remove("fade");
-      noticeTimer = setTimeout(() => {
-        notice.classList.add("fade");
-        noticeTimer = setTimeout(() => { notice.hidden = true; }, 250);
-      }, 1500);
+      toast(text);
     },
   };
 })();

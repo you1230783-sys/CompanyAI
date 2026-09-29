@@ -1103,9 +1103,15 @@ output {
 }
 #toast {
   position: fixed;
-  bottom: 28px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 56px;
+  right: 24px;
+  bottom: auto;
+  left: auto;
+  margin: 0;
+  max-width: min(420px, calc(100vw - 48px));
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  border: 0;
   background: var(--strong-accent);
   color: var(--on-accent);
   padding: 10px 18px;
@@ -1366,10 +1372,27 @@ output {
 .project-card { margin: 4px 0; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
 .project-heading { display: flex; align-items: center; gap: 5px; }
 .project-heading strong { flex: 1; overflow: hidden; text-overflow: ellipsis; }
-.project-actions { display: flex; flex-wrap: wrap; gap: 4px; margin: 5px 0; }
-.project-actions button { font-size: 11px; padding: 3px 5px; }
-.project-path { font-size: 11px; overflow-wrap: anywhere; color: var(--muted); }
-#project-progress { position: fixed; bottom: 10px; right: 20px; z-index: 20; max-width: 65vw; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 3px 15px #0002; }
-#project-progress-text { margin-right: 10px; }
-#project-import-text { width: 100%; min-height: 200px; }
+/* 路徑保留在標題下，進度改用右上角共用三秒通知。 */
+.project-context { padding: 6px 24px; color: var(--muted); font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+.project-heading strong { white-space: nowrap; font-size: .85rem; }
+.project-heading .text-button { flex-shrink: 0; font-size: .75rem; padding: 4px; }
+.project-heading .icon-button { flex-shrink: 0; width: 28px; }
+:is(#project-dialog, #project-settings-dialog, #project-remove-dialog, #project-import-dialog) { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow-y: auto; }
+.dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.project-settings-actions { display: flex; flex-wrap: wrap; gap: 8px; border-top: 1px solid var(--line); padding-top: 16px; margin-top: 16px; }
+.project-file-picker { display: flex; gap: 8px; margin: 8px 0 18px; }
+.project-file-picker input { flex: 1; min-width: 0; }
+.project-file-picker button { flex-shrink: 0; }
+#project-import-text { width: 100%; height: 240px; min-height: 160px; max-height: 45vh; resize: vertical; padding: 10px 12px; margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+#project-import-text:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--soft); }
+#vnc-sync-dialog { width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow-y: auto; }
 body.collapsed .project-section { overflow: visible; }
+
+/* 工具歷程收合時只占一行，展開後可捲動查看，不搶走閱讀位置。 */
+.project-activity { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); margin: 10px 0; font-size: .85rem; overflow-wrap: anywhere; }
+.project-activity summary { cursor: pointer; padding: 10px 14px; color: var(--accent); }
+.project-activity-history { margin: 0; padding: 0 18px 12px 36px; max-height: 260px; overflow-y: auto; color: var(--muted); }
+.project-activity-history li { padding: 3px 0; }
+#project-activity { margin: 12px auto; max-width: 880px; }
+.notification-card .event-content { min-width: 0; overflow-wrap: anywhere; }
+.message-tools .retry-message { font-size: inherit; }

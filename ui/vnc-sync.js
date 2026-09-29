@@ -2,6 +2,18 @@
 "use strict";
 (() => {
   const command = value => send({ type: "vnc", command: value });
+  const dialog = $("vnc-sync-dialog");
+  // 記錄已送出的啟動要求，補上「按更新後立即關閉，原生狀態尚未抵達」的空窗。
+  let startRequested = false;
+  $("vnc-sync-open").onclick = () => dialog.showModal();
+  $("vnc-sync-close").onclick = () => dialog.close();
+  dialog.addEventListener("close", () => {
+    $("vnc-sync-password").value = "";
+    if (startRequested || state.vnc?.session_open || state.vnc?.syncing || state.vnc?.preview) {
+      command({action:"cancel_sync"});
+    }
+    startRequested = false;
+  });
   let settingsRevision = null;
   let previewId = null;
   let comparedRevision = null;
@@ -22,6 +34,7 @@
     const settings = { username: $("vnc-sync-user").value.trim(), password: $("vnc-sync-password").value,
       endpoints: endpointInputs.map(input => input.value.trim()) };
     for (const name of ["root", "home", "login", "logout"]) settings[name] = $("vnc-sync-" + name).value.trim();
+    startRequested = start;
     command({ action: "sync_settings", settings, clear_password: $("vnc-sync-clear-password").checked, start });
     $("vnc-sync-password").value = "";
   }
@@ -90,6 +103,10 @@
       const enabled = !!state.config.vnc_enabled && !!state.logged_in;
       const data = state.vnc || {};
       const settings = data.sync_settings;
+      $("vnc-sync-open").disabled = !enabled || !!data.closing;
+      $("vnc-sync-status").textContent = data.status || "";
+      if (data.session_open || data.syncing) startRequested = false;
+      if (!enabled && dialog.open) dialog.close();
       $("vnc-sync-controls").hidden = !enabled;
       if (!enabled) {
         $("vnc-sync-user").value = $("vnc-sync-password").value = "";

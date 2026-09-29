@@ -74,7 +74,7 @@
             </button>
           </div>
         </header>
-        <div id="status" class="status" role="status">正在準備工作空間…</div>
+        <div id="project-context" class="project-context" hidden></div>
         <section id="login-panel" class="login-panel" aria-label="登入公司服務">
           <p>尚未登入時無法使用其他功能</p>
           <div class="button-row">
@@ -87,6 +87,7 @@
         <section id="chat-view" class="view">
           <div id="transcript" tabindex="0" aria-label="聊天內容">
             <div id="messages"></div>
+            <details id="project-activity" class="project-activity" aria-label="專案執行歷程" hidden></details>
             <div
               id="live-task"
               class="live-task"
@@ -99,6 +100,7 @@
           </button>
           <div class="compose-area">
             <div class="quick-actions">
+              <button id="project-stop" hidden>停止專案任務</button>
               <button data-action="translate">
                 <span data-icon="languages"></span>翻譯</button
               ><button data-action="summarize">
@@ -178,32 +180,8 @@
         <section id="vnc-view" class="view secondary-view" hidden>
           <div class="section-heading">
             <div><h2>VNC 快速連線</h2><p>選擇機台，以本機安裝的 UltraVNC Viewer 開啟連線。</p></div>
-            <button id="vnc-manage" class="secondary-button" disabled>機台管理</button>
+            <div class="button-row"><button id="vnc-sync-open" class="secondary-button" disabled>從網站更新</button><button id="vnc-manage" class="secondary-button" disabled>機台管理</button></div>
           </div>
-          <fieldset id="vnc-sync-controls" class="vnc-sync-controls">
-            <legend>從網站更新機台清單</legend>
-            <div class="vnc-login-fields">
-              <label>帳號<input id="vnc-sync-user" autocomplete="username" maxlength="256" /></label>
-              <label>密碼<input id="vnc-sync-password" type="password" autocomplete="off" maxlength="1024" placeholder="輸入網站登入密碼" /></label>
-            </div>
-            <label class="check-row"><input id="vnc-sync-clear-password" type="checkbox" />清除已記住的登入密碼</label>
-            <p class="subtle">記住登入資料；僅在按「更新機台清單」時登入，匯入或捨棄清單後登出。密碼留空會沿用已存值。</p>
-            <details><summary>詳細設定：網站根目錄與連結</summary>
-              <div class="vnc-sync-paths">
-                <label>網站根目錄<input id="vnc-sync-root" maxlength="2048" /></label>
-                <label>首頁連結<input id="vnc-sync-home" maxlength="2048" /></label>
-                <label>登入連結<input id="vnc-sync-login" maxlength="2048" /></label>
-                <label>登出連結<input id="vnc-sync-logout" maxlength="2048" /></label>
-                <p class="subtle">連結填相對路徑，可包含查詢參數。空白的機台 API 欄位不會送出請求。</p>
-                <div id="vnc-sync-endpoints"></div>
-              </div>
-            </details>
-            <div class="button-row">
-              <button id="vnc-sync-save" class="secondary-button">儲存登入與連結設定</button>
-              <button id="vnc-sync-start" class="primary-button">更新機台清單</button>
-              <button id="vnc-sync-cancel" class="secondary-button" hidden>停止取得清單</button>
-            </div>
-          </fieldset>
           <fieldset class="vnc-options">
             <legend>連線選項</legend>
             <label class="check-row"><input id="vnc-fullscreen" type="checkbox" disabled />全螢幕模式</label>
@@ -218,13 +196,6 @@
           <p class="subtle vnc-path">UltraVNC：<span id="vnc-viewer-path">尚未指定</span></p>
           <p class="subtle vnc-path">機台設定：<span id="vnc-machines-path">LM_AI.exe 同一資料夾的 machines.json</span></p>
           <p id="vnc-status" role="status">正在讀取設定…</p>
-          <section id="vnc-import-preview" class="vnc-sync-controls" hidden>
-            <h3>選擇要匯入的分類與機台</h3>
-            <p class="subtle">勾選整個分類，或只勾選需要的機台。未勾選項目會捨棄，不會刪除已儲存的機台。</p>
-            <div class="button-row"><button id="vnc-import-refresh" class="secondary-button">再次取得更新清單</button></div>
-            <div id="vnc-import-groups"></div>
-            <div class="button-row"><button id="vnc-import-apply" class="primary-button" disabled>匯入已選項目</button><button id="vnc-import-discard" class="secondary-button">捨棄本次清單</button></div>
-          </section>
           <div id="vnc-groups" class="vnc-groups" role="group" aria-label="機台分類"></div>
           <div id="vnc-machines" class="vnc-machines"></div>
         </section>
@@ -521,21 +492,74 @@
       </div>
       <p id="vnc-manager-status" role="status"></p>
     </dialog>
-    <dialog id="project-dialog">
-      <h2>新增專案</h2><p>選擇本機資料夾，讓此專案的對話讀取 TXT／MD。原始文件唯讀，修改另存至 _AI_Output。</p>
-      <label>專案名稱<input id="project-name" maxlength="60" autocomplete="off" /></label>
-      <p class="subtle">公司加密文件若无法直接讀取，可在專案中匯入記事本顯示的文字。第一版一次執行一個專案任務。</p>
-      <div class="dialog-actions"><button id="project-cancel">取消</button><button id="project-create" class="primary">選擇資料夾並建立</button></div>
+    <dialog id="vnc-sync-dialog" aria-labelledby="vnc-sync-title">
+      <div class="dialog-heading"><h2 id="vnc-sync-title">從網站更新機台清單</h2><button id="vnc-sync-close" class="secondary-button">關閉</button></div>
+          <fieldset id="vnc-sync-controls" class="vnc-sync-controls">
+            <legend>從網站更新機台清單</legend>
+            <div class="vnc-login-fields">
+              <label>帳號<input id="vnc-sync-user" autocomplete="username" maxlength="256" /></label>
+              <label>密碼<input id="vnc-sync-password" type="password" autocomplete="off" maxlength="1024" placeholder="輸入網站登入密碼" /></label>
+            </div>
+            <label class="check-row"><input id="vnc-sync-clear-password" type="checkbox" />清除已記住的登入密碼</label>
+            <p class="subtle">記住登入資料；僅在按「更新機台清單」時登入，匯入或捨棄清單後登出。密碼留空會沿用已存值。</p>
+            <details><summary>詳細設定：網站根目錄與連結</summary>
+              <div class="vnc-sync-paths">
+                <label>網站根目錄<input id="vnc-sync-root" maxlength="2048" /></label>
+                <label>首頁連結<input id="vnc-sync-home" maxlength="2048" /></label>
+                <label>登入連結<input id="vnc-sync-login" maxlength="2048" /></label>
+                <label>登出連結<input id="vnc-sync-logout" maxlength="2048" /></label>
+                <p class="subtle">連結填相對路徑，可包含查詢參數。空白的機台 API 欄位不會送出請求。</p>
+                <div id="vnc-sync-endpoints"></div>
+              </div>
+            </details>
+            <div class="button-row">
+              <button id="vnc-sync-save" class="secondary-button">儲存登入與連結設定</button>
+              <button id="vnc-sync-start" class="primary-button">更新機台清單</button>
+              <button id="vnc-sync-cancel" class="secondary-button" hidden>停止取得清單</button>
+            </div>
+          </fieldset>
+      <p id="vnc-sync-status" role="status"></p>
+          <section id="vnc-import-preview" class="vnc-sync-controls" hidden>
+            <h3>選擇要匯入的分類與機台</h3>
+            <p class="subtle">勾選整個分類，或只勾選需要的機台。未勾選項目會捨棄，不會刪除已儲存的機台。</p>
+            <div class="button-row"><button id="vnc-import-refresh" class="secondary-button">再次取得更新清單</button></div>
+            <div id="vnc-import-groups"></div>
+            <div class="button-row"><button id="vnc-import-apply" class="primary-button" disabled>匯入已選項目</button><button id="vnc-import-discard" class="secondary-button">捨棄本次清單</button></div>
+          </section>
     </dialog>
-    <dialog id="project-import-dialog">
-      <h2>匯入已解密文字</h2><p>請先用公司核准的記事本開啟文件，確認文字正確後複製到這裡。只保存明文快照，不修改原檔。</p>
-      <label>專案內相對檔名<input id="project-import-path" placeholder="資料／報告.txt" /></label>
-      <label>文件全文<textarea id="project-import-text" rows="12"></textarea></label>
-      <p class="subtle">匯入內容僅以 DPAPI 保存；原檔改變後需重新匯入或清除快照。來源編碼不明，修訂副本使用 UTF-8。</p>
-      <div class="dialog-actions"><button id="project-import-cancel">取消</button><button id="project-import-save" class="primary">確認文字並匯入</button></div>
+    <dialog id="project-dialog" aria-labelledby="project-dialog-title">
+      <h2 id="project-dialog-title">新增專案</h2>
+      <label>專案名稱<input id="project-name" maxlength="60" autocomplete="off" placeholder="輸入專案名稱" /></label>
+      <div class="dialog-actions"><button id="project-cancel">取消</button><button id="project-create" class="primary-button">選擇資料夾並建立</button></div>
     </dialog>
-    <div id="project-progress" role="status" hidden><span id="project-progress-text"></span><button id="project-stop">停止專案任務</button></div>
-    <div id="toast" role="status" hidden></div>
+    <dialog id="project-settings-dialog" aria-labelledby="project-settings-title">
+      <div class="dialog-heading"><h2 id="project-settings-title">專案設定</h2><button id="project-settings-close">關閉</button></div>
+      <label>專案名稱<input id="project-edit-name" maxlength="60" autocomplete="off" /></label>
+      <div class="dialog-actions"><button id="project-rename-save" class="primary-button">儲存名稱</button></div>
+      <div class="project-settings-actions">
+        <button id="project-settings-import" class="secondary-button">匯入文字</button>
+        <button id="project-clear-imports" class="secondary-button" hidden>清除匯入文字</button>
+        <button id="project-remove-open" class="secondary-button">移除專案</button>
+      </div>
+    </dialog>
+    <dialog id="project-remove-dialog" aria-labelledby="project-remove-title">
+      <h2 id="project-remove-title">移除專案</h2>
+      <p id="project-remove-message"></p><p>原始檔案與已產生的檔案都會保留。</p>
+      <div class="dialog-actions">
+        <button id="project-remove-cancel">取消</button>
+        <button id="project-remove-delete" class="secondary-button">一併刪除對話</button>
+        <button id="project-remove-move" class="primary-button">移到一般對話</button>
+      </div>
+    </dialog>
+    <dialog id="project-import-dialog" aria-labelledby="project-import-title">
+      <h2 id="project-import-title">匯入文字</h2>
+      <label for="project-import-path">檔案</label>
+      <div class="project-file-picker"><input id="project-import-path" readonly placeholder="選擇專案內的 TXT 或 MD 檔案" /><button id="project-import-choose" class="secondary-button">選擇檔案</button></div>
+      <label for="project-import-text">文件全文</label>
+      <textarea id="project-import-text" rows="12" placeholder="複製文件全文後，貼在這裡…"></textarea>
+      <div class="dialog-actions"><button id="project-import-cancel">取消</button><button id="project-import-save" class="primary-button" disabled>匯入</button></div>
+    </dialog>
+    <div id="toast" role="status" aria-live="polite" popover="manual" hidden></div>
     <script src="vendor/markdown-it.min.js"></script>
     <script src="vendor/footnote.min.js"></script>
     <script src="vendor/task-lists.min.js"></script>

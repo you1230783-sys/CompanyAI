@@ -13,6 +13,15 @@ pub struct ReceivedReply {
     pub from_stream: bool,
 }
 
+/// 本機重試設定；只保存模型別名與附件 ID，不保存或傳給前端任何 Token。
+#[derive(Clone, Serialize, Deserialize)]
+pub struct RetrySettings {
+    pub model: String,
+    pub mode: String,
+    pub skills: bool,
+    pub attachment_ids: Vec<String>,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Message {
     pub role: String,
@@ -29,6 +38,14 @@ pub struct Message {
     pub response_payload: Option<ReplyPayload>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub received_replies: Vec<ReceivedReply>,
+    /// 專案工具歷程只供本機顯示，不加入模型對話內容。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub project_activity: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_settings: Option<RetrySettings>,
+    /// 重試仍使用首次提問之前的上下文，畫面則保留每次嘗試。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_context_index: Option<usize>,
 }
 
 impl Message {
@@ -41,6 +58,9 @@ impl Message {
             incomplete: false,
             response_payload: None,
             received_replies: Vec::new(),
+            project_activity: Vec::new(),
+            retry_settings: None,
+            retry_context_index: None,
         }
     }
     pub fn assistant(content: String) -> Self {
@@ -52,6 +72,9 @@ impl Message {
             incomplete: false,
             response_payload: None,
             received_replies: Vec::new(),
+            project_activity: Vec::new(),
+            retry_settings: None,
+            retry_context_index: None,
         }
     }
 }
