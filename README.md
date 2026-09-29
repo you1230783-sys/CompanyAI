@@ -1,7 +1,16 @@
-# LM_AI 0.8.17 — Windows 工作助理
+# LM_AI 0.8.18 — Windows 工作助理
 
 Rust 桌面程式，提供公司瀏覽器登入、文字／附件對話、串流、持久背景任務、選字快捷鍵、網站通知及 Classic Outlook 唯讀助理。
 介面使用 WebView2、內嵌 HTML/CSS 與離線 Markdown 套件；不需 Node、Python 或外部 CDN。
+
+## 0.8.18 成果定位與 Office 試用
+
+- 成果路徑可點擊，在檔案總管選取檔案。保留可讀檔名；同名才加 `_2`、`_3`。每次任務輸出資料夾使用本機 `YYYYMMDD_HHMMSS`，同秒任務加序號。
+- 新增 DOCX 正文段落、XLSX 文字／數字儲存格、PPTX 一般文字框的讀取與副本修訂。透過本機桌面 Office，不需 Python；原檔保持唯讀。需先有來源文件，本版不從空白建立 Office。
+- PowerPoint 請先儲存並關閉，再執行專案工具。Office 不在文字 AppContainer 內；取消會在目前原生 COM 呼叫返回後生效，受保護檢視、授權或加密阻擋不會被略過。
+- Excel 公式、合併格與特殊值僅供閱讀；不涵蓋圖表／巨集／版面設計。Word／PPT 修改區塊可能需要微調混合字型與換行。工具回傳 scope 說明省略內容。
+- 公司加密的 Office 相容性仍需公司實測；Office 先另存至同專案的短期工作目錄，固定 broker 複製至新成果，再由 Office 讀回核對。若加密系統不允許複製或讀回，停止並保留未驗證輸出的路徑，不宣稱完成。
+- 交付 EXE 與 EXE 更新清單；NSIS 維持 0.8.15。本版 [契約](docs/DESKTOP_0_8_18_CONTRACT.md)、[驗證](docs/VALIDATION_0_8_18.md)。
 
 ## 0.8.17 專案歷程、重試與介面整理
 

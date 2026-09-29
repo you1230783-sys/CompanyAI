@@ -396,6 +396,45 @@ function notificationPreview(text) {
   return characters.slice(0, 50).join("") + (characters.length > 50 ? "…" : "");
 }
 
+/** 只將專案內成果路徑轉成定位連結；原生端再次驗證目前專案與檔案邊界。
+ * 同時支援舊版本的行內 code，以及模型產生的 Markdown 連結。
+ */
+function linkProjectArtifacts(bubble) {
+  if (!state.conversations?.some(c => c.id === state.active_id && c.project_id)) return;
+  for (const item of bubble.querySelectorAll("code, a")) {
+    if (item.closest("pre")) continue;
+    const value = item.tagName === "A" ? item.getAttribute("href") : item.textContent;
+    if (!/^_AI_Output[/\\][^\r\n]+$/u.test(value || "")) continue;
+    const link = node("a", "project-artifact", item.textContent);
+    link.href = "#";
+    link.dataset.path = value;
+    link.dataset.conversation = state.active_id;
+    link.title = "在檔案總管中顯示";
+    item.replaceWith(link);
+  }
+  // 舊回覆有時直接列出一整行路徑，沒有 Markdown code 或連結標記。
+  const walker = document.createTreeWalker(bubble, NodeFilter.SHOW_TEXT);
+  const plain = [];
+  while (walker.nextNode()) {
+    if (!walker.currentNode.parentElement.closest("a,code,pre")) plain.push(walker.currentNode);
+  }
+  for (const text of plain) {
+    const lines = text.textContent.split("\n");
+    if (!lines.some(line => /^_AI_Output[/\\].+\.(txt|md|docx|xlsx|pptx)$/iu.test(line.trim()))) continue;
+    const fragment = document.createDocumentFragment();
+    lines.forEach((line,index) => {
+      if (index) fragment.append(document.createTextNode("\n"));
+      const path = line.trim();
+      if (/^_AI_Output[/\\].+\.(txt|md|docx|xlsx|pptx)$/iu.test(path)) {
+        const link = node("a","project-artifact",path);
+        link.href = "#"; link.dataset.path = path; link.dataset.conversation = state.active_id;
+        link.title = "在檔案總管中顯示"; fragment.append(link);
+      } else fragment.append(document.createTextNode(line));
+    });
+    text.replaceWith(fragment);
+  }
+}
+
 function renderMessages() {
   const signature = JSON.stringify([
     state.active_id,
@@ -437,6 +476,7 @@ function renderMessages() {
     );
     if (message.role === "assistant") {
       bubble.innerHTML = renderAssistantReply(message.content, message.response_payload, message.received_replies);
+      linkProjectArtifacts(bubble);
       if (expanded.has(String(index))) bubble.querySelector(".answer-details")?.setAttribute("open", "");
       bubble.querySelectorAll("table").forEach((table) => {
         const wrapper = node("div", "table-wrap");
@@ -972,6 +1012,12 @@ document.addEventListener("click", (event) => {
   }
   const read = event.target.closest("[data-event]");
   if (read) send({ type: "read_event", id: read.dataset.event });
+  const artifact = event.target.closest(".project-artifact");
+  if (artifact) {
+    event.preventDefault();
+    send({type:"project", command:{action:"reveal", conversation:artifact.dataset.conversation, path:artifact.dataset.path}});
+    return;
+  }
   const link = event.target.closest(".markdown a");
   if (link) {
     event.preventDefault();

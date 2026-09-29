@@ -67,6 +67,12 @@
 - 使用者明確要求先提供網頁契約時，可先獨立提交／推送契約文件供同步開發；必須標示程式尚未驗收，其他原始碼及 EXE 待完整交付驗證後再提交。
 - 修改功能時同步更新 docs/WEB_INTEGRATION.md 與相應驗收說明。沒有實際操作 Word／Outlook 或取得外觀截圖時，不能宣稱這些驗收通過。
 
+## 0.8.18 成果與 Office（最新使用者指示）
+
+- 使用者要求成果可定位 Explorer、輸出保留可讀檔名、任務資料夾以時間命名，並試用 Word／Excel／PowerPoint；完成後編譯 EXE 並推送既有 main。
+- 進版 0.8.18，執行 `Build.ps1 -EmptyCargoCache -TestOffice`；本輪不製作 NSIS 或歷史 ZIP。公司加密及版面外觀未經公司實測不得宣稱驗收。
+- Office 第一版 DOCX 正文、XLSX UsedRange 文字／數字、PPTX 一般文字框；原件唯讀，固定 COM 工具，禁止模型指定任意 COM 方法。公式不改，不從空白建立 Office。相關限制见 docs/DESKTOP_0_8_18_CONTRACT.md。
+
 ## 0.8.17 專案歷程與重試（最新使用者指示）
 
 - 使用者已回報公司測試：列專案目錄、檔案清單、編輯 TXT 與儲存副本均成功；不延伸宣稱所有公司加密格式皆已驗收。

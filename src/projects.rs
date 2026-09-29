@@ -1,5 +1,6 @@
 //! 專案資料與固定工具契約。授權及副本所有權由桌面保存，不由模型文字決定。
 pub mod files;
+pub mod office;
 pub mod reply;
 pub mod runner;
 pub mod sandbox;
@@ -98,6 +99,13 @@ pub enum Tool {
         expected: String,
         replacement: String,
     },
+    EditOffice {
+        copy_id: String,
+        revision: String,
+        block_id: String,
+        expected: String,
+        replacement: String,
+    },
     SaveCopy {
         copy_id: String,
         revision: String,
@@ -116,6 +124,7 @@ impl Tool {
             Self::FindText { .. } => "尋找文字",
             Self::CreateWorkingCopy { source: None, .. } => "建立新檔案",
             Self::CreateWorkingCopy { .. } => "建立副本",
+            Self::EditOffice { .. } => "編輯 Office 文字",
             Self::EditText { .. } => "編輯文字",
             Self::SaveCopy { .. } => "儲存副本",
             Self::DeleteCopy { .. } => "刪除工作副本",

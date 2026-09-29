@@ -208,7 +208,7 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
                 }
                 Decision::Finish { message, artifacts } => {
                     report(&mut activity, &mut progress, "正在核對成果…".into());
-                    match broker.finish(&artifacts) {
+                    match broker.finish_cancellable(&artifacts, &run.cancel) {
                         Ok(paths) => {
                             let locations = if paths.is_empty() {
                                 String::new()

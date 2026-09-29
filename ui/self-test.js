@@ -980,6 +980,12 @@ window.runSelfTest = async (structuredFixture) => {
       const button = document.querySelector(".retry-message");button.click();button.click();
       check(retryCommands.filter(command => command.type === "retry_chat").length === 1 && retryCommands.at(-1).request_id === "request-one" && retryCommands.at(-1).message_count === 2, "retry button binds original request and suppresses double click");
       LMUI.receive(fixture);check(!document.querySelector(".retry-message").disabled, "rejected retry can be used again after state refresh");
+      fixture.messages[1].content = "成果：\n\n`_AI_Output/20260929_153000/測試 報告.txt`\n\n[另存](_AI_Output/20260929_153000/report.xlsx)\n\n_AI_Output/20260929_153000/plain.txt";
+      LMUI.receive(fixture);
+      const artifactLinks = document.querySelectorAll("#messages .project-artifact");
+      check(artifactLinks.length === 3 && artifactLinks[0].textContent.endsWith("測試 報告.txt"), "artifact paths render as readable links");
+      artifactLinks[0].click();
+      check(retryCommands.at(-1).type === "project" && retryCommands.at(-1).command.action === "reveal" && retryCommands.at(-1).command.conversation === "project-chat", "artifact clicks request native Explorer selection");
       fixture.notifications = [{id:"long",source:"ai",title:"長通知",summary:"中".repeat(60)+"👨‍👩‍👧‍👦",created_at:new Date().toISOString()}];
       LMUI.receive(fixture);
       check(document.querySelector(".notification-card p").textContent === "中".repeat(50)+"…" && fixture.notifications[0].summary.length > 60, "notification preview truncates without changing source");

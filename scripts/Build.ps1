@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$TestVnc)
+param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$TestVnc, [switch]$TestOffice)
 $ErrorActionPreference = 'Stop'
 if ($ValidateOnly -and $IncludeInstaller) { throw 'ValidateOnly cannot be combined with IncludeInstaller.' }
 # 統一載入 v142 與指定 SDK，讓手動執行及未來網頁呼叫使用相同編譯環境。
@@ -66,6 +66,12 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     $projectProbe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\project_smoke.exe'
     & $projectProbe $exe (Join-Path $projectRoot '.build\project-smoke')
     if ($LASTEXITCODE -ne 0) { throw 'Real AppContainer/project file integration failed.' }
+    if ($TestOffice) {
+        & cargo build --example office_smoke --frozen
+        if ($LASTEXITCODE -ne 0) { throw 'Office harness build failed.' }
+        $officeProbe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\office_smoke.exe'
+        & (Join-Path $PSScriptRoot 'Test-Office.ps1') -Exe $exe -Probe $officeProbe
+    }
     # 明確選用才啟動本機已安裝的 Viewer；一般自檢不會接觸 VNC。
     if ($TestVnc) {
         & cargo build --example vnc_smoke --frozen
@@ -106,6 +112,9 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     if ($ValidateOnly) {
         Write-Host 'Source validation passed; release artifacts and manifests were not updated.'
         return
+    }
+    if ($TestOffice) {
+        Copy-Item -LiteralPath (Join-Path $projectRoot '.build\office-verification.json') -Destination (Join-Path $projectRoot 'offline\office-verification.json') -Force
     }
     # 記錄實際版本與 DLL 依賴，之後可與公司的環境直接比較。
     $dependencies = & $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER /dump /dependents $exe
@@ -162,6 +171,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         exe_sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
         installer_built = [bool]$IncludeInstaller
         real_vnc_tested = [bool]$TestVnc
+        real_office_tested = [bool]$TestOffice
         offline_zip_built = $false
     } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $projectRoot 'offline\exe-verification.json') -Encoding UTF8
     Write-Host "Ready: $dist\LM_AI.exe"

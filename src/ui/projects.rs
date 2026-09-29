@@ -31,6 +31,10 @@ pub(super) enum ProjectCommand {
     ClearImports {
         id: String,
     },
+    Reveal {
+        conversation: String,
+        path: String,
+    },
     Stop,
 }
 pub(super) enum ProjectEvent {
@@ -179,6 +183,14 @@ impl App {
         if let Some(error) = &self.projects.error {
             return Err(error.clone());
         }
+        if let ProjectCommand::Reveal { conversation, path } = &command {
+            let project = self
+                .projects
+                .store
+                .project_for(conversation)
+                .ok_or("此對話已不屬於專案。")?;
+            return projects::files::reveal(project, path);
+        }
         if matches!(command, ProjectCommand::Stop) {
             self.projects.cancel();
             return Ok(());
@@ -275,6 +287,7 @@ impl App {
                 self.projects.store = store;
                 self.toast("已清除匯入文字");
             }
+            ProjectCommand::Reveal { .. } => unreachable!("已於上方處理成果定位"),
             ProjectCommand::Stop => (),
         }
         Ok(())

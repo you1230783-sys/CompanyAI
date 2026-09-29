@@ -1,0 +1,558 @@
+//! Office 的固定 COM 介面。只處理 DOCX 正文段落、XLSX 儲存格、PPTX 一般文字框。
+//! 模型拿到區塊 ID，不可指定 COM 方法。原件以唯讀開啟，套用經核對的修改後另存。
+use crate::{wide, AppResult};
+use serde::{Deserialize, Serialize};
+use std::{
+    path::Path,
+    sync::atomic::{AtomicBool, Ordering},
+};
+use windows::{
+    core::{GUID, PCWSTR},
+    Win32::System::{Com::*, Variant::*},
+};
+
+const MAX_BLOCKS: usize = 2000;
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Block {
+    pub id: String,
+    pub label: String,
+    pub text: String,
+    /// text 與 number 可改；formula / readonly 保留原件內容。
+    pub kind: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Snapshot {
+    pub scope: String,
+    pub blocks: Vec<Block>,
+}
+impl Snapshot {
+    pub fn serialize(&self) -> AppResult<String> {
+        let value = serde_json::to_string(self).map_err(|e| e.to_string())?;
+        if value.len() > super::text::MAX_TEXT {
+            return Err("Office 文字超過 200 KB，請使用較小文件。".into());
+        }
+        Ok(value)
+    }
+    /// 完整區塊比對，避免索引因別人修改而指向另一個段落或儲存格。
+    pub fn edit(&mut self, id: &str, expected: &str, replacement: &str) -> AppResult<()> {
+        super::text::validate(replacement)?;
+        let block = self
+            .blocks
+            .iter_mut()
+            .find(|b| b.id == id)
+            .ok_or("找不到此 Office 區塊。")?;
+        if block.text != expected {
+            return Err("Office 區塊原文已改變，請重新讀取。".into());
+        }
+        if block.kind == "number" {
+            let number: f64 = replacement
+                .parse()
+                .map_err(|_| "數值儲存格只能改為有限數字。")?;
+            if !number.is_finite() {
+                return Err("數值不可為無限或 NaN。".into());
+            }
+            block.text = number.to_string();
+        } else if block.kind == "text" {
+            // Word 段落末端標記不交给模型修改，避免破壞表格及段落索引。
+            if self.scope.starts_with("Word") && replacement.contains(['\r', '\n']) {
+                return Err("本版 Word 只修訂既有段落文字，不新增或合併段落。".into());
+            }
+            block.text = replacement.replace("\r\n", "\n").replace('\r', "\n");
+        } else {
+            return Err("公式、特殊欄位及受保護區塊目前僅供閱讀。".into());
+        }
+        Ok(())
+    }
+}
+pub fn supported(path: &Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase()
+            .as_str(),
+        "docx" | "xlsx" | "pptx"
+    )
+}
+
+/// 呼叫名稱都在此模組內固定，參數在此統一反轉成 IDispatch 規則。
+fn invoke(object: &IDispatch, name: &str, mut args: Vec<VARIANT>, put: bool) -> AppResult<VARIANT> {
+    let key = wide(name);
+    let mut id = 0;
+    let mut result = VARIANT::default();
+    args.reverse();
+    let mut property = -3; // DISPID_PROPERTYPUT
+    let params = DISPPARAMS {
+        rgvarg: args.as_mut_ptr(),
+        cArgs: args.len() as u32,
+        rgdispidNamedArgs: if put {
+            &mut property
+        } else {
+            std::ptr::null_mut()
+        },
+        cNamedArgs: u32::from(put),
+    };
+    unsafe {
+        object.GetIDsOfNames(&GUID::zeroed(), &PCWSTR(key.as_ptr()), 1, 0, &mut id)
+            .and_then(|()| object.Invoke(id, &GUID::zeroed(), 0,
+                if put { DISPATCH_PROPERTYPUT } else { DISPATCH_METHOD | DISPATCH_PROPERTYGET },
+                &params, Some(&mut result), None, None))
+            .map_err(|e| format!("Office 操作 {name} 失敗（{}）。請確認 Office 已啟用、文件可開啟且沒有待回應視窗。", e.code()))?;
+    }
+    Ok(result)
+}
+fn get(o: &IDispatch, name: &str) -> AppResult<VARIANT> {
+    invoke(o, name, vec![], false)
+}
+fn obj(value: VARIANT) -> AppResult<IDispatch> {
+    IDispatch::try_from(&value).map_err(|_| "Office 未回傳文件物件。".into())
+}
+fn child(o: &IDispatch, name: &str) -> AppResult<IDispatch> {
+    obj(get(o, name)?)
+}
+fn item(o: &IDispatch, index: i32) -> AppResult<IDispatch> {
+    obj(invoke(o, "Item", vec![index.into()], false)?)
+}
+fn set(o: &IDispatch, name: &str, value: VARIANT) -> AppResult<()> {
+    invoke(o, name, vec![value], true).map(|_| ())
+}
+fn integer(o: &IDispatch, name: &str) -> AppResult<i32> {
+    i32::try_from(&get(o, name)?).map_err(|_| format!("Office {name} 不是整數。"))
+}
+fn string(value: &VARIANT) -> AppResult<String> {
+    if unsafe { value.Anonymous.Anonymous.vt } == VT_EMPTY {
+        return Ok(String::new());
+    }
+    let mut output = VARIANT::default();
+    unsafe { VariantChangeType(&mut output, value, VAR_CHANGE_FLAGS(0), VT_BSTR) }
+        .map_err(|_| "Office 欄位無法轉為文字。")?;
+    Ok(unsafe { output.Anonymous.Anonymous.Anonymous.bstrVal.to_string() })
+}
+fn missing() -> VARIANT {
+    let mut value = VARIANT::default();
+    unsafe {
+        (*value.Anonymous.Anonymous).vt = VT_ERROR;
+        (*value.Anonymous.Anonymous).Anonymous.scode = 0x80020004u32 as i32;
+    }
+    value
+}
+struct Apartment;
+impl Drop for Apartment {
+    fn drop(&mut self) {
+        unsafe { CoUninitialize() };
+    }
+}
+
+struct Session {
+    app: IDispatch,
+    document: Option<IDispatch>,
+    ext: String,
+    collection: &'static str,
+    restore: Vec<(IDispatch, &'static str, VARIANT)>,
+}
+impl Drop for Session {
+    fn drop(&mut self) {
+        if let Some(doc) = self.document.take() {
+            if self.ext == "pptx" {
+                let _ = set(&doc, "Saved", (-1i32).into());
+            }
+            let _ = invoke(
+                &doc,
+                "Close",
+                if self.ext == "pptx" {
+                    vec![]
+                } else {
+                    vec![false.into()]
+                },
+                false,
+            );
+        }
+        for (object, name, value) in self.restore.drain(..).rev() {
+            let _ = set(&object, name, value);
+        }
+        // 只結束沒有其他文件的本次 Office 程序，絕不關閉使用者後來開啟的文件。
+        if child(&self.app, self.collection)
+            .and_then(|c| integer(&c, "Count"))
+            .ok()
+            == Some(0)
+        {
+            let _ = invoke(&self.app, "Quit", vec![], false);
+        }
+    }
+}
+impl Session {
+    fn open(path: &Path) -> AppResult<Self> {
+        let ext = path
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let (prog, collection) = match ext.as_str() {
+            "docx" => ("Word.Application", "Documents"),
+            "xlsx" => ("Excel.Application", "Workbooks"),
+            "pptx" => ("PowerPoint.Application", "Presentations"),
+            _ => return Err("Office 試用版支援 DOCX、XLSX、PPTX。".into()),
+        };
+        let class = unsafe { CLSIDFromProgID(PCWSTR(wide(prog).as_ptr())) }
+            .map_err(|_| format!("請先安裝 {prog} 對應的桌面版 Office。"))?;
+        // PowerPoint 是單一實例；避免改變使用者現有簡報或共用的巨集設定。
+        if ext == "pptx" {
+            let mut active = None;
+            if unsafe { windows::Win32::System::Ole::GetActiveObject(&class, None, &mut active) }
+                .is_ok()
+            {
+                return Err("請先儲存並關閉 PowerPoint，再執行簡報工具。".into());
+            }
+        }
+        let app: IDispatch = unsafe { CoCreateInstance(&class, None, CLSCTX_LOCAL_SERVER) }
+            .map_err(|e| format!("無法啟動 {prog}：{e}"))?;
+        let mut session = Self {
+            app,
+            document: None,
+            ext,
+            collection,
+            restore: Vec::new(),
+        };
+        if integer(&child(&session.app, collection)?, "Count")? != 0 {
+            return Err("Office 正在使用中，請先儲存並關閉相關視窗後重試。".into());
+        }
+        session.setting(session.app.clone(), "AutomationSecurity", 3i32.into())?; // msoAutomationSecurityForceDisable
+        session.setting(
+            session.app.clone(),
+            "DisplayAlerts",
+            if session.ext == "pptx" {
+                1i32.into()
+            } else {
+                0i32.into()
+            },
+        )?;
+        if session.ext == "docx" {
+            session.setting(
+                child(&session.app, "Options")?,
+                "UpdateLinksAtOpen",
+                false.into(),
+            )?;
+        } else if session.ext == "xlsx" {
+            session.setting(session.app.clone(), "EnableEvents", false.into())?;
+            session.setting(session.app.clone(), "AskToUpdateLinks", false.into())?;
+        }
+        let path = VARIANT::from(path.to_string_lossy().as_ref());
+        let args = match session.ext.as_str() {
+            "docx" => vec![
+                path,
+                false.into(),
+                true.into(),
+                false.into(),
+                "".into(),
+                "".into(),
+                false.into(),
+                "".into(),
+                "".into(),
+                missing(),
+                missing(),
+                false.into(),
+            ],
+            "xlsx" => vec![
+                path,
+                0i32.into(),
+                true.into(),
+                missing(),
+                "".into(),
+                "".into(),
+                true.into(),
+                missing(),
+                missing(),
+                false.into(),
+                false.into(),
+                missing(),
+                false.into(),
+            ],
+            _ => vec![path, (-1i32).into(), 0i32.into(), 0i32.into()],
+        };
+        session.document = Some(obj(invoke(
+            &child(&session.app, collection)?,
+            "Open",
+            args,
+            false,
+        )?)?);
+        if session.ext == "pptx" {
+            if bool::try_from(&get(session.document()?, "HasVBProject")?).unwrap_or(true) {
+                return Err("不支援包含 VBA 的簡報。".into());
+            }
+        } else {
+            let actual = integer(
+                session.document()?,
+                if session.ext == "docx" {
+                    "SaveFormat"
+                } else {
+                    "FileFormat"
+                },
+            )?;
+            let required = if session.ext == "docx" { 12 } else { 51 };
+            if actual != required {
+                return Err("文件實際格式與副檔名不同，請先用 Office 轉存標準 DOCX／XLSX。".into());
+            }
+        }
+        Ok(session)
+    }
+    /// 設定只在本次操作有效，包含錯誤路徑都恢复原值。
+    fn setting(&mut self, object: IDispatch, name: &'static str, value: VARIANT) -> AppResult<()> {
+        let old = get(&object, name)?;
+        self.restore.push((object.clone(), name, old));
+        set(&object, name, value)
+    }
+    fn document(&self) -> AppResult<&IDispatch> {
+        self.document.as_ref().ok_or("Office 文件未開啟。".into())
+    }
+    fn snapshot(&self, cancel: &AtomicBool) -> AppResult<(Snapshot, Vec<IDispatch>)> {
+        let document = self.document()?;
+        let mut blocks = Vec::new();
+        let mut targets = Vec::new();
+        let mut text_bytes = 0usize;
+        let mut push = |object: IDispatch,
+                        id: String,
+                        label: String,
+                        text: String,
+                        kind: &str|
+         -> AppResult<()> {
+            if cancel.load(Ordering::Relaxed) {
+                return Err("Office 操作已取消。".into());
+            }
+            if blocks.len() >= MAX_BLOCKS {
+                return Err("Office 文件超過 2000 個文字區塊／使用中儲存格，請縮小文件。".into());
+            }
+            text_bytes += text.len();
+            if text_bytes > super::text::MAX_TEXT {
+                return Err("Office 文字超過 200 KB，請縮小文件。".into());
+            }
+            blocks.push(Block {
+                id,
+                label,
+                text,
+                kind: kind.into(),
+            });
+            targets.push(object);
+            Ok(())
+        };
+        let scope = match self.ext.as_str() {
+            "docx" => {
+                let paragraphs = child(document, "Paragraphs")?;
+                for i in 1..=integer(&paragraphs, "Count")? {
+                    let range = child(&item(&paragraphs, i)?, "Range")?;
+                    let raw = string(&get(&range, "Text")?)?;
+                    let content = raw.trim_end_matches(['\r', '\u{7}']);
+                    // 只縮短尾端標記，不取代整個段落容器；保留表格結構。
+                    let end = integer(&range, "End")?
+                        - raw[content.len()..].encode_utf16().count() as i32;
+                    set(&range, "End", end.into())?;
+                    let plain = integer(&child(&range, "Fields")?, "Count")? == 0
+                        && integer(&child(&range, "InlineShapes")?, "Count")? == 0;
+                    push(
+                        range,
+                        format!("p{i}"),
+                        format!("正文段落 {i}"),
+                        content.into(),
+                        if plain { "text" } else { "readonly" },
+                    )?;
+                }
+                "Word 正文段落（含表格文字）；不含頁首頁尾、文字方塊、註解；特殊欄位唯讀。"
+            }
+            "xlsx" => {
+                let sheets = child(document, "Worksheets")?;
+                for s in 1..=integer(&sheets, "Count")? {
+                    let sheet = item(&sheets, s)?;
+                    let name = string(&get(&sheet, "Name")?)?;
+                    let cells = child(&child(&sheet, "UsedRange")?, "Cells")?;
+                    let count = integer(&cells, "Count")?;
+                    if count < 0 || count as usize > MAX_BLOCKS {
+                        return Err("Excel 使用範圍超過 2000 格，請縮小文件。".into());
+                    }
+                    for n in 1..=count {
+                        let cell = item(&cells, n)?;
+                        let address = string(&get(&cell, "Address")?)?;
+                        let formula = bool::try_from(&get(&cell, "HasFormula")?).unwrap_or(true);
+                        let merged = bool::try_from(&get(&cell, "MergeCells")?).unwrap_or(true);
+                        let value = get(&cell, if formula { "Formula" } else { "Value2" })?;
+                        let kind = if formula {
+                            "formula"
+                        } else if merged {
+                            "readonly"
+                        } else {
+                            match unsafe { value.Anonymous.Anonymous.vt } {
+                                VT_R8 | VT_I4 => "number",
+                                VT_BSTR | VT_EMPTY => "text",
+                                _ => "readonly",
+                            }
+                        };
+                        let text = if unsafe { value.Anonymous.Anonymous.vt } == VT_ERROR {
+                            "（Excel 錯誤值）".into()
+                        } else {
+                            string(&value)?
+                        };
+                        push(
+                            cell,
+                            format!("s{s}:{address}"),
+                            format!("{name}!{address}"),
+                            text,
+                            kind,
+                        )?;
+                    }
+                }
+                "Excel 工作表 UsedRange（最多 2000 格）；公式顯示公式文字且不可修改，合併格及特殊值唯讀；不含圖表、註解、資料連線。"
+            }
+            _ => {
+                let slides = child(document, "Slides")?;
+                let count = integer(&slides, "Count")?;
+                if count > 200 {
+                    return Err("PowerPoint 上限為 200 張投影片。".into());
+                }
+                let mut scanned = 0;
+                for s in 1..=count {
+                    let shapes = child(&item(&slides, s)?, "Shapes")?;
+                    for n in 1..=integer(&shapes, "Count")? {
+                        scanned += 1;
+                        if scanned > MAX_BLOCKS || cancel.load(Ordering::Relaxed) {
+                            return Err("PowerPoint 操作已取消或圖形超過 2000 個。".into());
+                        }
+                        let shape = item(&shapes, n)?;
+                        if integer(&shape, "HasTextFrame")? != 0 {
+                            let range = child(&child(&shape, "TextFrame")?, "TextRange")?;
+                            let content = string(&get(&range, "Text")?)?.replace('\r', "\n");
+                            push(
+                                range,
+                                format!("s{s}:shape{n}"),
+                                format!("投影片 {s} / 文字框 {n}"),
+                                content,
+                                "text",
+                            )?;
+                        }
+                    }
+                }
+                "PowerPoint 一般文字框及標題；不含群組、SmartArt、圖表、表格、備忘稿或圖片文字。"
+            }
+        };
+        let snapshot = Snapshot {
+            scope: scope.into(),
+            blocks,
+        };
+        snapshot.serialize()?;
+        Ok((snapshot, targets))
+    }
+}
+
+/// COM 物件只存在本次背景操作內，成功或錯誤均由 Drop 關閉文件。
+/// Office 是受信任的桌面程式，並非文字 AppContainer 的一部分。
+pub fn process(
+    source: &Path,
+    output: Option<&Path>,
+    expected: Option<&Snapshot>,
+    desired: Option<&Snapshot>,
+    cancel: &AtomicBool,
+) -> AppResult<Snapshot> {
+    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }.map_err(|e| e.to_string())?;
+    let _apartment = Apartment;
+    let session = Session::open(source)?;
+    let (current, targets) = session.snapshot(cancel)?;
+    if let Some(expected) = expected {
+        if &current != expected {
+            return Err("來源 Office 文件已變更，請重新建立工作副本。".into());
+        }
+    }
+    if let Some(desired) = desired {
+        if desired.blocks.len() != current.blocks.len() {
+            return Err("Office 區塊結構不一致。".into());
+        }
+        for ((old, new), target) in current.blocks.iter().zip(&desired.blocks).zip(&targets) {
+            if cancel.load(Ordering::Relaxed) {
+                return Err("Office 操作已取消，未發布。".into());
+            }
+            if old.text == new.text {
+                continue;
+            }
+            if old.id != new.id || old.kind != new.kind {
+                return Err("Office 區塊身分不符。".into());
+            }
+            match (session.ext.as_str(), old.kind.as_str()) {
+                ("xlsx", "number") => set(
+                    target,
+                    "Value2",
+                    new.text
+                        .parse::<f64>()
+                        .map_err(|_| "數字格式不正確。")?
+                        .into(),
+                )?,
+                ("xlsx", "text") => {
+                    // 前置單引號要求 Excel 儲存字面文字，不能把 =cmd 等內容當成公式。
+                    set(
+                        target,
+                        "Value2",
+                        VARIANT::from(format!("'{}", new.text).as_str()),
+                    )?;
+                }
+                (_, "text") => set(
+                    target,
+                    "Text",
+                    VARIANT::from(new.text.replace('\n', "\r").as_str()),
+                )?,
+                _ => return Err("拒絕修改唯讀 Office 區塊。".into()),
+            }
+        }
+        if session.snapshot(cancel)?.0 != *desired {
+            return Err("Office 修改結果與要求不一致，未發布。".into());
+        }
+    }
+    if let Some(output) = output {
+        if cancel.load(Ordering::Relaxed) {
+            return Err("Office 儲存已取消。".into());
+        }
+        let (method, format) = match session.ext.as_str() {
+            "docx" => ("SaveAs2", 12),
+            "xlsx" => ("SaveAs", 51),
+            _ => ("SaveCopyAs", 24),
+        };
+        invoke(
+            session.document()?,
+            method,
+            vec![
+                VARIANT::from(output.to_string_lossy().as_ref()),
+                format.into(),
+            ],
+            false,
+        )?;
+    }
+    Ok(desired.unwrap_or(&current).clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn sample(kind: &str) -> Snapshot {
+        Snapshot {
+            scope: "Excel".into(),
+            blocks: vec![Block {
+                id: "s1:$A$1".into(),
+                label: "A1".into(),
+                text: "12".into(),
+                kind: kind.into(),
+            }],
+        }
+    }
+    #[test]
+    fn edits_reject_formula_wrong_original_and_nonfinite_numbers() {
+        assert!(sample("formula").edit("s1:$A$1", "12", "99").is_err());
+        assert!(sample("text").edit("s1:$A$1", "wrong", "99").is_err());
+        assert!(sample("number").edit("s1:$A$1", "12", "NaN").is_err());
+        let mut value = sample("number");
+        value.edit("s1:$A$1", "12", "24.0").unwrap();
+        assert_eq!(value.blocks[0].text, "24");
+    }
+    #[test]
+    fn word_structure_and_macro_formats_are_not_editable() {
+        let mut value = sample("text");
+        value.scope = "Word 正文".into();
+        assert!(value.edit("s1:$A$1", "12", "first\nsecond").is_err());
+        for ext in ["docm", "xlsm", "pptm", "doc", "xls", "ppt"] {
+            assert!(!supported(Path::new(&format!("file.{ext}"))));
+        }
+    }
+}

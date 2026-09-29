@@ -473,3 +473,8 @@ Outlook 第一輪維持以 `# Outlook 郵件初篩 outlook-triage` 開頭，供�
 ## 0.7 桌面契約
 
 新版用途旗標、一般／背景模式、SSE、Outlook 容錯與自動更新欄位見 [DESKTOP_0_7_CONTRACT.md](DESKTOP_0_7_CONTRACT.md)；驗證範圍見 [VALIDATION_0_7.md](VALIDATION_0_7.md)。聊天路徑保留 /lm_server/v1/chat/completions。
+
+
+## 0.8.18 桌面 Office 工具
+
+後端路由沒有新增欄位；專案工具含 `edit_office` 仍由桌面透過 `skills:false` 傳入本機契約與 JSON 工具往返。成果定位、檔名及時間目錄均由桌面處理，網站不需要解析磁碟路徑或呼叫 Office。詳細資料結構見 [0.8.18 契約](DESKTOP_0_8_18_CONTRACT.md)。

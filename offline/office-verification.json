@@ -1,0 +1,18 @@
+{
+  "version": "0.8.18.0",
+  "result": "PASS",
+  "office_version": "16.0.20326.20158",
+  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\office-test-7f0a6af214d94eae8c6d510e34f2b777",
+  "checks": [
+    "DOCX/XLSX/PPTX COM read/edit/save/reopen",
+    "source bytes unchanged",
+    "readable filename and numbered second revision",
+    "duplicate save idempotent",
+    "Excel formula protected and literal = text",
+    "Excel numeric edit",
+    "Word and Excel bold retained",
+    "untouched paragraph/shape retained"
+  ],
+  "company_encryption_tested": false,
+  "screenshots_verified": false
+}
