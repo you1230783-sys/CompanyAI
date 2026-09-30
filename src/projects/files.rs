@@ -520,12 +520,47 @@ pub(super) fn fingerprint(project: &Project, source: &str) -> AppResult<String> 
     Ok(format!("{:x}", hash.finalize()))
 }
 
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct OfficeCopy {
-    source: String,
+    source: Option<String>,
     fingerprint: String,
-    original: office::Snapshot,
+    original: Option<office::Snapshot>,
+    actions: Vec<office::Action>,
     desired: office::Snapshot,
 }
+/// 原件的路徑、內容與格式均鎖定核對；空白文件不需要假造來源檔案。
+fn render_office(
+    project: &Project,
+    name: &str,
+    copy: &OfficeCopy,
+    output: Option<&Path>,
+    cancel: &AtomicBool,
+) -> AppResult<office::Snapshot> {
+    let source = copy
+        .source
+        .as_ref()
+        .map(|s| relative(s).map(|p| project.root.join(p)))
+        .transpose()?;
+    let _dirs = source
+        .as_ref()
+        .map(|p| pin(p.parent().ok_or("缺少來源目錄。")?))
+        .transpose()?;
+    let _file = source.as_ref().map(|p| checked_file(p)).transpose()?;
+    if let Some(path) = &copy.source {
+        if fingerprint(project, path)? != copy.fingerprint {
+            return Err("Office 原檔已變動，請重新建立副本。".into());
+        }
+    }
+    office::render(
+        source.as_deref(),
+        Path::new(name),
+        copy.original.as_ref(),
+        &copy.actions,
+        output,
+        cancel,
+    )
+}
+#[derive(serde::Serialize, serde::Deserialize)]
 struct Copy {
     office: Option<OfficeCopy>,
     name: String,
@@ -533,6 +568,15 @@ struct Copy {
     encoding: Encoding,
     saved_revision: Option<String>,
     paths: Vec<String>,
+}
+/// 只保存資料，不保存授權、Token、COM 物件或執行中的程序。
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(super) struct SavedBroker {
+    output_folder: Option<String>,
+    copies: BTreeMap<String, Copy>,
+    results: BTreeMap<String, (Value, Value)>,
+    published: Vec<String>,
+    txt_context: bool,
 }
 pub struct Broker {
     server_pdf: Option<super::server_pdf::Reader>,
@@ -559,6 +603,55 @@ impl Broker {
             published: Vec::new(),
             txt_context: false,
         })
+    }
+    pub(super) fn saved(&self) -> AppResult<SavedBroker> {
+        // 經序列化建立不含程序資源的快照，只有明確暫停時才呼叫。
+        serde_json::from_value(
+            json!({"output_folder":self.output_folder,"copies":self.copies,
+            "results":self.results,"published":self.published,"txt_context":self.txt_context}),
+        )
+        .map_err(|e| e.to_string())
+    }
+    pub(super) fn restore(&mut self, state: SavedBroker, cancel: &AtomicBool) -> AppResult<()> {
+        if state.copies.len() > 20 {
+            return Err("暫存工作副本數不合法。".into());
+        }
+        if let Some(folder) = &state.output_folder {
+            if relative(folder)?.components().count() != 1 {
+                return Err("暫存輸出目錄不合法。".into());
+            }
+            let _guards = pin(&self.project.root.join("_AI_Output").join(folder))?;
+        }
+        for (id, copy) in &state.copies {
+            crate::jobs::validate_id(id)?;
+            if relative(&copy.name)?.components().count() != 1 {
+                return Err("暫存檔名不合法。".into());
+            }
+            if let Some(office) = &copy.office {
+                if let Some(source) = &office.source {
+                    if fingerprint(&self.project, source)? != office.fingerprint {
+                        return Err(format!(
+                            "來源 {source} 已變更，未恢復舊版修改；請重新提出任務。"
+                        ));
+                    }
+                }
+                if office.desired.serialize()? != copy.text {
+                    return Err("暫存 Office 版本不一致。".into());
+                }
+            }
+            if copy.saved_revision.as_deref() == Some(text::revision(&copy.text).as_str()) {
+                let path = copy.paths.last().ok_or("暫存成果缺少路徑。")?;
+                if read_cancel(&self.project, path, cancel, None, None)?.0 != copy.text {
+                    return Err(format!("成果 {path} 已變更，未繼續舊任務。"));
+                }
+            }
+        }
+        self.output_folder = state.output_folder;
+        self.copies = state.copies;
+        self.results = state.results;
+        self.published = state.published;
+        self.txt_context = state.txt_context;
+        Ok(())
     }
     /// 只有專案代理啟用跨任務記憶；一般聊天沒有此能力。
     pub fn enable_memory(&mut self, conversation: &str) -> AppResult<()> {
@@ -663,6 +756,20 @@ impl Broker {
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
         match tool {
+            Tool::ReadWorkLog { offset } => {
+                // 過濾查閱本身，避免紀錄遞迴包含先前紀錄，亦不把排序當成執行順序。
+                let log = serde_json::to_string(&self.results.iter()
+                    .filter(|(_, (request, _))| request["tool"] != "read_work_log")
+                    .map(|(id,(request,result))| json!({"operation_id":id,"request":request,"result":result})).collect::<Vec<_>>()).map_err(|e| e.to_string())?;
+                let total = log.chars().count();
+                if *offset > total {
+                    return Err("紀錄讀取位置超出範圍。".into());
+                }
+                let part: String = log.chars().skip(*offset).take(6000).collect();
+                Ok(
+                    json!({"text":part,"offset":offset,"next_offset":offset+part.chars().count(),"total":total,"order":"operation_id；非時間順序"}),
+                )
+            }
             Tool::ListNotes { query } => self.memory()?.list_notes(query),
             Tool::ReadNote { id } => self.memory()?.read_note(id),
             Tool::CreateNote { scope, title, body } => {
@@ -816,20 +923,34 @@ impl Broker {
                         self.server_pdf.as_mut(),
                     )?
                 } else {
-                    if ext != "txt" {
-                        return Err("新的一般成果只建立 TXT；MD 僅允許既有 MD 的修訂副本。".into());
+                    if matches!(ext.as_str(), "docx" | "xlsx" | "pptx") {
+                        self.txt_context = true;
+                        (
+                            office::render(None, &rel, None, &[], None, cancel)?.serialize()?,
+                            Encoding::Utf8(true),
+                        )
+                    } else if ext == "txt" {
+                        (String::new(), Encoding::Utf8(true))
+                    } else {
+                        return Err(
+                            "新建只支援 TXT、DOCX、XLSX、PPTX；舊格式與 MD 請從來源建立副本。"
+                                .into(),
+                        );
                     }
-                    (String::new(), Encoding::Utf8(true))
                 };
                 let office = if office::supported(&rel) {
-                    let source = source.as_ref().ok_or("Office 目前需由既有文件建立副本。")?;
                     let original: office::Snapshot =
                         serde_json::from_str(&content).map_err(|e| e.to_string())?;
                     Some(OfficeCopy {
                         source: source.clone(),
-                        fingerprint: fingerprint(&self.project, source)?,
+                        fingerprint: source
+                            .as_ref()
+                            .map(|s| fingerprint(&self.project, s))
+                            .transpose()?
+                            .unwrap_or_default(),
                         desired: original.clone(),
-                        original,
+                        original: source.as_ref().map(|_| original),
+                        actions: Vec::new(),
                     })
                 } else {
                     None
@@ -888,22 +1009,21 @@ impl Broker {
                 block_id,
                 expected,
                 replacement,
-            } => {
-                let copy = self
-                    .copies
-                    .get_mut(copy_id)
-                    .ok_or("不是本次任務的工作副本。")?;
-                if text::revision(&copy.text) != *revision {
-                    return Err("版本已改變，請重新讀取。".into());
-                }
-                let office = copy.office.as_mut().ok_or("此工具只適用 Office 副本。")?;
-                let mut next = office.desired.clone();
-                next.edit(block_id, expected, replacement)?;
-                let serialized = next.serialize()?;
-                office.desired = next;
-                copy.text = serialized;
-                Ok(json!({"copy_id":copy_id,"revision":text::revision(&copy.text)}))
-            }
+            } => self.office_action(
+                copy_id,
+                revision,
+                office::Action::Edit {
+                    block_id: block_id.clone(),
+                    expected: expected.clone(),
+                    replacement: replacement.clone(),
+                },
+                cancel,
+            ),
+            Tool::OfficeAction {
+                copy_id,
+                revision,
+                operation,
+            } => self.office_action(copy_id, revision, *operation.clone(), cancel),
             Tool::SaveCopy { copy_id, revision } => {
                 let copy = self
                     .copies
@@ -924,7 +1044,13 @@ impl Broker {
                 }
                 // 原檔版本與內容都核對，格式或其他非文字部分變動也不能沿用舊副本。
                 if let Some(office) = &copy.office {
-                    if fingerprint(&self.project, &office.source)? != office.fingerprint {
+                    if office
+                        .source
+                        .as_ref()
+                        .map(|s| fingerprint(&self.project, s))
+                        .transpose()?
+                        .is_some_and(|stamp| stamp != office.fingerprint)
+                    {
                         return Err("Office 原檔已變動，請重新建立副本。".into());
                     }
                 }
@@ -953,20 +1079,17 @@ impl Broker {
                     fs::create_dir(&stage).map_err(|e| e.to_string())?;
                     let stage_guard = pin_stage(&stage)?;
                     let staged = stage.join(&copy.name);
-                    let source = self.project.root.join(self::relative(&office.source)?);
-                    let _source_dirs = pin(source.parent().ok_or("缺少來源目錄。")?)?;
-                    let _source_file = checked_file(&source)?;
-                    if fingerprint(&self.project, &office.source)? != office.fingerprint {
-                        return Err("Office 原檔已變動，請重新建立副本。".into());
-                    }
                     let saved = (|| {
-                        office::process(
-                            &source,
+                        let snapshot = render_office(
+                            &self.project,
+                            &copy.name,
+                            office,
                             Some(&staged),
-                            Some(&office.original),
-                            Some(&office.desired),
                             cancel,
                         )?;
+                        if snapshot != office.desired {
+                            return Err("Office 重建結果與工作版本不一致。".into());
+                        }
                         let mut input = checked_file(&staged)?;
                         if input.metadata().map_err(|e| e.to_string())?.len() > 50_000_000 {
                             return Err("Office 成果超過 50 MB。".into());
@@ -1004,6 +1127,34 @@ impl Broker {
                 Ok(json!({"discarded":copy_id}))
             }
         }
+    }
+    /// 驗證通過才替換記憶體版本；失敗的格式／結構操作不會污染先前成功的工作。
+    fn office_action(
+        &mut self,
+        id: &str,
+        revision: &str,
+        action: office::Action,
+        cancel: &AtomicBool,
+    ) -> AppResult<Value> {
+        let copy = self.copies.get_mut(id).ok_or("不是本次任務的工作副本。")?;
+        if text::revision(&copy.text) != revision {
+            return Err("版本已改變，請重新讀取。".into());
+        }
+        let office = copy.office.as_mut().ok_or("此工具只適用 Office 副本。")?;
+        let mut candidate = office.clone();
+        candidate.actions.push(action);
+        if candidate.actions.len() > 200 {
+            return Err("單一文件最多 200 次修改；請發布後建立新副本。".into());
+        }
+        let snapshot = render_office(&self.project, &copy.name, &candidate, None, cancel)?;
+        let content = snapshot.serialize()?;
+        let result = json!({"copy_id":id,"revision":text::revision(&content),"structure":snapshot.structure,
+            "blocks_tail":snapshot.blocks.iter().rev().take(12).map(|b| json!({"id":b.id,"label":b.label,"kind":b.kind,"format":b.format,"preview":b.text.chars().take(120).collect::<String>()})).collect::<Vec<_>>(),
+            "hint":"結構改變後使用新版本與區塊 ID；完整內容可用 read_file(copy_id) 讀取。"});
+        candidate.desired = snapshot;
+        *office = candidate;
+        copy.text = content;
+        Ok(result)
     }
     pub fn finish(&self, artifacts: &[String]) -> AppResult<Vec<String>> {
         self.finish_cancellable(artifacts, &AtomicBool::new(false))

@@ -453,6 +453,8 @@ function renderMessages() {
   if (signature === messageSignature) {
     const retry = document.querySelector("#messages .retry-message");
     if (retry) retry.disabled = !state.retry?.enabled;
+    const resume = document.querySelector("#messages .resume-project");
+    if (resume) resume.disabled = !state.retry?.enabled || state.projects?.running;
     return;
   }
   const changed = lastConversation !== state.active_id;
@@ -519,7 +521,13 @@ function renderMessages() {
     copy.innerHTML = icon("copy") + "複製";
     copy.title = "複製原文";
     tools.append(copy);
-    if (state.retry && index === state.messages.length - 1) {
+    if (message.project_paused && index === state.messages.length - 1 && state.conversations.some(c => c.id === state.active_id && c.project_id)) {
+      const resume = node("button", "resume-project", "繼續");
+      resume.disabled = !state.retry?.enabled || state.projects?.running;
+      resume.title = "從暫存的工作副本與進度繼續，不重新執行整個任務";
+      resume.onclick = () => { if (resume.disabled) return; resume.disabled = true; send({type:"project", command:{action:"resume",conversation:state.active_id,run_id:message.request_id,message_count:state.messages.length}}); };
+      tools.append(resume);
+    } else if (state.retry && index === state.messages.length - 1) {
       const retry = node("button", "retry-message", "重新再試一次");
       retry.innerHTML = icon("refresh") + "重新再試一次";
       retry.disabled = !state.retry.enabled;

@@ -1,14 +1,14 @@
 //! 程式保存可核對的進度；AI 筆記僅提供摘要，不授予權限、不取代檔案版本。
 use super::{text, Tool};
 use crate::{protocol::Message, AppResult};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 const SOFT_BYTES: usize = 120_000;
 const HARD_BYTES: usize = 240_000;
 
-#[derive(Default, Serialize)]
+#[derive(Default, Serialize, Deserialize)]
 struct Reading {
     revision: String,
     total: usize,
@@ -46,11 +46,13 @@ impl Reading {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 struct Note {
     text: String,
     covered: usize,
 }
 
+#[derive(Serialize, Deserialize)]
 pub(super) struct Progress {
     base: Vec<Message>,
     // 一筆為確定解析的操作及真實工具結果；失敗格式另存，不混入成功歷史。
@@ -83,6 +85,29 @@ impl Progress {
             consecutive_repairs: 0,
             total_repairs: 0,
             no_progress: 0,
+        }
+    }
+    /// 使用者主動續接才重設每段計數；去重紀錄仍由 broker 保留。
+    pub fn resume_segment(&mut self) {
+        self.total_repairs = 0;
+        self.consecutive_repairs = 0;
+        self.no_progress = 0;
+        self.repair = None;
+        self.compact = true;
+        // 完整原始結果仍存在加密 broker 操作簿，可用 read_work_log 分段取回。
+        // 續接使用最新兩筆結果、摘要與程式狀態，避免第二段再碰到 204 則訊息上限。
+        let remove = self.history.len().saturating_sub(2);
+        self.history.drain(..remove);
+        if let Some(note) = self.note.as_mut() {
+            note.covered = note.covered.saturating_sub(remove);
+        }
+        const RESUME_GUIDE: &str = "續接規則：上一段完整工具結果已加密保存，可用 read_work_log(offset) 查回；本輪僅附最近結果、摘要及實際副本狀態。未附原文不等於未讀過，也不可憑摘要捏造細節；必要時查操作紀錄或重讀來源。使用新的操作 ID，既有 ID 僅能查回完全相同參數的結果。";
+        if !self.base.iter().any(|m| m.content == RESUME_GUIDE) {
+            self.base.push(Message::user(RESUME_GUIDE));
+        }
+        // 所有操作去重保存於 broker；模型只需近期摘要，避免續接狀態本身無限膨脹。
+        if self.operations.len() > 20 {
+            self.operations.drain(..self.operations.len() - 20);
         }
     }
     /// 第五次有效閱讀且尚未讀完時，僅在下一輪附可選技能。
@@ -149,6 +174,7 @@ impl Progress {
             object.remove("entries");
             object.remove("positions");
             object.remove("document");
+            object.remove("blocks_tail");
         }
         self.operations
             .push(json!({"id":id,"tool":tool.label(),"result":metadata}));
@@ -280,6 +306,19 @@ mod tests {
     use super::*;
     fn read(offset: usize, revision: &str) -> Value {
         json!({"ok":true,"result":{"offset":offset,"next_offset":offset+10,"total":100,"revision":revision,"text":"original evidence"}})
+    }
+    #[test]
+    fn explicit_resume_keeps_state_but_bounds_model_history_without_a_note() {
+        let mut state = Progress::new(vec![Message::user("原始要求")]);
+        for i in 0..60 {
+            state.push_tool(format!("call{i}"), format!("evidence{i}"));
+        }
+        state.resume_segment();
+        let messages = state.messages(json!([])).unwrap();
+        assert!(messages.len() < 10);
+        assert!(messages.iter().any(|m| m.content.contains("read_work_log")));
+        assert!(messages.iter().any(|m| m.content == "evidence59"));
+        assert!(messages.iter().any(|m| m.content == "原始要求"));
     }
     #[test]
     fn notes_use_new_ranges_and_invalidate_on_version_change() {

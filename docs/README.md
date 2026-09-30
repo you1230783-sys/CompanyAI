@@ -6,6 +6,11 @@
 
 ## 目前版本
 
+- [0.8.26 契約](DESKTOP_0_8_26_CONTRACT.md)：Office 新建與格式、上限暫停續接、HTTP 階段診斷。
+- [0.8.26 驗證紀錄](VALIDATION_0_8_26.md)。
+
+### 前版協定參考
+
 - [0.8.25 工具契約](DESKTOP_0_8_25_CONTRACT.md)：桌面文字 tools／tool_calls、舊格式相容與執行界線。
 - [0.8.25 驗證紀錄](VALIDATION_0_8_25.md)：編譯器、測試、EXE 雜湊與未測範圍。
 - [0.8.25 完整請求範例](PROJECT_REQUEST_0_8_25_EXAMPLE.json)：包含完整 system，資料為虛構範例。

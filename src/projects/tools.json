@@ -82,7 +82,7 @@
       "type": "function",
       "function": {
         "name": "create_working_copy",
-        "description": "建立獨立副本；source 為來源相對路徑，null 為新 TXT；name 只填檔名。",
+        "description": "建立本次工作副本。source 為來源相對路徑；null 時新建 TXT/DOCX/XLSX/PPTX，name 為檔名。Office 來源保留格式，PDF/MSG 僅 TXT。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -181,6 +181,304 @@
             "block_id",
             "expected",
             "replacement"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "office_action",
+        "description": "修改 Office 副本結構／格式。format.target：Word/PPT 使用區塊 ID，Excel 使用 s1:A1:C3；字型 font、字級 size、顏色 #RRGGBB；style：Word title/heading1/heading2/body、Excel header、PPT title/body；alignment left/center/right/justify；間距為點，line_spacing 為倍數；number_format general/integer/decimal/percent/date/text。word_* 的 before 省略為結尾；excel_write 文字永遠是字面值、不寫公式。每次成功回新版本，結構更動後重讀 ID。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "copy_id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "operation": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "format"
+                    },
+                    "target": {
+                      "type": "string"
+                    },
+                    "format": {
+                      "type": "object",
+                      "properties": {
+                        "style": {
+                          "type": "string"
+                        },
+                        "font": {
+                          "type": "string"
+                        },
+                        "color": {
+                          "type": "string"
+                        },
+                        "alignment": {
+                          "type": "string"
+                        },
+                        "fill": {
+                          "type": "string"
+                        },
+                        "number_format": {
+                          "type": "string"
+                        },
+                        "size": {
+                          "type": "number"
+                        },
+                        "space_before": {
+                          "type": "number"
+                        },
+                        "space_after": {
+                          "type": "number"
+                        },
+                        "line_spacing": {
+                          "type": "number"
+                        },
+                        "column_width": {
+                          "type": "number"
+                        },
+                        "bold": {
+                          "type": "boolean"
+                        },
+                        "italic": {
+                          "type": "boolean"
+                        },
+                        "bullets": {
+                          "type": "boolean"
+                        },
+                        "borders": {
+                          "type": "boolean"
+                        },
+                        "wrap": {
+                          "type": "boolean"
+                        },
+                        "font_east_asia": {
+                          "type": "string",
+                          "description": "Word 東亞字型，需本機已安裝。"
+                        }
+                      },
+                      "required": [],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "target",
+                    "format"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "word_paragraph"
+                    },
+                    "before": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "format": {
+                      "type": "object",
+                      "properties": {
+                        "style": {
+                          "type": "string"
+                        },
+                        "font": {
+                          "type": "string"
+                        },
+                        "color": {
+                          "type": "string"
+                        },
+                        "alignment": {
+                          "type": "string"
+                        },
+                        "fill": {
+                          "type": "string"
+                        },
+                        "number_format": {
+                          "type": "string"
+                        },
+                        "size": {
+                          "type": "number"
+                        },
+                        "space_before": {
+                          "type": "number"
+                        },
+                        "space_after": {
+                          "type": "number"
+                        },
+                        "line_spacing": {
+                          "type": "number"
+                        },
+                        "column_width": {
+                          "type": "number"
+                        },
+                        "bold": {
+                          "type": "boolean"
+                        },
+                        "italic": {
+                          "type": "boolean"
+                        },
+                        "bullets": {
+                          "type": "boolean"
+                        },
+                        "borders": {
+                          "type": "boolean"
+                        },
+                        "wrap": {
+                          "type": "boolean"
+                        },
+                        "font_east_asia": {
+                          "type": "string",
+                          "description": "Word 東亞字型，需本機已安裝。"
+                        }
+                      },
+                      "required": [],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "word_table"
+                    },
+                    "before": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "rows"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "excel_sheet"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "name"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "excel_write"
+                    },
+                    "sheet": {
+                      "type": "integer"
+                    },
+                    "cell": {
+                      "type": "string"
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": [
+                            "string",
+                            "number",
+                            "null"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "sheet",
+                    "cell",
+                    "rows"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "ppt_slide"
+                    },
+                    "layout": {
+                      "enum": [
+                        "title",
+                        "content",
+                        "two_column"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string"
+                    },
+                    "right": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "layout",
+                    "title",
+                    "body"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "copy_id",
+            "revision",
+            "operation"
           ],
           "additionalProperties": false
         }
@@ -603,6 +901,28 @@
           "required": [
             "message"
           ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_work_log",
+        "description": "續接時查回本次任務完整原始操作與結果；offset 為 Unicode 字元位置，每次 6000 字。按 operation_id 排序，不代表時間順序。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
           "additionalProperties": false
         }
       }

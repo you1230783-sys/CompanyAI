@@ -11,6 +11,13 @@ use windows::{
     Win32::System::{Com::*, Variant::*},
 };
 
+mod authoring;
+pub use authoring::{render, Action, Format};
+#[cfg(debug_assertions)]
+mod fixtures;
+#[cfg(debug_assertions)]
+pub use fixtures::create as create_test_fixtures;
+
 const MAX_BLOCKS: usize = 2000;
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Block {
@@ -19,10 +26,17 @@ pub struct Block {
     pub text: String,
     /// text 與 number 可改；formula / readonly 保留原件內容。
     pub kind: String,
+    /// 索引至 Snapshot.formats；相同格式共用，避免數千儲存格重複佔用上下文。
+    #[serde(default)]
+    pub format: serde_json::Value,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Snapshot {
     pub scope: String,
+    #[serde(default)]
+    pub structure: serde_json::Value,
+    #[serde(default)]
+    pub formats: Vec<serde_json::Value>,
     pub blocks: Vec<Block>,
 }
 impl Snapshot {
@@ -55,7 +69,7 @@ impl Snapshot {
         } else if block.kind == "text" {
             // Word 段落末端標記不交给模型修改，避免破壞表格及段落索引。
             if self.scope.starts_with("Word") && replacement.contains(['\r', '\n']) {
-                return Err("本版 Word 只修訂既有段落文字，不新增或合併段落。".into());
+                return Err("本版 Word 只修訂既有段落文字，請用 office_action 新增段落。".into());
             }
             block.text = replacement.replace("\r\n", "\n").replace('\r', "\n");
         } else {
@@ -214,6 +228,9 @@ impl Drop for Session {
 }
 impl Session {
     fn open(path: &Path) -> AppResult<Self> {
+        Self::start(path, false)
+    }
+    fn start(path: &Path, create: bool) -> AppResult<Self> {
         let ext = path
             .extension()
             .and_then(|s| s.to_str())
@@ -267,6 +284,23 @@ impl Session {
         } else if session.collection == "Workbooks" {
             session.setting(session.app.clone(), "EnableEvents", false.into())?;
             session.setting(session.app.clone(), "AskToUpdateLinks", false.into())?;
+        }
+        if create {
+            if !matches!(session.ext.as_str(), "docx" | "xlsx" | "pptx") {
+                return Err("新建 Office 僅支援 DOCX、XLSX、PPTX。".into());
+            }
+            let args = match collection {
+                "Documents" => vec![missing(), false.into(), 0i32.into(), false.into()],
+                "Workbooks" => vec![(-4167i32).into()], // xlWBATWorksheet：固定一張工作表
+                _ => vec![0i32.into()],
+            };
+            session.document = Some(obj(invoke(
+                &child(&session.app, collection)?,
+                "Add",
+                args,
+                false,
+            )?)?);
+            return Ok(session);
         }
         let path = VARIANT::from(path.to_string_lossy().as_ref());
         let args = match session.ext.as_str() {
@@ -337,6 +371,8 @@ impl Session {
     fn snapshot(&self, cancel: &AtomicBool) -> AppResult<(Snapshot, Vec<IDispatch>)> {
         let document = self.document()?;
         let mut blocks = Vec::new();
+        let mut formats = Vec::new();
+        let mut format_ids = std::collections::BTreeMap::new();
         let mut targets = Vec::new();
         let mut text_bytes = 0usize;
         let mut push = |object: IDispatch,
@@ -355,11 +391,20 @@ impl Session {
             if text_bytes > super::text::MAX_TEXT {
                 return Err("Office 文字超過 200 KB，請縮小文件。".into());
             }
+            let attributes = authoring::inspect_format(&object, self.collection)?;
+            let key = attributes.to_string();
+            let index = *format_ids.entry(key).or_insert_with(|| {
+                let index = formats.len();
+                formats.push(attributes);
+                index
+            });
+            let format = serde_json::json!(index);
             blocks.push(Block {
                 id,
                 label,
                 text,
                 kind: kind.into(),
+                format,
             });
             targets.push(object);
             Ok(())
@@ -463,6 +508,8 @@ impl Session {
         };
         let snapshot = Snapshot {
             scope: scope.into(),
+            structure: authoring::structure(self)?,
+            formats,
             blocks,
         };
         snapshot.serialize()?;
@@ -559,11 +606,14 @@ mod tests {
     fn sample(kind: &str) -> Snapshot {
         Snapshot {
             scope: "Excel".into(),
+            structure: serde_json::Value::Null,
+            formats: Vec::new(),
             blocks: vec![Block {
                 id: "s1:$A$1".into(),
                 label: "A1".into(),
                 text: "12".into(),
                 kind: kind.into(),
+                format: serde_json::Value::Null,
             }],
         }
     }

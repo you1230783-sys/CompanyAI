@@ -383,6 +383,10 @@ mod tests {
                 "edit_office",
                 json!({"copy_id":"c","revision":"r","block_id":"b","expected":"舊","replacement":"新"}),
             ),
+            (
+                "office_action",
+                json!({"copy_id":"c","revision":"r","operation":{"kind":"excel_sheet","name":"資料"}}),
+            ),
             ("save_copy", json!({"copy_id":"c","revision":"r"})),
             ("delete_copy", json!({"copy_id":"c"})),
             ("list_notes", json!({})),
@@ -406,6 +410,7 @@ mod tests {
                 "update_document_note",
                 json!({"path":"a.txt","revision":"r","note_revision":"1","summary":"摘要"}),
             ),
+            ("read_work_log", json!({})),
             ("read_task_result", json!({"task_id":"t"})),
         ];
         let definitions: Value = serde_json::from_str(DEFINITIONS).unwrap();

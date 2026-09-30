@@ -41,6 +41,9 @@ pub struct Message {
     /// 專案工具歷程只供本機顯示，不加入模型對話內容。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub project_activity: Vec<String>,
+    /// 本機暫停狀態；模型無法藉回覆文字建立可續接授權。
+    #[serde(default)]
+    pub project_paused: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retry_settings: Option<RetrySettings>,
     /// 重試仍使用首次提問之前的上下文，畫面則保留每次嘗試。
@@ -59,6 +62,7 @@ impl Message {
             response_payload: None,
             received_replies: Vec::new(),
             project_activity: Vec::new(),
+            project_paused: false,
             retry_settings: None,
             retry_context_index: None,
         }
@@ -73,6 +77,7 @@ impl Message {
             response_payload: None,
             received_replies: Vec::new(),
             project_activity: Vec::new(),
+            project_paused: false,
             retry_settings: None,
             retry_context_index: None,
         }
@@ -189,7 +194,7 @@ pub fn api_error(status: u32, body: &str, secret: &str) -> String {
     let hint = match status {
         401 => "登入已到期或 API Key 無效，請重新登入。",
         403 => "此帳號沒有呼叫此 API 或模型的權限。",
-        404 => "找不到服務，請聯絡管理者確認部署。",
+        404 => "找不到指定資源或 API 路由，需依請求階段確認原因。",
         426 => "此版本已停止支援，請按「下載更新」取得新版。",
         429 => "請求過多，請稍後再試。",
         _ => "API 請求失敗，請檢查網站服務。",
@@ -197,7 +202,13 @@ pub fn api_error(status: u32, body: &str, secret: &str) -> String {
     let parsed = serde_json::from_str::<serde_json::Value>(body).ok();
     let detail = parsed
         .as_ref()
-        .and_then(|value| value.get("error")?.get("message")?.as_str())
+        .and_then(|value| {
+            value
+                .get("error")
+                .and_then(|e| e.get("message"))
+                .and_then(|m| m.as_str())
+                .or_else(|| value.get("message").and_then(|m| m.as_str()))
+        })
         .unwrap_or("");
     let redacted = if secret.is_empty() {
         detail.to_string()

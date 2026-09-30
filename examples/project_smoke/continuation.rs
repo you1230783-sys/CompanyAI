@@ -26,6 +26,7 @@ use std::{
 enum Case {
     LongRead,
     LongReadClean,
+    TransientSubmission,
     Replay,
     EmptyForever,
     WrongIdentity,
@@ -69,7 +70,7 @@ fn answer(case: Case, round: usize, body: &Value) -> Option<String> {
     assert!(all.contains("補充：保留數字與限制"));
     assert_eq!(body["skills"], false);
     let decision = match case {
-        Case::LongRead | Case::LongReadClean => {
+        Case::LongRead | Case::LongReadClean | Case::TransientSubmission => {
             let reads = state["operations"].as_array().unwrap().len();
             // 第五次有效閱讀才提供一次可選技能；正常情境完全略過筆記也須能讀完。
             assert_eq!(all.contains("可選技能：長文件閱讀筆記"), round == 5);
@@ -184,6 +185,7 @@ pub fn verify(root: &Path) -> AppResult<()> {
     for case in [
         Case::LongRead,
         Case::LongReadClean,
+        Case::TransientSubmission,
         Case::Replay,
         Case::EmptyForever,
         Case::WrongIdentity,
@@ -199,7 +201,10 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
     let run_id = format!("continue_{case:?}");
     let workspace = root.join(&run_id);
     std::fs::create_dir(&workspace).map_err(|e| e.to_string())?;
-    let original = if matches!(case, Case::LongRead | Case::LongReadClean) {
+    let original = if matches!(
+        case,
+        Case::LongRead | Case::LongReadClean | Case::TransientSubmission
+    ) {
         paper()
     } else {
         "原始文字".into()
@@ -219,6 +224,7 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
     let stop = stopped.clone();
     let server = std::thread::spawn(move || -> AppResult<usize> {
         let mut rounds = 0;
+        let mut missing = false;
         let mut last = json!({});
         while !stop.load(Ordering::Relaxed) {
             let (mut stream, _) = match listener.accept() {
@@ -245,11 +251,19 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
                         last["state"] = json!("cancelled");
                         last["error_message"] = json!("已取消");
                     }
+                    Case::TransientSubmission if rounds == 20 => {
+                        http = 503;
+                        missing = true;
+                    }
                     Case::UnknownSubmission => http = 503,
                     _ => (),
                 }
                 last.clone()
             } else if route.contains("/tasks/") {
+                if missing {
+                    http = 404;
+                    missing = false;
+                }
                 if matches!(case, Case::UnknownSubmission) {
                     http = 404;
                 }
@@ -272,6 +286,7 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
     )?;
     let result = runner::run(
         Run {
+            resume: false,
             id: run_id.clone(),
             project: Project {
                 id: "test".into(),
@@ -298,7 +313,7 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
             assert!(result?.contains("23 段"));
             assert_eq!(rounds, 26);
         }
-        Case::LongReadClean => {
+        Case::LongReadClean | Case::TransientSubmission => {
             assert!(result?.contains("23 段"));
             assert_eq!(rounds, 24);
         }
@@ -334,7 +349,15 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
             assert_eq!(rounds, 1);
         }
         Case::UnknownSubmission => {
-            assert!(result.unwrap_err().contains("未另建請求"));
+            let error = result.unwrap_err();
+            assert!(
+                error.contains("未另建請求")
+                    && error.contains("提交 POST")
+                    && error.contains("503")
+                    && error.contains("查詢 GET")
+                    && error.contains("404"),
+                "{error}"
+            );
             assert_eq!(rounds, 1);
         }
         Case::NoProgress => {

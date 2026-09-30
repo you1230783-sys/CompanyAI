@@ -1,4 +1,5 @@
 //! 僅處理呼叫端指定的 Office 測試資料夾；實際經過 broker 與 AppContainer。
+mod office_authoring;
 use company_ai::{
     projects::{files::Broker, sandbox::Worker, text, Project, Tool},
     AppResult,
@@ -8,6 +9,9 @@ fn run() -> AppResult<()> {
     let args: Vec<_> = std::env::args().collect();
     let exe = PathBuf::from(args.get(1).ok_or("需要 EXE。")?);
     let root = PathBuf::from(args.get(2).ok_or("需要固定測試檔資料夾。")?);
+    if args.get(3).is_some_and(|s| s == "--create-fixtures") {
+        return company_ai::projects::office::create_test_fixtures(&root);
+    }
     let cancel = AtomicBool::new(false);
     let mut worker = Worker::start(&exe, &cancel)?;
     // Word 實際輸出的繁體中文 PDF，驗證嵌入字型／ToUnicode，不只測 ASCII fixture。
@@ -179,6 +183,7 @@ fn run() -> AppResult<()> {
         );
         println!("PASS {ext}: {path}");
     }
+    office_authoring::verify(&root, &mut worker, &cancel)?;
     Ok(())
 }
 fn main() {

@@ -455,6 +455,7 @@ pub(crate) fn project_submit(
 ) -> AppResult<TaskStatus> {
     // 由專案執行器分別檢查身分、終態與模型正文，避免空白完成被誤當網路錯誤。
     post(config, session, CHAT_PATH, &task.request)
+        .map_err(|e| format!("提交 POST {CHAT_PATH}：{e}"))
 }
 
 /// 查詢原有請求；識別碼及正文由專案執行器分層驗證。
@@ -467,7 +468,7 @@ pub(crate) fn project_task_status(
         Some(r) => format!("{PREFIX}/tasks/{}", r.task_id),
         None => format!("{PREFIX}/tasks/by-request/{}", task.request_id),
     };
-    get(config, session, &path)
+    get(config, session, &path).map_err(|e| format!("查詢 GET {path}：{e}"))
 }
 
 pub fn task_status(config: &Config, session: &Session, task: &Task) -> AppResult<TaskStatus> {

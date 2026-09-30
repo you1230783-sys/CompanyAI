@@ -1,18 +1,22 @@
-{
-  "version": "0.8.20.0",
-  "result": "PASS",
-  "office_version": "16.0.20326.20158",
-  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\office-test-29bf48eda595412f9c2bdec4197a2437",
-  "checks": [
-    "DOC/DOCX/DOCM/XLS/XLSX/XLSM/XLSB/PPT/PPTX/PPTM COM read/edit/save/reopen",
-    "source bytes unchanged",
-    "readable filename and numbered second revision",
-    "duplicate save idempotent",
-    "Excel formula protected and literal = text",
-    "Excel numeric edit",
-    "Word and Excel bold retained",
-    "untouched paragraph/shape retained"
-  ],
-  "company_encryption_tested": false,
-  "screenshots_verified": false
+﻿{
+    "version":  "0.8.26.0",
+    "result":  "PASS",
+    "office_version":  "16.0.20326.20158",
+    "fixture":  "Y:\\Rust\\Project\\CompanyAI\\.build\\office-test-9ec7a92e0de4493a95b5940886d6929a",
+    "checks":  [
+                   "DOC/DOCX/DOCM/XLS/XLSX/XLSM/XLSB/PPT/PPTX/PPTM COM read/edit/save/reopen",
+                   "source bytes unchanged",
+                   "readable filename and numbered second revision",
+                   "duplicate save idempotent",
+                   "Excel formula protected and literal = text",
+                   "Excel numeric edit",
+                   "Word and Excel bold retained",
+                   "untouched paragraph/shape retained",
+                   "blank DOCX/XLSX/PPTX creation",
+                   "Word paragraphs/table/styles and Chinese font",
+                   "Excel worksheets/ranges/number formats/borders",
+                   "PPT title/content/two-column layouts and text styles"
+               ],
+    "company_encryption_tested":  false,
+    "screenshots_verified":  false
 }

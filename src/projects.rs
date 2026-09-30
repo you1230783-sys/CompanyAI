@@ -113,6 +113,11 @@ pub enum Tool {
         expected: String,
         replacement: String,
     },
+    OfficeAction {
+        copy_id: String,
+        revision: String,
+        operation: Box<office::Action>,
+    },
     SaveCopy {
         copy_id: String,
         revision: String,
@@ -163,6 +168,10 @@ pub enum Tool {
         section_id: Option<String>,
         summary: String,
     },
+    ReadWorkLog {
+        #[serde(default)]
+        offset: usize,
+    },
     ReadTaskResult {
         task_id: String,
         #[serde(default = "result_field")]
@@ -185,6 +194,7 @@ impl Tool {
             Self::FindText { .. } => "尋找文字",
             Self::CreateWorkingCopy { source: None, .. } => "建立新檔案",
             Self::CreateWorkingCopy { .. } => "建立副本",
+            Self::OfficeAction { .. } => "編輯 Office 結構與格式",
             Self::EditOffice { .. } => "編輯 Office 文字",
             Self::EditText { .. } => "編輯文字",
             Self::SaveCopy { .. } => "儲存副本",
@@ -197,6 +207,7 @@ impl Tool {
             Self::RestoreNote { .. } => "復原筆記",
             Self::ListDocumentSections { .. } => "查看文件分段摘要",
             Self::ReadDocumentSection { .. } => "閱讀文件區段",
+            Self::ReadWorkLog { .. } => "查閱本次操作紀錄",
             Self::ReadTaskResult { .. } => "讀取先前任務結果",
         }
     }

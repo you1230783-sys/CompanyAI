@@ -993,6 +993,13 @@ window.runSelfTest = async (structuredFixture) => {
       const button = document.querySelector(".retry-message");button.click();button.click();
       check(retryCommands.filter(command => command.type === "retry_chat").length === 1 && retryCommands.at(-1).request_id === "request-one" && retryCommands.at(-1).message_count === 2, "retry button binds original request and suppresses double click");
       LMUI.receive(fixture);check(!document.querySelector(".retry-message").disabled, "rejected retry can be used again after state refresh");
+      fixture.messages[1].project_paused = true; fixture.messages[1].request_id = "paused-run";
+      LMUI.receive(fixture);
+      const resume = document.querySelector(".resume-project");
+      check(resume && !resume.disabled && !document.querySelector(".retry-message"), "paused task offers continue instead of restart");
+      resume.click(); resume.click();
+      check(retryCommands.filter(c => c.command?.action === "resume").length === 1 && retryCommands.at(-1).command.run_id === "paused-run", "continue binds checkpoint and suppresses duplicate clicks");
+      fixture.messages[1].project_paused = false;
       fixture.messages[1].content = "成果：\n\n`_AI_Output/20260929_153000/測試 報告.txt`\n\n[另存](_AI_Output/20260929_153000/report.xlsx)\n\n_AI_Output/20260929_153000/plain.txt";
       LMUI.receive(fixture);
       const artifactLinks = document.querySelectorAll("#messages .project-artifact");

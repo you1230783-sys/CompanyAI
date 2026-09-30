@@ -14,7 +14,7 @@ pub(super) enum Reply {
 pub(super) fn receive(run: &Run, task: &mut Task, deadline: Instant) -> AppResult<Reply> {
     super::runner::check(&run.cancel, deadline)?;
     let submit = jobs::project_submit(&run.config, &run.session, task);
-    let submit_failed = submit.is_err();
+    let submit_error = submit.as_ref().err().cloned();
     let mut submitted_status = submit.ok();
     let mut connection_errors = 0;
     loop {
@@ -59,10 +59,14 @@ pub(super) fn receive(run: &Run, task: &mut Task, deadline: Instant) -> AppResul
             }
             Err(error) => {
                 connection_errors += 1;
-                if submit_failed || connection_errors >= 3 {
+                if connection_errors >= 3 {
                     return Err(format!(
-                        "無法確認原請求 {} 的結果，未另建請求或重播工具：{error}",
-                        task.request_id
+                        "無法確認原請求 {} 的結果，未另建請求或重播工具。{}最後一次{error}",
+                        task.request_id,
+                        submit_error
+                            .as_ref()
+                            .map(|e| format!("最初{e}；"))
+                            .unwrap_or_default()
                     ));
                 }
             }

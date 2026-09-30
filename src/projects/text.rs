@@ -5,7 +5,7 @@ use windows_sys::Win32::Globalization::*;
 
 pub const MAX_TEXT: usize = 200_000;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub enum Encoding {
     Utf8(bool),
     Utf16(bool),

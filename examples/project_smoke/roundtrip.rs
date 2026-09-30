@@ -266,6 +266,7 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
     )?;
     let result = runner::run(
         Run {
+            resume: false,
             id: run_id.clone(),
             project: Project {
                 id: "test".into(),

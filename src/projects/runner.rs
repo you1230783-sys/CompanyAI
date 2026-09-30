@@ -20,6 +20,7 @@ use std::{
 
 pub struct Run {
     pub id: String,
+    pub resume: bool,
     pub project: Project,
     pub conversation: String,
     pub messages: Vec<Message>,
@@ -29,8 +30,63 @@ pub struct Run {
     pub cancel: Arc<AtomicBool>,
 }
 
+const MAX_TOOLS: usize = 60;
+const MAX_REPLIES: usize = 80;
+fn quota_reached(replies: usize, tools: usize) -> bool {
+    replies >= MAX_REPLIES || tools >= MAX_TOOLS
+}
+
+const PAUSED: &str = "來回次數已達到上限，目前狀態已加密暫存。請按「繼續」以接續未完成的任務。";
+#[derive(serde::Serialize, serde::Deserialize)]
+struct PausedRun {
+    version: u32,
+    available: bool,
+    project: String,
+    project_root: PathBuf,
+    conversation: String,
+    principal: String,
+    request_text: String,
+    broker: super::files::SavedBroker,
+    progress: super::progress::Progress,
+}
+fn pause_path(root: &Path, id: &str) -> AppResult<PathBuf> {
+    jobs::validate_id(id)?;
+    Ok(root.join("project-runs").join(format!("{id}.resume.dpapi")))
+}
+fn load_pause(root: &Path, id: &str) -> AppResult<PausedRun> {
+    let path = pause_path(root, id)?;
+    if std::fs::metadata(&path)
+        .map_err(|_| "找不到暫停紀錄。")?
+        .len()
+        > 64_000_000
+    {
+        return Err("暫停紀錄過大。".into());
+    }
+    let bytes = storage::protect(&std::fs::read(path).map_err(|e| e.to_string())?, false)?;
+    serde_json::from_slice(&bytes).map_err(|_| "暫停紀錄無法解析。".into())
+}
+/// 按鈕依程式建立的暫存紀錄顯示，不相信模型自行聲稱已暫停。
+pub fn paused_available(root: &Path, id: &str) -> bool {
+    load_pause(root, id).is_ok_and(|s| s.version == 1 && s.available)
+}
+fn save_pause(
+    run: &Run,
+    principal: &str,
+    request: &str,
+    broker: &Broker,
+    progress: &super::progress::Progress,
+) -> AppResult<()> {
+    let state = json!({"version":1,"available":true,"project":run.project.id,"project_root":run.project.root,
+        "conversation":run.conversation,"principal":principal,"request_text":request,
+        "broker":broker.saved()?,"progress":progress});
+    checkpoint(&pause_path(&run.root, &run.id)?, &state)
+}
+
 fn checkpoint(path: &Path, value: &Value) -> AppResult<()> {
     let bytes = serde_json::to_vec(value).map_err(|e| e.to_string())?;
+    if bytes.len() > 60_000_000 {
+        return Err("專案暫存紀錄超過 60 MB，未宣稱已暫存。".into());
+    }
     storage::atomic_write(path, &storage::protect(&bytes, true)?)
 }
 
@@ -45,7 +101,7 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
     let mut broker = Broker::new(run.project.clone(), run.id.clone())?;
     broker.enable_server_pdf(run.config.clone(), run.session.clone())?;
     broker.enable_memory(&run.conversation)?;
-    let request_text = run
+    let mut request_text = run
         .messages
         .last()
         .map(|m| m.content.clone())
@@ -66,20 +122,59 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
         if !caps.supports("background") {
             return Err("文件工作區需要後端支援背景請求。".into());
         }
+        let resumed = if run.resume {
+            let mut saved = load_pause(&run.root, &run.id)?;
+            if saved.version != 1
+                || !saved.available
+                || saved.project != run.project.id
+                || saved.project_root != run.project.root
+                || saved.conversation != run.conversation
+                || saved.principal != caps.principal_id
+            {
+                return Err("暫停紀錄已使用、帳號不同或專案授權已變更，未續接。".into());
+            }
+            // 所有檢查成功才消耗此續接點；當機後不自動重播可能已執行的操作。
+            broker.restore(saved.broker, &run.cancel)?;
+            request_text = saved.request_text;
+            saved.progress.resume_segment();
+            checkpoint(
+                &pause_path(&run.root, &run.id)?,
+                &json!({"version":1,"available":false}),
+            )?;
+            Some(saved.progress)
+        } else {
+            None
+        };
         let remote = jobs::conversation(&run.config, &run.session, &run.conversation)?;
         let mut skill = Message::user(&super::tool_calls::system_prompt()?);
         skill.role = "system".into();
         run.messages.insert(0, skill);
         let deadline = Instant::now() + Duration::from_secs(1800);
         let mut failures = 0;
-        let mut progress_state = super::progress::Progress::new(run.messages.clone());
+        let mut progress_state =
+            resumed.unwrap_or_else(|| super::progress::Progress::new(run.messages.clone()));
         let mut tool_calls = 0;
-        for turn in 0..80 {
+        for turn in 0..=MAX_REPLIES {
+            if quota_reached(turn, tool_calls) {
+                check(&run.cancel, deadline)?;
+                save_pause(
+                    &run,
+                    &caps.principal_id,
+                    &request_text,
+                    &broker,
+                    &progress_state,
+                )?;
+                record["state"] = json!("paused");
+                return Ok(PAUSED.into());
+            }
             check(&run.cancel, deadline)?;
             if progress_state.stalled() {
                 return Err("連續八次未增加有效進度，已停止並保存紀錄。".into());
             }
-            let messages = progress_state.messages(broker.progress_snapshot())?;
+            let mut messages = progress_state.messages(broker.progress_snapshot())?;
+            if turn >= MAX_REPLIES - 4 || tool_calls >= MAX_TOOLS - 4 {
+                messages.push(Message::user(&format!("即將暫停：本段剩餘 {} 次模型回覆、{} 次工具操作。請在這次 arguments.progress_note 總結已完成、來源與版本、未完成事項及下一步；保持正常工具呼叫，不要假裝完成。程式會保存工作副本，等待使用者按繼續。",MAX_REPLIES-turn,MAX_TOOLS-tool_calls)));
+            }
             record["progress"] = progress_state.snapshot(broker.progress_snapshot());
             report(
                 &mut activity,
@@ -111,7 +206,13 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
                 .push(json!({"id":id,"request":task.request}));
             checkpoint(&journal, &record)?;
             super::events::register(&run.root, &id)?;
-            let outcome = super::model::receive(&run, &mut task, deadline)?;
+            let received = super::model::receive(&run, &mut task, deadline);
+            record["last_remote_status"] = json!(task.remote);
+            if let Err(error) = &received {
+                record["request_error"] = json!({"turn":turn+1,"request_id":id,"message":error});
+                checkpoint(&journal, &record)?;
+            }
+            let outcome = received.map_err(|e| format!("第 {} 輪：{e}", turn + 1))?;
             check(&run.cancel, deadline)?;
             let (reply, parsed, reason) = match outcome {
                 super::model::Reply::Text(text) => match super::reply::parse(&text)? {
@@ -154,7 +255,7 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
                     operation_id,
                     request,
                 } => {
-                    if tool_calls >= 60 {
+                    if tool_calls >= MAX_TOOLS {
                         return Err("已達本次 60 次工具操作上限，已保留進度與成果。".into());
                     }
                     tool_calls += 1;
@@ -264,7 +365,14 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
         .into(),
     );
     record["activity"] = json!(activity);
-    record["state"] = json!(if result.is_ok() { "ended" } else { "stopped" });
+    let paused = result.as_ref().is_ok_and(|text| text == PAUSED);
+    record["state"] = json!(if paused {
+        "paused"
+    } else if result.is_ok() {
+        "ended"
+    } else {
+        "stopped"
+    });
     record["outputs"] = json!(broker.published());
     record["result"] = json!(result);
     checkpoint(&journal, &record)?;
@@ -276,6 +384,8 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
         "cancelled"
     } else if result.is_err() {
         "failed"
+    } else if paused {
+        "paused"
     } else if outcome.starts_with("需要你的補充：") {
         "waiting_user"
     } else {
@@ -380,4 +490,16 @@ pub fn recover(root: &Path, id: &str) -> AppResult<String> {
         "上次專案任務未完成：{reason}\n\n可能已建立的檔案（需重新確認）：\n{}",
         outputs.join("\n")
     ))
+}
+
+#[cfg(test)]
+mod pause_tests {
+    use super::*;
+    #[test]
+    fn tool_and_model_quotas_pause_at_the_exact_boundary() {
+        assert!(!quota_reached(20, 20));
+        assert!(!quota_reached(79, 59));
+        assert!(quota_reached(80, 59));
+        assert!(quota_reached(79, 60));
+    }
 }

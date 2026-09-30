@@ -35,6 +35,11 @@ pub(super) enum ProjectCommand {
         conversation: String,
         path: String,
     },
+    Resume {
+        conversation: String,
+        run_id: String,
+        message_count: usize,
+    },
     Stop,
 }
 pub(super) enum ProjectEvent {
@@ -164,6 +169,7 @@ impl App {
                 continue;
             };
             let mut message = Message::assistant(projects::runner::recover(&self.root, &id)?);
+            message.project_paused = projects::runner::paused_available(&self.root, &id);
             message.project_activity =
                 projects::runner::recover_activity(&self.root, &id).unwrap_or_default();
             message.request_id = Some(id);
@@ -206,6 +212,28 @@ impl App {
             return Err("請先完成目前操作。".into());
         }
         match command {
+            ProjectCommand::Resume {
+                conversation,
+                run_id,
+                message_count,
+            } => {
+                if !self.logged_in()
+                    || self.versions.blocked()
+                    || !self.can_send()
+                    || self.active_id.as_deref() != Some(&conversation)
+                    || self.messages.len() != message_count
+                {
+                    return Err("目前無法續接，請確認登入與最新對話狀態。".into());
+                }
+                let message = self.messages.last().ok_or("找不到暫停訊息。")?;
+                if !message.project_paused
+                    || message.request_id.as_deref() != Some(&run_id)
+                    || !projects::runner::paused_available(&self.root, &run_id)
+                {
+                    return Err("此暫停點已失效，請使用最新的繼續按鈕。".into());
+                }
+                self.begin_project_segment(self.messages.clone(), Some(run_id))?;
+            }
             ProjectCommand::Create { name } => {
                 if let Some(root) = choose_path(self.window, None)? {
                     let mut store = self.projects.store.clone();
@@ -403,7 +431,14 @@ impl App {
         self.focus_draft = true;
         Ok(())
     }
-    pub(super) fn begin_project_chat(&mut self, mut messages: Vec<Message>) -> AppResult<()> {
+    pub(super) fn begin_project_chat(&mut self, messages: Vec<Message>) -> AppResult<()> {
+        self.begin_project_segment(messages, None)
+    }
+    fn begin_project_segment(
+        &mut self,
+        mut messages: Vec<Message>,
+        resume_id: Option<String>,
+    ) -> AppResult<()> {
         if self.projects.running.is_some() {
             return Err("第一版一次只執行一個專案任務，請先等待或停止。".into());
         }
@@ -417,7 +452,14 @@ impl App {
         if !self.work.store.drafts(Some(&conversation)).is_empty() {
             return Err("專案文件請放在授權資料夾內；第一版不混用網站附件。".into());
         }
-        let id = crate::jobs::new_id()?;
+        let resume = resume_id.is_some();
+        if resume {
+            messages.push(Message::user("繼續先前未完成的任務。"));
+        }
+        let id = match resume_id {
+            Some(id) => id,
+            None => crate::jobs::new_id()?,
+        };
         let cancel = Arc::new(AtomicBool::new(false));
         if let Some(message) = messages.last_mut() {
             message.request_id = Some(id.clone());
@@ -425,10 +467,15 @@ impl App {
         self.messages = messages.clone();
         self.save_history()?;
         let run = projects::runner::Run {
+            resume,
             id: id.clone(),
             project,
             conversation: conversation.clone(),
-            messages: super::retry::context(&messages)?,
+            messages: if resume {
+                vec![Message::user("繼續未完成任務")]
+            } else {
+                super::retry::context(&messages)?
+            },
             config: self.config.clone(),
             session: self.session.clone().ok_or("請先登入。")?,
             root: self.root.clone(),
@@ -454,7 +501,7 @@ impl App {
                 result,
             )));
         });
-        if self.messages.iter().filter(|m| m.role == "user").count() == 1 {
+        if !resume && self.messages.iter().filter(|m| m.role == "user").count() == 1 {
             if let Err(error) = self.queue_title(&self.active_id.clone().ok_or("找不到對話。")?)
             {
                 self.toast(&format!("專案任務已開始；標題暫未產生：{error}"));
@@ -490,7 +537,10 @@ impl App {
                     .take()
                     .map(|run| run.activity)
                     .unwrap_or_default();
-                self.projects.status = if cancelled {
+                let paused = projects::runner::paused_available(&self.root, &id);
+                self.projects.status = if paused {
+                    "專案已暫停，可按繼續。"
+                } else if cancelled {
                     "專案任務已停止。"
                 } else if result
                     .as_ref()
@@ -512,6 +562,7 @@ impl App {
                     .find(|c| c.id == conversation)
                     .ok_or("專案對話已不存在。")?;
                 let mut message = Message::assistant(text);
+                message.project_paused = paused;
                 message.project_activity = activity;
                 message.request_id = Some(id.clone());
                 c.messages.push(message);
@@ -533,53 +584,59 @@ impl App {
                         .messages
                         .clone();
                 }
-                // 一個使用者任務只保存一張已套用的卡片，內部模型回合不進工作清單。
-                let state = if cancelled {
-                    "cancelled"
-                } else if succeeded {
-                    "completed"
-                } else {
-                    "failed"
-                };
-                let remote = crate::jobs::TaskStatus {
-                    task_id: id.clone(),
-                    client_request_id: id.clone(),
-                    state: state.into(),
-                    progress: None,
-                    queue_position: None,
-                    result: if succeeded {
-                        Some(json!({"choices":[{"message":{"content":final_text}}]}))
+                // 暫停不建立「完成」卡；續接仍屬同一個任務。
+                self.work.store.tasks.retain(|t| t.request_id != id);
+                if !paused {
+                    // 一個使用者任務只保存一張已套用的卡片，內部模型回合不進工作清單。
+                    let state = if cancelled {
+                        "cancelled"
+                    } else if succeeded {
+                        "completed"
                     } else {
-                        None
-                    },
-                    response_payload_json: None,
-                    error_message: if succeeded {
-                        String::new()
-                    } else {
-                        final_text.chars().take(500).collect()
-                    },
-                };
-                self.work.store.tasks.push(crate::jobs::Task {
-                    request_id: id.clone(),
-                    conversation_id: conversation.clone(),
-                    request: json!({}),
-                    mode: "background".into(),
-                    title: "專案工作".into(),
-                    created_at: crate::unix_now(),
-                    remote: Some(remote),
-                    applied: true,
-                    message: self.projects.status.clone(),
-                    mail_analysis: false,
-                    title_generation: false,
-                    tool_events: vec![],
-                    partial: String::new(),
-                });
-                self.work_save()?;
+                        "failed"
+                    };
+                    let remote = crate::jobs::TaskStatus {
+                        task_id: id.clone(),
+                        client_request_id: id.clone(),
+                        state: state.into(),
+                        progress: None,
+                        queue_position: None,
+                        result: if succeeded {
+                            Some(json!({"choices":[{"message":{"content":final_text}}]}))
+                        } else {
+                            None
+                        },
+                        response_payload_json: None,
+                        error_message: if succeeded {
+                            String::new()
+                        } else {
+                            final_text.chars().take(500).collect()
+                        },
+                    };
+                    self.work.store.tasks.push(crate::jobs::Task {
+                        request_id: id.clone(),
+                        conversation_id: conversation.clone(),
+                        request: json!({}),
+                        mode: "background".into(),
+                        title: "專案工作".into(),
+                        created_at: crate::unix_now(),
+                        remote: Some(remote),
+                        applied: true,
+                        message: self.projects.status.clone(),
+                        mail_analysis: false,
+                        title_generation: false,
+                        tool_events: vec![],
+                        partial: String::new(),
+                    });
+                    self.work_save()?;
+                }
                 if self.logged_in() && !cancelled {
                     let waiting = self.projects.status == "等待你的補充。";
                     let notice = crate::notifications::Notification {
                         id: format!("project_{id}"),
-                        kind: if waiting {
+                        kind: if paused {
+                            "project.paused"
+                        } else if waiting {
                             "project.waiting_user"
                         } else if succeeded {
                             "project.completed"

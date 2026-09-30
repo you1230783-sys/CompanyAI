@@ -492,3 +492,12 @@ Outlook 第一輪維持以 `# Outlook 郵件初篩 outlook-triage` 開頭，供�
 ## 0.8.18 桌面 Office 工具
 
 後端路由沒有新增欄位；專案工具含 `edit_office` 仍由桌面透過 `skills:false` 傳入本機契約與 JSON 工具往返。成果定位、檔名及時間目錄均由桌面處理，網站不需要解析磁碟路徑或呼叫 Office。詳細資料結構見 [0.8.18 契約](DESKTOP_0_8_18_CONTRACT.md)。
+
+
+## 0.8.26 桌面 Office 與暫停續接
+
+HTTP 協定保持不變：專案請求 `skills:false`，工具定義／呼叫／結果仍為 messages 文字。新增 office_action 與 read_work_log 由桌面處理，網站不執行檔案操作。每段 60 工具／80 模型回覆上限及手動續接也由桌面管理。
+
+專案 messages 可能超過一般聊天的 40 則（20 輪），桌面上限為 204 則、單則 64 KB；請後端檢查是否仍套用一般聊天筆數限制。不能僅憑第 20 輪失敗就斷定此原因。桌面現在保留提交 POST 的錯誤與後續 GET tasks/by-request 或 tasks/{id} 的錯誤；404 可能是路由不存在或該請求尚未建立／已不可查，請以 request_id 對照服務端日誌。未知結果不重送 POST、不換 request_id。
+
+詳細見 [0.8.26 契約](DESKTOP_0_8_26_CONTRACT.md)。
