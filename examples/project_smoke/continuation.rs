@@ -71,13 +71,9 @@ fn answer(case: Case, round: usize, body: &Value) -> Option<String> {
     let decision = match case {
         Case::LongRead | Case::LongReadClean => {
             let reads = state["operations"].as_array().unwrap().len();
-            // 三段閱讀後才要求筆記；筆記附於第四個正常操作，沒有筆記專用請求。
-            if round == 2 {
-                assert!(!all.contains("已累積三段新閱讀"));
-            }
-            if round == 3 {
-                assert!(all.contains("已累積三段新閱讀"));
-            }
+            // 第五次有效閱讀才提供一次可選技能；正常情境完全略過筆記也須能讀完。
+            assert_eq!(all.contains("可選技能：長文件閱讀筆記"), round == 5);
+            assert!(!all.contains("已累積三段新閱讀或六次有效操作"));
             if round == 6 && matches!(case, Case::LongRead) {
                 return Some("done".into());
             }
@@ -93,7 +89,7 @@ fn answer(case: Case, round: usize, body: &Value) -> Option<String> {
                     .iter()
                     .filter(|m| m["content"].as_str().unwrap().starts_with("工具結果"))
                     .collect();
-                assert_eq!(results.len(), 5, "保留兩段已摘要和三段未摘要原文");
+                assert_eq!(results.len(), 3, "保留兩段已摘要和一段未摘要原文");
                 assert!(!results
                     .iter()
                     .any(|m| m["content"].as_str().unwrap().contains("segment_00")));
@@ -104,10 +100,15 @@ fn answer(case: Case, round: usize, body: &Value) -> Option<String> {
             if reads == 23 {
                 assert_eq!(state["readings"][0]["fully_read"], true);
                 assert_eq!(state["readings"][0]["next_unread_offset"], 138000);
+                assert_eq!(state["readings"][0]["read_count"], 0);
+                if matches!(case, Case::LongReadClean) {
+                    assert!(state["note"].is_null(), "不寫筆記也可正常完成");
+                    assert_eq!(state["total_repairs"], 0);
+                }
                 finish("已讀完 23 段；測試摘要含數字與限制。", json!([]))
             } else {
                 let mut next = read(&format!("read_{reads}"), reads * 6000);
-                if reads > 0 && reads.is_multiple_of(3) {
+                if matches!(case, Case::LongRead) && reads > 0 && reads.is_multiple_of(5) {
                     next["progress_note"] = json!(format!(
                         "來源 source.txt；版本 {}；已確認前 {reads} 段，數值 42，保留限制並繼續。",
                         text::revision(&paper())

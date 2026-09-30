@@ -1,6 +1,6 @@
 {
-  "recorded_at": "2026-09-30T09:22:29.0017477+08:00",
-  "version": "0.8.23.0",
+  "recorded_at": "2026-09-30T10:26:01.4203238+08:00",
+  "version": "0.8.24.0",
   "result": "PASS",
   "msvc": "14.29.30133",
   "compiler_report": [
@@ -8,7 +8,7 @@
     "Verified _MSC_FULL_VER=192930159 x64"
   ],
   "empty_cargo_cache": true,
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-2d6320e65b56498ca6275cdce93ca8f1",
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-96fada82ae16411189cbb70783e28378",
   "checks": [
     "v142 x64 compiler probe",
     "fmt",
@@ -22,7 +22,7 @@
     "DPAPI project memory, versioned notes and reserved .lmai boundary",
     "persistent PDF cache, source/profile/hash invalidation"
   ],
-  "exe_sha256": "59505fb4b8fc61d3c7f8f370cefa66ccba80ced026d386099456042487db2dd4",
+  "exe_sha256": "66d08fd4d5fc1f1a690ada55fc0a17038ad63ac12bdd0e433fee510ad2f5483e",
   "installer_built": false,
   "real_vnc_tested": false,
   "real_office_tested": false,

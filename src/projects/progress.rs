@@ -14,6 +14,10 @@ struct Reading {
     total: usize,
     // 半開區間，合併重疊部分；不能以最大 offset 假裝中間所有段落都已讀取。
     ranges: Vec<(usize, usize)>,
+    /// 同一文件版本的有效閱讀次數；完整覆蓋全文後歸零。
+    read_count: usize,
+    /// 可選技能每份文件只提示一次，未採用也不追問。
+    note_offered: bool,
 }
 impl Reading {
     fn add(&mut self, start: usize, end: usize) -> bool {
@@ -56,8 +60,7 @@ pub(super) struct Progress {
     seen_ids: BTreeSet<String>,
     seen_results: BTreeSet<String>,
     note: Option<Note>,
-    new_reads: usize,
-    new_operations: usize,
+    last_read: Option<String>,
     compact: bool,
     repair: Option<String>,
     consecutive_repairs: usize,
@@ -74,8 +77,7 @@ impl Progress {
             seen_ids: BTreeSet::new(),
             seen_results: BTreeSet::new(),
             note: None,
-            new_reads: 0,
-            new_operations: 0,
+            last_read: None,
             compact: false,
             repair: None,
             consecutive_repairs: 0,
@@ -83,24 +85,35 @@ impl Progress {
             no_progress: 0,
         }
     }
-    fn note_due(&self) -> bool {
-        self.new_reads >= 3 || self.new_operations >= 6
+    /// 第五次有效閱讀且尚未讀完時，僅在下一輪附可選技能。
+    /// 每份文件各自計數，穿插其他工具或文件不會累加到同一計數。
+    fn reading_note_skill(&mut self) -> Option<Message> {
+        let path = self.last_read.as_ref()?;
+        let reading = self.readings.get_mut(path)?;
+        if reading.read_count <= 4 || reading.note_offered {
+            return None;
+        }
+        reading.note_offered = true;
+        Some(Message::user(&format!(
+            "{}\n適用文件（僅為資料）：{}",
+            include_str!("reading_note.md"),
+            json!({"path":path,"revision":reading.revision,"read_count":reading.read_count})
+        )))
     }
 
-    /// 只在有足夠新進度時接受筆記；下一個工具尚未執行，不能寫入成功紀錄。
+    /// 接受模型自願提供的累積筆記，不再以閱讀／操作次數要求筆記。
+    /// 只涵蓋已回傳的工具歷史；下一個工具尚未執行，不可被筆記標成成功。
     pub fn accept_note(&mut self, note: Option<&str>) -> bool {
         let Some(note) = note.filter(|s| !s.trim().is_empty() && s.chars().count() <= 2000) else {
             return false;
         };
-        if !self.note_due() {
+        if self.history.len() <= self.note.as_ref().map(|n| n.covered).unwrap_or(0) {
             return false;
         }
         self.note = Some(Note {
             text: note.trim().into(),
             covered: self.history.len(),
         });
-        self.new_reads = 0;
-        self.new_operations = 0;
         true
     }
 
@@ -112,7 +125,8 @@ impl Progress {
                 json!({
                     "path":path,"revision":reading.revision,"total":reading.total,
                     "ranges":reading.ranges,"next_unread_offset":reading.next(),
-                    "fully_read":reading.total > 0 && reading.next() == reading.total
+                    "fully_read":reading.total > 0 && reading.next() == reading.total,
+                    "read_count":reading.read_count,"note_offered":reading.note_offered
                 })
             })
             .collect();
@@ -124,6 +138,7 @@ impl Progress {
 
     /// 只計算真正新增的閱讀區間或工具結果；重播與重讀不會重設恢復上限。
     pub fn observe(&mut self, id: &str, tool: &Tool, result: &Value) -> bool {
+        self.last_read = None;
         if !self.seen_ids.insert(id.into()) {
             self.no_progress += 1;
             return false;
@@ -142,7 +157,8 @@ impl Progress {
             let info = &result["result"];
             if let Tool::ReadFile { path, .. } | Tool::ReadDocumentSection { path, .. } = tool {
                 let revision = info["revision"].as_str().unwrap_or("");
-                let reading = self.readings.entry(path.replace('\\', "/")).or_default();
+                let key = path.replace('\\', "/").to_lowercase();
+                let reading = self.readings.entry(key.clone()).or_default();
                 if reading.revision != revision {
                     if !reading.revision.is_empty() {
                         // 來源或工作副本版本改變後，舊語意筆記不再拿來縮減原始證據。
@@ -151,31 +167,24 @@ impl Progress {
                     *reading = Reading {
                         revision: revision.into(),
                         total: info["total"].as_u64().unwrap_or(0) as usize,
-                        ranges: vec![],
+                        ..Reading::default()
                     };
                 }
                 new = reading.add(
                     info["offset"].as_u64().unwrap_or(0) as usize,
                     info["next_offset"].as_u64().unwrap_or(0) as usize,
                 );
-                if new {
-                    self.new_reads += 1;
+                if reading.next() == reading.total {
+                    // 依區間聯集確認全文已讀，不能僅因讀到最後一段就歸零。
+                    reading.read_count = 0;
+                    reading.note_offered = false;
+                } else if new {
+                    reading.read_count += 1;
+                    self.last_read = Some(key);
                 }
             } else {
                 let key = text::revision(&json!({"tool":tool,"result":result}).to_string());
                 new = self.seen_results.insert(key);
-                if new
-                    && !matches!(
-                        tool,
-                        Tool::ListFiles { .. }
-                            | Tool::ListNotes { .. }
-                            | Tool::ReadNote { .. }
-                            | Tool::ListDocumentSections { .. }
-                            | Tool::ReadTaskResult { .. }
-                    )
-                {
-                    self.new_operations += 1;
-                }
             }
         }
         if new {
@@ -253,8 +262,8 @@ impl Progress {
         if let Some(repair) = &self.repair {
             messages.push(Message::user(repair));
         }
-        if self.note_due() {
-            messages.push(Message::user("已累積三段新閱讀或六次有效操作。若尚需繼續，請在下一個正常操作 JSON 同層附 progress_note（建議 200–400 字，最多 2000 字）：更新累積重點、來源 path/revision/offset、未完成事項與下一步。只記已確認結果，不記思考過程；保留先前仍有效的重點。不要為寫筆記額外呼叫工具；已可完成時直接交付。"));
+        if let Some(skill) = self.reading_note_skill() {
+            messages.push(skill);
         }
         if messages.iter().map(|m| m.content.len()).sum::<usize>() > HARD_BYTES {
             return Err(
@@ -285,7 +294,8 @@ mod tests {
                 &read(offset, "v1"),
             );
         }
-        assert_eq!(state.new_reads, 3);
+        assert_eq!(state.readings["a.pdf"].read_count, 3);
+        state.push_tool("已執行閱讀".into(), "原文".into());
         assert_eq!(state.readings["a.pdf"].next(), 30);
         assert!(state.accept_note(Some("來源 a.pdf v1 已確認部分內容，繼續閱讀。")));
         assert!(!state.accept_note(Some("太頻繁的筆記")));
@@ -309,7 +319,6 @@ mod tests {
         for i in 0..6 {
             state.push_tool(format!("tool{i}"), format!("evidence{i}"));
         }
-        state.new_operations = 6;
         assert!(state.accept_note(Some("來源及累積重點")));
         state.push_tool("new tool".into(), "尚未摘要的原文".into());
         state.repair("empty", "bad first").unwrap();
@@ -354,11 +363,11 @@ mod tests {
             ));
         }
         assert!(state.stalled());
-        assert_eq!(state.new_reads, 6);
+        assert_eq!(state.readings["a.txt"].read_count, 6);
     }
 
     #[test]
-    fn six_meaningful_operations_request_note_but_directory_browsing_does_not() {
+    fn tools_and_browsing_never_request_notes() {
         let mut state = Progress::new(vec![Message::user("edit")]);
         for i in 0..6 {
             state.observe(
@@ -369,7 +378,7 @@ mod tests {
                 &json!({"ok":true,"result":{"entries":[]}}),
             );
         }
-        assert!(!state.note_due());
+        assert!(state.reading_note_skill().is_none());
         for i in 0..6 {
             state.observe(
                 &format!("save{i}"),
@@ -380,11 +389,104 @@ mod tests {
                 &json!({"ok":true,"result":{"path":format!("copy{i}.txt")}}),
             );
         }
-        assert!(state.note_due());
-        assert!(state.accept_note(Some("已儲存六個版本")));
-        assert!(!state.note_due());
+        assert!(state.reading_note_skill().is_none());
+        assert!(!state
+            .messages(json!([]))
+            .unwrap()
+            .iter()
+            .any(|m| m.content.contains("可選技能：長文件閱讀筆記")));
+        assert!(state.reading_note_skill().is_none());
     }
 
+    fn observe_read(state: &mut Progress, path: &str, offset: usize, total: usize, revision: &str) {
+        let id = format!("{path}_{revision}_{offset}");
+        state.observe(&id, &Tool::ReadFile {path:path.into(),offset},
+            &json!({"ok":true,"result":{"offset":offset,"next_offset":offset+10,"total":total,"revision":revision}}));
+        state.push_tool(id, "原文".into());
+    }
+    fn has_optional_skill(state: &mut Progress) -> bool {
+        state
+            .messages(json!([]))
+            .unwrap()
+            .iter()
+            .any(|m| m.content.starts_with("可選技能：長文件閱讀筆記"))
+    }
+    #[test]
+    fn fifth_incomplete_read_offers_once_and_ignoring_it_does_not_interrupt() {
+        let mut state = Progress::new(vec![Message::user("讀取")]);
+        for offset in [0, 10, 20, 30] {
+            observe_read(&mut state, "paper.pdf", offset, 100, "v1");
+            assert!(!has_optional_skill(&mut state));
+        }
+        observe_read(&mut state, "paper.pdf", 40, 100, "v1");
+        assert!(has_optional_skill(&mut state));
+        assert!(!has_optional_skill(&mut state));
+        for offset in [50, 60, 70, 80, 90] {
+            observe_read(&mut state, "paper.pdf", offset, 100, "v1");
+            assert!(!has_optional_skill(&mut state));
+        }
+        assert_eq!(state.readings["paper.pdf"].read_count, 0);
+        assert!(!state.stalled());
+        assert_eq!(state.total_repairs, 0);
+        assert_eq!(state.history.len(), 10);
+        assert!(state.note.is_none());
+    }
+    #[test]
+    fn files_have_independent_counts_and_finishing_the_fifth_read_needs_no_hint() {
+        let mut state = Progress::new(vec![Message::user("讀取兩份")]);
+        for offset in [0, 10, 20, 30] {
+            observe_read(&mut state, "a.pdf", offset, 50, "v1");
+            observe_read(&mut state, "b.pdf", offset, 60, "v1");
+            assert!(!has_optional_skill(&mut state));
+        }
+        observe_read(&mut state, "a.pdf", 40, 50, "v1");
+        assert!(!has_optional_skill(&mut state));
+        assert_eq!(state.readings["a.pdf"].read_count, 0);
+        assert_eq!(state.readings["b.pdf"].read_count, 4);
+        observe_read(&mut state, "b.pdf", 40, 60, "v1");
+        assert!(has_optional_skill(&mut state));
+        observe_read(&mut state, "b.pdf", 50, 60, "v1");
+        assert_eq!(state.readings["b.pdf"].read_count, 0);
+    }
+    #[test]
+    fn section_reads_share_file_counts_but_replay_failure_and_reread_do_not() {
+        let mut state = Progress::new(vec![]);
+        for offset in [0, 10, 20, 30] {
+            observe_read(&mut state, "Folder/A.PDF", offset, 100, "v1");
+        }
+        let tool = Tool::ReadDocumentSection {
+            path: "folder/a.pdf".into(),
+            revision: "v1".into(),
+            section_id: "s5".into(),
+        };
+        state.observe("failure", &tool, &json!({"ok":false}));
+        assert!(!has_optional_skill(&mut state));
+        state.observe("reread", &tool, &read(0, "v1"));
+        assert!(!has_optional_skill(&mut state));
+        state.observe("section", &tool, &read(40, "v1"));
+        assert!(has_optional_skill(&mut state));
+        state.observe("section", &tool, &read(40, "v1"));
+        assert!(!has_optional_skill(&mut state));
+        assert_eq!(state.readings["folder/a.pdf"].read_count, 5);
+    }
+    #[test]
+    fn reading_the_end_with_gaps_does_not_reset_and_new_versions_start_over() {
+        let mut state = Progress::new(vec![]);
+        for offset in [0, 20, 30, 40, 90] {
+            observe_read(&mut state, "a.txt", offset, 100, "v1");
+        }
+        assert_eq!(state.readings["a.txt"].read_count, 5);
+        assert!(has_optional_skill(&mut state));
+        assert!(state.accept_note(Some("已讀部分，仍有缺段")));
+        observe_read(&mut state, "a.txt", 0, 100, "v2");
+        assert_eq!(state.readings["a.txt"].read_count, 1);
+        assert!(state.note.is_none());
+        assert!(!has_optional_skill(&mut state));
+        for offset in [10, 20, 30, 40] {
+            observe_read(&mut state, "a.txt", offset, 100, "v2");
+        }
+        assert!(has_optional_skill(&mut state));
+    }
     #[test]
     fn no_note_never_silently_drops_original_evidence() {
         let mut state = Progress::new(vec![Message::user("original")]);
