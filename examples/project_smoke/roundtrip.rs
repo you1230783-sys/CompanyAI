@@ -69,13 +69,37 @@ pub(super) fn request(stream: &mut TcpStream) -> AppResult<(String, Value)> {
 }
 
 pub fn verify(root: &Path) -> AppResult<()> {
-    for mode in 0..=3 {
+    for mode in 0..=7 {
         verify_case(root, mode)?;
     }
     Ok(())
 }
 
-/// 0：正常；1：包裝工具；2：不完整 JSON 有限停止；3：說明＋ask_user 等待補充。
+/// 將既有測試步驟轉成文字 tool_calls；不依賴產品的轉換層產生預期資料。
+pub(super) fn tool_call(mut decision: Value, object_arguments: bool) -> Value {
+    let action = decision["action"].as_str().unwrap().to_owned();
+    let (id, name, mut arguments) = if action == "tool" {
+        let mut arguments = decision["request"].clone();
+        let name = arguments.as_object_mut().unwrap().remove("tool").unwrap();
+        (decision["operation_id"].clone(), name, arguments)
+    } else {
+        decision.as_object_mut().unwrap().remove("action");
+        (json!("terminal_call"), json!(action), decision.clone())
+    };
+    if let Some(note) = decision.get("progress_note") {
+        arguments["progress_note"] = note.clone();
+    }
+    let arguments = if object_arguments {
+        arguments
+    } else {
+        json!(arguments.to_string())
+    };
+    json!({"content":"依工具結果繼續處理。","tool_calls":[{
+        "id":id,"type":"function","function":{"name":name,"arguments":arguments}
+    }]})
+}
+
+/// 0–3 保留舊格式；4 標準字串參數；5 物件參數；6 新格式詢問；7 多呼叫拒絕後修復。
 fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
     let run_id = format!("roundtrip_{mode}");
     let workspace = root.join(&run_id);
@@ -119,6 +143,12 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
                 assert!(body.get("outlook_triage").is_none());
                 assert!(body.get("auto_generate_title").is_none());
                 assert_eq!(body["messages"][0]["role"], "system");
+                assert!(body.get("tools").is_none());
+                assert!(body.get("tool_choice").is_none());
+                assert!(body["messages"][0]["content"]
+                    .as_str()
+                    .unwrap()
+                    .contains("\"parameters\""));
                 assert_eq!(body["model"], "quality");
                 assert!(request_ids.insert(body["client_request_id"].as_str().unwrap().to_string()));
                 if mode == 2 && step == 2 && repair_sent {
@@ -142,7 +172,16 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
                         })
                         .and_then(|m| m["content"].as_str())
                         .ok_or("缺少工具結果。")?;
-                    serde_json::from_str(content.split_once('\n').ok_or("工具結果格式錯誤。")?.1)
+                    let envelope: Value = serde_json::from_str(
+                        content.split_once('\n').ok_or("工具結果格式錯誤。")?.1,
+                    )
+                    .map_err(|e| e.to_string())?;
+                    assert_eq!(envelope["role"], "tool");
+                    assert_eq!(
+                        envelope["tool_call_id"],
+                        ["read1", "copy1", "edit1", "save1"][step - 1]
+                    );
+                    serde_json::from_str(envelope["content"].as_str().ok_or("工具結果內容缺失。")?)
                         .map_err(|e| e.to_string())?
                 } else {
                     json!({})
@@ -150,7 +189,7 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
                 if step >= 1 {
                     assert_eq!(previous["ok"], true, "{previous}");
                 }
-                let decision = if mode == 3 && step == 1 {
+                let decision = if matches!(mode, 3 | 6) && step == 1 {
                     json!({"action":"ask_user","message":"請匯入兩篇 PDF 的文字。"})
                 } else {
                     match step {
@@ -177,7 +216,20 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
                         _ => return Err("不應出現額外模型請求。".into()),
                     }
                 };
-                let content = if step == 2 && mode == 2 {
+                let decision = if mode >= 4 {
+                    tool_call(decision, mode == 5)
+                } else {
+                    decision
+                };
+                let content = if mode == 7 && step == 2 && !repair_sent {
+                    let mut batch = decision.clone();
+                    batch["tool_calls"]
+                        .as_array_mut()
+                        .unwrap()
+                        .push(decision["tool_calls"][0].clone());
+                    repair_sent = true;
+                    batch.to_string()
+                } else if step == 2 && mode == 2 {
                     repair_sent = true;
                     "工具：{\"action\":\"tool\"".into()
                 } else {
@@ -233,10 +285,16 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
     stopped.store(true, Ordering::Relaxed);
     let rounds = server.join().map_err(|_| "測試伺服器失敗。")??;
     let activity = runner::recover_activity(&root.join("app-data"), &run_id)?;
-    if mode == 3 {
+    if matches!(mode, 3 | 6) {
         assert_eq!(result?, "需要你的補充：請匯入兩篇 PDF 的文字。");
         assert_eq!(rounds, 2);
-        assert!(activity.iter().any(|step| step.contains("文件尚缺 PDF")));
+        if mode == 3 {
+            assert!(activity.iter().any(|step| step.contains("文件尚缺 PDF")));
+        } else {
+            assert!(activity
+                .iter()
+                .any(|step| step.contains("依工具結果繼續處理")));
+        }
         assert!(!workspace.join("_AI_Output").exists());
         println!("PASS: wrapped ask_user displayed without JSON retry or false failure.");
         return Ok(());
@@ -250,7 +308,7 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
     } else {
         let answer = result?;
         assert_eq!(runner::recover(&root.join("app-data"), &run_id)?, answer);
-        assert_eq!(rounds, 5);
+        assert_eq!(rounds, if mode == 7 { 6 } else { 5 });
         if mode == 1 {
             assert!(activity
                 .iter()

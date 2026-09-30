@@ -1,0 +1,611 @@
+{
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "list_files",
+        "description": "列出專案相對資料夾；path 空字串為根目錄，最多 200 項。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_file",
+        "description": "讀取檔案或 copy_id；offset 是 Unicode 字元索引，每次最多 6000 字。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "find_text",
+        "description": "尋找文字，回傳字元位置與檔案版本。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "path",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "create_working_copy",
+        "description": "建立獨立副本；source 為來源相對路徑，null 為新 TXT；name 只填檔名。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "edit_text",
+        "description": "修改文字副本；start 為字元索引，expected 必須符合原文；插入用空 expected，刪除用空 replacement。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "copy_id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "start": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "expected": {
+              "type": "string"
+            },
+            "replacement": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "copy_id",
+            "revision",
+            "start",
+            "expected",
+            "replacement"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "edit_office",
+        "description": "替換既有 Office 區塊全文；block_id、expected 取自讀取结果，不改結構。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "copy_id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "block_id": {
+              "type": "string"
+            },
+            "expected": {
+              "type": "string"
+            },
+            "replacement": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "copy_id",
+            "revision",
+            "block_id",
+            "expected",
+            "replacement"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "save_copy",
+        "description": "另存成果，不覆寫既有檔案；後續修改後須再儲存。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "copy_id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "copy_id",
+            "revision"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "delete_copy",
+        "description": "捨棄本次未發布工作副本；不能刪除已儲存成果。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "copy_id": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "copy_id"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "list_notes",
+        "description": "查詢專案及本對話筆記，最多 30 筆，含可復原的已刪筆記。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "default": ""
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_note",
+        "description": "讀取筆記內容與版本。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "create_note",
+        "description": "新增已確認背景或對話筆記；不要把推論寫成全專案事實。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string",
+              "enum": [
+                "project",
+                "conversation"
+              ]
+            },
+            "title": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "body": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "scope",
+            "title",
+            "body"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "update_note",
+        "description": "更新筆記，revision 取最新工具結果。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "body": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "id",
+            "revision",
+            "title",
+            "body"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "delete_note",
+        "description": "軟刪除筆記，保留最近五份版本。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "id",
+            "revision"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "restore_note",
+        "description": "復原已刪筆記最近版本。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "id",
+            "revision"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "list_document_sections",
+        "description": "取得版本、摘要及分段索引；每頁 10 段，以 next_section_offset 續頁，索引不等於原文。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_document_section",
+        "description": "讀取指定段落，最多 4000 字；來源改變須重新 read_file。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "section_id": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "path",
+            "revision",
+            "section_id"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "update_document_note",
+        "description": "保存已讀內容摘要；section_id 為 null 時是全文摘要，其他值為已讀分段。兩個版本均取最新結果。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "note_revision": {
+              "type": "string"
+            },
+            "section_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "summary": {
+              "type": "string",
+              "maxLength": 1000
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "path",
+            "revision",
+            "note_revision",
+            "summary"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_task_result",
+        "description": "讀取本對話先前完整回答或要求，每次最多 6000 字，以 next_offset 續讀。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "task_id": {
+              "type": "string"
+            },
+            "field": {
+              "type": "string",
+              "enum": [
+                "result",
+                "request"
+              ],
+              "default": "result"
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "task_id"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "finish",
+        "description": "交付實際答案與本次已儲存成果；artifacts 為 save_copy 回傳的 copy_id，無副本則為空陣列。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "artifacts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "task_summary": {
+              "type": "string",
+              "maxLength": 1000
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "message",
+            "artifacts"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "ask_user",
+        "description": "資料不足或需使用者協助時詢問，結束本次執行並等待補充。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "task_summary": {
+              "type": "string",
+              "maxLength": 1000
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "message"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

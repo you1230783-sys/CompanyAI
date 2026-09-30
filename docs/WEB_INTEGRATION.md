@@ -1,3 +1,5 @@
+> **0.8.25：** 專案 system 文字包含 Chat Completions 形狀的 tools 定義；模型在回答文字內輸出單一 tool_calls，桌面轉成既有工具執行。HTTP 不新增 tools／tool_choice／response_format，工具結果仍放 user.content，skills:false 不變。網站只需保留 messages 與回答正文，不解析或剝除內層 JSON。舊 action 格式相容，缺漏工具名稱採有限修復。詳見 [契約](DESKTOP_0_8_25_CONTRACT.md)／[驗證](VALIDATION_0_8_25.md)。
+
 > **0.8.24：** 移除三次閱讀／六次操作的筆記提示。桌面僅在同一文件第五次有效閱讀後且未读完時，在 messages 附一次可選閱讀筆記技能；模型可略過。`skills:false`、路由與 `.lmai` 格式均不變。詳見 [0.8.24 契約](DESKTOP_0_8_24_CONTRACT.md)。
 
 > **0.8.23：** 專案跨任務改送選取記憶／近期使用者要求，不重送所有舊答案。請完整採用桌面 `messages`，不要自行補回舊對話或技能。`task_summary` 僅為模型正文操作 JSON 的可選欄位，HTTP 仍 `skills:false`，PDF 路由不變。通知的 `resource_id` 須為該輪 task_id 或 client_request_id，桌面才能隱藏內部工具／標題通知；缺少關聯時保留通知，不猜測。桌面顯示單一任務不等於網站已合併工作。詳見 [0.8.23 契約](DESKTOP_0_8_23_CONTRACT.md)。

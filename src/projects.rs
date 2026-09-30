@@ -11,6 +11,7 @@ pub mod runner;
 pub mod sandbox;
 mod server_pdf;
 pub mod text;
+mod tool_calls;
 
 use crate::{jobs, storage, AppResult};
 use serde::{Deserialize, Serialize};

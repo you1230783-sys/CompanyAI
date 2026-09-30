@@ -67,6 +67,19 @@
 - 使用者明確要求先提供網頁契約時，可先獨立提交／推送契約文件供同步開發；必須標示程式尚未驗收，其他原始碼及 EXE 待完整交付驗證後再提交。
 - 修改功能時同步更新 docs/WEB_INTEGRATION.md 與相應驗收說明。沒有實際操作 Word／Outlook 或取得外觀截圖時，不能宣稱這些驗收通過。
 
+## 0.8.25 專案文字工具協定（最新使用者指示）
+
+- 使用者要求採用 OpenAI Chat Completions 的 tools／tool_calls 形狀，但定義與回覆都維持在 messages 文字中；網頁只轉送，不新增原生 tools、tool_choice、response_format 或 role=tool 的 HTTP 欄位。
+- tools.json 集中定義參數，skill.md 只教一種回覆格式並精簡重複說明。每輪單一呼叫，id 映射原 operation_id，function.name／arguments 映射既有 Decision／Tool；finish／ask_user 也是桌面自訂工具。不是 API 原生工具呼叫，也不宣稱強制 Schema 保證。
+- arguments 提示使用標準 JSON 字串，parser 同時容許完整物件，避免多一層引號的無效重試；保留舊 action 格式相容。多操作、混用協定、缺漏參數先修復，不猜工具／版本；未知工具與無效操作 ID 停止。版本、授權、去重與成果檢查不放寬。
+- 使用者已要求編譯後放到 Git，取代先前僅改原始碼的限制。進版 0.8.25，執行 Build.ps1 -EmptyCargoCache，交付原始碼、EXE、簽署 EXE 清單與驗證文件至既有 main；不製作 NSIS／ZIP。詳見 docs/DESKTOP_0_8_25_CONTRACT.md。
+
+## 待下次發行：缺少工具名稱的格式修正
+
+- 使用者回報摘要工具 request 漏寫 tool，要求修正原始碼，**先不編譯、不進版**，留待其繼續測試後一起處理；本輪不打包、不提交或推送，保留 0.8.24 成品與清單。
+- 缺少／非物件 request，或缺少／空白／型別錯誤的 request.tool，回傳明確格式原因，沿用既有有限修復；不自行猜測工具名稱。非空但不支援的工具仍停止。
+- 補上回歸測試，僅做格式與原始碼檢查，未編譯執行的測試必須明確標示；詳見 docs/PENDING_TOOL_NAME_REPAIR.md。
+
 ## 0.8.24 可選閱讀筆記（最新）
 
 - 使用者要求取消每三次閱讀／六次操作的筆記要求。每份文件、每個版本各自計數，有效閱讀超過四次且未完整讀完時，下一輪才附一次可選技能；可略過，不重試或阻擋。

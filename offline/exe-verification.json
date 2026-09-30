@@ -1,30 +1,30 @@
-{
-  "recorded_at": "2026-09-30T10:26:01.4203238+08:00",
-  "version": "0.8.24.0",
-  "result": "PASS",
-  "msvc": "14.29.30133",
-  "compiler_report": [
-    "v142.c",
-    "Verified _MSC_FULL_VER=192930159 x64"
-  ],
-  "empty_cargo_cache": true,
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-96fada82ae16411189cbb70783e28378",
-  "checks": [
-    "v142 x64 compiler probe",
-    "fmt",
-    "Clippy",
-    "workspace tests",
-    "cargo build --release --frozen",
-    "WebView2 DOM self-check",
-    "AppContainer OS file/network isolation",
-    "project copy/edit/publish integration",
-    "HTTP skills/tool loops with bounded JSON repair and activity history",
-    "DPAPI project memory, versioned notes and reserved .lmai boundary",
-    "persistent PDF cache, source/profile/hash invalidation"
-  ],
-  "exe_sha256": "66d08fd4d5fc1f1a690ada55fc0a17038ad63ac12bdd0e433fee510ad2f5483e",
-  "installer_built": false,
-  "real_vnc_tested": false,
-  "real_office_tested": false,
-  "offline_zip_built": false
+﻿{
+    "recorded_at":  "2026-09-30T11:47:24.4501736+08:00",
+    "version":  "0.8.25.0",
+    "result":  "PASS",
+    "msvc":  "14.29.30133",
+    "compiler_report":  [
+                            "v142.c",
+                            "Verified _MSC_FULL_VER=192930159 x64"
+                        ],
+    "empty_cargo_cache":  true,
+    "cargo_home":  "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-199e0523a15f4437aa861b60235847a2",
+    "checks":  [
+                   "v142 x64 compiler probe",
+                   "fmt",
+                   "Clippy",
+                   "workspace tests",
+                   "cargo build --release --frozen",
+                   "WebView2 DOM self-check",
+                   "AppContainer OS file/network isolation",
+                   "project copy/edit/publish integration",
+                   "HTTP skills/tool loops with bounded JSON repair and activity history",
+                   "DPAPI project memory, versioned notes and reserved .lmai boundary",
+                   "persistent PDF cache, source/profile/hash invalidation"
+               ],
+    "exe_sha256":  "df7b1222b370330dcab6556305ff72949f4dbd324365c24dfe7bb4904502763c",
+    "installer_built":  false,
+    "real_vnc_tested":  false,
+    "real_office_tested":  false,
+    "offline_zip_built":  false
 }

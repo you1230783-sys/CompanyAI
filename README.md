@@ -1,7 +1,14 @@
-# LM_AI 0.8.24 — Windows 工作助理
+# LM_AI 0.8.25 — Windows 工作助理
 
 Rust 桌面程式，提供公司瀏覽器登入、文字／附件對話、串流、持久背景任務、選字快捷鍵、網站通知及 Classic Outlook 唯讀助理。
 介面使用 WebView2、內嵌 HTML/CSS 與離線 Markdown 套件；不需 Node、Python 或外部 CDN。
+
+## 0.8.25 專案工具格式統一
+
+- system 文字附 OpenAI Chat Completions 形狀的工具定義，模型每輪回傳單一 tool_calls；桌面轉為既有受限工具操作，網頁仍只轉送文字。
+- 參數接受標準 JSON 字串及完整物件，舊 action 格式仍相容；格式缺漏與多操作採有限修復，不猜測工具、版本或自動重做成功修改。
+- 精簡重複提示；finish／ask_user 統一成自訂工具。這是文字協定，沒有啟用原生 API 或 strict 格式約束，模型成功率仍待公司測試。
+- 僅發布 EXE，NSIS 不變。[契約](docs/DESKTOP_0_8_25_CONTRACT.md)／[驗證](docs/VALIDATION_0_8_25.md)。
 
 ## 0.8.24 閱讀筆記改為可選
 

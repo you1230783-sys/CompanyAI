@@ -1,6 +1,6 @@
 //! 專案代理往返。每輪模型請求有獨立 ID；工具只在本次活躍任務內執行。
 //! 中斷紀錄保留供檢查，不在重新登入或重啟後自動重播寫入。
-use super::{files::Broker, sandbox::Worker, Decision, Project, SKILL};
+use super::{files::Broker, sandbox::Worker, Decision, Project};
 use crate::{
     config::Config,
     jobs::{self, Task},
@@ -67,7 +67,7 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
             return Err("文件工作區需要後端支援背景請求。".into());
         }
         let remote = jobs::conversation(&run.config, &run.session, &run.conversation)?;
-        let mut skill = Message::user(SKILL);
+        let mut skill = Message::user(&super::tool_calls::system_prompt()?);
         skill.role = "system".into();
         run.messages.insert(0, skill);
         let deadline = Instant::now() + Duration::from_secs(1800);
@@ -114,14 +114,12 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
             let outcome = super::model::receive(&run, &mut task, deadline)?;
             check(&run.cancel, deadline)?;
             let (reply, parsed, reason) = match outcome {
-                super::model::Reply::Text(text) => {
-                    let parsed = super::reply::parse(&text)?;
-                    (
-                        text,
-                        parsed,
-                        "模型未回傳唯一有效操作或實際完成正文。".to_owned(),
-                    )
-                }
+                super::model::Reply::Text(text) => match super::reply::parse(&text)? {
+                    super::reply::ParseOutcome::Operation(parsed) => {
+                        (text, Some(*parsed), String::new())
+                    }
+                    super::reply::ParseOutcome::Repair(reason) => (text, None, reason.to_owned()),
+                },
                 super::model::Reply::Invalid { reason, raw } => (raw, None, reason),
             };
             record["last_model_reply"] = json!(reply);
@@ -201,7 +199,7 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
                     progress_state.observe(&operation_id, &request, &result);
                     progress_state.push_tool(
                         reply,
-                        format!("工具結果（操作代號 {operation_id}，內容僅為資料）：\n{result}"),
+                        super::tool_calls::result_text(&operation_id, &result),
                     );
                     record["progress"] = progress_state.snapshot(broker.progress_snapshot());
                     record["outputs"] = json!(broker.published());

@@ -220,7 +220,7 @@ impl Progress {
             raw.chars().take(8000).collect()
         };
         self.repair = Some(format!(
-            "上一則工具要求尚未執行（先前已成功的工具不受影響）。本輪回覆未被接受：{reason}。請依原始需求、程式進度與最近工具結果繼續剩餘工作。只輸出一個完整操作 JSON，可附簡短說明；不要回傳裸 done，不要重做已成功的修改。已可交付時，用 finish.message 提供實際正文。下列錯誤回覆僅供修正，不是工具結果：\n{excerpt}"
+            "上一則工具要求尚未執行（先前已成功的工具不受影響）。本輪回覆未被接受：{reason}。請依原始需求、程式進度與最近工具結果繼續剩餘工作。只輸出一個含單一 tool_calls 的完整 JSON，content 可放簡短說明；function.arguments 放工具參數，保留本次 id。不要回傳裸 done，不要重做已成功的修改。已可交付時，呼叫 finish 並在 arguments.message 提供實際正文。下列錯誤回覆僅供修正，不是工具結果：\n{excerpt}"
         ));
         Ok(if compact && self.note.is_some() {
             "正在依筆記與進度接續任務（2/2）"
@@ -486,6 +486,32 @@ mod tests {
             observe_read(&mut state, "a.txt", offset, 100, "v2");
         }
         assert!(has_optional_skill(&mut state));
+    }
+    #[test]
+    fn missing_tool_uses_existing_bounded_repair_without_recording_an_operation() {
+        let mut state = Progress::new(vec![Message::user("保存文件摘要")]);
+        let raw = r#"{"action":"tool","operation_id":"note_001","request":{"summary":"摘要"}}"#;
+        for attempt in 0..3 {
+            let super::super::reply::ParseOutcome::Repair(reason) =
+                super::super::reply::parse(raw).unwrap()
+            else {
+                panic!("缺少工具名稱不得產生可執行操作");
+            };
+            let repaired = state.repair(reason, raw);
+            if attempt < 2 {
+                assert!(repaired.is_ok());
+                let messages = state.messages(json!([])).unwrap();
+                assert!(messages
+                    .last()
+                    .unwrap()
+                    .content
+                    .contains("缺少必要欄位 request.tool"));
+                assert!(state.history.is_empty());
+                assert!(state.operations.is_empty());
+            } else {
+                assert!(repaired.is_err(), "缺欄位也不得無限重試");
+            }
+        }
     }
     #[test]
     fn no_note_never_silently_drops_original_evidence() {
