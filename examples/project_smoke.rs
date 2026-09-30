@@ -1,6 +1,8 @@
 //! 使用真正的 AppContainer EXE 驗證文件工具。僅在指定測試資料夾建立測試檔，不操作使用者文件。
 #[path = "project_smoke/continuation.rs"]
 mod continuation;
+#[path = "project_smoke/memory.rs"]
+mod memory;
 #[path = "project_smoke/pdf.rs"]
 mod pdf;
 #[path = "project_smoke/roundtrip.rs"]
@@ -132,6 +134,7 @@ fn run() -> AppResult<()> {
     drop(worker);
     roundtrip::verify(&root)?;
     continuation::verify(&root)?;
+    memory::verify(&exe, &root)?;
     pdf::verify(&exe, &root)?;
     server_pdf::verify(&exe, &root)?;
     Ok(())

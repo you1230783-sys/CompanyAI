@@ -263,7 +263,8 @@ function renderWork() {
           send({ type: "select_chat", id: task.conversation_id });
         }),
       );
-      if (task.active && task.state !== "submitting")
+      if (task.project) actions.append(actionButton("停止專案任務", () => send({type:"project",command:{action:"stop"}})));
+      if (!task.project && task.active && task.state !== "submitting")
         actions.append(
           actionButton("取消任務", () =>
             ask("取消工作", "伺服器會嘗試取消；若已完成，仍會取回結果。", () =>
@@ -277,7 +278,7 @@ function renderWork() {
             workCommand({ action: "retry_task", id: task.id }),
           ),
         );
-      if (task.active)
+      if (!task.project && task.active)
         actions.append(
           actionButton("停止追蹤", () =>
             ask(
@@ -287,7 +288,7 @@ function renderWork() {
             ),
           ),
         );
-      actions.append(
+      if (!task.project) actions.append(
         actionButton("移除任務", () =>
           ask(
             "移除本機任務？",
@@ -300,7 +301,7 @@ function renderWork() {
       $("task-list").append(card);
     }
   }
-  const current = tasks.find(t => t.active && t.conversation_id === state.active_id)
+  const current = tasks.find(t => !t.project && t.active && t.conversation_id === state.active_id)
     || tasks.find(t => t.conversation_id === state.active_id && t.tool_events?.length);
   const live = $("live-task");
   const savedPartial = current && state.messages.some((message) => message.request_id === current.id && message.role === "assistant" && message.incomplete);

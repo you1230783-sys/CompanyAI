@@ -133,13 +133,14 @@ impl Progress {
             object.remove("text");
             object.remove("entries");
             object.remove("positions");
+            object.remove("document");
         }
         self.operations
             .push(json!({"id":id,"tool":tool.label(),"result":metadata}));
         let mut new = false;
         if result["ok"] == true {
             let info = &result["result"];
-            if let Tool::ReadFile { path, .. } = tool {
+            if let Tool::ReadFile { path, .. } | Tool::ReadDocumentSection { path, .. } = tool {
                 let revision = info["revision"].as_str().unwrap_or("");
                 let reading = self.readings.entry(path.replace('\\', "/")).or_default();
                 if reading.revision != revision {
@@ -163,7 +164,16 @@ impl Progress {
             } else {
                 let key = text::revision(&json!({"tool":tool,"result":result}).to_string());
                 new = self.seen_results.insert(key);
-                if new && !matches!(tool, Tool::ListFiles { .. }) {
+                if new
+                    && !matches!(
+                        tool,
+                        Tool::ListFiles { .. }
+                            | Tool::ListNotes { .. }
+                            | Tool::ReadNote { .. }
+                            | Tool::ListDocumentSections { .. }
+                            | Tool::ReadTaskResult { .. }
+                    )
+                {
                     self.new_operations += 1;
                 }
             }

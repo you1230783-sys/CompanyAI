@@ -970,7 +970,20 @@ window.runSelfTest = async (structuredFixture) => {
       check(!$("project-context").hidden && $("project-context").textContent === "C:\\測試", "project path moved below title");
       check(!$("project-activity").open && $("project-activity").querySelector("summary").textContent === "建立副本…", "activity collapsed with latest step");
       $("project-activity").open = true;
-      fixture.projects.activity.push("編輯文字：完成"); LMUI.receive(fixture);
+      const projectToast = toast, notices = [], projectTasks = fixture.work.tasks;
+      try {
+        toast = message => notices.push(message);
+        fixture.projects.status = "等待 AI 回覆（第 2 輪）";
+        fixture.work.tasks = [{id:"run-one",conversation_id:"project-chat",title:"專案工作",project:true,active:true,state:"running"}];
+        fixture.projects.activity.push("編輯文字：完成"); LMUI.receive(fixture);
+        check(notices.length === 0, "internal project steps do not create toast notifications");
+        check($("task-list").querySelectorAll(".task-card").length === 1, "project has one visible running task");
+        const controls = [...$("task-list").querySelectorAll("button")];
+        check(!controls.some(b => ["取消任務","停止追蹤","移除任務"].includes(b.textContent)), "project does not expose server child task actions");
+        controls.find(b => b.textContent === "停止專案任務").click();
+        check(retryCommands.pop()?.command?.action === "stop", "project card stops the project runner");
+      } finally { toast = projectToast; fixture.work.tasks = projectTasks; }
+      LMUI.receive(fixture);
       check($("project-activity").open && $("project-activity").querySelectorAll("li").length === 3, "progress preserves expanded history");
       check(document.querySelector(".retry-message").disabled, "retry disabled while running");
       fixture.projects.running = false;

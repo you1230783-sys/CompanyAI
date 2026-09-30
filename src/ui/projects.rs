@@ -45,6 +45,7 @@ pub(super) struct Running {
     id: String,
     conversation: String,
     activity: Vec<String>,
+    started: u64,
     cancel: Arc<AtomicBool>,
 }
 #[derive(Default)]
@@ -174,6 +175,9 @@ impl App {
             self.archive = archive;
         }
         Ok(())
+    }
+    pub(super) fn project_task(&self) -> Option<serde_json::Value> {
+        self.projects.running.as_ref().map(|run| json!({"id":run.id,"conversation_id":run.conversation,"title":"專案工作","mode":"background","state":"running","active":true,"project":true,"created_at":run.started,"message":self.projects.status,"can_retry":false}))
     }
     pub(super) fn project_state(&self) -> serde_json::Value {
         json!({"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len()})).collect::<Vec<_>>(),
@@ -434,6 +438,7 @@ impl App {
             id: id.clone(),
             conversation: conversation.clone(),
             activity: vec!["準備專案任務…".into()],
+            started: crate::unix_now(),
             cancel,
         });
         self.set_draft(String::new());
@@ -474,13 +479,20 @@ impl App {
                 if !self.projects.running.as_ref().is_some_and(|r| r.id == id) {
                     return Ok(());
                 }
+                let cancelled = self
+                    .projects
+                    .running
+                    .as_ref()
+                    .is_some_and(|r| r.cancel.load(Ordering::Relaxed));
                 let activity = self
                     .projects
                     .running
                     .take()
                     .map(|run| run.activity)
                     .unwrap_or_default();
-                self.projects.status = if result
+                self.projects.status = if cancelled {
+                    "專案任務已停止。"
+                } else if result
                     .as_ref()
                     .is_ok_and(|text| text.starts_with("需要你的補充："))
                 {
@@ -491,6 +503,7 @@ impl App {
                     "專案任務未完成，請查看對話。"
                 }
                 .into();
+                let succeeded = result.is_ok();
                 let text = result.unwrap_or_else(|error| format!("本次任務未完成：{error}"));
                 let mut archive = self.archive.clone();
                 let c = archive
@@ -500,9 +513,14 @@ impl App {
                     .ok_or("專案對話已不存在。")?;
                 let mut message = Message::assistant(text);
                 message.project_activity = activity;
-                message.request_id = Some(id);
+                message.request_id = Some(id.clone());
                 c.messages.push(message);
                 c.updated_at = crate::unix_now();
+                let final_text = c
+                    .messages
+                    .last()
+                    .map(|m| m.content.clone())
+                    .unwrap_or_default();
                 history::save(&self.root, &archive)?;
                 self.archive = archive;
                 if self.logged_in() && self.active_id.as_deref() == Some(&conversation) {
@@ -514,6 +532,84 @@ impl App {
                         .ok_or("找不到對話。")?
                         .messages
                         .clone();
+                }
+                // 一個使用者任務只保存一張已套用的卡片，內部模型回合不進工作清單。
+                let state = if cancelled {
+                    "cancelled"
+                } else if succeeded {
+                    "completed"
+                } else {
+                    "failed"
+                };
+                let remote = crate::jobs::TaskStatus {
+                    task_id: id.clone(),
+                    client_request_id: id.clone(),
+                    state: state.into(),
+                    progress: None,
+                    queue_position: None,
+                    result: if succeeded {
+                        Some(json!({"choices":[{"message":{"content":final_text}}]}))
+                    } else {
+                        None
+                    },
+                    response_payload_json: None,
+                    error_message: if succeeded {
+                        String::new()
+                    } else {
+                        final_text.chars().take(500).collect()
+                    },
+                };
+                self.work.store.tasks.push(crate::jobs::Task {
+                    request_id: id.clone(),
+                    conversation_id: conversation.clone(),
+                    request: json!({}),
+                    mode: "background".into(),
+                    title: "專案工作".into(),
+                    created_at: crate::unix_now(),
+                    remote: Some(remote),
+                    applied: true,
+                    message: self.projects.status.clone(),
+                    mail_analysis: false,
+                    title_generation: false,
+                    tool_events: vec![],
+                    partial: String::new(),
+                });
+                self.work_save()?;
+                if self.logged_in() && !cancelled {
+                    let waiting = self.projects.status == "等待你的補充。";
+                    let notice = crate::notifications::Notification {
+                        id: format!("project_{id}"),
+                        kind: if waiting {
+                            "project.waiting_user"
+                        } else if succeeded {
+                            "project.completed"
+                        } else {
+                            "project.failed"
+                        }
+                        .into(),
+                        title: self.projects.status.clone(),
+                        summary: final_text.chars().take(50).collect(),
+                        created_at: crate::notifications::now_text(),
+                        expires_at: None,
+                        resource_id: Some(id.clone()),
+                        read_at: if self.is_foreground() {
+                            Some(crate::notifications::now_text())
+                        } else {
+                            None
+                        },
+                        dismissed: false,
+                    };
+                    self.inbox.merge(crate::notifications::EventPage {
+                        events: vec![notice],
+                        next_cursor: None,
+                        has_more: false,
+                    })?;
+                    crate::notifications::save(&self.root, &self.inbox)?;
+                    self.toast(&self.projects.status.clone());
+                    if self.config.notification_popups && !self.is_foreground() {
+                        self.work.task_balloon = true;
+                        tray(self.window, NIM_MODIFY, Some(&self.projects.status));
+                    }
                 }
             }
         }

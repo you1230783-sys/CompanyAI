@@ -133,7 +133,22 @@ impl App {
                 }
                 match result {
                     Ok(cache) => {
-                        let added = cache.new_unread_count(&self.site.cache);
+                        let added = if !self.site.cache.initialized || cache.suppress_popup {
+                            0
+                        } else {
+                            cache
+                                .items
+                                .iter()
+                                .filter(|n| {
+                                    !n.is_read
+                                        && !self.site.cache.items.iter().any(|old| old.id == n.id)
+                                        && !crate::projects::events::internal(
+                                            &self.root,
+                                            n.resource_id.as_deref(),
+                                        )
+                                })
+                                .count()
+                        };
                         site::save(&self.root, &cache)?;
                         self.site.cache = cache;
                         self.site.retry_seconds = 60;

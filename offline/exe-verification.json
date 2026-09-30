@@ -1,6 +1,6 @@
 {
-  "recorded_at": "2026-09-30T06:25:53.6604858+08:00",
-  "version": "0.8.22.0",
+  "recorded_at": "2026-09-30T09:22:29.0017477+08:00",
+  "version": "0.8.23.0",
   "result": "PASS",
   "msvc": "14.29.30133",
   "compiler_report": [
@@ -8,7 +8,7 @@
     "Verified _MSC_FULL_VER=192930159 x64"
   ],
   "empty_cargo_cache": true,
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-45a7b107d3cb4607bd296ecf025d0dd6",
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-2d6320e65b56498ca6275cdce93ca8f1",
   "checks": [
     "v142 x64 compiler probe",
     "fmt",
@@ -18,9 +18,11 @@
     "WebView2 DOM self-check",
     "AppContainer OS file/network isolation",
     "project copy/edit/publish integration",
-    "HTTP skills/tool loops with bounded JSON repair and activity history"
+    "HTTP skills/tool loops with bounded JSON repair and activity history",
+    "DPAPI project memory, versioned notes and reserved .lmai boundary",
+    "persistent PDF cache, source/profile/hash invalidation"
   ],
-  "exe_sha256": "d173dbc995d1edefb63370dbbd88e72615f0a356ea60db881109f9d5eeac6acb",
+  "exe_sha256": "59505fb4b8fc61d3c7f8f370cefa66ccba80ced026d386099456042487db2dd4",
   "installer_built": false,
   "real_vnc_tested": false,
   "real_office_tested": false,

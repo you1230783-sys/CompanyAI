@@ -101,7 +101,7 @@
     const notice = JSON.stringify([projects.error || projects.status || "", !!projects.error]);
     if (notice !== lastNotice) {
       lastNotice = notice;
-      toast(projects.error || projects.status);
+      if (projects.error) toast(projects.error);
     }
     $("project-stop").hidden = !projects.running;
     $("project-stop").disabled = false;

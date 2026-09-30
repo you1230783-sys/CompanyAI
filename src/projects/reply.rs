@@ -6,6 +6,7 @@ pub struct Parsed {
     pub decision: Decision,
     pub commentary: String,
     pub note: Option<String>,
+    pub task_summary: Option<String>,
 }
 
 /// None 表示可要求模型重新給出唯一操作；此時絕不執行任何候選 JSON。
@@ -46,6 +47,16 @@ pub fn parse(text: &str) -> AppResult<Option<Parsed>> {
                 | "edit_office"
                 | "save_copy"
                 | "delete_copy"
+                | "list_notes"
+                | "read_note"
+                | "create_note"
+                | "update_note"
+                | "delete_note"
+                | "restore_note"
+                | "list_document_sections"
+                | "read_document_section"
+                | "update_document_note"
+                | "read_task_result"
         ) {
             return Err("模型要求未知工具，已停止。".into());
         }
@@ -56,6 +67,12 @@ pub fn parse(text: &str) -> AppResult<Option<Parsed>> {
     {
         None | Some(serde_json::Value::Null) => None,
         Some(serde_json::Value::String(note)) if note.chars().count() <= 2000 => Some(note),
+        _ => return Ok(None),
+    };
+    // 完成摘要附在同一個回覆，不額外啟動模型呼叫；舊模型未提供時保留明確標示的節錄。
+    let task_summary = match value.as_object_mut().and_then(|v| v.remove("task_summary")) {
+        None | Some(serde_json::Value::Null) => None,
+        Some(serde_json::Value::String(s)) if s.chars().count() <= 1000 => Some(s),
         _ => return Ok(None),
     };
     let decision = match serde_json::from_value::<Decision>(value) {
@@ -86,6 +103,7 @@ pub fn parse(text: &str) -> AppResult<Option<Parsed>> {
         decision,
         commentary,
         note,
+        task_summary,
     }))
 }
 
@@ -137,6 +155,16 @@ mod tests {
         assert!(parse(&format!("{ask}\n{TOOL}")).unwrap().is_none());
     }
 
+    #[test]
+    fn finish_summary_is_optional_bounded_and_separate_from_answer() {
+        let parsed = parse(r#"{"action":"finish","message":"答案為 42","artifacts":[],"task_summary":"已確認數值 42"}"#).unwrap().unwrap();
+        assert_eq!(parsed.task_summary.as_deref(), Some("已確認數值 42"));
+        assert!(
+            matches!(parsed.decision, Decision::Finish {message, ..} if message == "答案為 42")
+        );
+        let oversized = serde_json::json!({"action":"finish","message":"答案","artifacts":[],"task_summary":"字".repeat(1001)});
+        assert!(parse(&oversized.to_string()).unwrap().is_none());
+    }
     #[test]
     fn refuses_ambiguous_or_unknown_commands() {
         assert!(parse(&TOOL.replace("read_file", "shell")).is_err());

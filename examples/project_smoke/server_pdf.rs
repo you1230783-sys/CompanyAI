@@ -56,6 +56,8 @@ pub fn verify(exe: &Path, parent: &Path) -> AppResult<()> {
                 }
                 Err(e) => return Err(e.to_string()),
             };
+            // Windows accept 可能繼承 listener 的非阻塞模式；此 fixture 逐筆同步處理。
+            stream.set_nonblocking(false).map_err(|e| e.to_string())?;
             stream
                 .set_read_timeout(Some(Duration::from_secs(5)))
                 .map_err(|e| e.to_string())?;
@@ -84,7 +86,7 @@ pub fn verify(exe: &Path, parent: &Path) -> AppResult<()> {
             let mut body = vec![0; length];
             stream.read_exact(&mut body).map_err(|e| e.to_string())?;
             let call = calls.fetch_add(1, Ordering::SeqCst) + 1;
-            assert!(String::from_utf8_lossy(&body).contains(&format!("opaque-original-{call}")));
+            assert!(String::from_utf8_lossy(&body).contains("opaque-original-"));
             let markdown = format!("# 轉換 {call}\n\nPDF 中文內容\n");
             write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: text/markdown; charset=utf-8\r\nX-Request-ID: test-{call}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",markdown.len(),markdown).map_err(|e|e.to_string())?;
         }
@@ -100,7 +102,7 @@ pub fn verify(exe: &Path, parent: &Path) -> AppResult<()> {
             },
             "pdf-task".into(),
         )?;
-        broker.enable_server_pdf(config, session)?;
+        broker.enable_server_pdf(config.clone(), session.clone())?;
         let cancel = AtomicBool::new(false);
         let mut worker = Worker::start(exe, &cancel)?;
         let mut call = |id: &str, tool: Tool| -> AppResult<serde_json::Value> {
@@ -183,9 +185,60 @@ pub fn verify(exe: &Path, parent: &Path) -> AppResult<()> {
         assert_eq!(text::decode(&bytes)?.0, "已整理\n\nPDF 中文內容\n");
         assert_eq!(
             std::fs::read_dir(&root).map_err(|e| e.to_string())?.count(),
-            2,
-            "不得產生明文 MD 快取"
+            3,
+            "只新增加密 .lmai，不得產生明文 MD 快取"
         );
+        let mut reopened = Broker::new(
+            Project {
+                id: "reopened".into(),
+                name: "reopened".into(),
+                root: root.clone(),
+                imports: BTreeMap::new(),
+            },
+            "second_task".into(),
+        )?;
+        reopened.enable_server_pdf(config.clone(), session.clone())?;
+        let cached = reopened.execute(
+            "cached",
+            &Tool::ReadFile {
+                path: "測試.pdf".into(),
+                offset: 0,
+            },
+            &mut worker,
+            &cancel,
+        )?;
+        assert_eq!(cached["ok"], true);
+        assert_eq!(count.load(Ordering::SeqCst), 2, "第二次任務應重用磁碟快取");
+        let profile = format!("{}:pdf-markdown-v1-no-images", config.pdf_endpoint()?);
+        let key = text::revision(&format!(
+            "{}:{profile}",
+            text::revision("opaque-original-2")
+        ));
+        let cache_file = root.join(".lmai/cache").join(format!("{key}.dpapi"));
+        let encrypted = std::fs::read(&cache_file).map_err(|e| e.to_string())?;
+        assert!(!String::from_utf8_lossy(&encrypted).contains("PDF 中文內容"));
+        std::fs::write(cache_file, b"corrupt cache").map_err(|e| e.to_string())?;
+        let mut recovery = Broker::new(
+            Project {
+                id: "recover".into(),
+                name: "recover".into(),
+                root: root.clone(),
+                imports: BTreeMap::new(),
+            },
+            "third_task".into(),
+        )?;
+        recovery.enable_server_pdf(config, session)?;
+        let fresh = recovery.execute(
+            "fresh",
+            &Tool::ReadFile {
+                path: "測試.pdf".into(),
+                offset: 0,
+            },
+            &mut worker,
+            &cancel,
+        )?;
+        assert_eq!(fresh["ok"], true);
+        assert_eq!(count.load(Ordering::SeqCst), 3, "損毀快取應重新轉換");
         Ok(())
     })();
     done.store(true, Ordering::Relaxed);

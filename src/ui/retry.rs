@@ -56,7 +56,18 @@ impl App {
         {
             return false;
         }
-        self.can_send() && self.messages.len() < 39
+        self.can_send()
+            && self.messages.len()
+                < if self
+                    .active_id
+                    .as_deref()
+                    .and_then(|id| self.projects.store.project_for(id))
+                    .is_some()
+                {
+                    999
+                } else {
+                    39
+                }
     }
 
     pub(super) fn retry_state(&self) -> serde_json::Value {

@@ -9,6 +9,7 @@ use std::{
 };
 
 pub(super) struct Reader {
+    root: std::path::PathBuf,
     config: Config,
     session: Session,
     // 內容雜湊避免同一份 PDF 的分頁讀取、搜尋、建立 TXT 副本反覆上傳。
@@ -16,12 +17,13 @@ pub(super) struct Reader {
     cache: BTreeMap<String, String>,
 }
 impl Reader {
-    pub fn new(config: Config, session: Session) -> AppResult<Self> {
+    pub fn new(config: Config, session: Session, root: std::path::PathBuf) -> AppResult<Self> {
         config.pdf_endpoint()?;
         if !session.valid_for(&config) {
             return Err("登入已到期，請重新登入後轉換 PDF。".into());
         }
         Ok(Self {
+            root,
             config,
             session,
             cache: BTreeMap::new(),
@@ -54,6 +56,12 @@ impl Reader {
         if let Some(markdown) = self.cache.get(&revision) {
             return Ok(markdown.clone());
         }
+        let profile = format!("{}:pdf-markdown-v1-no-images", self.config.pdf_endpoint()?);
+        if let Ok(Some(markdown)) = super::memory::pdf_read(&self.root, &revision, &profile) {
+            super::text::validate(&markdown)?;
+            self.cache.insert(revision, markdown.clone());
+            return Ok(markdown);
+        }
         file.rewind().map_err(|e| e.to_string())?;
         let response = pdf::convert(
             &self.config.pdf_endpoint()?,
@@ -71,6 +79,8 @@ impl Reader {
         if self.cache.len() >= 20 {
             self.cache.clear();
         }
+        // 快取不可寫或舊帳號 DPAPI 不可讀時仍可完成當次閱讀；不覆寫筆記索引。
+        let _ = super::memory::pdf_write(&self.root, &revision, &profile, &markdown);
         self.cache.insert(revision, markdown.clone());
         Ok(markdown)
     }

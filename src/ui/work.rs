@@ -109,7 +109,7 @@ impl App {
             "message":a.message,"uploaded_bytes":a.uploaded_bytes,
             "progress":a.remote.as_ref().and_then(|r|r.progress),"queue_position":a.remote.as_ref().and_then(|r|r.queue_position)
         })).collect();
-        let tasks:Vec<_>=self.work.store.tasks.iter().rev().filter(|t| !t.title_generation).map(|t|json!({
+        let mut tasks:Vec<_>=self.work.store.tasks.iter().rev().filter(|t| !t.title_generation).map(|t|json!({
             "id":t.request_id,"conversation_id":t.conversation_id,"title":t.title,"mode":t.mode,"tool_events":t.tool_events,"created_at":t.created_at,
             "state":if t.applied && !t.remote.as_ref().is_some_and(TaskStatus::terminal){"stopped"}else{t.remote.as_ref().map(|r|r.state.as_str()).unwrap_or("submitting")},"active":t.active(),"message":t.message,
             "progress":t.remote.as_ref().and_then(|r|r.progress),"queue_position":t.remote.as_ref().and_then(|r|r.queue_position),
@@ -117,6 +117,9 @@ impl App {
             "can_retry":t.active()&&t.remote.is_none()&&!self.work.streams.contains(&t.request_id),
             "tool_status":if t.active(){self.work.tool_status.get(&t.request_id)}else{None}
         })).collect();
+        if let Some(task) = self.project_task() {
+            tasks.push(task);
+        }
         // 身分代號、附件 Token 與完整請求不傳入 WebView2。
         json!({"attachments":attachments,"tasks":tasks,"rules":self.work.caps.as_ref().filter(|_|self.work.capability_model == self.config.model && !self.work.capability_loading).map(|c|&c.attachments),
             "modes":self.work.caps.as_ref().map(|c|&c.execution_modes),"mode":self.work.mode,"status":self.work.status,
@@ -649,6 +652,9 @@ impl App {
             vec![],
         )?;
         jobs::set_skills(&mut request, false);
+        if self.projects.store.project_for(local).is_some() {
+            crate::projects::events::register(&self.root, &id)?;
+        }
         let task = Task {
             request_id: id,
             conversation_id: local.into(),
@@ -1067,6 +1073,17 @@ impl App {
                 match update {
                     jobs::StreamUpdate::Status(status) => {
                         task.apply_status(*status)?;
+                        if task.title_generation
+                            && self
+                                .projects
+                                .store
+                                .project_for(&task.conversation_id)
+                                .is_some()
+                        {
+                            if let Some(remote) = &task.remote {
+                                crate::projects::events::register(&self.root, &remote.task_id)?;
+                            }
+                        }
                         self.work_save()?;
                         self.finish_tasks()?;
                     }
@@ -1148,6 +1165,17 @@ impl App {
                     match result {
                         Ok(status) => {
                             task.apply_status(status)?;
+                            if task.title_generation
+                                && self
+                                    .projects
+                                    .store
+                                    .project_for(&task.conversation_id)
+                                    .is_some()
+                            {
+                                if let Some(remote) = &task.remote {
+                                    crate::projects::events::register(&self.root, &remote.task_id)?;
+                                }
+                            }
                             self.work.poll_delay = 5;
                         }
                         Err(e) => {

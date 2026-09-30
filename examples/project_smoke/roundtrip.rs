@@ -172,7 +172,7 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
                             json!({"action":"tool","operation_id":"save1","request":{"tool":"save_copy","copy_id":copy_id,"revision":previous["result"]["revision"]}})
                         }
                         4 => {
-                            json!({"action":"finish","message":"本機測試已完成修訂。","artifacts":[copy_id]})
+                            json!({"action":"finish","message":"本機測試已完成修訂。","artifacts":[copy_id],"task_summary":"已完成來源修訂與副本交付；來源保持不變。"})
                         }
                         _ => return Err("不應出現額外模型請求。".into()),
                     }
@@ -257,6 +257,29 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
                 .any(|text| text == "AI 說明：現在修改工作副本。"));
         }
         assert!(answer.contains("本機測試已完成修訂"));
+        let memory = company_ai::projects::memory::Memory::open(
+            Project {
+                id: "test".into(),
+                name: "測試".into(),
+                root: workspace.clone(),
+                imports: BTreeMap::new(),
+            },
+            "roundtrip_conversation",
+        )?;
+        let mut user = Message::user("修訂來源 TXT 並保存副本");
+        user.request_id = Some(run_id.clone());
+        let next = memory.context(&[
+            user,
+            Message::assistant(answer.clone()),
+            Message::user("接著修改成果"),
+        ])?;
+        assert!(next[0].content.contains("已完成來源修訂與副本交付"));
+        assert!(!next[0].content.contains("本機測試已完成修訂"));
+        assert!(memory.read_task_result(&run_id, "result", 0)?["text"]
+            .as_str()
+            .unwrap()
+            .contains("本機測試已完成修訂"));
+
         assert_eq!(
             activity
                 .iter()

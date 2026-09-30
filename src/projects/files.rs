@@ -23,7 +23,7 @@ use windows_sys::Win32::Storage::FileSystem::*;
 
 /// 回傳的 handle 保持到操作結束，拒絕目錄本身的寫入／刪除共用，
 /// 避免檢查後被重新命名、替換或改成 Junction；仍可在目錄內建立成果。
-fn pin(path: &Path) -> AppResult<Vec<File>> {
+pub(super) fn pin(path: &Path) -> AppResult<Vec<File>> {
     let mut current = PathBuf::new();
     let mut guards = Vec::new();
     for part in path.components() {
@@ -67,8 +67,35 @@ fn pin(path: &Path) -> AppResult<Vec<File>> {
     Ok(guards)
 }
 
+/// 以 Windows 正規化後的 handle 路徑排除私有資料；8.3 別名亦不可繞過名稱檢查。
+fn reject_internal(file: &File) -> AppResult<()> {
+    let mut name = vec![0u16; 32768];
+    let count = unsafe {
+        GetFinalPathNameByHandleW(
+            file.as_raw_handle(),
+            name.as_mut_ptr(),
+            name.len() as u32,
+            0,
+        )
+    } as usize;
+    if count == 0 || count >= name.len() {
+        return Err("無法核對文件的實際位置。".into());
+    }
+    if String::from_utf16_lossy(&name[..count])
+        .split(['\\', '/'])
+        .any(|p| p.eq_ignore_ascii_case(".lmai"))
+    {
+        return Err(".lmai 是專案內部資料，不可當成一般文件讀取。".into());
+    }
+    Ok(())
+}
+
 pub fn validate_root(root: &Path) -> AppResult<()> {
-    if !root.is_absolute()
+    if root.components().any(|c| {
+        c.as_os_str()
+            .to_string_lossy()
+            .eq_ignore_ascii_case(".lmai")
+    }) || !root.is_absolute()
         || root
             .components()
             .filter(|p| matches!(p, Component::Normal(_)))
@@ -78,6 +105,9 @@ pub fn validate_root(root: &Path) -> AppResult<()> {
         return Err("請選擇本機的專案資料夾，不可授權整個磁碟。".into());
     }
     let _guards = pin(root)?;
+    if let Some(directory) = _guards.last() {
+        reject_internal(directory)?;
+    }
     if !root.is_dir() {
         return Err("專案根目錄必須是資料夾。".into());
     }
@@ -94,7 +124,8 @@ pub fn relative(value: &str) -> AppResult<PathBuf> {
             Component::Normal(name) => {
                 let name = name.to_str().ok_or("路徑文字無法辨識。")?;
                 let base = name.split('.').next().unwrap_or("").to_ascii_uppercase();
-                if name.ends_with(['.', ' '])
+                if name.eq_ignore_ascii_case(".lmai")
+                    || name.ends_with(['.', ' '])
                     || name.contains(['<', '>', '"', '|', '?', '*'])
                     || name.chars().any(char::is_control)
                     || matches!(
@@ -146,6 +177,7 @@ fn read_cancel(
         .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
         .open(&target)
         .map_err(|_| "文件不存在、被占用或無讀取權限。")?;
+    reject_internal(&file)?;
     let mut info = BY_HANDLE_FILE_INFORMATION::default();
     if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0
         || info.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY) != 0
@@ -396,7 +428,7 @@ pub fn reveal(project: &Project, value: &str) -> AppResult<()> {
 }
 
 /// 固定開啟方式同時保護原檔、發布暫存，拒絕連結及操作期間的替換。
-fn checked_file(path: &Path) -> AppResult<File> {
+pub(super) fn checked_file(path: &Path) -> AppResult<File> {
     let file = OpenOptions::new()
         .read(true)
         .share_mode(FILE_SHARE_READ)
@@ -415,7 +447,7 @@ fn checked_file(path: &Path) -> AppResult<File> {
 /// Office 另存需要目錄寫入共用。先在嚴格目錄鎖下建立不分享存取的 anchor，
 /// 讓目錄始終非空（Windows 不允許替非空目錄設定 reparse point），並防止過渡期間更名。
 /// 再以 DELETE 存取權、不分享 DELETE 的 handle 固定目錄；不改變一般專案目錄的鎖。
-struct StageGuard {
+pub(super) struct StageGuard {
     directory: Option<File>,
     anchor: Option<File>,
     anchor_path: PathBuf,
@@ -428,9 +460,17 @@ impl Drop for StageGuard {
     }
 }
 fn pin_stage(path: &Path) -> AppResult<StageGuard> {
+    pin_named_stage(path, ".anchor")
+}
+
+/// 私有目錄跨啟動存在，使用唯一 anchor，避免上次崩潰殘留的 anchor 阻擋之後存取。
+pub(super) fn pin_memory_directory(path: &Path) -> AppResult<StageGuard> {
+    pin_named_stage(path, &format!(".anchor_{}", crate::jobs::new_id()?))
+}
+fn pin_named_stage(path: &Path, anchor_name: &str) -> AppResult<StageGuard> {
     const DELETE_ACCESS: u32 = 0x0001_0000;
     let initial = pin(path)?;
-    let anchor_path = path.join(".anchor");
+    let anchor_path = path.join(anchor_name);
     let anchor = OpenOptions::new()
         .read(true)
         .write(true)
@@ -459,13 +499,14 @@ fn pin_stage(path: &Path) -> AppResult<StageGuard> {
     })
 }
 
-fn fingerprint(project: &Project, source: &str) -> AppResult<String> {
+pub(super) fn fingerprint(project: &Project, source: &str) -> AppResult<String> {
     use sha2::{Digest, Sha256};
     let target = project.root.join(relative(source)?);
     let _pins = pin(target.parent().ok_or("缺少來源資料夾。")?)?;
     let mut file = checked_file(&target)?;
-    if file.metadata().map_err(|e| e.to_string())?.len() > 50_000_000 {
-        return Err("Office 檔案上限為 50 MB。".into());
+    reject_internal(&file)?;
+    if file.metadata().map_err(|e| e.to_string())?.len() > 52_428_800 {
+        return Err("來源檔案超過 50 MiB 上限。".into());
     }
     let mut hash = Sha256::new();
     let mut buffer = [0u8; 65536];
@@ -495,6 +536,7 @@ struct Copy {
 }
 pub struct Broker {
     server_pdf: Option<super::server_pdf::Reader>,
+    memory: Option<super::memory::Memory>,
     project: Project,
     output_folder: Option<String>,
     copies: BTreeMap<String, Copy>,
@@ -509,6 +551,7 @@ impl Broker {
         validate_root(&project.root)?;
         Ok(Self {
             server_pdf: None,
+            memory: None,
             project,
             output_folder: None,
             copies: BTreeMap::new(),
@@ -517,13 +560,31 @@ impl Broker {
             txt_context: false,
         })
     }
+    /// 只有專案代理啟用跨任務記憶；一般聊天沒有此能力。
+    pub fn enable_memory(&mut self, conversation: &str) -> AppResult<()> {
+        self.memory = Some(super::memory::Memory::open(
+            self.project.clone(),
+            conversation,
+        )?);
+        self.txt_context |= self.memory()?.has_protected_documents()?;
+        Ok(())
+    }
+    pub fn memory(&self) -> AppResult<&super::memory::Memory> {
+        self.memory
+            .as_ref()
+            .ok_or("本次任務未啟用專案記憶。".into())
+    }
     /// 正式代理任務啟用伺服器 PDF；本機診斷測試仍可使用原生解析器。
     pub fn enable_server_pdf(
         &mut self,
         config: crate::config::Config,
         session: crate::storage::Session,
     ) -> AppResult<()> {
-        self.server_pdf = Some(super::server_pdf::Reader::new(config, session)?);
+        self.server_pdf = Some(super::server_pdf::Reader::new(
+            config,
+            session,
+            self.project.root.clone(),
+        )?);
         Ok(())
     }
     /// 續接只能引用實際存在的工作副本與版本，不使用 AI 筆記重建檔案狀態。
@@ -577,14 +638,23 @@ impl Broker {
         if extension(Path::new(path))? != "md" {
             self.txt_context = true;
         }
-        read_cancel(
+        let stamp = self
+            .memory
+            .as_ref()
+            .map(|m| m.source_stamp(path))
+            .transpose()?;
+        let content = read_cancel(
             &self.project,
             path,
             cancel,
             Some(worker),
             self.server_pdf.as_mut(),
         )
-        .map(|(text, _)| text)
+        .map(|(text, _)| text)?;
+        if let (Some(memory), Some(stamp)) = (self.memory.as_mut(), stamp) {
+            memory.register_document(path, &content, &stamp)?;
+        }
+        Ok(content)
     }
     fn perform(
         &mut self,
@@ -593,9 +663,64 @@ impl Broker {
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
         match tool {
+            Tool::ListNotes { query } => self.memory()?.list_notes(query),
+            Tool::ReadNote { id } => self.memory()?.read_note(id),
+            Tool::CreateNote { scope, title, body } => {
+                self.memory()?.create_note(scope, title, body)
+            }
+            Tool::UpdateNote {
+                id,
+                revision,
+                title,
+                body,
+            } => self
+                .memory()?
+                .change_note(id, revision, Some((title, body)), false),
+            Tool::DeleteNote { id, revision } => {
+                self.memory()?.change_note(id, revision, None, false)
+            }
+            Tool::RestoreNote { id, revision } => {
+                self.memory()?.change_note(id, revision, None, true)
+            }
+            Tool::ListDocumentSections { path, offset } => {
+                self.content(path, cancel, worker)?;
+                self.memory()?.document_info(path, *offset)
+            }
+            Tool::ReadDocumentSection {
+                path,
+                revision,
+                section_id,
+            } => {
+                self.txt_context = true;
+                self.memory
+                    .as_mut()
+                    .ok_or("未啟用專案記憶。")?
+                    .read_section(path, revision, section_id)
+            }
+            Tool::UpdateDocumentNote {
+                path,
+                revision,
+                note_revision,
+                section_id,
+                summary,
+            } => self.memory()?.update_document_note(
+                path,
+                revision,
+                note_revision,
+                section_id.as_deref(),
+                summary,
+            ),
+            Tool::ReadTaskResult {
+                task_id,
+                field,
+                offset,
+            } => self.memory()?.read_task_result(task_id, field, *offset),
             Tool::ListFiles { path } => {
                 let target = self.project.root.join(relative(path)?);
                 let _guards = pin(&target)?;
+                if let Some(directory) = _guards.last() {
+                    reject_internal(directory)?;
+                }
                 let mut entries = Vec::new();
                 let mut truncated = false;
                 for (scanned, entry) in fs::read_dir(&target)
@@ -603,6 +728,13 @@ impl Broker {
                     .enumerate()
                 {
                     let entry = entry.map_err(|e| e.to_string())?;
+                    if entry
+                        .file_name()
+                        .to_string_lossy()
+                        .eq_ignore_ascii_case(".lmai")
+                    {
+                        continue;
+                    }
                     if entries.len() == 200 || scanned >= 500 {
                         truncated = true;
                         break;
@@ -625,8 +757,16 @@ impl Broker {
                 }
                 let text: String = content.chars().skip(*offset).take(6000).collect();
                 let next = offset + text.chars().count();
+                let document = if self.copies.contains_key(path) {
+                    Value::Null
+                } else if let Some(memory) = self.memory.as_mut() {
+                    memory.record_read(path, *offset, next);
+                    memory.read_info(path, *offset, next)?
+                } else {
+                    Value::Null
+                };
                 Ok(
-                    json!({"text":text,"offset":offset,"next_offset":next,"total":total,"truncated":next<total,"revision":text::revision(&content),"imported_snapshot":self.project.imports.contains_key(&path.replace('\\', "/"))}),
+                    json!({"text":text,"offset":offset,"next_offset":next,"total":total,"truncated":next<total,"revision":text::revision(&content),"document":document,"imported_snapshot":self.project.imports.contains_key(&path.replace('\\', "/"))}),
                 )
             }
             Tool::FindText { path, text: needle } => {

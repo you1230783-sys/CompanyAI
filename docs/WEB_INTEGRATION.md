@@ -1,3 +1,5 @@
+> **0.8.23：** 專案跨任務改送選取記憶／近期使用者要求，不重送所有舊答案。請完整採用桌面 `messages`，不要自行補回舊對話或技能。`task_summary` 僅為模型正文操作 JSON 的可選欄位，HTTP 仍 `skills:false`，PDF 路由不變。通知的 `resource_id` 須為該輪 task_id 或 client_request_id，桌面才能隱藏內部工具／標題通知；缺少關聯時保留通知，不猜測。桌面顯示單一任務不等於網站已合併工作。詳見 [0.8.23 契約](DESKTOP_0_8_23_CONTRACT.md)。
+
 > **0.8.22：** 專案以既有背景路由與 `skills:false` 傳送筆記、真實工具進度及續接提示，新增內容都在 messages，不新增 HTTP 欄位。請保留桌面提供的 messages，勿另附目的技能或重複拼接歷史。專案較長工具歷程可超過一般聊天 40 則訊息，桌面另設 204 則／240,000 UTF-8 bytes 內容上限；後端實際模型上下文限制仍須公司驗證。已完成但空白的模型結果可有限修復，身分／取消／結果未知不自動重送。詳見 [0.8.22 契約](DESKTOP_0_8_22_CONTRACT.md)。
 
 > **0.8.21：** 新增專案 PDF 同步 multipart 轉換。正式路由 `/lm_server/api/desktop/documents/pdf-to-markdown`，Bearer 桌面 Token＋X-Client-Version；200 為 UTF-8 Markdown bytes，錯誤為既有 JSON。詳見 [0.8.21 契約](DESKTOP_0_8_21_CONTRACT.md)。聊天 skills 與一般附件 API 不變。

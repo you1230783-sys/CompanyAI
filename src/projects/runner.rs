@@ -44,7 +44,19 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
     checkpoint(&journal, &record)?;
     let mut broker = Broker::new(run.project.clone(), run.id.clone())?;
     broker.enable_server_pdf(run.config.clone(), run.session.clone())?;
+    broker.enable_memory(&run.conversation)?;
+    let request_text = run
+        .messages
+        .last()
+        .map(|m| m.content.clone())
+        .unwrap_or_default();
+    let mut task_summary = None;
+    // 在建立模型請求前保存開始狀態；中途停止也保留可核對的任務索引。
+    broker
+        .memory()?
+        .save_run(&run.id, &request_text, "尚未完成", "running", None, &[])?;
     let result = (|| {
+        run.messages = broker.memory()?.context(&run.messages)?;
         let mut worker = Worker::start(
             &std::env::current_exe().map_err(|e| e.to_string())?,
             &run.cancel,
@@ -98,6 +110,7 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
                 .ok_or("任務記錄不正確。")?
                 .push(json!({"id":id,"request":task.request}));
             checkpoint(&journal, &record)?;
+            super::events::register(&run.root, &id)?;
             let outcome = super::model::receive(&run, &mut task, deadline)?;
             check(&run.cancel, deadline)?;
             let (reply, parsed, reason) = match outcome {
@@ -121,6 +134,12 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
                 checkpoint(&journal, &record)?;
                 continue;
             };
+            if matches!(
+                parsed.decision,
+                Decision::Finish { .. } | Decision::AskUser { .. }
+            ) {
+                task_summary = parsed.task_summary.clone();
+            }
             if progress_state.accept_note(parsed.note.as_deref()) {
                 report(&mut activity, &mut progress, "已更新任務筆記".into());
                 record["progress"] = progress_state.snapshot(broker.progress_snapshot());
@@ -251,6 +270,34 @@ pub fn run(mut run: Run, mut progress: impl FnMut(String)) -> AppResult<String> 
     record["outputs"] = json!(broker.published());
     record["result"] = json!(result);
     checkpoint(&journal, &record)?;
+    let outcome = result
+        .as_ref()
+        .map(|s| s.as_str())
+        .unwrap_or_else(|s| s.as_str());
+    let state = if run.cancel.load(Ordering::Relaxed) {
+        "cancelled"
+    } else if result.is_err() {
+        "failed"
+    } else if outcome.starts_with("需要你的補充：") {
+        "waiting_user"
+    } else {
+        "completed"
+    };
+    if let Err(error) = broker.memory()?.save_run(
+        &run.id,
+        &request_text,
+        outcome,
+        state,
+        task_summary.as_deref(),
+        broker.published(),
+    ) {
+        // 摘要保存失败不能推翻已核對的交付；完整結果仍在本機對話及 DPAPI 任務紀錄。
+        report(
+            &mut activity,
+            &mut progress,
+            format!("專案記憶暫未保存：{error}"),
+        );
+    }
     result.map_err(|error| {
         if broker.published().is_empty() {
             error

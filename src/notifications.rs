@@ -64,7 +64,10 @@ impl Notification {
     pub fn visible_ai(&self) -> bool {
         matches!(
             self.kind.as_str(),
-            "chat.completed"
+            "project.completed"
+                | "project.failed"
+                | "project.waiting_user"
+                | "chat.completed"
                 | "chat.failed"
                 | "task.completed"
                 | "task.failed"
@@ -106,7 +109,10 @@ impl Inbox {
         let mut ids = Vec::new();
         for event in &mut self.events {
             if !event.dismissed && !event.expired() {
-                ids.push(event.id.clone());
+                // 專案最終通知由桌面建立，網站沒有對應的通知 ID。
+                if !event.kind.starts_with("project.") {
+                    ids.push(event.id.clone());
+                }
                 event.read_at = Some(now.clone());
                 event.dismissed |= dismiss;
             }
@@ -252,6 +258,18 @@ mod tests {
             read_at: None,
             dismissed: false,
         }
+    }
+    #[test]
+    fn local_project_notifications_are_read_without_server_ids() {
+        let mut local = event();
+        local.id = "project_test".into();
+        local.kind = "project.completed".into();
+        let mut inbox = Inbox {
+            events: vec![event(), local],
+            ..Inbox::default()
+        };
+        assert_eq!(inbox.mark_all(false), vec!["evt_test"]);
+        assert!(inbox.events.iter().all(|e| e.read_at.is_some()));
     }
     #[test]
     fn event_replay_deduplicates_and_preserves_read_state() {

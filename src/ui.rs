@@ -281,10 +281,10 @@ impl App {
             .iter()
             .map(|c| json!({"id":c.id,"title":c.title,"updated_at":c.updated_at,"pinned":c.pinned,"project_id":self.projects.store.conversations.get(&c.id)}))
             .collect();
-        let mut events:Vec<serde_json::Value>=self.inbox.events.iter().filter(|e|!e.expired()&&!e.dismissed&&e.visible_ai()).map(|e|json!({
+        let mut events:Vec<serde_json::Value>=self.inbox.events.iter().filter(|e|!e.expired()&&!e.dismissed&&e.visible_ai()&&!crate::projects::events::internal(&self.root,e.resource_id.as_deref())).map(|e|json!({
             "id":e.id,"source":"ai","type":e.kind,"title":e.title,"summary":e.summary,"created_at":e.created_at,"read_at":e.read_at,"notification_key":format!("ai:{}",e.id)
         })).collect();
-        events.extend(self.site.cache.items.iter().map(|e|json!({"id":e.id,"source":"site","origin":e.source,"type":e.kind,"title":e.title,"summary":e.body,"created_at":e.created_at,"read_at":if e.is_read{Some(e.read_at.clone().unwrap_or_default())}else{None},"is_read":e.is_read,"url":e.url,"resource_id":e.resource_id,"received_at":e.received_at,"notification_key":format!("site:{}",e.id)})));
+        events.extend(self.site.cache.items.iter().filter(|e|!crate::projects::events::internal(&self.root,e.resource_id.as_deref())).map(|e|json!({"id":e.id,"source":"site","origin":e.source,"type":e.kind,"title":e.title,"summary":e.body,"created_at":e.created_at,"read_at":if e.is_read{Some(e.read_at.clone().unwrap_or_default())}else{None},"is_read":e.is_read,"url":e.url,"resource_id":e.resource_id,"received_at":e.received_at,"notification_key":format!("site:{}",e.id)})));
         events.sort_by(|a, b| {
             b["created_at"]
                 .as_str()
@@ -303,7 +303,7 @@ impl App {
             "busy":self.busy,"logged_in":self.logged_in(),"can_send":self.can_send(),"update_required":self.versions.blocked(),
             "retry":self.retry_state(),"projects":self.project_state(),"models":models,"conversations":conversations,"active_id":self.active_id,"messages":self.messages,
             "draft":self.draft,"draft_revision":self.draft_revision,"focus_draft":self.focus_draft,
-            "notifications":events,"notification_status":self.notification_status,"unread_count":self.inbox.unread_count()+self.site.cache.unread_count,"site_status":self.site.status,"site_loading":self.site.loading,"site_mutating":self.site.mutating,"notifications_loading":self.notifications_loading,
+            "notifications":events,"notification_status":self.notification_status,"unread_count":self.inbox.events.iter().filter(|e| e.visible_ai()&&!e.dismissed&&!e.expired()&&e.read_at.is_none()&&!crate::projects::events::internal(&self.root,e.resource_id.as_deref())).count()+self.site.cache.unread_count.saturating_sub(self.site.cache.items.iter().filter(|e|!e.is_read&&crate::projects::events::internal(&self.root,e.resource_id.as_deref())).count()),"site_status":self.site.status,"site_loading":self.site.loading,"site_mutating":self.site.mutating,"notifications_loading":self.notifications_loading,
             "mail":self.mail,"mail_busy":self.mail_busy,"mail_batch":self.mail_batch_state(),"history_error":self.history_error,
             "work":self.work_state(),"vnc":self.vnc_state(),"version_status":self.version_status,"login_code":self.grant.as_ref().map(|g|&g.user_code)
         }}));
@@ -601,8 +601,18 @@ impl App {
         };
         let mut messages = self.messages.clone();
         messages.push(Message::user(&content));
-        if messages.len() >= 40 {
-            return Err("此對話已達 20 輪，請新增對話。".into());
+        let project_chat = self
+            .active_id
+            .as_deref()
+            .and_then(|id| self.projects.store.project_for(id))
+            .is_some();
+        if messages.len() >= if project_chat { 1000 } else { 40 } {
+            return Err(if project_chat {
+                "此專案對話已達 500 輪，請新增專案對話。"
+            } else {
+                "此對話已達 20 輪，請新增對話。"
+            }
+            .into());
         }
         if self
             .active_id
@@ -1013,8 +1023,16 @@ impl App {
                 self.fetch_site(true);
             }
             Command::ReadEvent { id } => {
-                if !self.inbox.events.iter().any(|e| e.id == id) {
-                    return Err("找不到通知。".into());
+                let event = self
+                    .inbox
+                    .events
+                    .iter_mut()
+                    .find(|e| e.id == id)
+                    .ok_or("找不到通知。")?;
+                if event.kind.starts_with("project.") {
+                    event.read_at = Some(notifications::now_text());
+                    notifications::save(&self.root, &self.inbox)?;
+                    return Ok(());
                 }
                 let (config, session, tx, generation) = (
                     self.config.clone(),
@@ -1309,6 +1327,10 @@ impl App {
                             .iter()
                             .filter(|e| {
                                 e.visible_ai()
+                                    && !crate::projects::events::internal(
+                                        &self.root,
+                                        e.resource_id.as_deref(),
+                                    )
                                     && !e.kind.starts_with("chat.")
                                     && !e.kind.starts_with("attachment.")
                                     && !self.inbox.events.iter().any(|old| old.id == e.id)

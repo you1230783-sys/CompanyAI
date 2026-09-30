@@ -36,6 +36,7 @@ pub(super) fn receive(run: &Run, task: &mut Task, deadline: Instant) -> AppResul
                 {
                     return Err("任務回應識別碼不一致，已停止。".into());
                 }
+                super::events::register(&run.root, &status.task_id)?;
                 connection_errors = 0;
                 task.remote = Some(status.clone());
                 if status.state == "completed" {

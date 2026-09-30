@@ -110,7 +110,7 @@ impl Archive {
                 || !ids.insert(&conversation.id)
                 || conversation.title.chars().count() > 100
                 || conversation.draft.encode_utf16().count() > 16_000
-                || conversation.messages.len() > 40
+                || conversation.messages.len() > 1000
                 || conversation.messages.iter().any(|m| {
                     !matches!(m.role.as_str(), "user" | "assistant") || m.content.len() > 1_048_576
                 })

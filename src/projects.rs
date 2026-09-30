@@ -1,5 +1,7 @@
 //! 專案資料與固定工具契約。授權及副本所有權由桌面保存，不由模型文字決定。
+pub mod events;
 pub mod files;
+pub mod memory;
 mod model;
 pub mod office;
 mod pdf;
@@ -117,6 +119,60 @@ pub enum Tool {
     DeleteCopy {
         copy_id: String,
     },
+    ListNotes {
+        #[serde(default)]
+        query: String,
+    },
+    ReadNote {
+        id: String,
+    },
+    CreateNote {
+        scope: String,
+        title: String,
+        body: String,
+    },
+    UpdateNote {
+        id: String,
+        revision: String,
+        title: String,
+        body: String,
+    },
+    DeleteNote {
+        id: String,
+        revision: String,
+    },
+    RestoreNote {
+        id: String,
+        revision: String,
+    },
+    ListDocumentSections {
+        path: String,
+        #[serde(default)]
+        offset: usize,
+    },
+    ReadDocumentSection {
+        path: String,
+        revision: String,
+        section_id: String,
+    },
+    UpdateDocumentNote {
+        path: String,
+        revision: String,
+        note_revision: String,
+        section_id: Option<String>,
+        summary: String,
+    },
+    ReadTaskResult {
+        task_id: String,
+        #[serde(default = "result_field")]
+        field: String,
+        #[serde(default)]
+        offset: usize,
+    },
+}
+
+fn result_field() -> String {
+    "result".into()
 }
 
 impl Tool {
@@ -132,6 +188,15 @@ impl Tool {
             Self::EditText { .. } => "編輯文字",
             Self::SaveCopy { .. } => "儲存副本",
             Self::DeleteCopy { .. } => "刪除工作副本",
+            Self::ListNotes { .. } => "查詢專案筆記",
+            Self::ReadNote { .. } => "閱讀筆記",
+            Self::CreateNote { .. } => "新增筆記",
+            Self::UpdateNote { .. } | Self::UpdateDocumentNote { .. } => "更新筆記",
+            Self::DeleteNote { .. } => "刪除筆記",
+            Self::RestoreNote { .. } => "復原筆記",
+            Self::ListDocumentSections { .. } => "查看文件分段摘要",
+            Self::ReadDocumentSection { .. } => "閱讀文件區段",
+            Self::ReadTaskResult { .. } => "讀取先前任務結果",
         }
     }
 }
