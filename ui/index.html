@@ -35,12 +35,12 @@
           <span data-icon="monitor"></span><span class="nav-label">VNC 快速連線</span>
         </button>
         <section class="project-section" aria-label="專案">
-          <div class="section-caption"><span class="nav-label">專案</span><button id="new-project" class="text-button" title="新增專案"><span data-icon="plus"></span><span class="nav-label">新增專案</span></button></div>
+          <div class="section-caption"><button id="collapse-projects" class="section-toggle nav-label" aria-controls="project-list" aria-expanded="true">▾ 專案</button><button id="new-project" class="text-button" title="新增專案"><span data-icon="plus"></span><span class="nav-label">新增專案</span></button></div>
           <div id="project-list" class="nav-label"></div>
         </section>
         <div class="history-section">
           <div class="section-caption">
-            <span class="nav-label">最近對話</span>
+            <button id="collapse-recent" class="section-toggle nav-label" aria-controls="history-list" aria-expanded="true">▾ 最近對話</button>
             <button id="new-chat" class="text-button" title="新對話" aria-label="新對話">
               <span data-icon="plus"></span><span class="nav-label">新對話</span>
             </button>
@@ -87,6 +87,7 @@
         <section id="chat-view" class="view">
           <div id="transcript" tabindex="0" aria-label="聊天內容">
             <div id="messages"></div>
+            <div id="project-charts" class="project-charts" hidden></div>
             <div id="project-narration" hidden></div>
                 <details id="project-activity" class="project-activity" aria-label="專案執行歷程" hidden></details>
             <div
@@ -573,6 +574,8 @@
     <script src="vendor/purify.min.js"></script>
     <script src="icons.js"></script>
     <script src="self-test.js"></script>
+    <script src="vendor/echarts.min.js"></script>
+    <script src="charts.js"></script>
     <script src="app.js"></script>
     <script src="work.js"></script>
     <script src="mail.js"></script>

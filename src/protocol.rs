@@ -41,6 +41,8 @@ pub struct Message {
     /// 專案工具歷程只供本機顯示，不加入模型對話內容。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub project_activity: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub project_charts: Vec<crate::projects::charts::Chart>,
     /// 本機暫停狀態；模型無法藉回覆文字建立可續接授權。
     #[serde(default)]
     pub project_paused: bool,
@@ -62,6 +64,7 @@ impl Message {
             response_payload: None,
             received_replies: Vec::new(),
             project_activity: Vec::new(),
+            project_charts: Vec::new(),
             project_paused: false,
             retry_settings: None,
             retry_context_index: None,
@@ -77,6 +80,7 @@ impl Message {
             response_payload: None,
             received_replies: Vec::new(),
             project_activity: Vec::new(),
+            project_charts: Vec::new(),
             project_paused: false,
             retry_settings: None,
             retry_context_index: None,

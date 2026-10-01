@@ -13,6 +13,8 @@ mod pdf;
 mod roundtrip;
 #[path = "project_smoke/server_pdf.rs"]
 mod server_pdf;
+#[path = "project_smoke/skills.rs"]
+mod skills;
 
 use company_ai::{
     projects::{files::Broker, sandbox::Worker, text, Project, Tool},
@@ -136,6 +138,7 @@ fn run() -> AppResult<()> {
     assert_eq!(paths.len(), 1);
     println!("PASS: AppContainer handshake, OS file/network isolation, Unicode edit, replay, source protection, publish/readback, path escape and hardlink rejection. Fixture: {}", root.display());
     drop(worker);
+    skills::verify(&exe, &root)?;
     roundtrip::verify(&root)?;
     continuation::verify(&root)?;
     pause::verify(&root)?;

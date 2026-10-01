@@ -435,6 +435,24 @@ impl Memory {
             json!({"path":path,"revision":revision,"note_revision":doc.note_revision.to_string(),"section_id":section_id,"saved":true}),
         )
     }
+    /// 委派用原文區段不算主模型已讀，也不取得修改文件的能力。
+    pub(super) fn delegation_sections(&self, path: &str) -> AppResult<Vec<serde_json::Value>> {
+        let doc = self.document(path)?;
+        Ok(doc.sections.iter().map(|s| json!({"section_id":s.id,"start":s.start,"end":s.end,"text":doc.content.chars().skip(s.start).take(s.end-s.start).collect::<String>()})).collect())
+    }
+    pub(super) fn delegation_read<T: serde::de::DeserializeOwned>(
+        &self,
+        key: &str,
+    ) -> AppResult<Option<T>> {
+        self.vault.transaction()?.read("delegation", key)
+    }
+    pub(super) fn delegation_write<T: serde::Serialize>(
+        &self,
+        key: &str,
+        value: &T,
+    ) -> AppResult<()> {
+        self.vault.transaction()?.write("delegation", key, value)
+    }
     pub fn read_task_result(&self, id: &str, field: &str, offset: usize) -> AppResult<Value> {
         jobs::validate_id(id)?;
         let task: RunResult = self

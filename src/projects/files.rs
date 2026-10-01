@@ -577,6 +577,10 @@ pub(super) struct SavedBroker {
     results: BTreeMap<String, (Value, Value)>,
     published: Vec<String>,
     txt_context: bool,
+    #[serde(default)]
+    loaded_skills: Vec<String>,
+    #[serde(default)]
+    charts: Vec<super::charts::Chart>,
 }
 pub struct Broker {
     server_pdf: Option<super::server_pdf::Reader>,
@@ -589,6 +593,8 @@ pub struct Broker {
     published: Vec<String>,
     /// 任務接觸 TXT 後，不允許把內容混入未加密的 MD 成果。
     txt_context: bool,
+    loaded_skills: Vec<String>,
+    charts: Vec<super::charts::Chart>,
 }
 impl Broker {
     pub fn new(project: Project, _task: String) -> AppResult<Self> {
@@ -602,13 +608,15 @@ impl Broker {
             results: BTreeMap::new(),
             published: Vec::new(),
             txt_context: false,
+            loaded_skills: vec![],
+            charts: vec![],
         })
     }
     pub(super) fn saved(&self) -> AppResult<SavedBroker> {
         // 經序列化建立不含程序資源的快照，只有明確暫停時才呼叫。
         serde_json::from_value(
             json!({"output_folder":self.output_folder,"copies":self.copies,
-            "results":self.results,"published":self.published,"txt_context":self.txt_context}),
+            "results":self.results,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts}),
         )
         .map_err(|e| e.to_string())
     }
@@ -646,6 +654,12 @@ impl Broker {
                 }
             }
         }
+        super::skills::context(&state.loaded_skills)?;
+        for chart in &state.charts {
+            chart.validate()?;
+        }
+        self.loaded_skills = state.loaded_skills;
+        self.charts = state.charts;
         self.output_folder = state.output_folder;
         self.copies = state.copies;
         self.results = state.results;
@@ -691,8 +705,92 @@ impl Broker {
             }))
             .collect::<Vec<_>>())
     }
+    pub(super) fn skill_context(&self) -> AppResult<String> {
+        super::skills::context(&self.loaded_skills)
+    }
+    pub fn charts(&self) -> &[super::charts::Chart] {
+        &self.charts
+    }
+    fn add_chart(&mut self, chart: super::charts::Chart) -> AppResult<Value> {
+        chart.validate()?;
+        if self.charts.len() >= 12 {
+            return Err("每次任務最多 12 張圖表。".into());
+        }
+        self.charts.push(chart);
+        Ok(json!({"chart_index":self.charts.len()-1,"displayed_in_conversation":true}))
+    }
+    /// 明確指定檔案，逐檔使用與 read_file 相同的存取邊界；不掃描未知目錄。
+    fn search_files(
+        &mut self,
+        paths: &[String],
+        query: &str,
+        worker: &mut Worker,
+        cancel: &AtomicBool,
+    ) -> AppResult<Value> {
+        if paths.is_empty()
+            || paths.len() > 20
+            || query.trim().is_empty()
+            || query.chars().count() > 200
+        {
+            return Err("搜尋需指定 1–20 份文件與 1–200 字查詢。".into());
+        }
+        let mut matches = Vec::new();
+        let mut errors = Vec::new();
+        let mut truncated = false;
+        for path in paths {
+            if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                return Err("操作已取消。".into());
+            }
+            match self.content(path, cancel, worker) {
+                Ok(content) => {
+                    let revision = text::revision(&content);
+                    for (byte, _) in content.match_indices(query) {
+                        if matches.len() >= 60 {
+                            truncated = true;
+                            break;
+                        }
+                        let offset = content[..byte].chars().count();
+                        let start = offset.saturating_sub(100);
+                        matches.push(json!({"path":path,"revision":revision,"offset":offset,"excerpt":content.chars().skip(start).take(300).collect::<String>()}));
+                    }
+                }
+                Err(error) => errors.push(json!({"path":path,"error":error})),
+            }
+        }
+        Ok(
+            json!({"matches":matches,"errors":errors,"truncated":truncated,"complete":errors.is_empty()&&!truncated}),
+        )
+    }
     pub fn published(&self) -> &[String] {
         &self.published
+    }
+    /// 非同步委派也共用操作去重表；不能與一般工具重複使用不同參數的 ID。
+    pub(super) fn cached_result(&self, id: &str, tool: &Tool) -> AppResult<Option<Value>> {
+        crate::jobs::validate_id(id)?;
+        let request = serde_json::to_value(tool).map_err(|e| e.to_string())?;
+        if let Some((previous, result)) = self.results.get(id) {
+            if previous != &request {
+                return Err("操作識別碼重複但參數不同；已停止。".into());
+            }
+            return Ok(Some(result.clone()));
+        }
+        Ok(None)
+    }
+    pub(super) fn remember_result(
+        &mut self,
+        id: &str,
+        tool: &Tool,
+        result: &Value,
+    ) -> AppResult<()> {
+        self.cached_result(id, tool)?;
+        self.results.insert(
+            id.into(),
+            (
+                serde_json::to_value(tool).map_err(|e| e.to_string())?,
+                result.clone(),
+            ),
+        );
+        Ok(())
     }
     pub fn execute(
         &mut self,
@@ -716,7 +814,7 @@ impl Broker {
         self.results.insert(id.into(), (request, result.clone()));
         Ok(result)
     }
-    fn content(
+    pub(super) fn content(
         &mut self,
         path: &str,
         cancel: &AtomicBool,
@@ -756,6 +854,40 @@ impl Broker {
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
         match tool {
+            Tool::LoadSkill { id } => {
+                let body = super::skills::load(id)?;
+                if !self.loaded_skills.contains(id) {
+                    self.loaded_skills.push(id.clone());
+                }
+                Ok(json!({"id":id,"instructions":body}))
+            }
+            Tool::SearchFiles { paths, query } => self.search_files(paths, query, worker, cancel),
+            Tool::OfficeBatch {
+                copy_id,
+                revision,
+                operations,
+            } => self.office_batch(copy_id, revision, operations.clone(), cancel),
+            Tool::CreateChart { chart } => self.add_chart(chart.clone()),
+            Tool::ChartFromExcel {
+                path,
+                revision,
+                sheet,
+                range,
+                kind,
+                title,
+                x_label,
+                y_label,
+            } => {
+                let content = self.content(path, cancel, worker)?;
+                if text::revision(&content) != *revision {
+                    return Err("文件版本已變更，請重新讀取。".into());
+                }
+                let chart = super::charts::from_excel(
+                    &content, *sheet, range, kind, title, x_label, y_label, path, revision,
+                )?;
+                self.add_chart(chart)
+            }
+            Tool::SummarizeDocument { .. } => Err("摘要委派需由專案任務協調器執行。".into()),
             Tool::ReadWorkLog { offset } => {
                 // 過濾查閱本身，避免紀錄遞迴包含先前紀錄，亦不把排序當成執行順序。
                 let log = serde_json::to_string(&self.results.iter()
@@ -1136,13 +1268,26 @@ impl Broker {
         action: office::Action,
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
+        self.office_batch(id, revision, vec![action], cancel)
+    }
+    /// 整批在候選文件重建成功後才提交；失敗不修改目前副本，且只啟動一次 Office。
+    fn office_batch(
+        &mut self,
+        id: &str,
+        revision: &str,
+        actions: Vec<office::Action>,
+        cancel: &AtomicBool,
+    ) -> AppResult<Value> {
+        if actions.is_empty() || actions.len() > 20 {
+            return Err("每批需為 1–20 個 Office 操作。".into());
+        }
         let copy = self.copies.get_mut(id).ok_or("不是本次任務的工作副本。")?;
         if text::revision(&copy.text) != revision {
             return Err("版本已改變，請重新讀取。".into());
         }
         let office = copy.office.as_mut().ok_or("此工具只適用 Office 副本。")?;
         let mut candidate = office.clone();
-        candidate.actions.push(action);
+        candidate.actions.extend(actions);
         if candidate.actions.len() > 200 {
             return Err("單一文件最多 200 次修改；請發布後建立新副本。".into());
         }

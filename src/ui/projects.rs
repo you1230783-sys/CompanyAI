@@ -44,12 +44,14 @@ pub(super) enum ProjectCommand {
 }
 pub(super) enum ProjectEvent {
     Progress(String, String),
+    Charts(String, Vec<projects::charts::Chart>),
     Finished(String, String, AppResult<String>),
 }
 pub(super) struct Running {
     id: String,
     conversation: String,
     activity: Vec<String>,
+    charts: Vec<projects::charts::Chart>,
     started: u64,
     cancel: Arc<AtomicBool>,
 }
@@ -172,6 +174,7 @@ impl App {
             message.project_paused = projects::runner::paused_available(&self.root, &id);
             message.project_activity =
                 projects::runner::recover_activity(&self.root, &id).unwrap_or_default();
+            message.project_charts = projects::runner::recover_charts(&self.root, &id);
             message.request_id = Some(id);
             conversation.messages.push(message);
             changed = true;
@@ -187,7 +190,7 @@ impl App {
     }
     pub(super) fn project_state(&self) -> serde_json::Value {
         json!({"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len()})).collect::<Vec<_>>(),
-            "running":self.projects.running.is_some(),"running_id":self.projects.running.as_ref().map(|r|&r.id),"activity":self.projects.running.as_ref().map(|r|&r.activity),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
+            "running":self.projects.running.is_some(),"running_id":self.projects.running.as_ref().map(|r|&r.id),"activity":self.projects.running.as_ref().map(|r|&r.activity),"charts":self.projects.running.as_ref().map(|r|&r.charts),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
     }
     pub(super) fn project_command(&mut self, command: ProjectCommand) -> AppResult<()> {
         if let Some(error) = &self.projects.error {
@@ -485,6 +488,7 @@ impl App {
             id: id.clone(),
             conversation: conversation.clone(),
             activity: vec!["準備專案任務…".into()],
+            charts: vec![],
             started: crate::unix_now(),
             cancel,
         });
@@ -492,9 +496,15 @@ impl App {
         self.projects.status = "正在建立受限制執行器…".into();
         let tx = self.tx.clone();
         thread::spawn(move || {
-            let result = projects::runner::run(run, |text| {
-                let _ = tx.send(Event::Project(ProjectEvent::Progress(id.clone(), text)));
-            });
+            let result = projects::runner::run_with_charts(
+                run,
+                |text| {
+                    let _ = tx.send(Event::Project(ProjectEvent::Progress(id.clone(), text)));
+                },
+                |charts| {
+                    let _ = tx.send(Event::Project(ProjectEvent::Charts(id.clone(), charts)));
+                },
+            );
             let _ = tx.send(Event::Project(ProjectEvent::Finished(
                 id,
                 conversation,
@@ -511,6 +521,11 @@ impl App {
     }
     pub(super) fn project_event(&mut self, event: ProjectEvent) -> AppResult<()> {
         match event {
+            ProjectEvent::Charts(id, charts) => {
+                if let Some(run) = self.projects.running.as_mut().filter(|r| r.id == id) {
+                    run.charts = charts;
+                }
+            }
             ProjectEvent::Progress(id, text) => {
                 if let Some(run) = self.projects.running.as_mut().filter(|r| r.id == id) {
                     if run.activity.last() != Some(&text) {
@@ -564,6 +579,7 @@ impl App {
                 let mut message = Message::assistant(text);
                 message.project_paused = paused;
                 message.project_activity = activity;
+                message.project_charts = projects::runner::recover_charts(&self.root, &id);
                 message.request_id = Some(id.clone());
                 c.messages.push(message);
                 c.updated_at = crate::unix_now();

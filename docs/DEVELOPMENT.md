@@ -31,7 +31,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build.ps1 -Emp
 
 依賴由 `Cargo.lock`、`vendor` 與 `.cargo/config.toml` 固定，使用空 Cargo 快取及 `--frozen` 驗證。環境腳本優先使用專案內的 `toolchain`，否則使用共用 `.tools`，並設定本專案的 target 目錄。
 
-`toolchain/` 與 `vendor/` 不直接提交 Git。**現存離線 ZIP 是歷史交付包，不代表目前 0.8.27 原始碼。** 全新環境需先準備指定工具鏈與符合 Cargo.lock 的 vendor；不要將舊 ZIP 整包覆蓋到新版原始碼。完整離線包操作見 [離線交付與 Git](OFFLINE_AND_GIT.md)。
+`toolchain/` 與 `vendor/` 不直接提交 Git。**現存離線 ZIP 是歷史交付包，不代表目前 0.8.28 原始碼。** 全新環境需先準備指定工具鏈與符合 Cargo.lock 的 vendor；不要將舊 ZIP 整包覆蓋到新版原始碼。完整離線包操作見 [離線交付與 Git](OFFLINE_AND_GIT.md)。
 
 | Build 選項 | 用途 |
 | --- | --- |
@@ -121,3 +121,7 @@ EXE／ZIP 由 Git LFS 管理。更新簽署私鑰位於 `.private/`，不提交�
 公司服務主機與路由固定於程式，不提供 UI 修改；目前使用內網 HTTP，DPAPI 的本機加密不等於傳輸 TLS。版本、模型與登入檢查由共用服務流程處理；已確認的最低版本門檻跨重啟保存，不因斷線解除。
 
 一般聊天與專案皆使用現有後端契約；0.8.27 工具定義只放在 system 文字內，並非原生 API tools 欄位。串接、提示詞與驗證入口見 [技術文件索引](README.md)。
+
+### 新增專案工作技能
+
+內建技能目錄位於 `src/projects/skills.rs` 與 `src/projects/skills/*.md`，只包含工作方法；工具參數集中在 `tools.json`，操作實作仍由 Rust 決定授權。圖表在 `charts.rs`／`ui/charts.js`，快速模型委派在 `delegation.rs`。修改 Office 或批次邏輯須使用 `-TestOffice`；摘要 HTTP／快取／續接測試在 `examples/project_smoke/skills.rs`。

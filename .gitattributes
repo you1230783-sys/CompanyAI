@@ -13,3 +13,8 @@ offline/*.zip filter=lfs diff=lfs merge=lfs -text
 
 # Preserve upstream license text, including its original trailing spaces.
 ui/vendor/pdf.NOTICES.txt -whitespace
+
+# Preserve the pinned upstream ECharts bytes and published SHA256 across checkouts.
+ui/vendor/echarts.min.js text eol=lf
+ui/vendor/ECHARTS-LICENSE.txt text eol=lf
+ui/vendor/ECHARTS-NOTICE.txt text eol=lf

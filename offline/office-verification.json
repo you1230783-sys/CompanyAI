@@ -1,8 +1,8 @@
 ﻿{
-    "version":  "0.8.26.0",
+    "version":  "0.8.28.0",
     "result":  "PASS",
     "office_version":  "16.0.20326.20158",
-    "fixture":  "Y:\\Rust\\Project\\CompanyAI\\.build\\office-test-9ec7a92e0de4493a95b5940886d6929a",
+    "fixture":  "Y:\\Rust\\Project\\CompanyAI\\.build\\office-test-94e6590373a9410a8eb30cb10aeb0deb",
     "checks":  [
                    "DOC/DOCX/DOCM/XLS/XLSX/XLSM/XLSB/PPT/PPTX/PPTM COM read/edit/save/reopen",
                    "source bytes unchanged",
@@ -15,7 +15,9 @@
                    "blank DOCX/XLSX/PPTX creation",
                    "Word paragraphs/table/styles and Chinese font",
                    "Excel worksheets/ranges/number formats/borders",
-                   "PPT title/content/two-column layouts and text styles"
+                   "PPT title/content/two-column layouts and text styles",
+                   "Office batch commit and failed-batch rollback",
+                   "Excel chart reads numeric cells from checked snapshot"
                ],
     "company_encryption_tested":  false,
     "screenshots_verified":  false

@@ -41,6 +41,8 @@ pub struct Config {
     pub hotkey: String,
     pub font_size: u8,
     pub sidebar_collapsed: bool,
+    pub projects_collapsed: bool,
+    pub recent_collapsed: bool,
     pub notification_popups: bool,
     pub dark_mode: bool,
     /// 快捷鍵只在啟用時註冊；浮動圖示為獨立、預設關閉的選項。
@@ -61,6 +63,8 @@ struct Preferences {
     hotkey: Option<String>,
     font_size: Option<u8>,
     sidebar_collapsed: bool,
+    projects_collapsed: bool,
+    recent_collapsed: bool,
     notification_popups: Option<bool>,
     dark_mode: bool,
     hotkey_enabled: Option<bool>,
@@ -78,6 +82,8 @@ impl Serialize for Config {
             hotkey: Some(self.hotkey.clone()),
             font_size: Some(self.font_size),
             sidebar_collapsed: self.sidebar_collapsed,
+            projects_collapsed: self.projects_collapsed,
+            recent_collapsed: self.recent_collapsed,
             notification_popups: Some(self.notification_popups),
             dark_mode: self.dark_mode,
             hotkey_enabled: Some(self.hotkey_enabled),
@@ -98,6 +104,8 @@ impl<'de> Deserialize<'de> for Config {
             hotkey: saved.hotkey.unwrap_or_else(|| "Win+Esc".into()),
             font_size: saved.font_size.unwrap_or(14).clamp(12, 20),
             sidebar_collapsed: saved.sidebar_collapsed,
+            projects_collapsed: saved.projects_collapsed,
+            recent_collapsed: saved.recent_collapsed,
             notification_popups: saved.notification_popups.unwrap_or(true),
             dark_mode: saved.dark_mode,
             hotkey_enabled: saved.hotkey_enabled.unwrap_or(true),
@@ -124,6 +132,8 @@ impl Default for Config {
             hotkey: "Win+Esc".into(),
             font_size: 14,
             sidebar_collapsed: false,
+            projects_collapsed: false,
+            recent_collapsed: false,
             notification_popups: true,
             dark_mode: false,
             hotkey_enabled: true,
@@ -300,6 +310,21 @@ mod tests {
     }
 
     #[test]
+    fn section_collapse_preferences_are_independent_and_persistent() {
+        let config = Config {
+            projects_collapsed: true,
+            recent_collapsed: false,
+            ..Config::default()
+        };
+        let loaded: Config =
+            serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
+        assert!(loaded.projects_collapsed);
+        assert!(!loaded.recent_collapsed);
+        let old: Config = serde_json::from_str("{}").unwrap();
+        assert!(!old.projects_collapsed && !old.recent_collapsed);
+    }
+
+    #[test]
     fn saved_preferences_cannot_override_company_routes() {
         let config: Config = serde_json::from_str(r#"{"server_url":"https://other-host","chat_path":"/wrong","device_path":"/wrong","token_path":"/wrong","allow_http":false,"auth_header":"x_api_key","model":"quality","hotkey":"Ctrl+Shift+F8"}"#).unwrap();
         assert_eq!(
@@ -312,7 +337,7 @@ mod tests {
         assert_eq!(config.model, "quality");
         assert_eq!(config.hotkey, "Ctrl+Shift+F8");
         let saved = serde_json::to_value(&config).unwrap();
-        assert_eq!(saved.as_object().unwrap().len(), 12);
+        assert_eq!(saved.as_object().unwrap().len(), 14);
         assert!(saved.get("server_url").is_none());
         assert!(Config::default().validate().is_ok());
     }

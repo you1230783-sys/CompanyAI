@@ -86,6 +86,8 @@
     render() {
     const projects = state.projects || {items:[]};
     const showActivity = state.logged_in && projects.running && projects.running_conversation === state.active_id;
+    ChartUI.render($("project-charts"), showActivity ? projects.charts : []);
+    ChartUI.cleanup();
     const key = showActivity ? projects.running_id : "";
     const events = showActivity ? (projects.activity || [projects.status]) : [];
     const nextActivity = JSON.stringify([key, events]);

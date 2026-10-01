@@ -392,7 +392,11 @@ function renderProjectNarration(container, events) {
   container.replaceChildren();
   const notes = (events || []).filter(text => typeof text === "string" && text.startsWith("AI 說明："));
   container.hidden = !notes.length;
-  for (const note of notes) container.append(node("p", "project-narration", note.slice(6)));
+  for (const note of notes) {
+    const text = node("div", "project-narration markdown");
+    text.innerHTML = renderMarkdown(note.slice(6));
+    container.append(text);
+  }
 }
 
 /** 通知只顯示短摘要；保留原資料與原本的開啟／已讀動作。 */
@@ -514,6 +518,10 @@ function renderMessages() {
       content.append(details);
     }
     content.append(bubble);
+    if (message.project_charts?.length) {
+      const charts = node("div", "project-charts"); content.append(charts);
+      ChartUI.render(charts, message.project_charts);
+    }
     if (message.incomplete) content.append(node("p", "incomplete-warning", "回覆中斷，後續內容未收到；這裡保留已收到的部分。"));
     const tools = node("div", "message-tools");
     const copy = node("button", "copy-message");
@@ -726,6 +734,12 @@ function receive(next) {
     "--font-size",
     state.config.font_size + "px",
   );
+  for (const [section, label, list] of [["projects", "專案", "project-list"], ["recent", "最近對話", "history-list"]]) {
+    const collapsed = !!state.config[section + "_collapsed"];
+    $(list).hidden = collapsed;
+    $("collapse-" + section).textContent = (collapsed ? "▸ " : "▾ ") + label;
+    $("collapse-" + section).setAttribute("aria-expanded", String(!collapsed));
+  }
   document.body.classList.toggle("collapsed", state.config.sidebar_collapsed);
   $("collapse").title = state.config.sidebar_collapsed
     ? "展開側欄"
@@ -1139,3 +1153,8 @@ $("clear-all-events").onclick = () =>
       send({ type: "site_action", command: { action: "delete_all" } });
     },
   );
+
+// 每個區塊各自保存；不受整個側欄的收合狀態影響。
+for (const section of ["projects", "recent"]) {
+  $("collapse-" + section).onclick = () => send({type:"collapse_section", section, collapsed:!state.config[section + "_collapsed"]});
+}

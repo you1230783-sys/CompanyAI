@@ -66,16 +66,68 @@ pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResul
         )?;
         let id = created["copy_id"].as_str().unwrap().to_owned();
         let mut revision = created["revision"].as_str().unwrap().to_owned();
-        for (index, operation) in actions.into_iter().enumerate() {
-            let result = call(
-                &format!("op{index}"),
-                Tool::OfficeAction {
-                    copy_id: id.clone(),
+        let operations = actions
+            .into_iter()
+            .map(serde_json::from_value)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        let result = call(
+            "batch",
+            Tool::OfficeBatch {
+                copy_id: id.clone(),
+                revision: revision.clone(),
+                operations,
+            },
+        )?;
+        revision = result["revision"].as_str().unwrap().to_owned();
+        // 先執行有效格式，再碰到不存在的目標：整批不得改變目前副本。
+        let before = call(
+            "before_failed_batch",
+            Tool::ReadFile {
+                path: id.clone(),
+                offset: 0,
+            },
+        )?;
+        let invalid = vec![
+            json!({"kind":"format","target":if ext=="docx" {"p1"} else if ext=="xlsx" {"s1:A1"} else {"s1:shape1"},"format":{"bold":true}}),
+            json!({"kind":"format","target":"does-not-exist","format":{"bold":true}}),
+        ];
+        assert!(call(
+            "failed_batch",
+            Tool::OfficeBatch {
+                copy_id: id.clone(),
+                revision: revision.clone(),
+                operations: invalid
+                    .into_iter()
+                    .map(serde_json::from_value)
+                    .collect::<Result<_, _>>()
+                    .unwrap()
+            }
+        )
+        .is_err());
+        let after = call(
+            "after_failed_batch",
+            Tool::ReadFile {
+                path: id.clone(),
+                offset: 0,
+            },
+        )?;
+        assert_eq!(before["revision"], after["revision"], "失敗批次不得提交");
+        if ext == "xlsx" {
+            let chart = call(
+                "chart",
+                Tool::ChartFromExcel {
+                    path: id.clone(),
                     revision: revision.clone(),
-                    operation: serde_json::from_value(operation).map_err(|e| e.to_string())?,
+                    sheet: 1,
+                    range: "A1:B2".into(),
+                    kind: "bar".into(),
+                    title: "速度".into(),
+                    x_label: "項目".into(),
+                    y_label: "m/min".into(),
                 },
             )?;
-            revision = result["revision"].as_str().unwrap().to_owned();
+            assert_eq!(chart["chart_index"], 0);
         }
         // 驗證陳舊版本被拒絕，拒絕後正確版本仍可發布。
         assert!(call(

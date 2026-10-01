@@ -96,7 +96,16 @@ fn checkpoint(path: &Path, value: &Value) -> AppResult<()> {
 }
 
 pub fn run(run: Run, progress: impl FnMut(String)) -> AppResult<String> {
-    run_for(run, progress, SEGMENT_BUDGET)
+    run_for(run, progress, SEGMENT_BUDGET, |_| {})
+}
+
+/// 圖表為結構化 UI 事件，不混入模型文字或一般進度字串。
+pub fn run_with_charts(
+    run: Run,
+    progress: impl FnMut(String),
+    charts: impl FnMut(Vec<super::charts::Chart>),
+) -> AppResult<String> {
+    run_for(run, progress, SEGMENT_BUDGET, charts)
 }
 
 /// 僅供 debug 整合測試推進期限，不改正式 EXE 的兩小時政策。
@@ -106,10 +115,15 @@ pub fn run_with_test_budget(
     progress: impl FnMut(String),
     budget: Duration,
 ) -> AppResult<String> {
-    run_for(run, progress, budget)
+    run_for(run, progress, budget, |_| {})
 }
 
-fn run_for(mut run: Run, mut progress: impl FnMut(String), budget: Duration) -> AppResult<String> {
+fn run_for(
+    mut run: Run,
+    mut progress: impl FnMut(String),
+    budget: Duration,
+    mut charts: impl FnMut(Vec<super::charts::Chart>),
+) -> AppResult<String> {
     let mut activity = Vec::new();
     let journal = run
         .root
@@ -172,6 +186,7 @@ fn run_for(mut run: Run, mut progress: impl FnMut(String), budget: Duration) -> 
         } else {
             None
         };
+        charts(broker.charts().to_vec());
         let remote = jobs::conversation(&run.config, &run.session, &run.conversation)?;
         let mut skill = Message::user(&super::tool_calls::system_prompt()?);
         skill.role = "system".into();
@@ -221,6 +236,12 @@ fn run_for(mut run: Run, mut progress: impl FnMut(String), budget: Duration) -> 
                     return pause(&error, &broker, &progress_state, pending_model.as_ref())
                 }
             };
+            let instructions = broker.skill_context()?;
+            if !instructions.is_empty() {
+                let mut message = Message::user(&instructions);
+                message.role = "system".into();
+                messages.insert(1, message);
+            }
             if turn >= MAX_REPLIES - 4 || tool_calls >= MAX_TOOLS - 4 {
                 messages.push(Message::user(&format!("即將暫停：本段剩餘 {} 次模型回覆、{} 次工具操作。請在這次 arguments.progress_note 總結已完成、來源與版本、未完成事項及下一步；保持正常工具呼叫，不要假裝完成。程式會保存工作副本，等待使用者按繼續。",MAX_REPLIES-turn,MAX_TOOLS-tool_calls)));
             }
@@ -345,7 +366,31 @@ fn run_for(mut run: Run, mut progress: impl FnMut(String), budget: Duration) -> 
                         return pause(TIME_LIMIT_REASON, &broker, &progress_state, Some(&task));
                     }
                     let result =
-                        broker.execute(&operation_id, &request, &mut worker, &run.cancel)?;
+                        if let Some(result) = broker.cached_result(&operation_id, &request)? {
+                            result
+                        } else if let super::Tool::SummarizeDocument { path, focus } = &request {
+                            match super::delegation::summarize(
+                                &run,
+                                &mut broker,
+                                &mut worker,
+                                &caps.principal_id,
+                                &operation_id,
+                                path,
+                                focus,
+                                deadline,
+                                |text| report(&mut activity, &mut progress, text),
+                            )? {
+                                super::delegation::Outcome::Complete(result) => result,
+                                super::delegation::Outcome::Pending(reason) => {
+                                    return pause(&reason, &broker, &progress_state, Some(&task))
+                                }
+                            }
+                        } else {
+                            broker.execute(&operation_id, &request, &mut worker, &run.cancel)?
+                        };
+                    broker.remember_result(&operation_id, &request, &result)?;
+                    record["charts"] = json!(broker.charts());
+                    charts(broker.charts().to_vec());
                     report(
                         &mut activity,
                         &mut progress,
@@ -439,6 +484,7 @@ fn run_for(mut run: Run, mut progress: impl FnMut(String), budget: Duration) -> 
     } else {
         "stopped"
     });
+    record["charts"] = json!(broker.charts());
     record["outputs"] = json!(broker.published());
     record["result"] = json!(result);
     checkpoint(&journal, &record)?;
@@ -553,6 +599,25 @@ pub fn recover(root: &Path, id: &str) -> AppResult<String> {
         "上次專案任務未完成：{reason}\n\n可能已建立的檔案（需重新確認）：\n{}",
         outputs.join("\n")
     ))
+}
+
+/// 歷史對話與異常復原共用已保存的結構化圖表，不重新呼叫模型。
+pub fn recover_charts(root: &Path, id: &str) -> Vec<super::charts::Chart> {
+    let read = || -> AppResult<Vec<super::charts::Chart>> {
+        jobs::validate_id(id)?;
+        let bytes = std::fs::read(root.join("project-runs").join(format!("{id}.dpapi")))
+            .map_err(|e| e.to_string())?;
+        let data: Value =
+            serde_json::from_slice(&storage::protect(&bytes, false)?).map_err(|e| e.to_string())?;
+        let charts: Vec<super::charts::Chart> =
+            serde_json::from_value(data.get("charts").cloned().unwrap_or(json!([])))
+                .map_err(|e| e.to_string())?;
+        for chart in &charts {
+            chart.validate()?;
+        }
+        Ok(charts)
+    };
+    read().unwrap_or_default()
 }
 
 #[cfg(test)]

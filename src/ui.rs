@@ -98,6 +98,10 @@ enum Command {
         id: String,
         pinned: bool,
     },
+    CollapseSection {
+        section: String,
+        collapsed: bool,
+    },
     Preferences {
         font_size: u8,
         sidebar_collapsed: bool,
@@ -820,6 +824,14 @@ impl App {
                     .pinned = pinned;
                 history::save(&self.root, &archive)?;
                 self.archive = archive;
+            }
+            Command::CollapseSection { section, collapsed } => {
+                match section.as_str() {
+                    "projects" => self.config.projects_collapsed = collapsed,
+                    "recent" => self.config.recent_collapsed = collapsed,
+                    _ => return Err("未知側欄區塊。".into()),
+                }
+                storage::save_config(&self.root, &self.config)?;
             }
             Command::Preferences {
                 font_size,

@@ -14,8 +14,9 @@ pub(super) fn system_prompt() -> AppResult<String> {
     let definitions: Value =
         serde_json::from_str(DEFINITIONS).map_err(|_| "內建專案工具定義無法解析，已停止。")?;
     Ok(format!(
-        "{}\n\n工具定義（OpenAI Chat Completions tools 形狀，僅為文字契約）：\n{}",
+        "{}\n技能目錄：{}\n\n工具定義（OpenAI Chat Completions tools 形狀，僅為文字契約）：\n{}",
         super::SKILL,
+        super::skills::catalog(),
         definitions
     ))
 }
@@ -368,6 +369,21 @@ mod tests {
     #[test]
     fn catalogue_covers_all_existing_operations_and_defaults() {
         let samples = [
+            ("load_skill", json!({"id":"paper-evidence"})),
+            ("search_files", json!({"paths":["a.txt"],"query":"測試"})),
+            (
+                "office_batch",
+                json!({"copy_id":"c","revision":"r","operations":[]}),
+            ),
+            (
+                "create_chart",
+                json!({"chart":{"kind":"line","title":"T","x_label":"x","y_label":"y","x":[1],"series":[{"name":"a","values":[2]}],"source":"測試"}}),
+            ),
+            (
+                "chart_from_excel",
+                json!({"path":"a.xlsx","revision":"r","sheet":1,"range":"A1:B2","kind":"bar","title":"T","x_label":"x","y_label":"y"}),
+            ),
+            ("summarize_document", json!({"path":"a.txt","focus":"重點"})),
             ("list_files", json!({"path":""})),
             ("read_file", json!({"path":"a.txt"})),
             ("find_text", json!({"path":"a.txt","text":"文字"})),

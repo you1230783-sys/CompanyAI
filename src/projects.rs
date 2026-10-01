@@ -1,4 +1,6 @@
 //! 專案資料與固定工具契約。授權及副本所有權由桌面保存，不由模型文字決定。
+pub mod charts;
+mod delegation;
 pub mod events;
 pub mod files;
 pub mod memory;
@@ -10,6 +12,7 @@ pub mod reply;
 pub mod runner;
 pub mod sandbox;
 mod server_pdf;
+mod skills;
 pub mod text;
 mod tool_calls;
 
@@ -83,6 +86,35 @@ impl Store {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "tool", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Tool {
+    LoadSkill {
+        id: String,
+    },
+    SearchFiles {
+        paths: Vec<String>,
+        query: String,
+    },
+    OfficeBatch {
+        copy_id: String,
+        revision: String,
+        operations: Vec<office::Action>,
+    },
+    CreateChart {
+        chart: charts::Chart,
+    },
+    ChartFromExcel {
+        path: String,
+        revision: String,
+        sheet: usize,
+        range: String,
+        kind: String,
+        title: String,
+        x_label: String,
+        y_label: String,
+    },
+    SummarizeDocument {
+        path: String,
+        focus: String,
+    },
     ListFiles {
         path: String,
     },
@@ -189,6 +221,11 @@ impl Tool {
     /// 使用者可讀的操作名稱，避免將 JSON 或文件全文當進度訊息。
     pub fn label(&self) -> &'static str {
         match self {
+            Self::LoadSkill { .. } => "載入工作技能",
+            Self::SearchFiles { .. } => "跨文件搜尋",
+            Self::OfficeBatch { .. } => "批次編輯 Office",
+            Self::CreateChart { .. } | Self::ChartFromExcel { .. } => "建立圖表",
+            Self::SummarizeDocument { .. } => "快速模型摘要",
             Self::ListFiles { .. } => "讀取檔案清單",
             Self::ReadFile { .. } => "閱讀檔案",
             Self::FindText { .. } => "尋找文字",
