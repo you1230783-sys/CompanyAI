@@ -6,6 +6,9 @@
 
 ## 目前版本
 
+- [0.8.27 契約](DESKTOP_0_8_27_CONTRACT.md)：兩小時時限、異常暫停與原請求查回。
+- [0.8.27 驗證紀錄](VALIDATION_0_8_27.md)。
+
 - [0.8.26 契約](DESKTOP_0_8_26_CONTRACT.md)：Office 新建與格式、上限暫停續接、HTTP 階段診斷。
 - [0.8.26 驗證紀錄](VALIDATION_0_8_26.md)。
 

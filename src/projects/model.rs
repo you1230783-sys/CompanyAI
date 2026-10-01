@@ -8,17 +8,34 @@ use std::time::{Duration, Instant};
 
 pub(super) enum Reply {
     Text(String),
-    Invalid { reason: String, raw: String },
+    Invalid {
+        reason: String,
+        raw: String,
+    },
+    /// 原請求尚未確認終態；只保存並查回，禁止重新提交。
+    Pending(String),
 }
 
-pub(super) fn receive(run: &Run, task: &mut Task, deadline: Instant) -> AppResult<Reply> {
-    super::runner::check(&run.cancel, deadline)?;
-    let submit = jobs::project_submit(&run.config, &run.session, task);
-    let submit_error = submit.as_ref().err().cloned();
-    let mut submitted_status = submit.ok();
+pub(super) fn receive(
+    run: &Run,
+    task: &mut Task,
+    deadline: Instant,
+    lookup_only: bool,
+) -> AppResult<Reply> {
+    super::runner::check_cancel(&run.cancel)?;
+    // 手動續接只 GET 原 request/task ID；即使連續 404，也不能再次 POST。
+    let (mut submitted_status, submit_error) = if lookup_only {
+        (task.remote.clone().filter(|s| s.terminal()), None)
+    } else {
+        let submit = jobs::project_submit(&run.config, &run.session, task);
+        (submit.as_ref().ok().cloned(), submit.err())
+    };
     let mut connection_errors = 0;
     loop {
-        super::runner::check(&run.cancel, deadline)?;
+        super::runner::check_cancel(&run.cancel)?;
+        if submitted_status.is_none() && Instant::now() >= deadline {
+            return Ok(Reply::Pending(super::runner::TIME_LIMIT_REASON.into()));
+        }
         // POST 有可解析狀態便立即核對；不丟棄錯誤身分再以後續 GET 掩蓋它。
         let received = match submitted_status.take() {
             Some(status) => Ok(status),
@@ -60,19 +77,22 @@ pub(super) fn receive(run: &Run, task: &mut Task, deadline: Instant) -> AppResul
             Err(error) => {
                 connection_errors += 1;
                 if connection_errors >= 3 {
-                    return Err(format!(
+                    return Ok(Reply::Pending(format!(
                         "無法確認原請求 {} 的結果，未另建請求或重播工具。{}最後一次{error}",
                         task.request_id,
                         submit_error
                             .as_ref()
                             .map(|e| format!("最初{e}；"))
                             .unwrap_or_default()
-                    ));
+                    )));
                 }
             }
         }
         for _ in 0..10 {
-            super::runner::check(&run.cancel, deadline)?;
+            super::runner::check_cancel(&run.cancel)?;
+            if Instant::now() >= deadline {
+                return Ok(Reply::Pending(super::runner::TIME_LIMIT_REASON.into()));
+            }
             std::thread::sleep(Duration::from_millis(100));
         }
     }

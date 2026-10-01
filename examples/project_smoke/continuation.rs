@@ -337,7 +337,8 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
             assert_eq!(decoded.trim_start_matches('\u{feff}'), "新增原始文字");
         }
         Case::EmptyForever => {
-            assert!(result.unwrap_err().contains("重試兩次"));
+            assert!(result?.contains("重試兩次"));
+            assert!(runner::paused_available(&root.join("app-data"), &run_id));
             assert_eq!(rounds, 3);
         }
         Case::WrongIdentity => {
@@ -349,7 +350,8 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
             assert_eq!(rounds, 1);
         }
         Case::UnknownSubmission => {
-            let error = result.unwrap_err();
+            let error = result?;
+            assert!(runner::paused_available(&root.join("app-data"), &run_id));
             assert!(
                 error.contains("未另建請求")
                     && error.contains("提交 POST")
@@ -361,7 +363,8 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
             assert_eq!(rounds, 1);
         }
         Case::NoProgress => {
-            assert!(result.unwrap_err().contains("八次"));
+            assert!(result?.contains("八次"));
+            assert!(runner::paused_available(&root.join("app-data"), &run_id));
             assert_eq!(rounds, 9);
         }
     }

@@ -31,7 +31,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build.ps1 -Emp
 
 依賴由 `Cargo.lock`、`vendor` 與 `.cargo/config.toml` 固定，使用空 Cargo 快取及 `--frozen` 驗證。環境腳本優先使用專案內的 `toolchain`，否則使用共用 `.tools`，並設定本專案的 target 目錄。
 
-`toolchain/` 與 `vendor/` 不直接提交 Git。**現存離線 ZIP 是歷史交付包，不代表目前 0.8.26 原始碼。** 全新環境需先準備指定工具鏈與符合 Cargo.lock 的 vendor；不要將舊 ZIP 整包覆蓋到新版原始碼。完整離線包操作見 [離線交付與 Git](OFFLINE_AND_GIT.md)。
+`toolchain/` 與 `vendor/` 不直接提交 Git。**現存離線 ZIP 是歷史交付包，不代表目前 0.8.27 原始碼。** 全新環境需先準備指定工具鏈與符合 Cargo.lock 的 vendor；不要將舊 ZIP 整包覆蓋到新版原始碼。完整離線包操作見 [離線交付與 Git](OFFLINE_AND_GIT.md)。
 
 | Build 選項 | 用途 |
 | --- | --- |
@@ -82,7 +82,7 @@ cargo run --example browser_smoke --frozen
 
 | 檔案 | 目前狀態 |
 | --- | --- |
-| `dist/LM_AI.exe`、`dist/update-manifest-exe.json` | 0.8.26，EXE 與簽署清單須成對發布。 |
+| `dist/LM_AI.exe`、`dist/update-manifest-exe.json` | 0.8.27，EXE 與簽署清單須成對發布。 |
 | `dist/LM_AI_Setup.exe`、`dist/update-manifest.json` | 0.8.15，尚未重製為最新版本。 |
 | `offline/CompanyAI-offline.zip` 及其校驗／清單 | 歷史交付包，版本與目前原始碼分開確認。 |
 
@@ -120,4 +120,4 @@ EXE／ZIP 由 Git LFS 管理。更新簽署私鑰位於 `.private/`，不提交�
 
 公司服務主機與路由固定於程式，不提供 UI 修改；目前使用內網 HTTP，DPAPI 的本機加密不等於傳輸 TLS。版本、模型與登入檢查由共用服務流程處理；已確認的最低版本門檻跨重啟保存，不因斷線解除。
 
-一般聊天與專案皆使用現有後端契約；0.8.26 工具定義只放在 system 文字內，並非原生 API tools 欄位。串接、提示詞與驗證入口見 [技術文件索引](README.md)。
+一般聊天與專案皆使用現有後端契約；0.8.27 工具定義只放在 system 文字內，並非原生 API tools 欄位。串接、提示詞與驗證入口見 [技術文件索引](README.md)。
