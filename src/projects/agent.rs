@@ -237,11 +237,15 @@ fn build_request(
     {
         return Err("代理訊息超過網站公告上限；未截斷內容或提交。".into());
     }
-    let tools = if use_tools {
+    let mut tools = if use_tools {
         schema::definitions(caps.strict_tool_arguments)?
     } else {
         vec![]
     };
+    // 委派只提供給品質模型；快速模型直接使用閱讀工具，避免呼叫自己再撞權限。
+    if caps.model != "quality" {
+        tools.retain(|tool| tool["function"]["name"] != "summarize_document");
+    }
     if use_tools
         && (tools.len() > caps.limits.tools.min(128)
             || serde_json::to_vec(&tools).map_err(|e| e.to_string())?.len()
@@ -298,6 +302,22 @@ fn validate_history(messages: &[Message]) -> AppResult<()> {
     Ok(())
 }
 
+/// 僅接收原生工具封裝的契約欄位，供應商附加資訊不送入歷史或執行器。
+/// arguments 是實際操作要求，必須完整保留，後續仍依工具 Schema 驗證。
+fn incoming_call(call: &Value) -> AppResult<Value> {
+    let normalized = json!({
+        "id": call["id"],
+        "type": call["type"],
+        "function": {
+            "name": call["function"]["name"],
+            "arguments": call["function"]["arguments"],
+        },
+    });
+    validate_call(&normalized)?;
+    Ok(normalized)
+}
+
+/// 內部歷史只保存正規化後的工具封裝，避免後續請求重新帶出未知欄位。
 fn validate_call(call: &Value) -> AppResult<()> {
     let id = call["id"].as_str().ok_or("工具缺少 call ID。")?;
     let name = call["function"]["name"]
@@ -353,7 +373,8 @@ pub enum Parsed {
     Text(String),
 }
 
-/// 從原生欄位直接解析，絕不搜尋 content 中的 JSON 或修補引號／括號。
+/// 僅讀取原生回覆的已知欄位，其餘供應商資訊忽略；必要欄位仍須存在且合法。
+/// 絕不搜尋 content 中的 JSON 或修補引號／括號。
 pub fn parse(
     status: &jobs::TaskStatus,
     task: &jobs::Task,
@@ -378,6 +399,7 @@ pub fn parse(
     let choice = &choices[0];
     let value = &choice["message"];
     if value["role"] != "assistant"
+        || value.get("content").is_none()
         || (!value["content"].is_null() && !value["content"].is_string())
     {
         return Err("原生 assistant 訊息格式錯誤。".into());
@@ -399,7 +421,12 @@ pub fn parse(
     }
     let mut message = Message::assistant(value["content"].as_str().unwrap_or("").into());
     if let Some(calls) = value.get("tool_calls") {
-        message.tool_calls = calls.as_array().ok_or("tool_calls 不是陣列。")?.clone();
+        message.tool_calls = calls
+            .as_array()
+            .ok_or("tool_calls 不是陣列。")?
+            .iter()
+            .map(incoming_call)
+            .collect::<AppResult<Vec<_>>>()?;
     }
     let expected_tools = task.request["tools"]
         .as_array()
@@ -445,6 +472,18 @@ pub fn parse(
     };
     let operation = operation_key(principal, run, &task.request_id, &call_id);
     let arguments = schema::restore_optional(name, args)?;
+    for field in ["copy_id", "revision"] {
+        if arguments
+            .get(field)
+            .is_some_and(|v| v.as_str().is_none_or(|s| s.trim().is_empty()))
+        {
+            return Ok(Parsed::Repair {
+                reason: format!("{field} 不可空白。修改前先 create_working_copy，使用工具成功回傳的 copy_id 與最新 revision；只要閱讀時請用 read_file，不要用 edit_text 試探。"),
+                message: Some(message),
+                call_id: Some(call_id),
+            });
+        }
+    }
     let mut envelope = json!({"content":message.content,"tool_calls":[{"id":operation,"type":"function","function":{"name":name,"arguments":arguments}}]});
     // 既有 Decision 仍負責驗證執行參數；这里只轉接可信欄位，不解析模型正文。
     envelope["content"] = json!(message.content);
@@ -463,13 +502,27 @@ pub fn parse(
 }
 
 pub fn validate_status(status: &jobs::TaskStatus, task: &jobs::Task) -> AppResult<()> {
+    // 身分欄位逐一比對；伺服器新增的 context metadata 不影響原請求配對。
+    // get() 區分欄位缺漏與合法 null（例如第一輪 parent_request_id）。
+    let expected = &task.request["context"];
+    let context = status.agent_envelope.get("context").unwrap_or(&Value::Null);
+    let context_matches = context.is_object()
+        && [
+            "project_id",
+            "run_id",
+            "turn_index",
+            "parent_request_id",
+            "context_policy",
+        ]
+        .iter()
+        .all(|key| context.get(key) == expected.get(key));
     if status
         .agent_envelope
         .get("contract_version")
         .and_then(Value::as_str)
         != Some(CONTRACT)
         || status.agent_envelope.get("conversation_id") != task.request.get("conversation_id")
-        || status.agent_envelope.get("context") != task.request.get("context")
+        || !context_matches
         || status.client_request_id != task.request_id
         || task
             .remote

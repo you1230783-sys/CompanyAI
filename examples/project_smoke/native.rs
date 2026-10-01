@@ -146,6 +146,13 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                 let messages = body["messages"].as_array().unwrap();
                 assert_eq!(messages.iter().filter(|m| m["role"] == "system").count(), 1);
                 for (i, message) in messages.iter().enumerate() {
+                    assert!(message.get("provider_specific_fields").is_none());
+                    if let Some(calls) = message["tool_calls"].as_array() {
+                        for call in calls {
+                            assert!(call.get("provider_specific_fields").is_none());
+                            assert!(call["function"].get("provider_specific_fields").is_none());
+                        }
+                    }
                     if message["role"] == "tool" {
                         assert_eq!(
                             message["tool_call_id"],
@@ -232,6 +239,21 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     "client_request_id":body["client_request_id"],"conversation_id":body["conversation_id"],"context":body["context"],
                     "state":"completed","result":{"id":format!("completion_{posts}"),"object":"chat.completion","created":1,"model":body["model"],
                     "choices":[{"index":0,"message":message,"finish_reason":reason}]},"error":null,"error_message":""});
+                if case == 0 {
+                    // 正式 HTTP 往返同時帶上游額外欄位，下一輪只能回送白名單訊息。
+                    for pointer in [
+                        "",
+                        "/context",
+                        "/result",
+                        "/result/choices/0",
+                        "/result/choices/0/message",
+                        "/result/choices/0/message/tool_calls/0",
+                        "/result/choices/0/message/tool_calls/0/function",
+                    ] {
+                        completed.pointer_mut(pointer).unwrap()["provider_specific_fields"] =
+                            json!({"ignored":true});
+                    }
+                }
                 if case == 10 {
                     completed["state"] = json!("running");
                     completed["result"] = Value::Null;

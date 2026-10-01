@@ -90,7 +90,6 @@
             <div id="project-charts" class="project-charts" hidden></div>
             <div id="project-narration" hidden></div>
                 <details id="project-activity" class="project-activity" aria-label="專案執行歷程" hidden></details>
-                <button id="project-diagnostics-live" class="text-button" hidden>執行紀錄</button>
             <div
               id="live-task"
               class="live-task"
@@ -438,6 +437,12 @@
             伺服器端仍會儲存已送出的對話、附件及任務資料；刪除本機資料或移除任務卡片不會刪除伺服器端的紀錄。
           </p>
         </section>
+        <details id="advanced-settings">
+          <summary>進階功能</summary>
+          <label for="project-diagnostics-run">目前對話的專案執行紀錄</label>
+          <select id="project-diagnostics-run" aria-label="選擇專案任務"></select>
+          <button id="project-diagnostics-open" class="secondary-button">查看執行紀錄</button>
+        </details>
       </div>
     </dialog>
     <dialog id="required-update-dialog" aria-labelledby="required-update-title">

@@ -110,7 +110,8 @@
             },
             "revision": {
               "type": "string",
-              "description": "inspect_excel 回傳的 excel: 版本，與 read_file 文字版本不同。"
+              "description": "inspect_excel 回傳的 excel: 版本，與 read_file 文字版本不同。",
+              "minLength": 1
             },
             "sheet": {
               "type": "integer",
@@ -173,7 +174,8 @@
             },
             "revision": {
               "type": "string",
-              "description": "inspect_excel 回傳的 excel: 版本，與 read_file 文字版本不同。"
+              "description": "inspect_excel 回傳的 excel: 版本，與 read_file 文字版本不同。",
+              "minLength": 1
             },
             "sheet": {
               "type": "integer",
@@ -311,10 +313,12 @@
           "type": "object",
           "properties": {
             "copy_id": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "revision": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "start": {
               "type": "integer",
@@ -351,10 +355,12 @@
           "type": "object",
           "properties": {
             "copy_id": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "revision": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "block_id": {
               "type": "string"
@@ -385,15 +391,17 @@
       "type": "function",
       "function": {
         "name": "office_action",
-        "description": "修改 Office 副本結構／格式。format.target：Word/PPT 使用區塊 ID，Excel 使用 s1:A1:C3；字型 font、字級 size、顏色 #RRGGBB；style：Word title/heading1/heading2/body、Excel header、PPT title/body；alignment left/center/right/justify；間距為點，line_spacing 為倍數；number_format general/integer/decimal/percent/date/text。word_* 的 before 省略為結尾；excel_write 文字永遠是字面值、不寫公式。每次成功回新版本，結構更動後重讀 ID。",
+        "description": "修改 Office 副本結構／格式。format.target：Word/PPT 使用區塊 ID，Excel 使用 s1:A1:C3；字型 font、字級 size、顏色 #RRGGBB；style：Word title/heading1/heading2/body、Excel header、PPT title/body；alignment left/center/right/justify；間距為點，line_spacing 為倍數；number_format general/integer/decimal/percent/date/text。word_* 的 before 省略為結尾；excel_write 文字永遠是字面值、不寫公式。每次成功回新版本，結構更動後重讀 ID。 可用 insert_image 嵌入 PNG（先匯出趨勢圖再插入）。",
         "parameters": {
           "type": "object",
           "properties": {
             "copy_id": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "revision": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "operation": {
               "oneOf": [
@@ -662,6 +670,103 @@
                     "body"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "insert_image"
+                    },
+                    "path": {
+                      "type": "string",
+                      "description": "專案相對 PNG 路徑；可用 export_chart_png 回傳的 path。不可使用網址或外部路徑。"
+                    },
+                    "width": {
+                      "type": "number",
+                      "minimum": 12,
+                      "maximum": 1200,
+                      "description": "寬度（點，72 點=1 英吋），高度依 PNG 比例自動計算。"
+                    },
+                    "target": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "word"
+                            },
+                            "before": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "description": "段落 ID 前方；null 或省略為文末。"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "excel"
+                            },
+                            "sheet": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "cell": {
+                              "type": "string",
+                              "description": "起始儲存格，例如 H2；圖片浮於工作表，不改寫儲存格。"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "sheet",
+                            "cell"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "ppt"
+                            },
+                            "slide": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "left": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "top": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "slide",
+                            "left",
+                            "top"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "path",
+                    "target",
+                    "width"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             },
@@ -688,10 +793,12 @@
           "type": "object",
           "properties": {
             "copy_id": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "revision": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "progress_note": {
               "type": "string",
@@ -715,7 +822,8 @@
           "type": "object",
           "properties": {
             "copy_id": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "progress_note": {
               "type": "string",
@@ -823,7 +931,8 @@
               "type": "string"
             },
             "revision": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "title": {
               "type": "string",
@@ -860,7 +969,8 @@
               "type": "string"
             },
             "revision": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "progress_note": {
               "type": "string",
@@ -887,7 +997,8 @@
               "type": "string"
             },
             "revision": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "progress_note": {
               "type": "string",
@@ -942,7 +1053,8 @@
               "type": "string"
             },
             "revision": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "section_id": {
               "type": "string"
@@ -973,7 +1085,8 @@
               "type": "string"
             },
             "revision": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "note_revision": {
               "type": "string"
@@ -1186,11 +1299,13 @@
           "properties": {
             "copy_id": {
               "type": "string",
-              "description": ""
+              "description": "",
+              "minLength": 1
             },
             "revision": {
               "type": "string",
-              "description": ""
+              "description": "",
+              "minLength": 1
             },
             "operations": {
               "type": "array",
@@ -1461,6 +1576,103 @@
                       "body"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "insert_image"
+                      },
+                      "path": {
+                        "type": "string",
+                        "description": "專案相對 PNG 路徑；可用 export_chart_png 回傳的 path。不可使用網址或外部路徑。"
+                      },
+                      "width": {
+                        "type": "number",
+                        "minimum": 12,
+                        "maximum": 1200,
+                        "description": "寬度（點，72 點=1 英吋），高度依 PNG 比例自動計算。"
+                      },
+                      "target": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "word"
+                              },
+                              "before": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "段落 ID 前方；null 或省略為文末。"
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "excel"
+                              },
+                              "sheet": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "cell": {
+                                "type": "string",
+                                "description": "起始儲存格，例如 H2；圖片浮於工作表，不改寫儲存格。"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "sheet",
+                              "cell"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "ppt"
+                              },
+                              "slide": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "left": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "top": {
+                                "type": "number",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "slide",
+                              "left",
+                              "top"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "path",
+                      "target",
+                      "width"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               },
@@ -1584,7 +1796,8 @@
             },
             "revision": {
               "type": "string",
-              "description": ""
+              "description": "",
+              "minLength": 1
             },
             "sheet": {
               "type": "integer",

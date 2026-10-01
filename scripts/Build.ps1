@@ -70,7 +70,16 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         & cargo build --example office_smoke --frozen
         if ($LASTEXITCODE -ne 0) { throw 'Office harness build failed.' }
         $officeProbe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\office_smoke.exe'
-        & (Join-Path $PSScriptRoot 'Test-Office.ps1') -Exe $exe -Probe $officeProbe
+        # 獨立程序確保 PowerShell COM 包裝物件一併釋放；只 Quit 不保證實例退出，
+        # 否則後續圖片測試會被正確的「不接管既有 PowerPoint」保護擋下。
+        $powerShellExe = (Get-Process -Id $PID).Path
+        & $powerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Test-Office.ps1') -Exe $exe -Probe $officeProbe
+        if ($LASTEXITCODE -ne 0) { throw 'Isolated native Office verification failed.' }
+        & cargo build --example office_images --frozen
+        if ($LASTEXITCODE -ne 0) { throw 'Office image harness build failed.' }
+        $imageProbe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\office_images.exe'
+        & $imageProbe $exe (Join-Path $projectRoot ('.build\office-images-' + [guid]::NewGuid().ToString('N')))
+        if ($LASTEXITCODE -ne 0) { throw 'Office PNG embed/save/reopen verification failed.' }
     }
     # 明確選用才啟動本機已安裝的 Viewer；一般自檢不會接觸 VNC。
     if ($TestVnc) {

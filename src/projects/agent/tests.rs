@@ -46,6 +46,49 @@ fn request_uses_native_fields_and_no_legacy_flags() {
     assert_eq!(empty["tools"], json!([]));
     assert_eq!(empty["tool_choice"], "none");
 }
+
+#[test]
+fn fast_model_does_not_receive_delegation_and_blank_copy_is_repairable() {
+    let mut capabilities = caps();
+    capabilities.model = "fast".into();
+    let request = build_request(
+        &capabilities,
+        "c",
+        "r",
+        json!({}),
+        &[Message::user("閱讀")],
+        true,
+    )
+    .unwrap();
+    assert!(!request["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|t| t["function"]["name"] == "summarize_document"));
+    let mut capabilities = caps();
+    capabilities.strict_tool_arguments = false;
+    let task = task(
+        build_request(
+            &capabilities,
+            "c",
+            "req1",
+            json!({}),
+            &[Message::user("修改")],
+            true,
+        )
+        .unwrap(),
+    );
+    let mut status = status(
+        &task,
+        r#"{"copy_id":"","revision":"","start":0,"expected":"","replacement":""}"#,
+    );
+    status.result.as_mut().unwrap()["choices"][0]["message"]["tool_calls"][0]["function"]["name"] =
+        json!("edit_text");
+    assert!(matches!(
+        parse(&status, &task, &capabilities.principal_id, "run"),
+        Ok(Parsed::Repair { .. })
+    ));
+}
 #[test]
 fn native_null_content_call_is_accepted_without_parsing_text() {
     let task = task(request());
@@ -71,6 +114,131 @@ fn native_null_content_call_is_accepted_without_parsing_text() {
         operation_key("owner", "run", "req1", "call:001")
     );
 }
+#[test]
+fn provider_metadata_is_ignored_and_not_forwarded_in_history() {
+    let task = task(request());
+    let args = r#"{"path":"測試.txt","offset":0,"progress_note":null}"#;
+    let mut status = status(&task, args);
+    status
+        .agent_envelope
+        .insert("provider_metadata".into(), json!(true));
+    status.agent_envelope.get_mut("context").unwrap()["provider_metadata"] = json!(true);
+    let result = status.result.as_mut().unwrap();
+    // 每層都加入不同型別的未知欄位；內部只留下原生訊息白名單。
+    result["provider_metadata"] = json!({"unexpected":"ignored"});
+    result["choices"][0]["provider_metadata"] = json!([1, 2]);
+    let value = &mut result["choices"][0]["message"];
+    value["provider_specific_fields"] = json!({"tool_calls":[{"name":"delete_copy"}]});
+    value["reasoning_content"] = json!("不回填模型私有內容");
+    value["tool_calls"][0]["provider_metadata"] = json!(true);
+    value["tool_calls"][0]["function"]["provider_metadata"] = json!("ignored");
+    let Parsed::Operation { message, .. } = parse(&status, &task, "owner", "run").unwrap() else {
+        panic!("expected tool")
+    };
+    assert_eq!(
+        message.wire(),
+        json!({"role":"assistant","content":null,
+        "tool_calls":[{"id":"call:001","type":"function",
+            "function":{"name":"read_file","arguments":args}}]})
+    );
+    assert!(
+        validate_history(&[message, Message::result("call:001", &json!({"ok":true})),]).is_ok()
+    );
+
+    // 忽略封裝額外欄位不等於忽略實際操作參數。
+    status.result.as_mut().unwrap()["choices"][0]["message"]["tool_calls"][0]["function"]
+        ["arguments"] =
+        json!(r#"{"path":"a","offset":0,"progress_note":null,"unknown_argument":true}"#);
+    assert!(parse(&status, &task, "owner", "run").is_err());
+}
+
+#[test]
+fn response_allowlist_still_requires_valid_native_fields() {
+    let task = task(request());
+    let original = status(&task, r#"{"path":"a","offset":0,"progress_note":null}"#);
+    for key in [
+        "project_id",
+        "run_id",
+        "turn_index",
+        "parent_request_id",
+        "context_policy",
+    ] {
+        let mut missing = original.clone();
+        missing
+            .agent_envelope
+            .get_mut("context")
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .remove(key);
+        assert!(
+            parse(&missing, &task, "p", "r").is_err(),
+            "missing context.{key}"
+        );
+    }
+    for pointer in [
+        "/id",
+        "/object",
+        "/created",
+        "/model",
+        "/choices/0/index",
+        "/choices/0/finish_reason",
+        "/choices/0/message/role",
+        "/choices/0/message/content",
+        "/choices/0/message/tool_calls/0/id",
+        "/choices/0/message/tool_calls/0/type",
+        "/choices/0/message/tool_calls/0/function/name",
+        "/choices/0/message/tool_calls/0/function/arguments",
+    ] {
+        let mut missing = original.clone();
+        let result = missing.result.as_mut().unwrap();
+        result["provider_specific_fields"] = json!({"fallback":"must not be used"});
+        let (parent, key) = pointer.rsplit_once('/').unwrap();
+        result
+            .pointer_mut(parent)
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .remove(key);
+        assert!(
+            parse(&missing, &task, "p", "r").is_err(),
+            "missing {pointer}"
+        );
+        let mut wrong_type = original.clone();
+        *wrong_type
+            .result
+            .as_mut()
+            .unwrap()
+            .pointer_mut(pointer)
+            .unwrap() = json!(true);
+        assert!(
+            parse(&wrong_type, &task, "p", "r").is_err(),
+            "wrong type {pointer}"
+        );
+    }
+}
+
+#[test]
+fn delegated_text_ignores_provider_metadata() {
+    let request = build_request(
+        &caps(),
+        "c",
+        "req1",
+        json!({}),
+        &[Message::user("摘要")],
+        false,
+    )
+    .unwrap();
+    let task = task(request);
+    let mut status = status(&task, "{}");
+    let choice = &mut status.result.as_mut().unwrap()["choices"][0];
+    choice["finish_reason"] = json!("stop");
+    choice["message"] = json!({"role":"assistant", "content":"摘要內容",
+        "provider_specific_fields":{"anything":true}});
+    assert!(matches!(parse(&status, &task, "p", "r").unwrap(),
+        Parsed::Text(text) if text == "摘要內容"));
+}
+
 #[test]
 fn strict_schema_duplicate_keys_unknown_fields_and_malformed_arguments_fail() {
     let task = task(request());

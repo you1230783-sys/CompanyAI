@@ -347,7 +347,7 @@ fn run_for(
             } else if let Some(agent) = progress_state.agent.as_mut() {
                 let capabilities = agent.caps.clone();
                 let parent = agent.parent.clone();
-                agent.request(
+                let mut request = agent.request(
                     &capabilities,
                     &run,
                     &remote,
@@ -355,7 +355,9 @@ fn run_for(
                     &messages,
                     true,
                     parent.as_deref(),
-                )?
+                )?;
+                broker.restrict_tools(&mut request);
+                request
             } else {
                 let legacy = messages
                     .iter()

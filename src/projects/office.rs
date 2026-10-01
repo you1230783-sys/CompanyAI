@@ -13,6 +13,7 @@ use windows::{
 
 mod authoring;
 pub mod excel;
+pub mod images;
 pub use authoring::{render, Action, Format};
 #[cfg(debug_assertions)]
 mod fixtures;
@@ -291,7 +292,9 @@ impl Session {
                 return Err("新建 Office 僅支援 DOCX、XLSX、PPTX。".into());
             }
             let args = match collection {
-                "Documents" => vec![missing(), false.into(), 0i32.into(), false.into()],
+                // Word 圖片的比例／替代文字屬性需要文件視窗物件。
+                // Application 本身保持隱藏；Visible=true 不把背景 Word 顯示給使用者。
+                "Documents" => vec![missing(), false.into(), 0i32.into(), true.into()],
                 "Workbooks" => vec![(-4167i32).into()], // xlWBATWorksheet：固定一張工作表
                 _ => vec![0i32.into()],
             };
@@ -317,7 +320,7 @@ impl Session {
                 "".into(),
                 missing(),
                 missing(),
-                false.into(),
+                true.into(), // 文件視窗物件供圖片 COM 屬性使用；Application 仍隱藏。
             ],
             "xlsx" | "xls" | "xlsm" | "xlsb" => vec![
                 path,

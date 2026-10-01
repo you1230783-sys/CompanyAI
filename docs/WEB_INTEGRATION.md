@@ -1,3 +1,5 @@
+> **0.8.32：** Office 既有操作新增 `insert_image` 分支，不增加路由或資料庫欄位。工具目錄仍為 32 項，但每次請求依模型及副本／圖表狀態提供其中可用項目，網站不要假設 tools 永遠相同。原生回覆白名單與 `provider_specific_fields` 的處理，見 [本次驗證與配合事項](VALIDATION_0_8_32.md)。
+
 > **0.8.31：** 新增 `export_chart_png`，工具總數由 31 增為 32；仍透過既有原生 tools 通用契約。PNG 在桌面內嵌 ECharts 產生，不增加網站 API、資料庫欄位或伺服器工具。詳見 [驗證紀錄](VALIDATION_0_8_31.md)。
 
 > **0.8.30：修正多型別工具 Schema。** Office 表格與圖表橫軸的 string／number 聯集改用 anyOf，符合既有 desktop-agent-v1；網站不需放寬 type 陣列驗證。詳見 [修正及驗證](VALIDATION_0_8_30.md)。

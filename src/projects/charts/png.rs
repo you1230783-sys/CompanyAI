@@ -48,12 +48,22 @@ pub fn decode_url(url: &str) -> AppResult<Vec<u8>> {
 
 /// 檢查容器邊界、固定尺寸及 CRC；不信任副檔名，也不把截斷影像當成成果。
 pub fn validate(bytes: &[u8]) -> AppResult<()> {
+    let (width, height) = dimensions(bytes)?;
+    if (width, height) != (WIDTH, HEIGHT) {
+        return Err("PNG 尺寸不符。".into());
+    }
+    Ok(())
+}
+
+/// Office 可嵌入專案既有 PNG；共用容器檢查，但不限制成圖表的固定尺寸。
+pub fn dimensions(bytes: &[u8]) -> AppResult<(u32, u32)> {
     if bytes.len() > MAX_BYTES || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         return Err("圖表 PNG 標頭或大小不合法。".into());
     }
     let mut offset = 8;
     let mut has_header = false;
     let mut has_data = false;
+    let mut dimensions = (0, 0);
     while offset + 12 <= bytes.len() {
         let size = u32::from_be_bytes(
             bytes[offset..offset + 4]
@@ -78,14 +88,27 @@ pub fn validate(bytes: &[u8]) -> AppResult<()> {
         if !has_header {
             if kind != b"IHDR"
                 || size != 13
-                || body[..4] != WIDTH.to_be_bytes()
-                || body[4..8] != HEIGHT.to_be_bytes()
-                || body[8] != 8
-                || ![2, 6].contains(&body[9])
-                || body[10..] != [0, 0, 0]
+                || !matches!(
+                    (body[9], body[8]),
+                    (0, 1 | 2 | 4 | 8 | 16) | (2 | 4 | 6, 8 | 16) | (3, 1 | 2 | 4 | 8)
+                )
+                || body[10] != 0
+                || body[11] != 0
+                || body[12] > 1
             {
                 return Err("PNG 尺寸或像素格式不符。".into());
             }
+            let width = u32::from_be_bytes(body[..4].try_into().map_err(|_| "PNG 寬度錯誤。")?);
+            let height = u32::from_be_bytes(body[4..8].try_into().map_err(|_| "PNG 高度錯誤。")?);
+            if width == 0
+                || height == 0
+                || width > 8192
+                || height > 8192
+                || u64::from(width) * u64::from(height) > 16_000_000
+            {
+                return Err("PNG 限 8192×8192 以內、總計 1600 萬像素。".into());
+            }
+            dimensions = (width, height);
             has_header = true;
         } else if kind == b"IHDR" {
             return Err("PNG 重複標頭。".into());
@@ -95,7 +118,7 @@ pub fn validate(bytes: &[u8]) -> AppResult<()> {
         }
         if kind == b"IEND" {
             return if size == 0 && has_data && end == bytes.len() {
-                Ok(())
+                Ok(dimensions)
             } else {
                 Err("PNG 結尾或影像資料不完整。".into())
             };

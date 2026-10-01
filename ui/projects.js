@@ -16,7 +16,12 @@
   $("project-diagnostics-dialog").addEventListener("close", () => { diagnosticsRequest = null; $("project-diagnostics-text").value = ""; });
   $("project-diagnostics-refresh").onclick = () => { if (diagnosticsRequest) openDiagnostics(diagnosticsRequest.conversation, diagnosticsRequest.run_id); };
   $("project-diagnostics-copy").onclick = () => send({type:"copy",text:$("project-diagnostics-text").value});
-  $("project-diagnostics-live").onclick = () => { if (state.projects?.running_id) openDiagnostics(state.active_id, state.projects.running_id); };
+  $("project-diagnostics-open").onclick = () => {
+    const runId = $("project-diagnostics-run").value;
+    if (!runId) return;
+    $("settings-dialog").close();
+    openDiagnostics(state.active_id, runId);
+  };
   $("new-project").onclick = () => { $("project-name").value = ""; $("project-dialog").showModal(); $("project-name").focus(); };
   $("project-cancel").onclick = () => $("project-dialog").close();
   $("project-create").onclick = () => {
@@ -106,7 +111,24 @@
     render() {
     const projects = state.projects || {items:[]};
     const showActivity = state.logged_in && projects.running && projects.running_conversation === state.active_id;
-    $("project-diagnostics-live").hidden = !showActivity;
+    // 診斷只在設定的進階區提供；保留目前對話每次任務的入口，不在聊天區佔位。
+    const selector = $("project-diagnostics-run"), old = selector.value;
+    const runs = new Map();
+    for (const message of state.messages || []) {
+      if (message.role === "assistant" && message.request_id && message.project_activity?.length) {
+        runs.set(message.request_id, `${String(message.content || "專案任務").slice(0, 50)} · ${message.request_id.slice(0, 8)}`);
+      }
+    }
+    if (showActivity) runs.set(projects.running_id, `執行中 · ${projects.running_id.slice(0, 8)}`);
+    const diagnosticsSignature = JSON.stringify([state.active_id, [...runs]]);
+    if (selector.dataset.signature !== diagnosticsSignature) {
+      selector.replaceChildren(); selector.dataset.signature = diagnosticsSignature;
+      for (const [id, title] of [...runs].reverse()) selector.add(new Option(title, id));
+      if (!runs.size) selector.add(new Option("目前對話沒有專案執行紀錄", ""));
+      if (runs.has(old)) selector.value = old;
+    }
+    selector.disabled = !state.logged_in || !runs.size;
+    $("project-diagnostics-open").disabled = selector.disabled;
     if (diagnosticsRequest && (!state.logged_in || diagnosticsRequest.conversation !== state.active_id)) $("project-diagnostics-dialog").close();
     ChartUI.render($("project-charts"), showActivity ? projects.charts : []);
     ChartUI.cleanup();

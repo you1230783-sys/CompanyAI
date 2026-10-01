@@ -6,6 +6,7 @@
 
 ## 目前版本
 
+- [0.8.32 Office 圖片與進階診斷](VALIDATION_0_8_32.md)：PNG 嵌入、工具可用條件與網站上游正規化配合。
 - [0.8.31 圖表與本機診斷驗證](VALIDATION_0_8_31.md)：10000 筆圖表、PNG 匯出、工具錯誤及逐輪執行紀錄。
 - [0.8.30 Schema 修正及驗證](VALIDATION_0_8_30.md)：修正 Office 表格與圖表多型別造成第一輪 UNSUPPORTED_SCHEMA。
 - [原生工具 desktop-agent-v1 契約](DESKTOP_AGENT_V1_CONTRACT.md)：獨立專案代理路由、原生訊息、能力協商、持久 JSON 與雙方驗收。

@@ -537,6 +537,31 @@ struct OfficeCopy {
     actions: Vec<office::Action>,
     desired: office::Snapshot,
 }
+
+/// 在同一組目錄／檔案鎖下驗證 PNG 並計算版本；鎖需保持至 Office 嵌入完成。
+fn locked_image(project: &Project, value: &str) -> AppResult<(PathBuf, Vec<File>, String)> {
+    let rel = relative(value)?;
+    if !rel
+        .extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|s| s.eq_ignore_ascii_case("png"))
+    {
+        return Err("圖片插入目前只接受專案內的 PNG。".into());
+    }
+    let path = project.root.join(rel);
+    let mut locks = pin(path.parent().ok_or("缺少圖片目錄。")?)?;
+    let mut file = checked_file(&path)?;
+    let mut bytes = Vec::new();
+    Read::by_ref(&mut file)
+        .take((super::charts::png::MAX_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    super::charts::png::dimensions(&bytes)?;
+    use sha2::{Digest, Sha256};
+    let hash = format!("{:x}", Sha256::digest(&bytes));
+    locks.push(file);
+    Ok((path, locks, hash))
+}
 /// 原件的路徑、內容與格式均鎖定核對；空白文件不需要假造來源檔案。
 fn render_office(
     project: &Project,
@@ -560,11 +585,23 @@ fn render_office(
             return Err("Office 原檔已變動，請重新建立副本。".into());
         }
     }
+    let mut actions = copy.actions.clone();
+    let mut image_locks = Vec::new();
+    for action in &mut actions {
+        if let office::Action::InsertImage { path, sha256, .. } = action {
+            let (absolute, locks, hash) = locked_image(project, path)?;
+            if sha256.as_deref() != Some(hash.as_str()) {
+                return Err("圖片來源已變更，請重新建立工作副本，避免替換已確認的圖像。".into());
+            }
+            image_locks.extend(locks);
+            *path = absolute.to_string_lossy().into_owned();
+        }
+    }
     office::render(
         source.as_deref(),
         Path::new(name),
         copy.original.as_ref(),
-        &copy.actions,
+        &actions,
         output,
         cancel,
     )
@@ -736,6 +773,22 @@ impl Broker {
     }
     pub fn charts(&self) -> &[super::charts::Chart] {
         &self.charts
+    }
+    /// 新一輪只公告目前有實際操作對象的工具；不改寫已提交／待查回的請求。
+    pub(super) fn restrict_tools(&self, request: &mut Value) {
+        if let Some(tools) = request["tools"].as_array_mut() {
+            tools.retain(
+                |tool| match tool["function"]["name"].as_str().unwrap_or("") {
+                    "export_chart_png" => !self.charts.is_empty(),
+                    "edit_text" => self.copies.values().any(|c| c.office.is_none()),
+                    "edit_office" | "office_action" | "office_batch" => {
+                        self.copies.values().any(|c| c.office.is_some())
+                    }
+                    "save_copy" | "delete_copy" => !self.copies.is_empty(),
+                    _ => true,
+                },
+            );
+        }
     }
     pub fn set_png_renderer(&mut self, renderer: super::charts::png::Renderer) {
         self.png_renderer = Some(renderer);
@@ -1545,11 +1598,19 @@ impl Broker {
         &mut self,
         id: &str,
         revision: &str,
-        actions: Vec<office::Action>,
+        mut actions: Vec<office::Action>,
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
         if actions.is_empty() || actions.len() > 20 {
             return Err("每批需為 1–20 個 Office 操作。".into());
+        }
+        for action in &mut actions {
+            if let office::Action::InsertImage { path, sha256, .. } = action {
+                if sha256.is_some() {
+                    return Err("圖片雜湊由程式管理，不接受模型提供的 sha256。".into());
+                }
+                *sha256 = Some(locked_image(&self.project, path)?.2);
+            }
         }
         let copy = self.copies.get_mut(id).ok_or("不是本次任務的工作副本。")?;
         if text::revision(&copy.text) != revision {
@@ -1623,6 +1684,55 @@ impl Broker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn tools_require_existing_edit_and_export_targets() {
+        let mut broker = Broker::new(
+            Project {
+                id: "p".into(),
+                name: "p".into(),
+                root: std::env::current_dir().unwrap(),
+                imports: BTreeMap::new(),
+            },
+            "r".into(),
+        )
+        .unwrap();
+        let definitions: Value = serde_json::from_str(include_str!("tools.json")).unwrap();
+        let mut request = definitions.clone();
+        broker.restrict_tools(&mut request);
+        let has = |r: &Value, name: &str| {
+            r["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|t| t["function"]["name"] == name)
+        };
+        for name in [
+            "edit_text",
+            "office_action",
+            "office_batch",
+            "save_copy",
+            "delete_copy",
+            "export_chart_png",
+        ] {
+            assert!(!has(&request, name));
+        }
+        assert!(has(&request, "create_working_copy") && has(&request, "finish"));
+        broker.copies.insert(
+            "c".into(),
+            Copy {
+                office: None,
+                name: "a.txt".into(),
+                text: String::new(),
+                encoding: Encoding::Utf8(false),
+                saved_revision: None,
+                paths: vec![],
+            },
+        );
+        let mut request = definitions;
+        broker.restrict_tools(&mut request);
+        assert!(has(&request, "edit_text") && has(&request, "save_copy"));
+        assert!(!has(&request, "office_action") && !has(&request, "export_chart_png"));
+    }
     #[test]
     fn png_exports_preserve_names_reuse_verified_files_and_survive_restore() {
         let root = std::env::current_dir()

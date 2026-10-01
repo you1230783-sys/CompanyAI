@@ -6,6 +6,14 @@ use serde_json::{json, Value};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Action {
+    /// 圖片來源只能是專案相對 PNG；sha256 由 broker 填入，模型不能自行指定。
+    InsertImage {
+        path: String,
+        target: super::images::Placement,
+        width: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sha256: Option<String>,
+    },
     /// 此項由既有 edit_office 入口轉入，沿用原文核對。
     Edit {
         block_id: String,
@@ -153,7 +161,7 @@ impl Format {
 }
 
 /// 限定 A1 單格／矩形，不允許外部活頁簿、命名範圍、整欄或聯集。
-fn cell(value: &str) -> AppResult<(i32, i32)> {
+pub(super) fn cell(value: &str) -> AppResult<(i32, i32)> {
     let value = value.replace('$', "").to_ascii_uppercase();
     let split = value
         .find(|c: char| c.is_ascii_digit())
@@ -458,7 +466,12 @@ pub(super) fn structure(session: &Session) -> AppResult<Value> {
             json!({"rows":child(&object, property).and_then(|r| integer(&r,"Count")).ok(),"columns":child(&object,"Columns").and_then(|r| integer(&r,"Count")).ok()})
         } else { scalar(&object, property)? });
     }
-    Ok(json!({collection:result}))
+    let mut result = json!({collection:result});
+    let images = super::images::inventory(session)?;
+    if !images.is_empty() {
+        result["images"] = json!(images);
+    }
+    Ok(result)
 }
 
 fn rectangular<T>(rows: &[Vec<T>]) -> AppResult<usize> {
@@ -475,7 +488,11 @@ fn rectangular<T>(rows: &[Vec<T>]) -> AppResult<usize> {
 }
 
 impl Session {
-    fn word_insertion(&self, before: &Option<String>, cancel: &AtomicBool) -> AppResult<IDispatch> {
+    pub(super) fn word_insertion(
+        &self,
+        before: &Option<String>,
+        cancel: &AtomicBool,
+    ) -> AppResult<IDispatch> {
         let doc = self.document()?;
         let position = if let Some(id) = before {
             let (snapshot, targets) = self.snapshot(cancel)?;
@@ -508,6 +525,21 @@ impl Session {
         }
         let doc = self.document()?;
         match action {
+            Action::InsertImage {
+                path,
+                target,
+                width,
+                sha256,
+            } => {
+                super::images::insert(
+                    self,
+                    Path::new(path),
+                    target,
+                    *width,
+                    sha256.as_deref().ok_or("圖片尚未由工作區核對。")?,
+                    cancel,
+                )?;
+            }
             Action::Edit {
                 block_id,
                 expected,

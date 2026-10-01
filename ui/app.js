@@ -529,11 +529,6 @@ function renderMessages() {
     copy.innerHTML = icon("copy") + "複製";
     copy.title = "複製原文";
     tools.append(copy);
-    if (message.role === "assistant" && message.request_id && message.project_activity?.length) {
-      const diagnostics = node("button", "project-diagnostics", "執行紀錄");
-      diagnostics.onclick = () => window.ProjectUI?.openDiagnostics(state.active_id, message.request_id);
-      tools.append(diagnostics);
-    }
     if (message.project_paused && index === state.messages.length - 1 && state.conversations.some(c => c.id === state.active_id && c.project_id)) {
       const resume = node("button", "resume-project", "繼續");
       resume.disabled = !state.retry?.enabled || state.projects?.running;

@@ -993,6 +993,11 @@ window.runSelfTest = async (structuredFixture) => {
       fixture.projects.activity = ["讀取檔案清單：完成", "建立副本…"];
       LMUI.receive(fixture); LMUI.showView("chat");
       check(!$("project-context").hidden && $("project-context").textContent === "C:\\測試", "project path moved below title");
+      check(!document.getElementById("project-diagnostics-live") && !$("advanced-settings").open, "diagnostics hidden in collapsed advanced settings");
+      check($("project-diagnostics-run").value === "run-one" && !$("project-diagnostics-open").disabled, "advanced diagnostics can select running task");
+      $("project-diagnostics-open").click();
+      check($("project-diagnostics-dialog").open && retryCommands.at(-1)?.command?.run_id === "run-one", "advanced diagnostics opens selected local log");
+      $("project-diagnostics-close").click(); await frame();
       check(!$("project-activity").open && $("project-activity").querySelector("summary").textContent === "建立副本…", "activity collapsed with latest step");
       $("project-activity").open = true;
       const projectToast = toast, notices = [], projectTasks = fixture.work.tasks;
