@@ -95,8 +95,17 @@ fn checkpoint(path: &Path, value: &Value) -> AppResult<()> {
     storage::atomic_write(path, &storage::protect(&bytes, true)?)
 }
 
+pub(super) fn diagnostic_excerpt(text: &str, limit: usize) -> String {
+    let mut chars = text.chars();
+    let mut result: String = chars.by_ref().take(limit).collect();
+    if chars.next().is_some() {
+        result.push_str("\n[內容過長，已截斷顯示]");
+    }
+    result
+}
+
 pub fn run(run: Run, progress: impl FnMut(String)) -> AppResult<String> {
-    run_for(run, progress, SEGMENT_BUDGET, |_| {}, false)
+    run_for(run, progress, SEGMENT_BUDGET, |_| {}, false, None)
 }
 
 /// 圖表為結構化 UI 事件，不混入模型文字或一般進度字串。
@@ -105,7 +114,17 @@ pub fn run_with_charts(
     progress: impl FnMut(String),
     charts: impl FnMut(Vec<super::charts::Chart>),
 ) -> AppResult<String> {
-    run_for(run, progress, SEGMENT_BUDGET, charts, false)
+    run_for(run, progress, SEGMENT_BUDGET, charts, false, None)
+}
+
+/// 正式桌面提供固定 PNG 繪製服務；非 UI 測試入口不虛構成功匯出。
+pub fn run_with_chart_export(
+    run: Run,
+    progress: impl FnMut(String),
+    charts: impl FnMut(Vec<super::charts::Chart>),
+    renderer: super::charts::png::Renderer,
+) -> AppResult<String> {
+    run_for(run, progress, SEGMENT_BUDGET, charts, false, Some(renderer))
 }
 
 /// 僅供 debug 整合測試推進期限，不改正式 EXE 的兩小時政策。
@@ -115,13 +134,13 @@ pub fn run_with_test_budget(
     progress: impl FnMut(String),
     budget: Duration,
 ) -> AppResult<String> {
-    run_for(run, progress, budget, |_| {}, false)
+    run_for(run, progress, budget, |_| {}, false, None)
 }
 
 /// 舊文字協定的回歸測試入口；正式 EXE 不編入，不能用它降級新任務。
 #[cfg(debug_assertions)]
 pub fn run_legacy_test(run: Run, progress: impl FnMut(String)) -> AppResult<String> {
-    run_for(run, progress, SEGMENT_BUDGET, |_| {}, true)
+    run_for(run, progress, SEGMENT_BUDGET, |_| {}, true, None)
 }
 #[cfg(debug_assertions)]
 pub fn run_legacy_with_test_budget(
@@ -129,7 +148,7 @@ pub fn run_legacy_with_test_budget(
     progress: impl FnMut(String),
     budget: Duration,
 ) -> AppResult<String> {
-    run_for(run, progress, budget, |_| {}, true)
+    run_for(run, progress, budget, |_| {}, true, None)
 }
 #[cfg(debug_assertions)]
 pub fn run_legacy_with_charts(
@@ -137,7 +156,7 @@ pub fn run_legacy_with_charts(
     progress: impl FnMut(String),
     charts: impl FnMut(Vec<super::charts::Chart>),
 ) -> AppResult<String> {
-    run_for(run, progress, SEGMENT_BUDGET, charts, true)
+    run_for(run, progress, SEGMENT_BUDGET, charts, true, None)
 }
 
 fn run_for(
@@ -146,6 +165,7 @@ fn run_for(
     budget: Duration,
     mut charts: impl FnMut(Vec<super::charts::Chart>),
     legacy_test: bool,
+    png_renderer: Option<super::charts::png::Renderer>,
 ) -> AppResult<String> {
     let mut activity = Vec::new();
     let journal = run
@@ -155,6 +175,9 @@ fn run_for(
     let mut record = json!({"project_id":run.project.id,"conversation_id":run.conversation,"state":"starting","requests":[],"operations":[],"outputs":[]});
     checkpoint(&journal, &record)?;
     let mut broker = Broker::new(run.project.clone(), run.id.clone())?;
+    if let Some(renderer) = png_renderer {
+        broker.set_png_renderer(renderer);
+    }
     broker.enable_server_pdf(run.config.clone(), run.session.clone())?;
     broker.enable_memory(&run.conversation)?;
     let mut request_text = run
@@ -366,6 +389,28 @@ fn run_for(
             let received =
                 super::model::receive(&run, &mut task, deadline, lookup_only, agent_caps.as_ref());
             record["last_remote_status"] = json!(task.remote);
+            // 每輪保留可讀的回覆摘錄與伺服器識別，不依賴網站是否建立聊天紀錄。
+            // 不另外複製整份 messages／tools；長回覆明確標示截斷。
+            if let Some(entry) = record["requests"].as_array_mut().and_then(|a| a.last_mut()) {
+                entry["turn"] = json!(turn + 1);
+                if let Some(status) = &task.remote {
+                    entry["task_id"] = json!(status.task_id);
+                    entry["state"] = json!(status.state);
+                    if let Some(result) = &status.result {
+                        let reply = result
+                            .to_string()
+                            .replace(&run.session.access_token, "[已隱藏]");
+                        entry["response"] = json!(diagnostic_excerpt(&reply, 32_000));
+                    }
+                    entry["error"] = json!(status
+                        .error_message
+                        .replace(&run.session.access_token, "[已隱藏]"));
+                }
+                if let Err(error) = &received {
+                    entry["error"] = json!(error.replace(&run.session.access_token, "[已隱藏]"));
+                }
+            }
+            checkpoint(&journal, &record)?;
             if let Err(error) = &received {
                 record["request_error"] = json!({"turn":turn+1,"request_id":id,"message":error});
                 checkpoint(&journal, &record)?;
@@ -428,6 +473,14 @@ fn run_for(
                 }
             };
             record["last_model_reply"] = json!(reply);
+            if let Some(entry) = record["requests"].as_array_mut().and_then(|a| a.last_mut()) {
+                if entry.get("response").is_none() {
+                    entry["response"] = json!(diagnostic_excerpt(
+                        &reply.replace(&run.session.access_token, "[已隱藏]"),
+                        32_000
+                    ));
+                }
+            }
             record["last_remote_status"] = json!(task.remote);
             // 已知終態才可發起修復；多 JSON、空白完成均不執行候選工具。
             let Some(parsed) = parsed else {
@@ -521,20 +574,24 @@ fn run_for(
                     report(
                         &mut activity,
                         &mut progress,
-                        format!(
-                            "{label}：{}",
-                            if result["ok"] == false {
-                                "失敗"
-                            } else {
-                                "完成"
-                            }
-                        ),
+                        if result["ok"] == false {
+                            let reason = result["error"].as_str().unwrap_or("工具未提供錯誤原因");
+                            format!(
+                                "{label}：失敗（操作 {operation_id}）\n{}",
+                                diagnostic_excerpt(
+                                    &reason.replace(&run.session.access_token, "[已隱藏]"),
+                                    800
+                                )
+                            )
+                        } else {
+                            format!("{label}：完成")
+                        },
                     );
                     record["activity"] = json!(activity);
                     record["operations"]
                         .as_array_mut()
                         .ok_or("任務記錄不正確。")?
-                        .push(json!({"id":operation_id,"request":request,"result":result}));
+                        .push(json!({"id":operation_id,"request_id":id,"turn":turn+1,"request":request,"result":result}));
                     progress_state.observe(&operation_id, &request, &result);
                     if let Some((message, call_id)) = native_call {
                         progress_state.push_native(message, &call_id, &result);

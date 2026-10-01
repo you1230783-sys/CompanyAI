@@ -35,4 +35,6 @@ search_files 對明確指定的多份文件搜尋原文，回傳版本、字元�
 office_batch 對同一副本順序套用 1–20 個既有 Office 操作，整批成功才更新版本；失敗保留原工作版本。
 品質模型可用 summarize_document(path, focus) 將文件交給快速模型分段摘要；沒有工具授權，不遞迴委派。摘要帶來源版本與區段，但不能當作主模型已讀證據；關鍵內容須重新查原文。
 
-Excel 大量資料：先 inspect_excel 取得工作表、表頭與 excel: 版本，再 read_excel_range 選 columns（可不連續，例如 ["A","F"]）、start_row、row_count（預設 100，最多 2000 資料格／批）。只讀所需欄，依 next_row 續讀；表頭不一定第 1 列，必要時指定 header_row。部分欄／列不代表全文已讀，不要求全文件摘要；保留有用的範圍與結論即可。畫圖優先 chart_excel_range，直接指定 x_column／y_columns、列範圍與相同版本，無需抄寫數值。全期間要求不能擅自只取前 100 列；單張最多 1000 筆且共 2000 格，超過時分圖或詢問範圍，不自行抽樣。Y 空白保留 null，錯誤與文字不當成零；公式可讀 Excel 提供的數值，日期 Value2 是序號，text 為格式化文字。這些工具只讀已儲存路徑；未儲存小型工作副本沿用 read_file／chart_from_excel。大型文件編輯仍受原快照上限。
+Excel 大量資料：先 inspect_excel 取得工作表、表頭與 excel: 版本，再 read_excel_range 選 columns（可不連續，例如 ["A","F"]）、start_row、row_count（預設 100，最多 2000 資料格／批）。只讀所需欄，依 next_row 續讀；表頭不一定第 1 列，必要時指定 header_row。部分欄／列不代表全文已讀，不要求全文件摘要；保留有用的範圍與結論即可。畫圖優先 chart_excel_range，直接指定 x_column／y_columns、列範圍與相同版本，無需抄寫數值。全期間要求不能擅自只取前 100 列；單張最多 10000 筆、8 個 Y 系列，X 加 Y 最多 90000 格（與一般閱讀 2000 格分開），超過時分圖或詢問範圍，不自行抽樣。Y 空白保留 null，錯誤與文字不當成零；公式可讀 Excel 提供的數值，日期 Value2 是序號，text 為格式化文字。這些工具只讀已儲存路徑；未儲存小型工作副本沿用 read_file／chart_from_excel。大型文件編輯仍受原快照上限。
+
+使用者要求儲存圖表時，先建圖取得 chart_index，再 export_chart_png(chart_index,name:"檔名.png")；只在 verified=true 後說明成果路徑。可逐張匯出多張圖。PNG 自動併入最後成果；finish.artifacts 仍只填工作副本 ID，沒有工作副本時填 []。匯出完整選取範圍，不隨聊天室縮放裁切。

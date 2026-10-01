@@ -228,6 +228,29 @@ impl WebView {
         unsafe { self.view.PostWebMessageAsJson(PCWSTR(value.as_ptr())) }
             .map_err(|_| "無法更新介面。".into())
     }
+    /// 僅呼叫固定的內嵌繪圖函式。Chart 經 JSON 序列化為資料，禁止模型提供腳本。
+    /// 非同步 callback 回到 UI 執行緒；PNG 解碼及落盤由等待結果的背景任務負責。
+    pub fn export_chart_png(
+        &self,
+        chart: &crate::projects::charts::Chart,
+        reply: mpsc::Sender<AppResult<String>>,
+    ) -> AppResult<()> {
+        chart.validate()?;
+        let data = serde_json::to_string(chart).map_err(|e| e.to_string())?;
+        let script = wide(&format!("window.ChartUI.exportPng({data})"));
+        let callback = ExecuteScriptCompletedHandler::create(Box::new(move |status, result| {
+            let result = status
+                .map_err(|e| format!("PNG 繪製失敗：{e}"))
+                .and_then(|_| {
+                    serde_json::from_str::<String>(&result)
+                        .map_err(|_| "PNG 匯出未完成，請確認桌面介面仍可使用。".into())
+                });
+            let _ = reply.send(result);
+            Ok(())
+        }));
+        unsafe { self.view.ExecuteScript(PCWSTR(script.as_ptr()), &callback) }
+            .map_err(|e| format!("無法啟動 PNG 繪製：{e}"))
+    }
 }
 fn mime_type(path: &str) -> &'static str {
     match path.rsplit('.').next() {

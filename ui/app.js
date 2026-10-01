@@ -432,12 +432,12 @@ function linkProjectArtifacts(bubble) {
   }
   for (const text of plain) {
     const lines = text.textContent.split("\n");
-    if (!lines.some(line => /^_AI_Output[/\\].+\.(txt|md|docx|doc|docm|xlsx|xls|xlsm|xlsb|pptx|ppt|pptm)$/iu.test(line.trim()))) continue;
+    if (!lines.some(line => /^_AI_Output[/\\].+\.(txt|md|docx|doc|docm|xlsx|xls|xlsm|xlsb|pptx|ppt|pptm|png)$/iu.test(line.trim()))) continue;
     const fragment = document.createDocumentFragment();
     lines.forEach((line,index) => {
       if (index) fragment.append(document.createTextNode("\n"));
       const path = line.trim();
-      if (/^_AI_Output[/\\].+\.(txt|md|docx|doc|docm|xlsx|xls|xlsm|xlsb|pptx|ppt|pptm)$/iu.test(path)) {
+      if (/^_AI_Output[/\\].+\.(txt|md|docx|doc|docm|xlsx|xls|xlsm|xlsb|pptx|ppt|pptm|png)$/iu.test(path)) {
         const link = node("a","project-artifact",path);
         link.href = "#"; link.dataset.path = path; link.dataset.conversation = state.active_id;
         link.title = "在檔案總管中顯示"; fragment.append(link);
@@ -529,6 +529,11 @@ function renderMessages() {
     copy.innerHTML = icon("copy") + "複製";
     copy.title = "複製原文";
     tools.append(copy);
+    if (message.role === "assistant" && message.request_id && message.project_activity?.length) {
+      const diagnostics = node("button", "project-diagnostics", "執行紀錄");
+      diagnostics.onclick = () => window.ProjectUI?.openDiagnostics(state.active_id, message.request_id);
+      tools.append(diagnostics);
+    }
     if (message.project_paused && index === state.messages.length - 1 && state.conversations.some(c => c.id === state.active_id && c.project_id)) {
       const resume = node("button", "resume-project", "繼續");
       resume.disabled = !state.retry?.enabled || state.projects?.running;

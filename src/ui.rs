@@ -152,6 +152,7 @@ enum Command {
     },
 }
 enum Event {
+    SmokePng(AppResult<()>),
     Project(projects::ProjectEvent),
     VncSync(String, crate::vnc::sync::SessionEvent),
     VncSearch(String, AppResult<PathBuf>),
@@ -737,7 +738,46 @@ impl App {
             }
             Command::SelfTestResult { ok, detail } => {
                 if self.smoke {
-                    self.smoke_result = Some(if ok { Ok(()) } else { Err(detail) });
+                    if !ok {
+                        self.smoke_result = Some(Err(detail));
+                    } else {
+                        // 以正式 WebView2 callback 路徑取得 PNG，再由 Rust 驗證及落盤。
+                        // 不只檢查 JS 回傳前綴，確保下一次建置能驗收原生跨執行緒橋接。
+                        let chart = crate::projects::charts::Chart {
+                            kind: "line".into(),
+                            title: "10,000 筆量測趨勢／PNG 匯出測試".into(),
+                            x_label: "時間 (秒)".into(),
+                            y_label: "量測值".into(),
+                            x: (0..10_000).map(|i| json!(i)).collect(),
+                            series: vec![crate::projects::charts::Series {
+                                name: "量測 A".into(),
+                                values: (0..10_000)
+                                    .map(|i| {
+                                        if (3000..3100).contains(&i) {
+                                            None
+                                        } else {
+                                            Some((i as f64 / 400.0).sin() * 10.0)
+                                        }
+                                    })
+                                    .collect(),
+                            }],
+                            source: "固定測試資料，包含 3000–3099 筆缺值；不讀使用者資料".into(),
+                        };
+                        let (reply, response) = mpsc::channel();
+                        self.view.export_chart_png(&chart, reply)?;
+                        let tx = self.tx.clone();
+                        let destination = self.root.join("chart-smoke.png");
+                        thread::spawn(move || {
+                            let result = (|| -> AppResult<()> {
+                                let url = response
+                                    .recv_timeout(Duration::from_secs(20))
+                                    .map_err(|_| "PNG 自檢逾時。")??;
+                                let png = crate::projects::charts::png::decode_url(&url)?;
+                                std::fs::write(destination, png).map_err(|e| e.to_string())
+                            })();
+                            let _ = tx.send(Event::SmokePng(result));
+                        });
+                    }
                 }
             }
             Command::Draft { text } => {
@@ -1224,6 +1264,11 @@ impl App {
                 self.start_notifications();
             }
             Event::Project(event) => self.project_event(event)?,
+            Event::SmokePng(result) => {
+                if self.smoke {
+                    self.smoke_result = Some(result);
+                }
+            }
             Event::UpdateReady(result) => {
                 self.update_busy = false;
                 match result {

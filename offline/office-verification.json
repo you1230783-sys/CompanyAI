@@ -1,27 +1,27 @@
-﻿{
-    "version":  "0.8.29.0",
-    "result":  "PASS",
-    "office_version":  "16.0.20326.20158",
-    "fixture":  "Y:\\Rust\\Project\\CompanyAI\\.build\\office-test-c4765b804069402cb6a629c4a440ceb3",
-    "checks":  [
-                   "DOC/DOCX/DOCM/XLS/XLSX/XLSM/XLSB/PPT/PPTX/PPTM COM read/edit/save/reopen",
-                   "source bytes unchanged",
-                   "readable filename and numbered second revision",
-                   "duplicate save idempotent",
-                   "Excel formula protected and literal = text",
-                   "Excel numeric edit",
-                   "Word and Excel bold retained",
-                   "untouched paragraph/shape retained",
-                   "blank DOCX/XLSX/PPTX creation",
-                   "Word paragraphs/table/styles and Chinese font",
-                   "Excel worksheets/ranges/number formats/borders",
-                   "PPT title/content/two-column layouts and text styles",
-                   "Office batch commit and failed-batch rollback",
-                   "Excel chart reads numeric cells from checked snapshot",
-                   "large XLS/XLSX bounded headers and noncontiguous A/F 100-row pages",
-                   "range chart uses Excel numeric formula results and preserves missing rows",
-                   "range revision mismatch, path escape and cell-budget rejection"
-               ],
-    "company_encryption_tested":  false,
-    "screenshots_verified":  false
+{
+  "version": "0.8.31.0",
+  "result": "PASS",
+  "office_version": "16.0.20326.20158",
+  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\office-test-aeaf0f5dc3bd4f568f911b3f74d3738e",
+  "checks": [
+    "DOC/DOCX/DOCM/XLS/XLSX/XLSM/XLSB/PPT/PPTX/PPTM COM read/edit/save/reopen",
+    "source bytes unchanged",
+    "readable filename and numbered second revision",
+    "duplicate save idempotent",
+    "Excel formula protected and literal = text",
+    "Excel numeric edit",
+    "Word and Excel bold retained",
+    "untouched paragraph/shape retained",
+    "blank DOCX/XLSX/PPTX creation",
+    "Word paragraphs/table/styles and Chinese font",
+    "Excel worksheets/ranges/number formats/borders",
+    "PPT title/content/two-column layouts and text styles",
+    "Office batch commit and failed-batch rollback",
+    "Excel chart reads numeric cells from checked snapshot",
+    "large XLS/XLSX bounded headers and noncontiguous A/F 100-row pages",
+    "range chart uses Excel numeric formula results and preserves missing rows",
+    "range revision mismatch, path escape and cell-budget rejection"
+  ],
+  "company_encryption_tested": false,
+  "screenshots_verified": false
 }

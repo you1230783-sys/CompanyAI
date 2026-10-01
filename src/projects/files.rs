@@ -336,7 +336,16 @@ fn reserve_output(folder: &Path, name: &str) -> AppResult<(String, File)> {
         .file_stem()
         .and_then(|s| s.to_str())
         .ok_or("檔名無效。")?;
-    let ext = extension(path)?;
+    // PNG 僅在專用匯出流程使用，不擴大一般文件閱讀／工作副本支援格式。
+    let ext = if path
+        .extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|s| s.eq_ignore_ascii_case("png"))
+    {
+        "png".into()
+    } else {
+        extension(path)?
+    };
     for number in 1..=10000 {
         let candidate = if number == 1 {
             name.to_owned()
@@ -569,6 +578,13 @@ struct Copy {
     saved_revision: Option<String>,
     paths: Vec<String>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ChartExport {
+    chart_index: usize,
+    name: String,
+    path: String,
+    sha256: String,
+}
 /// 只保存資料，不保存授權、Token、COM 物件或執行中的程序。
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(super) struct SavedBroker {
@@ -581,6 +597,8 @@ pub(super) struct SavedBroker {
     loaded_skills: Vec<String>,
     #[serde(default)]
     charts: Vec<super::charts::Chart>,
+    #[serde(default)]
+    chart_exports: Vec<ChartExport>,
 }
 pub struct Broker {
     server_pdf: Option<super::server_pdf::Reader>,
@@ -595,6 +613,8 @@ pub struct Broker {
     txt_context: bool,
     loaded_skills: Vec<String>,
     charts: Vec<super::charts::Chart>,
+    chart_exports: Vec<ChartExport>,
+    png_renderer: Option<super::charts::png::Renderer>,
 }
 impl Broker {
     pub fn new(project: Project, _task: String) -> AppResult<Self> {
@@ -610,13 +630,15 @@ impl Broker {
             txt_context: false,
             loaded_skills: vec![],
             charts: vec![],
+            chart_exports: vec![],
+            png_renderer: None,
         })
     }
     pub(super) fn saved(&self) -> AppResult<SavedBroker> {
         // 經序列化建立不含程序資源的快照，只有明確暫停時才呼叫。
         serde_json::from_value(
             json!({"output_folder":self.output_folder,"copies":self.copies,
-            "results":self.results,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts}),
+            "results":self.results,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports}),
         )
         .map_err(|e| e.to_string())
     }
@@ -658,6 +680,10 @@ impl Broker {
         for chart in &state.charts {
             chart.validate()?;
         }
+        for export in &state.chart_exports {
+            self.verify_chart_export(export)?;
+        }
+        self.chart_exports = state.chart_exports;
         self.loaded_skills = state.loaded_skills;
         self.charts = state.charts;
         self.output_folder = state.output_folder;
@@ -711,13 +737,134 @@ impl Broker {
     pub fn charts(&self) -> &[super::charts::Chart] {
         &self.charts
     }
+    pub fn set_png_renderer(&mut self, renderer: super::charts::png::Renderer) {
+        self.png_renderer = Some(renderer);
+    }
     fn add_chart(&mut self, chart: super::charts::Chart) -> AppResult<Value> {
         chart.validate()?;
         if self.charts.len() >= 12 {
             return Err("每次任務最多 12 張圖表。".into());
         }
+        if serde_json::to_vec(&self.charts)
+            .map_err(|e| e.to_string())?
+            .len()
+            + serde_json::to_vec(&chart).map_err(|e| e.to_string())?.len()
+            > 16 * 1024 * 1024
+        {
+            return Err("本次任務的圖表資料合計超過 16 MiB，請分成另一個任務。".into());
+        }
         self.charts.push(chart);
         Ok(json!({"chart_index":self.charts.len()-1,"displayed_in_conversation":true}))
+    }
+    fn verify_chart_export(&self, export: &ChartExport) -> AppResult<()> {
+        let path = relative(&export.path)?;
+        if path.components().count() != 3
+            || !path.starts_with("_AI_Output")
+            || !path
+                .extension()
+                .and_then(|s| s.to_str())
+                .is_some_and(|s| s.eq_ignore_ascii_case("png"))
+        {
+            return Err("PNG 成果路徑不合法。".into());
+        }
+        let target = self.project.root.join(path);
+        let _guards = pin(target.parent().ok_or("PNG 目錄不存在。")?)?;
+        let mut file = checked_file(&target)?;
+        let mut bytes = Vec::new();
+        Read::by_ref(&mut file)
+            .take((super::charts::png::MAX_BYTES + 1) as u64)
+            .read_to_end(&mut bytes)
+            .map_err(|e| e.to_string())?;
+        super::charts::png::validate(&bytes)?;
+        use sha2::{Digest, Sha256};
+        if format!("{:x}", Sha256::digest(&bytes)) != export.sha256 {
+            return Err("PNG 成果已變更，請確認後重新匯出。".into());
+        }
+        Ok(())
+    }
+
+    fn export_chart_png(
+        &mut self,
+        index: usize,
+        name: &str,
+        cancel: &AtomicBool,
+    ) -> AppResult<Value> {
+        let relative_name = relative(name)?;
+        if relative_name.components().count() != 1
+            || !relative_name
+                .extension()
+                .and_then(|s| s.to_str())
+                .is_some_and(|s| s.eq_ignore_ascii_case("png"))
+        {
+            return Err("請提供單一 PNG 檔名，例如「亮度趨勢.png」，不要包含資料夾。".into());
+        }
+        let chart = self
+            .charts
+            .get(index)
+            .ok_or("找不到本次任務的圖表編號，請先建立圖表。")?;
+        chart.validate()?;
+        // 同圖、同檔名的再次要求沿用已驗證成果；任務暫停後亦保留此記錄。
+        if let Some(export) = self
+            .chart_exports
+            .iter()
+            .find(|e| e.chart_index == index && e.name == name)
+        {
+            self.verify_chart_export(export)?;
+            return Ok(
+                json!({"chart_index":index,"path":export.path,"verified":true,"reused":true}),
+            );
+        }
+        let bytes = self
+            .png_renderer
+            .as_mut()
+            .ok_or("目前沒有可用的桌面圖表匯出器。")?(chart, cancel)?;
+        super::charts::png::validate(&bytes)?;
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err("PNG 匯出已取消，未寫入檔案。".into());
+        }
+        let _root = pin(&self.project.root)?;
+        let base = self.project.root.join("_AI_Output");
+        match fs::create_dir(&base) {
+            Ok(()) => (),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => (),
+            Err(e) => return Err(e.to_string()),
+        }
+        let _base = pin(&base)?;
+        if self.output_folder.is_none() {
+            self.output_folder = Some(create_output_folder(&base)?);
+        }
+        let folder_name = self
+            .output_folder
+            .as_deref()
+            .ok_or("PNG 輸出資料夾不存在。")?;
+        let folder = base.join(folder_name);
+        let _folder = pin(&folder)?;
+        let (actual_name, mut file) = reserve_output(&folder, name)?;
+        let path = format!("_AI_Output/{folder_name}/{actual_name}");
+        // 保留可能部分寫入的路徑；失敗時明確回報，不將檔案登記為成功匯出。
+        self.published.push(path.clone());
+        file.write_all(&bytes)
+            .and_then(|_| file.sync_all())
+            .map_err(|e| format!("PNG 可能已部分寫入 {path}，尚未交付：{e}"))?;
+        file.rewind().map_err(|e| e.to_string())?;
+        let mut verified = Vec::new();
+        Read::by_ref(&mut file)
+            .take((super::charts::png::MAX_BYTES + 1) as u64)
+            .read_to_end(&mut verified)
+            .map_err(|e| e.to_string())?;
+        if verified != bytes {
+            return Err(format!("PNG {path} 讀回不一致，尚未交付。"));
+        }
+        use sha2::{Digest, Sha256};
+        self.chart_exports.push(ChartExport {
+            chart_index: index,
+            name: name.into(),
+            path: path.clone(),
+            sha256: format!("{:x}", Sha256::digest(&bytes)),
+        });
+        Ok(
+            json!({"chart_index":index,"path":path,"verified":true,"width":super::charts::png::WIDTH,"height":super::charts::png::HEIGHT}),
+        )
     }
     /// 明確指定檔案，逐檔使用與 read_file 相同的存取邊界；不掃描未知目錄。
     fn search_files(
@@ -966,9 +1113,9 @@ impl Broker {
                     start_row: *start_row,
                     row_count: *row_count,
                 };
-                selection.validate()?;
+                selection.validate_chart()?;
                 let (page, _) = self.with_excel(path, Some(revision), |target| {
-                    office::excel::read(target, &selection, cancel)
+                    office::excel::read_chart(target, &selection, cancel)
                 })?;
                 let chart =
                     super::charts::from_page(&page, kind, title, x_label, y_label, path, revision)?;
@@ -988,6 +1135,9 @@ impl Broker {
                 operations,
             } => self.office_batch(copy_id, revision, operations.clone(), cancel),
             Tool::CreateChart { chart } => self.add_chart(chart.clone()),
+            Tool::ExportChartPng { chart_index, name } => {
+                self.export_chart_png(*chart_index, name, cancel)
+            }
             Tool::ChartFromExcel {
                 path,
                 revision,
@@ -1458,6 +1608,14 @@ impl Broker {
         {
             return Err("仍有未儲存的工作副本，請先儲存或捨棄。".into());
         }
+        // PNG 已由匯出工具發布，不是文字工作副本；自動併入交付清單並重新核對。
+        for export in &self.chart_exports {
+            if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                return Err("成果檢查已取消。".into());
+            }
+            self.verify_chart_export(export)?;
+            paths.push(export.path.clone());
+        }
         Ok(paths)
     }
 }
@@ -1465,6 +1623,57 @@ impl Broker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn png_exports_preserve_names_reuse_verified_files_and_survive_restore() {
+        let root = std::env::current_dir()
+            .unwrap()
+            .join(".build")
+            .join(format!("png-test-{}", crate::jobs::new_id().unwrap()));
+        fs::create_dir_all(&root).unwrap();
+        let project = Project {
+            id: "png".into(),
+            name: "png".into(),
+            root: root.clone(),
+            imports: BTreeMap::new(),
+        };
+        let mut broker = Broker::new(project.clone(), "run".into()).unwrap();
+        let chart = super::super::charts::Chart {
+            kind: "line".into(),
+            title: "圖".into(),
+            x_label: "x".into(),
+            y_label: "y".into(),
+            x: vec![json!(1)],
+            series: vec![super::super::charts::Series {
+                name: "A".into(),
+                values: vec![Some(2.0)],
+            }],
+            source: "測試".into(),
+        };
+        broker.add_chart(chart.clone()).unwrap();
+        broker.add_chart(chart).unwrap();
+        broker.set_png_renderer(Box::new(|_, _| Ok(super::super::charts::png::fixture())));
+        let cancel = AtomicBool::new(false);
+        assert!(broker.export_chart_png(0, "../bad.png", &cancel).is_err());
+        assert!(broker.export_chart_png(99, "bad.png", &cancel).is_err());
+        let first = broker.export_chart_png(0, "趨勢.png", &cancel).unwrap();
+        let again = broker.export_chart_png(0, "趨勢.png", &cancel).unwrap();
+        assert_eq!(first["path"], again["path"]);
+        assert_eq!(again["reused"], true);
+        let second = broker.export_chart_png(1, "趨勢.png", &cancel).unwrap();
+        assert!(second["path"].as_str().unwrap().ends_with("趨勢_2.png"));
+        let mut restored = Broker::new(project, "run".into()).unwrap();
+        restored.restore(broker.saved().unwrap(), &cancel).unwrap();
+        let paths = restored.finish(&[]).unwrap();
+        assert_eq!(paths.len(), 2);
+        fs::write(root.join(&paths[0]), b"changed").unwrap();
+        assert!(restored.finish(&[]).is_err());
+        for path in &paths {
+            fs::remove_file(root.join(path)).unwrap();
+        }
+        fs::remove_dir(root.join(paths[0].rsplit_once('/').unwrap().0)).unwrap();
+        fs::remove_dir(root.join("_AI_Output")).unwrap();
+        fs::remove_dir(root).unwrap();
+    }
     #[test]
     fn reader_copy_allows_reader_write_access_without_unlocking_original() {
         let root = std::env::current_dir()

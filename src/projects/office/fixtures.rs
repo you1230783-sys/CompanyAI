@@ -87,9 +87,9 @@ fn create_large_excel(folder: &Path) -> AppResult<()> {
     for (address, property, value) in [
         ("A1", "Value2", "序號".into()),
         ("F1", "Value2", "量測".into()),
-        ("A2:A1001", "Formula", "=ROW()-1".into()),
-        ("F2:F1001", "Formula", "=(ROW()-1)*2".into()),
-        ("B2:E1001", "Value2", "不應讀到的中間欄".into()),
+        ("A2:A10001", "Formula", "=ROW()-1".into()),
+        ("F2:F10001", "Formula", "=(ROW()-1)*2".into()),
+        ("B2:E10001", "Value2", "不應讀到的中間欄".into()),
         ("H2", "Formula", "=1/0".into()),
     ] {
         let range = obj(invoke(&sheet, "Range", vec![address.into()], false)?)?;

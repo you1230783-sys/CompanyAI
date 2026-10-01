@@ -6,6 +6,7 @@
 
 ## 目前版本
 
+- [0.8.31 圖表與本機診斷驗證](VALIDATION_0_8_31.md)：10000 筆圖表、PNG 匯出、工具錯誤及逐輪執行紀錄。
 - [0.8.30 Schema 修正及驗證](VALIDATION_0_8_30.md)：修正 Office 表格與圖表多型別造成第一輪 UNSUPPORTED_SCHEMA。
 - [原生工具 desktop-agent-v1 契約](DESKTOP_AGENT_V1_CONTRACT.md)：獨立專案代理路由、原生訊息、能力協商、持久 JSON 與雙方驗收。
 - [桌面端實作與驗證狀態](VALIDATION_0_8_29.md)：0.8.29 EXE 已接入原生工具與 Excel 選欄，實際網站與模型待聯合驗收。

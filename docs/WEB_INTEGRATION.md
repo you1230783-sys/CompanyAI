@@ -1,3 +1,5 @@
+> **0.8.31：** 新增 `export_chart_png`，工具總數由 31 增為 32；仍透過既有原生 tools 通用契約。PNG 在桌面內嵌 ECharts 產生，不增加網站 API、資料庫欄位或伺服器工具。詳見 [驗證紀錄](VALIDATION_0_8_31.md)。
+
 > **0.8.30：修正多型別工具 Schema。** Office 表格與圖表橫軸的 string／number 聯集改用 anyOf，符合既有 desktop-agent-v1；網站不需放寬 type 陣列驗證。詳見 [修正及驗證](VALIDATION_0_8_30.md)。
 
 > **0.8.29：desktop-agent-v1 桌面端已接入，待實機聯合驗收。** 新專案及快速摘要委派使用代理能力／提交入口、原生 tools／tool_calls／role=tool；一般聊天、Outlook、標題及 PDF 路由不變。請依 [完整契約](DESKTOP_AGENT_V1_CONTRACT.md) 實作網站，另見 [桌面實作與驗證狀態](VALIDATION_0_8_29.md)。以下 0.8.28／0.8.25 描述保留作舊版本及舊 checkpoint 參考。

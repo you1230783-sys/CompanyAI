@@ -5,6 +5,18 @@
   let lastNotice = "", pickerRequest = 0, activityKey = "", activitySignature = "";
   const command = value => send({type: "project", command: value});
   const findProject = id => state.projects?.items?.find(project => project.id === id);
+  let diagnosticsRequest = null;
+  function openDiagnostics(conversation, runId) {
+    diagnosticsRequest = {conversation, run_id:runId};
+    $("project-diagnostics-text").value = "正在讀取本機紀錄…";
+    if (!$("project-diagnostics-dialog").open) $("project-diagnostics-dialog").showModal();
+    command({action:"diagnostics", ...diagnosticsRequest});
+  }
+  $("project-diagnostics-close").onclick = () => $("project-diagnostics-dialog").close();
+  $("project-diagnostics-dialog").addEventListener("close", () => { diagnosticsRequest = null; $("project-diagnostics-text").value = ""; });
+  $("project-diagnostics-refresh").onclick = () => { if (diagnosticsRequest) openDiagnostics(diagnosticsRequest.conversation, diagnosticsRequest.run_id); };
+  $("project-diagnostics-copy").onclick = () => send({type:"copy",text:$("project-diagnostics-text").value});
+  $("project-diagnostics-live").onclick = () => { if (state.projects?.running_id) openDiagnostics(state.active_id, state.projects.running_id); };
   $("new-project").onclick = () => { $("project-name").value = ""; $("project-dialog").showModal(); $("project-name").focus(); };
   $("project-cancel").onclick = () => $("project-dialog").close();
   $("project-create").onclick = () => {
@@ -75,7 +87,15 @@
     result.disabled = disabled; result.onclick = action; return result;
   }
   window.ProjectUI = {
+    openDiagnostics,
     receive(message) {
+      if (message.type === "project_diagnostics") {
+        if (diagnosticsRequest && $("project-diagnostics-dialog").open && message.conversation === state.active_id &&
+            message.conversation === diagnosticsRequest.conversation && message.run_id === diagnosticsRequest.run_id) {
+          $("project-diagnostics-text").value = message.text;
+        }
+        return;
+      }
       // 原生選檔取消不改欄位；延遲回覆不能寫入另一個專案或已關閉的視窗。
       if (message.type !== "project_import_file" || !$("project-import-dialog").open ||
           message.id !== importProject || message.request_id !== pickerRequest) return;
@@ -86,6 +106,8 @@
     render() {
     const projects = state.projects || {items:[]};
     const showActivity = state.logged_in && projects.running && projects.running_conversation === state.active_id;
+    $("project-diagnostics-live").hidden = !showActivity;
+    if (diagnosticsRequest && (!state.logged_in || diagnosticsRequest.conversation !== state.active_id)) $("project-diagnostics-dialog").close();
     ChartUI.render($("project-charts"), showActivity ? projects.charts : []);
     ChartUI.cleanup();
     const key = showActivity ? projects.running_id : "";

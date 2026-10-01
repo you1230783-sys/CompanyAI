@@ -108,9 +108,17 @@ window.runSelfTest = async (structuredFixture) => {
     const chartHost = document.createElement("div"); document.body.append(chartHost);
     ChartUI.render(chartHost, [{kind:"line",title:"<script>test</script>",x_label:"時間 (s)",y_label:"電壓 (V)",x:[1,2,3],series:[{name:"A",values:[4,null,6]}],source:"測試來源"}]);
     await frame();
+    chartHost.querySelector("details").open = true; await frame();
     check(!!chartHost.querySelector("canvas") && chartHost.querySelectorAll("table tr").length === 4, "offline ECharts canvas and accessible data table");
     check(!chartHost.querySelector("script") && chartHost.querySelector("h3").textContent.includes("<script>"), "chart labels are inert text");
     chartHost.querySelector("button").click(); check(!!chartHost.querySelector(".chart-expanded"), "chart expand");
+    const largeChart = {kind:"line",title:"一萬筆趨勢",x_label:"時間",y_label:"數值",x:Array.from({length:10000},(_,i)=>i),series:[{name:"A",values:Array.from({length:10000},(_,i)=>i===3000?null:i)}],source:"本機測試"};
+    const png = ChartUI.exportPng(largeChart);
+    const pngHeader = atob(png.slice("data:image/png;base64,".length, "data:image/png;base64,".length + 32));
+    check(png.startsWith("data:image/png;base64,") && pngHeader.slice(1,4)==="PNG", "PNG export returns PNG bytes");
+    ChartUI.render(chartHost,[largeChart]); await frame();
+    chartHost.querySelector("details").open = true; await frame();
+    check(chartHost.querySelectorAll("table tr").length === 101, "large chart table uses 100-row pages");
     chartHost.remove(); ChartUI.cleanup();
     fixture.config.sidebar_collapsed = true;
     fixture.config.font_size = 12;

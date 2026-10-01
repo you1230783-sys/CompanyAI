@@ -369,6 +369,10 @@ mod tests {
     #[test]
     fn catalogue_covers_all_existing_operations_and_defaults() {
         let samples = [
+            (
+                "export_chart_png",
+                json!({"chart_index":0,"name":"趨勢.png"}),
+            ),
             ("inspect_excel", json!({"path":"a.xlsx"})),
             (
                 "read_excel_range",

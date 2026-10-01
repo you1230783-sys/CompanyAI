@@ -62,17 +62,29 @@ pub struct Selection {
 }
 impl Selection {
     pub fn validate(&self) -> AppResult<()> {
+        self.validate_limits(1000, 100, MAX_CELLS)
+    }
+    /// 直接畫圖不把逐格快照送給模型，使用獨立額度；一般分批閱讀不放寬。
+    pub fn validate_chart(&self) -> AppResult<()> {
+        self.validate_limits(super::super::charts::MAX_POINTS, 9, 90_000)
+    }
+    fn validate_limits(
+        &self,
+        max_rows: usize,
+        max_columns: usize,
+        max_cells: usize,
+    ) -> AppResult<()> {
         check_row(self.header_row)?;
         check_row(self.start_row)?;
         if self.sheet == 0
             || self.sheet > i32::MAX as usize
             || self.columns.is_empty()
-            || self.columns.len() > 100
-            || !(1..=1000).contains(&self.row_count)
-            || self.columns.len() * self.row_count > MAX_CELLS
+            || self.columns.len() > max_columns
+            || !(1..=max_rows).contains(&self.row_count)
+            || self.columns.len() * self.row_count > max_cells
             || self.start_row + self.row_count - 1 > 1_048_576
         {
-            return Err("Excel 每批限 1–100 欄、1–1000 列，資料合計最多 2000 格；請縮小 row_count 後分批讀取。".into());
+            return Err(format!("Excel 此操作限 1–{max_columns} 欄、1–{max_rows} 列，資料合計最多 {max_cells} 格；請縮小範圍或分批處理。"));
         }
         let mut seen = std::collections::BTreeSet::new();
         for column in &self.columns {
@@ -208,10 +220,13 @@ fn bounded(value: Value) -> AppResult<Value> {
 
 /// 邊讀邊限制內容，不先將上千個超長儲存格全部放入記憶體才拒絕。
 fn account_cell(cell: &Cell, bytes: &mut usize) -> AppResult<()> {
+    account_cell_limit(cell, bytes, super::super::text::MAX_TEXT)
+}
+fn account_cell_limit(cell: &Cell, bytes: &mut usize, limit: usize) -> AppResult<()> {
     *bytes += serde_json::to_string(cell)
         .map_err(|e| e.to_string())?
         .len();
-    if *bytes > super::super::text::MAX_TEXT {
+    if *bytes > limit {
         return Err("選取文字過多，請減少列數或欄數後重讀；未截斷儲存格。".into());
     }
     Ok(())
@@ -265,6 +280,21 @@ pub fn inspect(
 /// 保留原始列號與欄位順序；空白、錯誤值不刪除，避免 A／F 兩欄錯位。
 pub fn read(path: &Path, selection: &Selection, cancel: &AtomicBool) -> AppResult<Page> {
     selection.validate()?;
+    read_bounded(path, selection, cancel, super::super::text::MAX_TEXT)
+}
+
+/// 僅供本機畫圖使用；最多 90000 格、32 MiB 暫存資料，不回傳整批 Cell 給模型。
+pub fn read_chart(path: &Path, selection: &Selection, cancel: &AtomicBool) -> AppResult<Page> {
+    selection.validate_chart()?;
+    read_bounded(path, selection, cancel, 32 * 1024 * 1024)
+}
+
+fn read_bounded(
+    path: &Path,
+    selection: &Selection,
+    cancel: &AtomicBool,
+    limit: usize,
+) -> AppResult<Page> {
     check_cancel(cancel)?;
     unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }.map_err(|e| e.to_string())?;
     let _apartment = Apartment;
@@ -281,7 +311,7 @@ pub fn read(path: &Path, selection: &Selection, cancel: &AtomicBool) -> AppResul
     for column in &columns {
         check_cancel(cancel)?;
         let value = cell(&sheet, column, selection.header_row)?;
-        account_cell(&value, &mut bytes)?;
+        account_cell_limit(&value, &mut bytes, limit)?;
         headers.push(value);
     }
     let end = (selection.start_row + selection.row_count - 1).min(used_range.last_row);
@@ -291,7 +321,7 @@ pub fn read(path: &Path, selection: &Selection, cancel: &AtomicBool) -> AppResul
         for column in &columns {
             check_cancel(cancel)?;
             let value = cell(&sheet, column, row)?;
-            account_cell(&value, &mut bytes)?;
+            account_cell_limit(&value, &mut bytes, limit)?;
             cells.push(value);
         }
         rows.push(Row { row, cells });
@@ -313,13 +343,33 @@ pub fn read(path: &Path, selection: &Selection, cancel: &AtomicBool) -> AppResul
         date_1904: bool::try_from(&get(session.document()?, "Date1904")?)
             .map_err(|_| "Excel 日期系統無效。")?,
     };
-    bounded(serde_json::to_value(&page).map_err(|e| e.to_string())?)?;
+    if serde_json::to_vec(&page).map_err(|e| e.to_string())?.len() > limit {
+        return Err("Excel 選取資料超過本次操作容量，請縮小範圍；未自動抽樣。".into());
+    }
     Ok(page)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn chart_limits_are_independent_of_model_read_pages() {
+        let mut selection = Selection {
+            sheet: 1,
+            columns: (1..=9).map(column_name).collect(),
+            header_row: 1,
+            start_row: 2,
+            row_count: 10_000,
+        };
+        selection.validate_chart().unwrap();
+        assert!(selection.validate().is_err());
+        selection.row_count = 10_001;
+        assert!(selection.validate_chart().is_err());
+        selection.row_count = 3000;
+        selection.columns = vec!["A".into(), "F".into()];
+        selection.validate_chart().unwrap();
+        assert!(selection.validate().is_err());
+    }
     #[test]
     fn selected_columns_are_bounded_without_counting_intervening_columns() {
         let mut selection = Selection {

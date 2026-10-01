@@ -90,6 +90,7 @@
             <div id="project-charts" class="project-charts" hidden></div>
             <div id="project-narration" hidden></div>
                 <details id="project-activity" class="project-activity" aria-label="專案執行歷程" hidden></details>
+                <button id="project-diagnostics-live" class="text-button" hidden>執行紀錄</button>
             <div
               id="live-task"
               class="live-task"
@@ -560,6 +561,11 @@
       <label for="project-import-text">文件全文</label>
       <textarea id="project-import-text" rows="12" placeholder="複製文件全文後，貼在這裡…"></textarea>
       <div class="dialog-actions"><button id="project-import-cancel">取消</button><button id="project-import-save" class="primary-button" disabled>匯入</button></div>
+    </dialog>
+    <dialog id="project-diagnostics-dialog" aria-labelledby="project-diagnostics-title">
+      <div class="dialog-heading"><h2 id="project-diagnostics-title">本機執行紀錄</h2><button id="project-diagnostics-close">關閉</button></div>
+      <textarea id="project-diagnostics-text" readonly rows="20" aria-label="AI 回覆與工具結果"></textarea>
+      <div class="dialog-actions"><button id="project-diagnostics-refresh">重新讀取</button><button id="project-diagnostics-copy">複製紀錄</button></div>
     </dialog>
     <div id="toast" role="status" aria-live="polite" popover="manual" hidden></div>
     <script src="vendor/markdown-it.min.js"></script>

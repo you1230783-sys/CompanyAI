@@ -2,6 +2,7 @@
 pub(crate) mod agent;
 pub mod charts;
 mod delegation;
+pub mod diagnostics;
 pub mod events;
 pub mod files;
 pub mod memory;
@@ -140,6 +141,10 @@ pub enum Tool {
     CreateChart {
         chart: charts::Chart,
     },
+    ExportChartPng {
+        chart_index: usize,
+        name: String,
+    },
     ChartFromExcel {
         path: String,
         revision: String,
@@ -267,6 +272,7 @@ impl Tool {
             Self::SearchFiles { .. } => "跨文件搜尋",
             Self::OfficeBatch { .. } => "批次編輯 Office",
             Self::CreateChart { .. } | Self::ChartFromExcel { .. } => "建立圖表",
+            Self::ExportChartPng { .. } => "儲存圖表 PNG",
             Self::SummarizeDocument { .. } => "快速模型摘要",
             Self::ListFiles { .. } => "讀取檔案清單",
             Self::ReadFile { .. } => "閱讀檔案",

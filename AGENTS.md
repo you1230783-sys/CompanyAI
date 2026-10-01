@@ -67,7 +67,15 @@
 - 使用者明確要求先提供網頁契約時，可先獨立提交／推送契約文件供同步開發；必須標示程式尚未驗收，其他原始碼及 EXE 待完整交付驗證後再提交。
 - 修改功能時同步更新 docs/WEB_INTEGRATION.md 與相應驗收說明。沒有實際操作 Word／Outlook 或取得外觀截圖時，不能宣稱這些驗收通過。
 
-## 0.8.30：原生工具 Schema 相容性修正（最新）
+## 0.8.31：圖表、PNG 及本機診斷（最新使用者指示）
+
+- 使用者已改為要求完成後進版、編譯並上傳 Git，取代本批先前「不編譯、不進版」指示。發布 0.8.31 EXE、簽署清單、原始碼與文件至 main，不製作 NSIS／ZIP。
+- 單圖最多 10000 筆、8 系列；Excel 直接畫圖獨立最多 90000 格，一般 read_excel_range 仍限 2000 格，不靜默抽樣。
+- export_chart_png 由內嵌 ECharts 繪製完整範圍，受控寫入 _AI_Output，重名加序號、讀回核對、任務去重及交付前再驗證。
+- 工具失敗顯示原因，另提供本機加密日誌的查看／複製；不將本機顯示視為已修復網站資料保存。
+- 執行 Build.ps1 -EmptyCargoCache -TestOffice；涵蓋真實 Excel 一萬筆取值、PNG WebView2 callback 與目視檢查。實際公司加密及網站聯測仍需使用者確認。紀錄見 docs/VALIDATION_0_8_31.md。
+
+## 0.8.30：原生工具 Schema 相容性修正
 
 - 使用者回報第一輪 `UNSUPPORTED_SCHEMA`：type 陣列只允許單一型別加 null。桌面轉換器須將 Office 儲存格與圖表橫軸的多型別改為非根位置 anyOf，不要求網站放寬既有契約。
 - 沿用 EXE／Git 發行授權，執行 Build.ps1 -EmptyCargoCache，涵蓋 v142、空快取、全部工具 Schema 及既有原生代理整合。Office COM 實作未修改，不重跑 Office／NSIS／ZIP；公司網站聯測仍需使用者確認。

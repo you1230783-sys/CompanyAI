@@ -41,10 +41,20 @@ pub(super) enum ProjectCommand {
         message_count: usize,
     },
     Stop,
+    Diagnostics {
+        conversation: String,
+        run_id: String,
+    },
 }
 pub(super) enum ProjectEvent {
     Progress(String, String),
     Charts(String, Vec<projects::charts::Chart>),
+    ExportPng(
+        String,
+        projects::charts::Chart,
+        mpsc::Sender<AppResult<String>>,
+    ),
+    Diagnostics(String, String, AppResult<String>),
     Finished(String, String, AppResult<String>),
 }
 pub(super) struct Running {
@@ -193,6 +203,48 @@ impl App {
             "running":self.projects.running.is_some(),"running_id":self.projects.running.as_ref().map(|r|&r.id),"activity":self.projects.running.as_ref().map(|r|&r.activity),"charts":self.projects.running.as_ref().map(|r|&r.charts),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
     }
     pub(super) fn project_command(&mut self, command: ProjectCommand) -> AppResult<()> {
+        if let ProjectCommand::Diagnostics {
+            conversation,
+            run_id,
+        } = &command
+        {
+            if self.active_id.as_deref() != Some(conversation.as_str())
+                || !self.archive.conversations.iter().any(|c| {
+                    c.id == *conversation
+                        && c.messages
+                            .iter()
+                            .any(|m| m.request_id.as_deref() == Some(run_id.as_str()))
+                })
+            {
+                return Err("只能查看目前對話所屬的執行紀錄。".into());
+            }
+            let (root, conversation, id, tx) = (
+                self.root.clone(),
+                conversation.clone(),
+                run_id.clone(),
+                self.tx.clone(),
+            );
+            let token = self
+                .session
+                .as_ref()
+                .map(|s| s.access_token.clone())
+                .unwrap_or_default();
+            thread::spawn(move || {
+                let result = projects::diagnostics::read(&root, &id, &conversation).map(|text| {
+                    if token.is_empty() {
+                        text
+                    } else {
+                        text.replace(&token, "[已隱藏]")
+                    }
+                });
+                let _ = tx.send(Event::Project(ProjectEvent::Diagnostics(
+                    conversation,
+                    id,
+                    result,
+                )));
+            });
+            return Ok(());
+        }
         if let Some(error) = &self.projects.error {
             return Err(error.clone());
         }
@@ -323,6 +375,7 @@ impl App {
                 self.toast("已清除匯入文字");
             }
             ProjectCommand::Reveal { .. } => unreachable!("已於上方處理成果定位"),
+            ProjectCommand::Diagnostics { .. } => unreachable!("已於上方處理診斷讀取"),
             ProjectCommand::Stop => (),
         }
         Ok(())
@@ -496,7 +549,35 @@ impl App {
         self.projects.status = "正在建立受限制執行器…".into();
         let tx = self.tx.clone();
         thread::spawn(move || {
-            let result = projects::runner::run_with_charts(
+            let export_tx = tx.clone();
+            let export_id = id.clone();
+            let renderer: projects::charts::png::Renderer = Box::new(move |chart, cancel| {
+                let (reply, response) = mpsc::channel();
+                export_tx
+                    .send(Event::Project(ProjectEvent::ExportPng(
+                        export_id.clone(),
+                        chart.clone(),
+                        reply,
+                    )))
+                    .map_err(|_| "桌面介面已關閉，PNG 未匯出。")?;
+                let deadline = Instant::now() + Duration::from_secs(45);
+                loop {
+                    if cancel.load(Ordering::Relaxed) {
+                        return Err("PNG 匯出已取消。".into());
+                    }
+                    if Instant::now() >= deadline {
+                        return Err("PNG 繪製逾時，未寫入檔案。".into());
+                    }
+                    match response.recv_timeout(Duration::from_millis(100)) {
+                        Ok(result) => return projects::charts::png::decode_url(&result?),
+                        Err(mpsc::RecvTimeoutError::Timeout) => (),
+                        Err(mpsc::RecvTimeoutError::Disconnected) => {
+                            return Err("PNG 繪製中斷。".into())
+                        }
+                    }
+                }
+            });
+            let result = projects::runner::run_with_chart_export(
                 run,
                 |text| {
                     let _ = tx.send(Event::Project(ProjectEvent::Progress(id.clone(), text)));
@@ -504,6 +585,7 @@ impl App {
                 |charts| {
                     let _ = tx.send(Event::Project(ProjectEvent::Charts(id.clone(), charts)));
                 },
+                renderer,
             );
             let _ = tx.send(Event::Project(ProjectEvent::Finished(
                 id,
@@ -521,6 +603,23 @@ impl App {
     }
     pub(super) fn project_event(&mut self, event: ProjectEvent) -> AppResult<()> {
         match event {
+            ProjectEvent::Diagnostics(conversation, id, result) => {
+                if self.logged_in() && self.active_id.as_deref() == Some(&conversation) {
+                    self.view.post(&json!({"type":"project_diagnostics","conversation":conversation,"run_id":id,"text":result.unwrap_or_else(|e|format!("無法讀取執行紀錄：{e}"))}))?;
+                }
+            }
+            ProjectEvent::ExportPng(id, chart, reply) => {
+                if !self
+                    .projects
+                    .running
+                    .as_ref()
+                    .is_some_and(|run| run.id == id && !run.cancel.load(Ordering::Relaxed))
+                {
+                    let _ = reply.send(Err("任務已結束或取消，PNG 未匯出。".into()));
+                } else if let Err(error) = self.view.export_chart_png(&chart, reply.clone()) {
+                    let _ = reply.send(Err(error));
+                }
+            }
             ProjectEvent::Charts(id, charts) => {
                 if let Some(run) = self.projects.running.as_mut().filter(|r| r.id == id) {
                     run.charts = charts;

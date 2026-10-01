@@ -2,6 +2,11 @@
 use crate::AppResult;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+pub mod png;
+
+pub const MAX_POINTS: usize = 10_000;
+pub const MAX_SERIES: usize = 8;
+pub const MAX_CHART_BYTES: usize = 8 * 1024 * 1024;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Series {
@@ -23,11 +28,11 @@ impl Chart {
     pub fn validate(&self) -> AppResult<()> {
         if !["line", "bar", "scatter"].contains(&self.kind.as_str())
             || self.x.is_empty()
-            || self.x.len() > 1000
+            || self.x.len() > MAX_POINTS
             || self.series.is_empty()
-            || self.series.len() > 8
+            || self.series.len() > MAX_SERIES
         {
-            return Err("圖表限 line/bar/scatter，1–1000 筆與 1–8 個系列。".into());
+            return Err("圖表限 line/bar/scatter，1–10000 筆與 1–8 個系列。".into());
         }
         for label in [&self.title, &self.x_label, &self.y_label, &self.source] {
             if label.chars().count() > 500 {
@@ -49,6 +54,9 @@ impl Chart {
             {
                 return Err("系列長度需等於橫軸筆數，數值需有限，缺值使用 null。".into());
             }
+        }
+        if serde_json::to_vec(self).map_err(|e| e.to_string())?.len() > MAX_CHART_BYTES {
+            return Err("圖表資料超過 8 MiB，請縮短標籤或分圖；未自動抽樣。".into());
         }
         Ok(())
     }
@@ -98,8 +106,10 @@ pub fn from_excel(
         .ok_or("範圍需包含標題列，例如 A1:C20。")?;
     let (c1, r1) = cell(first)?;
     let (c2, r2) = cell(last)?;
-    if c2 <= c1 || c2 - c1 > 8 || r2 <= r1 || r2 - r1 > 1000 {
-        return Err("範圍需為 2–9 欄、2–1001 列。".into());
+    if c2 <= c1 || c2 - c1 > MAX_SERIES || r2 <= r1 || r2 - r1 > MAX_POINTS {
+        return Err(
+            "範圍需為 2–9 欄、2–10001 列（含標題）；大型 Excel 請使用 chart_excel_range。".into(),
+        );
     }
     let prefix = format!("s{sheet}:");
     let mut cells = std::collections::BTreeMap::new();
@@ -240,6 +250,32 @@ pub fn from_page(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ten_thousand_points_are_preserved_without_sampling() {
+        let mut chart = Chart {
+            kind: "line".into(),
+            title: "T".into(),
+            x_label: "x".into(),
+            y_label: "y".into(),
+            x: (0..MAX_POINTS).map(|i| serde_json::json!(i)).collect(),
+            series: (0..MAX_SERIES)
+                .map(|i| Series {
+                    name: format!("s{i}"),
+                    values: vec![Some(1.0); MAX_POINTS],
+                })
+                .collect(),
+            source: "測試".into(),
+        };
+        chart.series[0].values[3000] = None;
+        chart.validate().unwrap();
+        assert_eq!(chart.x.len(), 10000);
+        assert_eq!(chart.series[0].values[3000], None);
+        chart.x.push(serde_json::json!(10000));
+        for series in &mut chart.series {
+            series.values.push(Some(1.0));
+        }
+        assert!(chart.validate().is_err());
+    }
     #[test]
     fn chart_rejects_mismatched_and_executable_options() {
         let mut chart:Chart=serde_json::from_value(serde_json::json!({"kind":"line","title":"T","x_label":"s","y_label":"V","x":[1,2],"series":[{"name":"a","values":[2,null]}],"source":"測試"})).unwrap();

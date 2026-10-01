@@ -50,7 +50,7 @@ pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResul
             call(json!({"tool":"inspect_excel","path":path,"sheet":sheet,"column_count":3}))?;
         assert_eq!(header["ok"], true, "{header}");
         assert_eq!(header["result"]["next_header_column"], "D");
-        assert_eq!(header["result"]["used_range"]["last_row"], 1001);
+        assert_eq!(header["result"]["used_range"]["last_row"], 10001);
         let revision = header["result"]["revision"].clone();
         let mut request = json!({"tool":"read_excel_range","path":path,"revision":revision,"sheet":sheet,"columns":["A","F"],"start_row":2});
         let first = call(request.clone())?;
@@ -95,7 +95,7 @@ pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResul
         request["row_count"] = json!(100);
         assert_eq!(call("duplicate", request.clone())?["ok"], false);
         request["columns"] = json!(["A", "F"]);
-        request["start_row"] = json!(1000);
+        request["start_row"] = json!(10000);
         let last = call("last", request.clone())?;
         assert_eq!(last["ok"], true, "{last}");
         assert_eq!(last["result"]["row_count"], 2);
@@ -134,6 +134,18 @@ pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResul
             original,
             "所有讀取／畫圖不得修改來源"
         );
+        let ten_thousand = call(
+            "ten_thousand",
+            json!({"tool":"chart_excel_range","path":path,"revision":revision,"sheet":sheet,
+            "x_column":"A","y_columns":["F"],"start_row":2,"row_count":10000,"kind":"line","title":"一萬筆趨勢","x_label":"序號","y_label":"量測"}),
+        )?;
+        assert_eq!(ten_thousand["ok"], true, "{ten_thousand}");
+        let over_limit = call(
+            "over_chart_limit",
+            json!({"tool":"chart_excel_range","path":path,"revision":revision,"sheet":sheet,
+            "x_column":"A","y_columns":["F"],"start_row":2,"row_count":10001,"kind":"line","title":"超量","x_label":"X","y_label":"Y"}),
+        )?;
+        assert_eq!(over_limit["ok"], false);
         let mut changed = original.clone();
         changed.push(0);
         std::fs::write(root.join(&path), changed).map_err(|e| e.to_string())?;
@@ -141,7 +153,15 @@ pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResul
         std::fs::write(root.join(&path), &original).map_err(|e| e.to_string())?;
         assert_eq!(stale["ok"], false, "{stale}");
         assert!(stale["error"].as_str().unwrap().contains("版本已變更"));
-        println!("PASS large {ext}: noncontiguous A/F, 100-row pages, headers, native chart values/gaps, version and source protection.");
+        let full_chart = broker.charts().last().unwrap();
+        assert_eq!(full_chart.x.len(), 10000);
+        assert_eq!(full_chart.series[0].values[1], None);
+        assert_eq!(full_chart.series[0].values[9999], Some(20000.0));
+        assert_eq!(
+            std::fs::read(root.join(&path)).map_err(|e| e.to_string())?,
+            original
+        );
+        println!("PASS large {ext}: noncontiguous A/F, 100-row pages, headers, native 10000-point chart values/gaps, version and source protection.");
     }
     Ok(())
 }

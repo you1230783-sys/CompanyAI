@@ -1,6 +1,6 @@
 {
-  "recorded_at": "2026-10-01T18:48:44.1273938+08:00",
-  "version": "0.8.30.0",
+  "recorded_at": "2026-10-01T19:19:03.1866753+08:00",
+  "version": "0.8.31.0",
   "result": "PASS",
   "msvc": "14.29.30133",
   "compiler_report": [
@@ -8,7 +8,7 @@
     "Verified _MSC_FULL_VER=192930159 x64"
   ],
   "empty_cargo_cache": true,
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-12335324f7f34c2e936111caa146f5c2",
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-8ee8017746db4e49a439147eddd3eeef",
   "checks": [
     "v142 x64 compiler probe",
     "fmt",
@@ -27,9 +27,9 @@
     "desktop-agent-v1 native HTTP roles, capability checks, cancellation and parent/child request recovery",
     "large Excel headers, selected columns, row paging and native chart values"
   ],
-  "exe_sha256": "ef3d2dd489bdcf7a252159b73daa33e6bcbaf851714eb2a94bc1c9602fb8352f",
+  "exe_sha256": "93432fd5cd66012110e672f3f3bb6503455530f38b9d7762b0e0fb3ea9c06d28",
   "installer_built": false,
   "real_vnc_tested": false,
-  "real_office_tested": false,
+  "real_office_tested": true,
   "offline_zip_built": false
 }

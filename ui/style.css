@@ -1393,6 +1393,8 @@ body.collapsed .project-section { overflow: visible; }
 .project-activity summary { cursor: pointer; padding: 10px 14px; color: var(--accent); }
 .project-activity-history { margin: 0; padding: 0 18px 12px 36px; max-height: 260px; overflow-y: auto; color: var(--muted); }
 .project-activity-history li { padding: 3px 0; }
+#project-diagnostics-dialog { width: min(960px, 92vw); }
+#project-diagnostics-text { box-sizing: border-box; width: 100%; height: min(65vh, 680px); padding: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); resize: vertical; font-family: Consolas, monospace; white-space: pre-wrap; }
 #project-activity { margin: 12px auto; max-width: 880px; }
 .notification-card .event-content { min-width: 0; overflow-wrap: anywhere; }
 .message-tools .retry-message { font-size: inherit; }

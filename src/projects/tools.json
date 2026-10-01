@@ -163,7 +163,7 @@
       "type": "function",
       "function": {
         "name": "chart_excel_range",
-        "description": "Excel 畫圖優先使用：直接由 Excel 讀 x_column 和 y_columns 指定範圍，不需模型抄寫或讀完整快照。最多 1000 筆且所有資料欄合計 2000 格；可使用 Excel 提供的數值型公式結果，空白 Y 為缺值，錯誤／合併／文字數值不當成零。不自動抽樣或截去未選資料。",
+        "description": "Excel 畫圖優先使用：直接讀 x_column 和 y_columns 指定範圍，不需模型抄寫。單張最多 10000 筆、8 個 Y 系列（X 加 Y 最多 90000 格），與一般 read_excel_range 的 2000 格額度分開。公式使用 Excel 數值，空白 Y 保留缺值；不自動抽樣。回傳 chart_index，可用 export_chart_png 儲存完整圖。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -194,7 +194,7 @@
             "row_count": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 1000,
+              "maximum": 10000,
               "default": 100
             },
             "x_column": {
@@ -1043,7 +1043,7 @@
       "type": "function",
       "function": {
         "name": "finish",
-        "description": "交付實際答案與本次已儲存成果；artifacts 為 save_copy 回傳的 copy_id，無副本則為空陣列。",
+        "description": "交付實際答案與本次已儲存成果；artifacts 為 save_copy 回傳的 copy_id，無副本則為空陣列。 PNG 匯出成果會自動核對及附上路徑；artifacts 仍只列工作副本 ID，不填 chart_index 或 PNG 路徑。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -1481,7 +1481,7 @@
       "type": "function",
       "function": {
         "name": "create_chart",
-        "description": "建立對話圖表卡片，不執行任意程式。",
+        "description": "建立對話圖表，最多 10000 筆、8 個系列；回傳 chart_index，可用 export_chart_png 儲存。大量 Excel 優先 chart_excel_range，避免將全部數字塞入模型參數。不接受腳本。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -1516,7 +1516,7 @@
                       "number"
                     ]
                   },
-                  "maxItems": 1000
+                  "maxItems": 10000
                 },
                 "series": {
                   "type": "array",
@@ -1535,7 +1535,8 @@
                             "number",
                             "null"
                           ]
-                        }
+                        },
+                        "maxItems": 10000
                       }
                     },
                     "required": [
@@ -1648,6 +1649,36 @@
           "required": [
             "path",
             "focus"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "export_chart_png",
+        "description": "依使用者需求將本次任務已建立的圖表存成 PNG。chart_index 使用建圖工具回傳的從 0 開始編號；name 為單一 .png 檔名。桌面繪製完整範圍、1600×1000 白底圖（含標題、座標、圖例及來源），儲存於本次 _AI_Output 資料夾；重名加序號，不覆寫。成功回傳 verified 與成果 path 後才可宣稱已存檔。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "chart_index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
+            },
+            "name": {
+              "type": "string",
+              "description": "例如 亮度趨勢.png，不含資料夾。"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "chart_index",
+            "name"
           ],
           "additionalProperties": false
         }
