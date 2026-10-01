@@ -72,5 +72,52 @@ pub fn create(folder: &Path) -> AppResult<()> {
             )?;
         }
     }
+    create_large_excel(folder)?;
+    Ok(())
+}
+
+/// 大表使用整段固定公式建立數值，避免測試資料建立器本身逐格呼叫 COM。
+/// 中間欄含未選文字、F3 留白、H2 為錯誤；用來核對選欄與缺值不位移。
+fn create_large_excel(folder: &Path) -> AppResult<()> {
+    let session = Session::start(Path::new("large.xlsx"), true)?;
+    let doc = session.document()?;
+    let sheets = child(doc, "Worksheets")?;
+    let sheet = item(&sheets, 1)?;
+    set(&sheet, "Name", "大量資料".into())?;
+    for (address, property, value) in [
+        ("A1", "Value2", "序號".into()),
+        ("F1", "Value2", "量測".into()),
+        ("A2:A1001", "Formula", "=ROW()-1".into()),
+        ("F2:F1001", "Formula", "=(ROW()-1)*2".into()),
+        ("B2:E1001", "Value2", "不應讀到的中間欄".into()),
+        ("H2", "Formula", "=1/0".into()),
+    ] {
+        let range = obj(invoke(&sheet, "Range", vec![address.into()], false)?)?;
+        set(&range, property, value)?;
+    }
+    let blank = obj(invoke(&sheet, "Range", vec!["F3".into()], false)?)?;
+    invoke(&blank, "ClearContents", vec![], false)?;
+    // 新工作表位於前面，刻意讓測試先依工作表名稱找到序號。
+    let offset = obj(invoke(&sheets, "Add", vec![], false)?)?;
+    set(&offset, "Name", "偏移表頭".into())?;
+    for (address, value) in [("D5", "標題"), ("F1105", "末端")] {
+        let range = obj(invoke(&offset, "Range", vec![address.into()], false)?)?;
+        set(&range, "Value2", value.into())?;
+    }
+    for ext in ["xlsx", "xls"] {
+        invoke(
+            doc,
+            "SaveAs",
+            vec![
+                folder
+                    .join(format!("large.{ext}"))
+                    .to_string_lossy()
+                    .as_ref()
+                    .into(),
+                save_format(ext)?.into(),
+            ],
+            false,
+        )?;
+    }
     Ok(())
 }

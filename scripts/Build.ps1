@@ -167,7 +167,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         compiler_report = $compilerReport
         empty_cargo_cache = [bool]$EmptyCargoCache
         cargo_home = $env:CARGO_HOME
-        checks = @('v142 x64 compiler probe','fmt','Clippy','workspace tests','cargo build --release --frozen','WebView2 DOM self-check','AppContainer OS file/network isolation','project copy/edit/publish integration','HTTP skills/tool loops with bounded JSON repair and activity history','DPAPI project memory, versioned notes and reserved .lmai boundary','persistent PDF cache, source/profile/hash invalidation','built-in skills, bounded cross-file search and chart dedup','fast model delegation, multi-section summaries, encrypted cache and pause without repost','offline ECharts canvas and data table')
+        checks = @('v142 x64 compiler probe','fmt','Clippy','workspace tests','cargo build --release --frozen','WebView2 DOM self-check','AppContainer OS file/network isolation','project copy/edit/publish integration','HTTP skills/tool loops with bounded JSON repair and activity history','DPAPI project memory, versioned notes and reserved .lmai boundary','persistent PDF cache, source/profile/hash invalidation','built-in skills, bounded cross-file search and chart dedup','fast model delegation, multi-section summaries, encrypted cache and pause without repost','offline ECharts canvas and data table','desktop-agent-v1 native HTTP roles, capability checks, cancellation and parent/child request recovery','large Excel headers, selected columns, row paging and native chart values')
         exe_sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
         installer_built = [bool]$IncludeInstaller
         real_vnc_tested = [bool]$TestVnc

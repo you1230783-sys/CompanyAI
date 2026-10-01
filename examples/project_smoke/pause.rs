@@ -143,7 +143,7 @@ pub fn verify(root: &Path) -> AppResult<()> {
         cancel: Arc::new(AtomicBool::new(false)),
     };
     let result = (|| -> AppResult<()> {
-        let paused = runner::run(run(false), |_| {})?;
+        let paused = runner::run_legacy_test(run(false), |_| {})?;
         assert!(paused.contains("請按「繼續」"), "{paused}");
         assert!(runner::paused_available(
             &root.join("app-data"),
@@ -157,14 +157,14 @@ pub fn verify(root: &Path) -> AppResult<()> {
         );
         let mut wrong_project = run(true);
         wrong_project.project.id = "another-project".into();
-        assert!(runner::run(wrong_project, |_| {})
+        assert!(runner::run_legacy_test(wrong_project, |_| {})
             .unwrap_err()
             .contains("授權已變更"));
         assert!(runner::paused_available(
             &root.join("app-data"),
             "pause_limit"
         ));
-        let finished = runner::run(run(true), |_| {})?;
+        let finished = runner::run_legacy_test(run(true), |_| {})?;
         assert!(finished.contains("續接完成"), "{finished}");
         assert!(!runner::paused_available(
             &root.join("app-data"),

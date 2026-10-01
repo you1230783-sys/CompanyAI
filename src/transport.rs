@@ -582,8 +582,16 @@ fn exchange_inner(
                     continue;
                 }
             }
-            if bytes.len() + read as usize > 1_048_576 {
-                return Err("API 回應超過 1 MB，已停止讀取。".into());
+            // 代理完整訊息與共用 task 查詢需容納契約的 2 MiB 外層；其他路由維持舊限制。
+            let response_limit = if url.path().contains("/api/desktop/agent/")
+                || url.path().contains("/api/desktop/tasks/")
+            {
+                2_097_152
+            } else {
+                1_048_576
+            };
+            if bytes.len() + read as usize > response_limit {
+                return Err("API 回應超過大小限制，已停止讀取。".into());
             }
             bytes.extend_from_slice(&chunk[..read as usize]);
         }

@@ -228,12 +228,13 @@ fn delegation(root: &Path, pending: bool) -> AppResult<()> {
     };
     let result = (|| -> AppResult<()> {
         if pending {
-            let text = runner::run_with_test_budget(run(false), |_| {}, Duration::from_secs(2))?;
+            let text =
+                runner::run_legacy_with_test_budget(run(false), |_| {}, Duration::from_secs(2))?;
             assert!(text.contains("請按「繼續」"), "{text}");
             resumed.store(true, Ordering::Relaxed);
-            assert!(runner::run(run(true), |_| {})?.contains("已取得快速模型摘要"));
+            assert!(runner::run_legacy_test(run(true), |_| {})?.contains("已取得快速模型摘要"));
         } else {
-            assert!(runner::run(run(false), |_| {})?.contains("已取得快速模型摘要"));
+            assert!(runner::run_legacy_test(run(false), |_| {})?.contains("已取得快速模型摘要"));
         }
         Ok(())
     })();

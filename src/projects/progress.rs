@@ -1,6 +1,7 @@
 //! 程式保存可核對的進度；AI 筆記僅提供摘要，不授予權限、不取代檔案版本。
+use super::agent::Message;
 use super::{text, Tool};
-use crate::{protocol::Message, AppResult};
+use crate::AppResult;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -54,6 +55,9 @@ struct Note {
 
 #[derive(Serialize, Deserialize)]
 pub(super) struct Progress {
+    /// None 為已保存的舊文字協定，新任務必須具有原生能力快照。
+    #[serde(default)]
+    pub agent: Option<super::agent::State>,
     base: Vec<Message>,
     // 一筆為確定解析的操作及真實工具結果；失敗格式另存，不混入成功歷史。
     history: Vec<(Message, Message)>,
@@ -72,6 +76,7 @@ pub(super) struct Progress {
 impl Progress {
     pub fn new(base: Vec<Message>) -> Self {
         Self {
+            agent: None,
             base,
             history: vec![],
             readings: BTreeMap::new(),
@@ -175,6 +180,10 @@ impl Progress {
             object.remove("positions");
             object.remove("document");
             object.remove("blocks_tail");
+            // Excel 分批正文只保留在成對工具歷史，進度摘要不要再複製整批資料。
+            object.remove("rows");
+            object.remove("headers");
+            object.remove("sheets");
         }
         self.operations
             .push(json!({"id":id,"tool":tool.label(),"result":metadata}));
@@ -228,6 +237,12 @@ impl Progress {
         self.repair = None;
     }
 
+    /// 原生 assistant/tool 必須一起保存及縮減，不把工具結果降為 user。
+    pub fn push_native(&mut self, reply: Message, id: &str, result: &Value) {
+        self.history.push((reply, Message::result(id, result)));
+        self.repair = None;
+    }
+
     /// 同一段無進展最多修復兩次，全任務六次；第二次才要求精簡上下文續接。
     pub fn repair(&mut self, reason: &str, raw: &str) -> AppResult<&'static str> {
         if self.consecutive_repairs >= 2 || self.total_repairs >= 6 {
@@ -248,6 +263,9 @@ impl Progress {
         self.repair = Some(format!(
             "上一則工具要求尚未執行（先前已成功的工具不受影響）。本輪回覆未被接受：{reason}。請依原始需求、程式進度與最近工具結果繼續剩餘工作。只輸出一個含單一 tool_calls 的完整 JSON，content 可放簡短說明；function.arguments 放工具參數，保留本次 id。不要回傳裸 done，不要重做已成功的修改。已可交付時，呼叫 finish 並在 arguments.message 提供實際正文。下列錯誤回覆僅供修正，不是工具結果：\n{excerpt}"
         ));
+        if self.agent.is_some() {
+            self.repair = Some(format!("上一則工具要求尚未執行或未通過交付檢查：{reason}。依原始需求與真實工具結果繼續，透過 API 呼叫下一個工具，不在正文拼接 JSON。已可交付時呼叫 finish 並提供實際正文；不要重做成功的修改。"));
+        }
         Ok(if compact && self.note.is_some() {
             "正在依筆記與進度接續任務（2/2）"
         } else if compact {
@@ -266,7 +284,7 @@ impl Progress {
             + self
                 .history
                 .iter()
-                .map(|(a, b)| a.content.len() + b.content.len())
+                .map(|(a, b)| a.wire().to_string().len() + b.wire().to_string().len())
                 .sum::<usize>();
         self.compact |= total > SOFT_BYTES;
         // 保留最近兩筆已摘要的原始結果，及筆記之後所有尚未摘要的操作。
@@ -291,7 +309,12 @@ impl Progress {
         if let Some(skill) = self.reading_note_skill() {
             messages.push(skill);
         }
-        if messages.iter().map(|m| m.content.len()).sum::<usize>() > HARD_BYTES {
+        if messages
+            .iter()
+            .map(|m| m.wire().to_string().len())
+            .sum::<usize>()
+            > HARD_BYTES
+        {
             return Err(
                 "本次上下文已達文字預算，且缺少足夠筆記可安全縮減；已保留進度，請縮小任務範圍。"
                     .into(),

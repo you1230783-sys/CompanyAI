@@ -1,5 +1,7 @@
 //! 僅處理呼叫端指定的 Office 測試資料夾；實際經過 broker 與 AppContainer。
 mod office_authoring;
+#[path = "office_smoke/excel_read.rs"]
+mod office_excel_read;
 use company_ai::{
     projects::{files::Broker, sandbox::Worker, text, Project, Tool},
     AppResult,
@@ -184,6 +186,7 @@ fn run() -> AppResult<()> {
         println!("PASS {ext}: {path}");
     }
     office_authoring::verify(&root, &mut worker, &cancel)?;
+    office_excel_read::verify(&root, &mut worker, &cancel)?;
     Ok(())
 }
 fn main() {

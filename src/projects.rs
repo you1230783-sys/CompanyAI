@@ -1,4 +1,5 @@
 //! 專案資料與固定工具契約。授權及副本所有權由桌面保存，不由模型文字決定。
+pub(crate) mod agent;
 pub mod charts;
 mod delegation;
 pub mod events;
@@ -86,6 +87,44 @@ impl Store {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "tool", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Tool {
+    InspectExcel {
+        path: String,
+        #[serde(default = "office::excel::default_sheet")]
+        sheet: usize,
+        #[serde(default = "office::excel::default_sheet")]
+        header_row: usize,
+        #[serde(default = "office::excel::default_column")]
+        start_column: String,
+        #[serde(default = "office::excel::default_columns")]
+        column_count: usize,
+    },
+    ReadExcelRange {
+        path: String,
+        revision: String,
+        sheet: usize,
+        columns: Vec<String>,
+        #[serde(default = "office::excel::default_sheet")]
+        header_row: usize,
+        start_row: usize,
+        #[serde(default = "office::excel::default_rows")]
+        row_count: usize,
+    },
+    ChartExcelRange {
+        path: String,
+        revision: String,
+        sheet: usize,
+        x_column: String,
+        y_columns: Vec<String>,
+        #[serde(default = "office::excel::default_sheet")]
+        header_row: usize,
+        start_row: usize,
+        #[serde(default = "office::excel::default_rows")]
+        row_count: usize,
+        kind: String,
+        title: String,
+        x_label: String,
+        y_label: String,
+    },
     LoadSkill {
         id: String,
     },
@@ -221,6 +260,9 @@ impl Tool {
     /// 使用者可讀的操作名稱，避免將 JSON 或文件全文當進度訊息。
     pub fn label(&self) -> &'static str {
         match self {
+            Self::InspectExcel { .. } => "查看 Excel 表頭",
+            Self::ReadExcelRange { .. } => "分批讀取 Excel",
+            Self::ChartExcelRange { .. } => "依選取欄位建立圖表",
             Self::LoadSkill { .. } => "載入工作技能",
             Self::SearchFiles { .. } => "跨文件搜尋",
             Self::OfficeBatch { .. } => "批次編輯 Office",

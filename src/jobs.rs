@@ -45,6 +45,9 @@ impl Capabilities {
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TaskStatus {
+    /// 新代理契約的 context、版號及錯誤等原生外層；舊任務可省略。
+    #[serde(default, flatten, deserialize_with = "deserialize_agent_envelope")]
+    pub agent_envelope: std::collections::BTreeMap<String, Value>,
     pub task_id: String,
     pub client_request_id: String,
     pub state: String,
@@ -59,6 +62,21 @@ pub struct TaskStatus {
     pub response_payload_json: Option<Value>,
     #[serde(default)]
     pub error_message: String,
+}
+/// 舊契約仍忽略歷史估時等額外欄位；只有帶字串契約版本的代理保留完整外層。
+fn deserialize_agent_envelope<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<std::collections::BTreeMap<String, Value>, D::Error> {
+    let fields = std::collections::BTreeMap::<String, Value>::deserialize(deserializer)?;
+    if fields
+        .get("contract_version")
+        .and_then(Value::as_str)
+        .is_some()
+    {
+        Ok(fields)
+    } else {
+        Ok(Default::default())
+    }
 }
 impl TaskStatus {
     /// 先驗證任務身分及狀態；專案代理可另外修復已完成但無效的模型正文。
@@ -868,6 +886,7 @@ mod tests {
         wrong.request_id = "another_request".into();
         assert!(retain_partial(&mut archive, &wrong).is_err());
         task.remote = Some(TaskStatus {
+            agent_envelope: Default::default(),
             task_id: "task1".into(),
             client_request_id: task.request_id.clone(),
             state: "completed".into(),
@@ -1077,6 +1096,7 @@ mod tests {
     #[test]
     fn task_correlation_and_terminal_state_cannot_regress() {
         let status = TaskStatus {
+            agent_envelope: Default::default(),
             task_id: "task1".into(),
             client_request_id: "request1".into(),
             state: "failed".into(),
@@ -1151,6 +1171,7 @@ mod tests {
                 tool_events: Vec::new(),
                 partial: String::new(),
                 remote: Some(TaskStatus {
+                    agent_envelope: Default::default(),
                     task_id: index.to_string(),
                     client_request_id: index.to_string(),
                     state: state.into(),

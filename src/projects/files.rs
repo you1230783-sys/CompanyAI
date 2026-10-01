@@ -847,6 +847,39 @@ impl Broker {
         }
         Ok(content)
     }
+    /// 選欄讀取不呼叫 content()，避免先建立受 2000 格限制的完整編輯快照。
+    /// 來源及上層目錄在整次 COM 操作期間禁止替換；每批使用原檔 bytes 的版本指紋。
+    fn with_excel<T>(
+        &self,
+        path: &str,
+        expected: Option<&str>,
+        read: impl FnOnce(&Path) -> AppResult<T>,
+    ) -> AppResult<(T, String)> {
+        let relative = relative(path)?;
+        if !matches!(
+            extension(&relative)?.as_str(),
+            "xlsx" | "xls" | "xlsm" | "xlsb"
+        ) {
+            return Err(
+                "Excel 選欄工具需要專案內已儲存的 XLS/XLSX/XLSM/XLSB 路徑；工作副本請先儲存。"
+                    .into(),
+            );
+        }
+        let target = self.project.root.join(relative);
+        let _directories = pin(target.parent().ok_or("缺少 Excel 來源目錄。")?)?;
+        let source = checked_file(&target)?;
+        reject_internal(&source)?;
+        let revision = format!("excel:{}", fingerprint(&self.project, path)?);
+        if expected.is_some_and(|expected| expected != revision) {
+            return Err("Excel 原檔版本已變更，或提供的不是選欄讀取版本；請重新 inspect_excel 後再讀取，不可混用兩個版本的列資料。".into());
+        }
+        let value = read(&target)?;
+        if revision != format!("excel:{}", fingerprint(&self.project, path)?) {
+            return Err("Excel 在讀取期間變更，本輪資料未接受，請重新取得表頭與版本。".into());
+        }
+        Ok((value, revision))
+    }
+
     fn perform(
         &mut self,
         tool: &Tool,
@@ -854,6 +887,93 @@ impl Broker {
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
         match tool {
+            Tool::InspectExcel {
+                path,
+                sheet,
+                header_row,
+                start_column,
+                column_count,
+            } => {
+                self.txt_context = true;
+                let (mut value, revision) = self.with_excel(path, None, |target| {
+                    office::excel::inspect(
+                        target,
+                        *sheet,
+                        *header_row,
+                        start_column,
+                        *column_count,
+                        cancel,
+                    )
+                })?;
+                value["path"] = json!(path);
+                value["revision"] = json!(revision);
+                Ok(value)
+            }
+            Tool::ReadExcelRange {
+                path,
+                revision,
+                sheet,
+                columns,
+                header_row,
+                start_row,
+                row_count,
+            } => {
+                self.txt_context = true;
+                let selection = office::excel::Selection {
+                    sheet: *sheet,
+                    columns: columns.clone(),
+                    header_row: *header_row,
+                    start_row: *start_row,
+                    row_count: *row_count,
+                };
+                selection.validate()?;
+                let (page, _) = self.with_excel(path, Some(revision), |target| {
+                    office::excel::read(target, &selection, cancel)
+                })?;
+                let mut value = serde_json::to_value(&page).map_err(|e| e.to_string())?;
+                value["path"] = json!(path);
+                value["revision"] = json!(revision);
+                value["row_count"] = json!(page.rows.len());
+                value["data_cells"] = json!(page.rows.len() * page.columns.len());
+                value["scope"] = json!("僅所列欄位與列號；next_row 為所選欄位下一批位置，不代表整份文件已讀完。value 為 Excel Value2；日期是序號，text 為顯示文字。公式值為 Excel 本次開啟時提供，未主動更新外部連結。");
+                Ok(value)
+            }
+            Tool::ChartExcelRange {
+                path,
+                revision,
+                sheet,
+                x_column,
+                y_columns,
+                header_row,
+                start_row,
+                row_count,
+                kind,
+                title,
+                x_label,
+                y_label,
+            } => {
+                self.txt_context = true;
+                if y_columns.is_empty() || y_columns.len() > 8 {
+                    return Err("圖表需選擇 1–8 個縱軸欄位。".into());
+                }
+                let columns = std::iter::once(x_column.clone())
+                    .chain(y_columns.iter().cloned())
+                    .collect();
+                let selection = office::excel::Selection {
+                    sheet: *sheet,
+                    columns,
+                    header_row: *header_row,
+                    start_row: *start_row,
+                    row_count: *row_count,
+                };
+                selection.validate()?;
+                let (page, _) = self.with_excel(path, Some(revision), |target| {
+                    office::excel::read(target, &selection, cancel)
+                })?;
+                let chart =
+                    super::charts::from_page(&page, kind, title, x_label, y_label, path, revision)?;
+                self.add_chart(chart)
+            }
             Tool::LoadSkill { id } => {
                 let body = super::skills::load(id)?;
                 if !self.loaded_skills.contains(id) {

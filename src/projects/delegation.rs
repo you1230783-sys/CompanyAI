@@ -15,6 +15,8 @@ struct State {
     request: Value,
     summaries: Vec<Value>,
     pending: Option<Task>,
+    #[serde(default)]
+    agent_caps: Option<super::agent::Capabilities>,
 }
 pub enum Outcome {
     Complete(Value),
@@ -28,6 +30,8 @@ pub fn summarize(
     worker: &mut Worker,
     principal: &str,
     operation: &str,
+    mut agent_state: Option<&mut super::agent::State>,
+    parent_request: &str,
     path: &str,
     focus: &str,
     deadline: Instant,
@@ -50,7 +54,11 @@ pub fn summarize(
     }
     // 控制整份摘要大小，避免完成委派後反而超過父模型的上下文硬上限。
     let summary_limit = (24_000 / sections.len()).min(1500);
-    let request = json!({"path":path,"revision":revision,"focus":focus,"profile":PROFILE,"model":"fast","principal":principal,"binding":run.config.binding()?});
+    let mut request = json!({"path":path,"revision":revision,"focus":focus,"profile":PROFILE,"model":"fast","principal":principal,"binding":run.config.binding()?});
+    // 舊委派暫存的比較鍵保持原樣，不能因新增協定欄位而無法查回舊請求。
+    if agent_state.is_some() {
+        request["contract"] = json!(super::agent::CONTRACT);
+    }
     let key = text::revision(&format!("{}|{}|{}", run.id, operation, principal));
     let mut state = broker
         .memory()?
@@ -83,8 +91,18 @@ pub fn summarize(
         root: run.root.clone(),
         cancel: run.cancel.clone(),
     };
+    if agent_state.is_some() && state.agent_caps.is_none() {
+        let caps = super::agent::capabilities(&child.config, &child.session, false)?;
+        if caps.principal_id != principal {
+            return Err("委派模型帳號不一致。".into());
+        }
+        state.agent_caps = Some(caps);
+    }
     while state.summaries.len() < sections.len() {
         if run.cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            if let (Some(task), Some(caps)) = (state.pending.as_ref(), state.agent_caps.as_ref()) {
+                super::agent::cancel(&child.config, &child.session, task, caps);
+            }
             return Err("委派已取消。".into());
         }
         if Instant::now() >= deadline {
@@ -112,7 +130,25 @@ pub fn summarize(
                         .to_string(),
                 ),
             ];
-            let request = jobs::project_chat_request("fast", &messages, &remote, &id)?;
+            let request = if let (Some(agent), Some(caps)) =
+                (agent_state.as_deref_mut(), state.agent_caps.as_ref())
+            {
+                let messages = messages
+                    .into_iter()
+                    .map(Into::into)
+                    .collect::<Vec<super::agent::Message>>();
+                agent.request(
+                    caps,
+                    &child,
+                    &remote,
+                    &id,
+                    &messages,
+                    false,
+                    Some(parent_request),
+                )?
+            } else {
+                jobs::project_chat_request("fast", &messages, &remote, &id)?
+            };
             state.pending = Some(Task {
                 request_id: id.clone(),
                 conversation_id: run.conversation.clone(),
@@ -133,9 +169,37 @@ pub fn summarize(
             broker.memory()?.delegation_write(&key, &state)?;
         }
         let task = state.pending.as_mut().ok_or("委派缺少請求。")?;
-        let reply = model::receive(&child, task, deadline, lookup_only);
+        let reply = model::receive(
+            &child,
+            task,
+            deadline,
+            lookup_only,
+            state.agent_caps.as_ref(),
+        );
         broker.memory()?.delegation_write(&key, &state)?;
-        match reply? {
+        let reply = match reply? {
+            model::Reply::Native => {
+                let task = state.pending.as_ref().ok_or("委派缺少原請求。")?;
+                match super::agent::parse(
+                    task.remote.as_ref().ok_or("委派缺少結果。")?,
+                    task,
+                    principal,
+                    &run.id,
+                )? {
+                    super::agent::Parsed::Text(text) => model::Reply::Text(text),
+                    super::agent::Parsed::Repair { reason, .. } => model::Reply::Invalid {
+                        reason,
+                        raw: String::new(),
+                    },
+                    super::agent::Parsed::Operation { .. } => {
+                        return Err("快速摘要不具工具授權。".into())
+                    }
+                }
+            }
+            reply => reply,
+        };
+        match reply {
+            model::Reply::Native => return Err("委派原生回覆尚未轉換。".into()),
             model::Reply::Pending(reason) => return Ok(Outcome::Pending(reason)),
             model::Reply::Invalid { reason, .. } => {
                 return Ok(Outcome::Complete(

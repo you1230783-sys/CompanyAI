@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 pub(super) enum Reply {
     Text(String),
+    Native,
     Invalid {
         reason: String,
         raw: String,
@@ -21,30 +22,48 @@ pub(super) fn receive(
     task: &mut Task,
     deadline: Instant,
     lookup_only: bool,
+    agent_caps: Option<&super::agent::Capabilities>,
 ) -> AppResult<Reply> {
     super::runner::check_cancel(&run.cancel)?;
     // 手動續接只 GET 原 request/task ID；即使連續 404，也不能再次 POST。
     let (mut submitted_status, submit_error) = if lookup_only {
         (task.remote.clone().filter(|s| s.terminal()), None)
+    } else if let Some(caps) = agent_caps {
+        match super::agent::submit(&run.config, &run.session, task, caps) {
+            super::agent::Submission::Accepted(status) => (Some(status), None),
+            super::agent::Submission::Rejected(error) => return Err(error),
+            super::agent::Submission::Unknown(error) => (None, Some(error)),
+        }
     } else {
         let submit = jobs::project_submit(&run.config, &run.session, task);
         (submit.as_ref().ok().cloned(), submit.err())
     };
     let mut connection_errors = 0;
     loop {
-        super::runner::check_cancel(&run.cancel)?;
+        if run.cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            if let Some(caps) = agent_caps {
+                super::agent::cancel(&run.config, &run.session, task, caps);
+            }
+            super::runner::check_cancel(&run.cancel)?;
+        }
         if submitted_status.is_none() && Instant::now() >= deadline {
             return Ok(Reply::Pending(super::runner::TIME_LIMIT_REASON.into()));
         }
         // POST 有可解析狀態便立即核對；不丟棄錯誤身分再以後續 GET 掩蓋它。
         let received = match submitted_status.take() {
             Some(status) => Ok(status),
-            None => jobs::project_task_status(&run.config, &run.session, task),
+            None => match agent_caps {
+                Some(caps) => super::agent::status(&run.config, &run.session, task, caps),
+                None => jobs::project_task_status(&run.config, &run.session, task),
+            },
         };
         match received {
             Ok(status) => {
                 // 身分／未知狀態是契約錯誤，不能當成模型正文錯誤而重新送出工作。
                 status.validate_envelope()?;
+                if agent_caps.is_some() {
+                    super::agent::validate_status(&status, task)?;
+                }
                 if status.client_request_id != task.request_id
                     || task
                         .remote
@@ -57,6 +76,10 @@ pub(super) fn receive(
                 connection_errors = 0;
                 task.remote = Some(status.clone());
                 if status.state == "completed" {
+                    if let Some(caps) = agent_caps {
+                        super::agent::check_result_limits(&status, caps)?;
+                        return Ok(Reply::Native);
+                    }
                     return Ok(match status.reply_text() {
                         Ok(text) => Reply::Text(text),
                         Err(error) => Reply::Invalid {
@@ -71,7 +94,14 @@ pub(super) fn receive(
                     });
                 }
                 if status.terminal() {
-                    return Err(format!("模型任務未完成：{}", status.error_message));
+                    return Err(format!(
+                        "模型任務未完成：{} {}",
+                        status.error_message,
+                        status
+                            .agent_envelope
+                            .get("error")
+                            .unwrap_or(&serde_json::Value::Null)
+                    ));
                 }
             }
             Err(error) => {
@@ -89,7 +119,12 @@ pub(super) fn receive(
             }
         }
         for _ in 0..10 {
-            super::runner::check_cancel(&run.cancel)?;
+            if run.cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                if let Some(caps) = agent_caps {
+                    super::agent::cancel(&run.config, &run.session, task, caps);
+                }
+                super::runner::check_cancel(&run.cancel)?;
+            }
             if Instant::now() >= deadline {
                 return Ok(Reply::Pending(super::runner::TIME_LIMIT_REASON.into()));
             }

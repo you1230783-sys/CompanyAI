@@ -199,12 +199,13 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
         } else {
             30
         };
-        let paused = runner::run_with_test_budget(run(false), |_| {}, Duration::from_secs(budget))?;
+        let paused =
+            runner::run_legacy_with_test_budget(run(false), |_| {}, Duration::from_secs(budget))?;
         assert!(paused.contains("請按「繼續」"), "{paused}");
         assert!(runner::paused_available(&root.join("app-data"), &id));
         assert!(!workspace.join("_AI_Output").exists(), "暫停前尚未儲存");
         ready.store(true, Ordering::Relaxed);
-        assert!(runner::run(run(true), |_| {})?.contains("中斷後續接完成"));
+        assert!(runner::run_legacy_test(run(true), |_| {})?.contains("中斷後續接完成"));
         assert!(!runner::paused_available(&root.join("app-data"), &id));
         let folder = std::fs::read_dir(workspace.join("_AI_Output"))
             .map_err(|e| e.to_string())?

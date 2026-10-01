@@ -612,6 +612,7 @@ impl App {
                         "failed"
                     };
                     let remote = crate::jobs::TaskStatus {
+                        agent_envelope: Default::default(),
                         task_id: id.clone(),
                         client_request_id: id.clone(),
                         state: state.into(),

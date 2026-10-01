@@ -96,7 +96,7 @@ fn checkpoint(path: &Path, value: &Value) -> AppResult<()> {
 }
 
 pub fn run(run: Run, progress: impl FnMut(String)) -> AppResult<String> {
-    run_for(run, progress, SEGMENT_BUDGET, |_| {})
+    run_for(run, progress, SEGMENT_BUDGET, |_| {}, false)
 }
 
 /// 圖表為結構化 UI 事件，不混入模型文字或一般進度字串。
@@ -105,7 +105,7 @@ pub fn run_with_charts(
     progress: impl FnMut(String),
     charts: impl FnMut(Vec<super::charts::Chart>),
 ) -> AppResult<String> {
-    run_for(run, progress, SEGMENT_BUDGET, charts)
+    run_for(run, progress, SEGMENT_BUDGET, charts, false)
 }
 
 /// 僅供 debug 整合測試推進期限，不改正式 EXE 的兩小時政策。
@@ -115,7 +115,29 @@ pub fn run_with_test_budget(
     progress: impl FnMut(String),
     budget: Duration,
 ) -> AppResult<String> {
-    run_for(run, progress, budget, |_| {})
+    run_for(run, progress, budget, |_| {}, false)
+}
+
+/// 舊文字協定的回歸測試入口；正式 EXE 不編入，不能用它降級新任務。
+#[cfg(debug_assertions)]
+pub fn run_legacy_test(run: Run, progress: impl FnMut(String)) -> AppResult<String> {
+    run_for(run, progress, SEGMENT_BUDGET, |_| {}, true)
+}
+#[cfg(debug_assertions)]
+pub fn run_legacy_with_test_budget(
+    run: Run,
+    progress: impl FnMut(String),
+    budget: Duration,
+) -> AppResult<String> {
+    run_for(run, progress, budget, |_| {}, true)
+}
+#[cfg(debug_assertions)]
+pub fn run_legacy_with_charts(
+    run: Run,
+    progress: impl FnMut(String),
+    charts: impl FnMut(Vec<super::charts::Chart>),
+) -> AppResult<String> {
+    run_for(run, progress, SEGMENT_BUDGET, charts, true)
 }
 
 fn run_for(
@@ -123,6 +145,7 @@ fn run_for(
     mut progress: impl FnMut(String),
     budget: Duration,
     mut charts: impl FnMut(Vec<super::charts::Chart>),
+    legacy_test: bool,
 ) -> AppResult<String> {
     let mut activity = Vec::new();
     let journal = run
@@ -188,13 +211,48 @@ fn run_for(
         };
         charts(broker.charts().to_vec());
         let remote = jobs::conversation(&run.config, &run.session, &run.conversation)?;
-        let mut skill = Message::user(&super::tool_calls::system_prompt()?);
+        let native = resumed
+            .as_ref()
+            .map(|p| p.agent.is_some())
+            .unwrap_or(!legacy_test);
+        let agent_caps = if native {
+            let saved_caps = resumed
+                .as_ref()
+                .and_then(|p| p.agent.as_ref())
+                .map(|s| s.caps.clone());
+            let caps = match saved_caps {
+                Some(caps) => caps,
+                None => super::agent::capabilities(&run.config, &run.session, true)?,
+            };
+            caps.validate(&run.config.model, true)?;
+            Some(caps)
+        } else {
+            None
+        };
+        if let Some(agent) = &agent_caps {
+            if agent.principal_id != caps.principal_id {
+                return Err("代理帳號與目前登入身分不一致。".into());
+            }
+            report(&mut activity, &mut progress, agent.mode_label().into());
+        }
+        let prompt = if native {
+            super::agent::system_prompt()
+        } else {
+            super::tool_calls::system_prompt()?
+        };
+        let mut skill = Message::user(&prompt);
         skill.role = "system".into();
         run.messages.insert(0, skill);
         let deadline = Instant::now() + budget;
         let mut failures = 0;
-        let mut progress_state =
-            resumed.unwrap_or_else(|| super::progress::Progress::new(run.messages.clone()));
+        let mut progress_state = resumed.unwrap_or_else(|| {
+            super::progress::Progress::new(
+                run.messages.clone().into_iter().map(Into::into).collect(),
+            )
+        });
+        if progress_state.agent.is_none() {
+            progress_state.agent = agent_caps.clone().map(super::agent::State::new);
+        }
         let mut tool_calls = 0;
         // 只有已確認本機工具結果時才使用此暫停入口；寫入中斷仍是一般錯誤。
         let pause = |reason: &str,
@@ -238,12 +296,17 @@ fn run_for(
             };
             let instructions = broker.skill_context()?;
             if !instructions.is_empty() {
-                let mut message = Message::user(&instructions);
-                message.role = "system".into();
-                messages.insert(1, message);
+                if native {
+                    // 契約僅一則最前面的 system；按需技能併入同一則。
+                    messages[0].content.push_str(&format!("\n{instructions}"));
+                } else {
+                    let mut message = super::agent::Message::user(&instructions);
+                    message.role = "system".into();
+                    messages.insert(1, message);
+                }
             }
             if turn >= MAX_REPLIES - 4 || tool_calls >= MAX_TOOLS - 4 {
-                messages.push(Message::user(&format!("即將暫停：本段剩餘 {} 次模型回覆、{} 次工具操作。請在這次 arguments.progress_note 總結已完成、來源與版本、未完成事項及下一步；保持正常工具呼叫，不要假裝完成。程式會保存工作副本，等待使用者按繼續。",MAX_REPLIES-turn,MAX_TOOLS-tool_calls)));
+                messages.push(super::agent::Message::user(&format!("即將暫停：本段剩餘 {} 次模型回覆、{} 次工具操作。請在這次 arguments.progress_note 總結已完成、來源與版本、未完成事項及下一步；保持正常工具呼叫，不要假裝完成。程式會保存工作副本，等待使用者按繼續。",MAX_REPLIES-turn,MAX_TOOLS-tool_calls)));
             }
             record["progress"] = progress_state.snapshot(broker.progress_snapshot());
             report(
@@ -256,7 +319,27 @@ fn run_for(
                 .as_ref()
                 .map(|t| t.request_id.clone())
                 .map_or_else(jobs::new_id, Ok)?;
-            let request = jobs::project_chat_request(&run.config.model, &messages, &remote, &id)?;
+            let request = if let Some(task) = &pending_model {
+                task.request.clone()
+            } else if let Some(agent) = progress_state.agent.as_mut() {
+                let capabilities = agent.caps.clone();
+                let parent = agent.parent.clone();
+                agent.request(
+                    &capabilities,
+                    &run,
+                    &remote,
+                    &id,
+                    &messages,
+                    true,
+                    parent.as_deref(),
+                )?
+            } else {
+                let legacy = messages
+                    .iter()
+                    .map(super::agent::Message::legacy)
+                    .collect::<Vec<_>>();
+                jobs::project_chat_request(&run.config.model, &legacy, &remote, &id)?
+            };
             let mut task = pending_model.take().unwrap_or(Task {
                 request_id: id.clone(),
                 conversation_id: run.conversation.clone(),
@@ -280,7 +363,8 @@ fn run_for(
                 .push(json!({"id":id,"request":task.request}));
             checkpoint(&journal, &record)?;
             super::events::register(&run.root, &id)?;
-            let received = super::model::receive(&run, &mut task, deadline, lookup_only);
+            let received =
+                super::model::receive(&run, &mut task, deadline, lookup_only, agent_caps.as_ref());
             record["last_remote_status"] = json!(task.remote);
             if let Err(error) = &received {
                 record["request_error"] = json!({"turn":turn+1,"request_id":id,"message":error});
@@ -292,7 +376,46 @@ fn run_for(
             if Instant::now() >= deadline {
                 return pause(TIME_LIMIT_REASON, &broker, &progress_state, Some(&task));
             }
+            let mut native_call = None;
             let (reply, parsed, reason) = match outcome {
+                super::model::Reply::Native => {
+                    if let Some(agent) = progress_state.agent.as_mut() {
+                        agent.parent = Some(id.clone());
+                    }
+                    let status = task.remote.as_ref().ok_or("原生任務缺少結果。")?;
+                    let raw = status
+                        .result
+                        .as_ref()
+                        .map(Value::to_string)
+                        .unwrap_or_default();
+                    match super::agent::parse(status, &task, &caps.principal_id, &run.id)? {
+                        super::agent::Parsed::Operation {
+                            parsed,
+                            message,
+                            call_id,
+                        } => {
+                            native_call = Some((message, call_id));
+                            (raw, Some(*parsed), String::new())
+                        }
+                        super::agent::Parsed::Repair {
+                            reason,
+                            message,
+                            call_id,
+                        } => {
+                            if let (Some(message), Some(call_id)) = (message, call_id) {
+                                progress_state.push_native(
+                                    message,
+                                    &call_id,
+                                    &json!({"ok":false,"error":reason,"executed":false}),
+                                );
+                            }
+                            (raw, None, reason)
+                        }
+                        super::agent::Parsed::Text(_) => {
+                            return Err("主代理未取得工具回覆。".into())
+                        }
+                    }
+                }
                 super::model::Reply::Text(text) => match super::reply::parse(&text)? {
                     super::reply::ParseOutcome::Operation(parsed) => {
                         (text, Some(*parsed), String::new())
@@ -365,6 +488,8 @@ fn run_for(
                     if Instant::now() >= deadline {
                         return pause(TIME_LIMIT_REASON, &broker, &progress_state, Some(&task));
                     }
+                    record["pending_operation"]["state"] = json!("started");
+                    checkpoint(&journal, &record)?;
                     let result =
                         if let Some(result) = broker.cached_result(&operation_id, &request)? {
                             result
@@ -375,6 +500,8 @@ fn run_for(
                                 &mut worker,
                                 &caps.principal_id,
                                 &operation_id,
+                                progress_state.agent.as_mut(),
+                                &id,
                                 path,
                                 focus,
                                 deadline,
@@ -409,10 +536,15 @@ fn run_for(
                         .ok_or("任務記錄不正確。")?
                         .push(json!({"id":operation_id,"request":request,"result":result}));
                     progress_state.observe(&operation_id, &request, &result);
-                    progress_state.push_tool(
-                        reply,
-                        super::tool_calls::result_text(&operation_id, &result),
-                    );
+                    if let Some((message, call_id)) = native_call {
+                        progress_state.push_native(message, &call_id, &result);
+                    } else {
+                        progress_state.push_tool(
+                            reply,
+                            super::tool_calls::result_text(&operation_id, &result),
+                        );
+                    }
+                    record["pending_operation"] = Value::Null;
                     record["progress"] = progress_state.snapshot(broker.progress_snapshot());
                     record["outputs"] = json!(broker.published());
                     record["pending_operation"] = Value::Null;
@@ -445,12 +577,22 @@ fn run_for(
                                         .join("\n")
                                 )
                             };
+                            if let Some((call, call_id)) = native_call {
+                                record["terminal_tool_result"] = json!({"call":call,"result":super::agent::Message::result(&call_id,&json!({"ok":true,"state":"completed"}))});
+                            }
                             return Ok(format!("{message}{locations}"));
                         }
                         Err(error) => {
                             failures += 1;
                             if failures >= 3 {
                                 return Err(error);
+                            }
+                            if let Some((message, call_id)) = native_call {
+                                progress_state.push_native(
+                                    message,
+                                    &call_id,
+                                    &json!({"ok":false,"error":error,"executed":false}),
+                                );
                             }
                             let label = progress_state
                                 .repair(&format!("交付檢查未通過：{error}"), &reply)?;
@@ -460,7 +602,12 @@ fn run_for(
                         }
                     }
                 }
-                Decision::AskUser { message } => return Ok(format!("需要你的補充：{message}")),
+                Decision::AskUser { message } => {
+                    if let Some((call, call_id)) = native_call {
+                        record["terminal_tool_result"] = json!({"call":call,"result":super::agent::Message::result(&call_id,&json!({"ok":true,"state":"waiting_user"}))});
+                    }
+                    return Ok(format!("需要你的補充：{message}"));
+                }
             }
         }
         Err("已達本次 80 次模型回覆上限，已停止並保留輸出。".into())

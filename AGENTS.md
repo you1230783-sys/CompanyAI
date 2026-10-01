@@ -67,6 +67,13 @@
 - 使用者明確要求先提供網頁契約時，可先獨立提交／推送契約文件供同步開發；必須標示程式尚未驗收，其他原始碼及 EXE 待完整交付驗證後再提交。
 - 修改功能時同步更新 docs/WEB_INTEGRATION.md 與相應驗收說明。沒有實際操作 Word／Outlook 或取得外觀截圖時，不能宣稱這些驗收通過。
 
+## 0.8.29：desktop-agent-v1 原生工具（最新）
+
+- 依使用者要求實作已發布的 docs/DESKTOP_AGENT_V1_CONTRACT.md；新專案及快速摘要委派走原生代理路由。一般聊天、Outlook、標題、PDF 不變。
+- 不從模型正文擷取工具 JSON；能力不支援不降級。僅已存在的舊 checkpoint 延續原協定；debug 的 legacy 測試入口不可作正式降級。
+- 使用者已要求編譯後上 Git：進版 0.8.29，以 Build.ps1 -EmptyCargoCache -TestOffice 完成 v142／空快取／原生代理及 Office 驗證，提交 EXE、簽署清單、原始碼與文件至 main；不製作 NSIS／ZIP。狀態見 docs/VALIDATION_0_8_29.md。
+- 使用者後續要求一併加入 Excel 選欄／分批讀取。新增 inspect_excel／read_excel_range／chart_excel_range；不變更網站通用契約，資料每批最多 2000 格、預設 100 列；完整編輯快照維持原上限。
+
 ## 0.8.28 專案技能與視覺化（最新）
 
 - 使用者授權側欄獨立收合、Markdown 說明、三種工作技能、跨文件搜尋、批次 Office、ECharts 與品質委派快速摘要。沿用 EXE／Git 發行授權，不製作 NSIS／ZIP。

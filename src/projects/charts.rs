@@ -153,6 +153,90 @@ pub fn from_excel(
     chart.validate()?;
     Ok(chart)
 }
+/// 直接使用 Excel 選欄工具的原生數值，不經模型抄寫，不因中間欄或空值而位移。
+/// 第一個欄位是 X，後續為 Y；同一版本的公式數值可讀，錯誤／合併格不可冒充空白。
+pub fn from_page(
+    page: &super::office::excel::Page,
+    kind: &str,
+    title: &str,
+    x_label: &str,
+    y_label: &str,
+    path: &str,
+    revision: &str,
+) -> AppResult<Chart> {
+    if page.columns.len() < 2 || page.columns.len() > 9 || page.headers.len() != page.columns.len()
+    {
+        return Err("Excel 圖表欄位結構不一致。".into());
+    }
+    let mut chart = Chart {
+        kind: kind.into(),
+        title: title.into(),
+        x_label: x_label.into(),
+        y_label: y_label.into(),
+        x: vec![],
+        series: page
+            .headers
+            .iter()
+            .enumerate()
+            .skip(1)
+            .map(|(i, header)| Series {
+                name: if header.text.trim().is_empty() {
+                    page.columns[i].clone()
+                } else {
+                    header.text.clone()
+                },
+                values: vec![],
+            })
+            .collect(),
+        source: format!(
+            "{path} | {revision} | 工作表 {} | 欄 {} | 列 {}–{}",
+            page.sheet,
+            page.columns.join(","),
+            page.start_row,
+            page.rows.last().map_or(page.start_row, |r| r.row)
+        ),
+    };
+    for row in &page.rows {
+        if row.cells.len() != page.columns.len() {
+            return Err("Excel 資料列與欄位數不一致。".into());
+        }
+        let x = &row.cells[0];
+        if !matches!(x.kind.as_str(), "number" | "text")
+            || x.value.as_str().is_some_and(|s| s.trim().is_empty())
+        {
+            return Err(format!(
+                "橫軸 {}{} 為空白、錯誤或特殊值，請明確縮小範圍；不自動刪列。",
+                page.columns[0], row.row
+            ));
+        }
+        chart.x.push(if kind == "scatter" {
+            serde_json::json!(x.value.as_f64().ok_or("散佈圖橫軸需為 Excel 數值。")?)
+        } else if !x.text.is_empty() {
+            if x.text.chars().all(|c| c == '#') {
+                return Err("橫軸顯示為 ####，請先在 Excel 調整顯示或改選有效標籤欄。".into());
+            }
+            Value::String(x.text.clone())
+        } else {
+            x.value.clone()
+        });
+        for (i, cell) in row.cells.iter().enumerate().skip(1) {
+            let number = match cell.kind.as_str() {
+                "blank" => None,
+                "number" => Some(cell.value.as_f64().ok_or("Excel 數值格式錯誤。")?),
+                _ => {
+                    return Err(format!(
+                        "縱軸 {}{} 不是数值或空白；錯誤、文字與合併格不轉為零。",
+                        page.columns[i], row.row
+                    ))
+                }
+            };
+            chart.series[i - 1].values.push(number);
+        }
+    }
+    chart.validate()?;
+    Ok(chart)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

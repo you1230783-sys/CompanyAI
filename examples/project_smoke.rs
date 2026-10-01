@@ -5,6 +5,8 @@ mod continuation;
 mod interruption;
 #[path = "project_smoke/memory.rs"]
 mod memory;
+#[path = "project_smoke/native.rs"]
+mod native;
 #[path = "project_smoke/pause.rs"]
 mod pause;
 #[path = "project_smoke/pdf.rs"]
@@ -138,6 +140,7 @@ fn run() -> AppResult<()> {
     assert_eq!(paths.len(), 1);
     println!("PASS: AppContainer handshake, OS file/network isolation, Unicode edit, replay, source protection, publish/readback, path escape and hardlink rejection. Fixture: {}", root.display());
     drop(worker);
+    native::verify(&root)?;
     skills::verify(&exe, &root)?;
     roundtrip::verify(&root)?;
     continuation::verify(&root)?;

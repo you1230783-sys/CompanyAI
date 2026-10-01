@@ -12,6 +12,7 @@ use windows::{
 };
 
 mod authoring;
+pub mod excel;
 pub use authoring::{render, Action, Format};
 #[cfg(debug_assertions)]
 mod fixtures;
@@ -440,7 +441,7 @@ impl Session {
                     let cells = child(&child(&sheet, "UsedRange")?, "Cells")?;
                     let count = integer(&cells, "Count")?;
                     if count < 0 || count as usize > MAX_BLOCKS {
-                        return Err("Excel 使用範圍超過 2000 格，請縮小文件。".into());
+                        return Err("Excel 完整編輯快照超過 2000 格；閱讀或畫圖請先用 inspect_excel，再用 read_excel_range／chart_excel_range 選欄取值。".into());
                     }
                     for n in 1..=count {
                         let cell = item(&cells, n)?;

@@ -284,7 +284,7 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
         },
         &config,
     )?;
-    let result = runner::run(
+    let result = runner::run_legacy_test(
         Run {
             resume: false,
             id: run_id.clone(),

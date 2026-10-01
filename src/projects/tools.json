@@ -27,7 +27,7 @@
       "type": "function",
       "function": {
         "name": "read_file",
-        "description": "讀取檔案或 copy_id；offset 是 Unicode 字元索引，每次最多 6000 字。",
+        "description": "讀取檔案或 copy_id；offset 是 Unicode 字元索引，每次最多 6000 字。 Excel 資料閱讀優先 inspect_excel／read_excel_range；此工具的 Office 編輯快照仍限 2000 區塊。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -46,6 +46,201 @@
           },
           "required": [
             "path"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_excel",
+        "description": "Excel 閱讀／畫圖的第一步：只讀工作表名稱、UsedRange 邊界與指定表頭列；大表不受完整快照 2000 格限制。表頭預設 A 起 50 欄，可依 next_header_column 續取。工作表清單最多 100 個，sheet_count 顯示總數，可直接指定其他 sheet 序號。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "sheet": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647,
+              "default": 1
+            },
+            "header_row": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048576,
+              "default": 1
+            },
+            "start_column": {
+              "type": "string",
+              "default": "A"
+            },
+            "column_count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_excel_range",
+        "description": "只讀指定欄與列，預設 100 列，資料最多 2000 格／批。columns=[A,F] 不讀 B–E；保留空白、原列號及下一批 next_row。含選取欄的表頭。不是全文閱讀，不強制建立全文件摘要；表頭及資料都依同一原檔版本。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "專案內已儲存 Excel 的相對路徑，不接受工作 copy_id。"
+            },
+            "revision": {
+              "type": "string",
+              "description": "inspect_excel 回傳的 excel: 版本，與 read_file 文字版本不同。"
+            },
+            "sheet": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "header_row": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048576,
+              "default": 1
+            },
+            "start_row": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048576
+            },
+            "row_count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 100
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "欄名，例如 A 或 F；可不連續，不接受 A:F 或 A1。"
+              },
+              "minItems": 1,
+              "maxItems": 100
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "path",
+            "revision",
+            "sheet",
+            "columns",
+            "start_row"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "chart_excel_range",
+        "description": "Excel 畫圖優先使用：直接由 Excel 讀 x_column 和 y_columns 指定範圍，不需模型抄寫或讀完整快照。最多 1000 筆且所有資料欄合計 2000 格；可使用 Excel 提供的數值型公式結果，空白 Y 為缺值，錯誤／合併／文字數值不當成零。不自動抽樣或截去未選資料。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "專案內已儲存 Excel 的相對路徑，不接受工作 copy_id。"
+            },
+            "revision": {
+              "type": "string",
+              "description": "inspect_excel 回傳的 excel: 版本，與 read_file 文字版本不同。"
+            },
+            "sheet": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "header_row": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048576,
+              "default": 1
+            },
+            "start_row": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048576
+            },
+            "row_count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 100
+            },
+            "x_column": {
+              "type": "string"
+            },
+            "y_columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "maxItems": 8
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "line",
+                "bar",
+                "scatter"
+              ]
+            },
+            "title": {
+              "type": "string"
+            },
+            "x_label": {
+              "type": "string"
+            },
+            "y_label": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "path",
+            "revision",
+            "sheet",
+            "x_column",
+            "y_columns",
+            "start_row",
+            "kind",
+            "title",
+            "x_label",
+            "y_label"
           ],
           "additionalProperties": false
         }
@@ -1378,7 +1573,7 @@
       "type": "function",
       "function": {
         "name": "chart_from_excel",
-        "description": "從Excel已讀快照取值；範圍第一列為系列標題，第一欄為橫軸；不接受公式。",
+        "description": "從Excel已讀快照取值；範圍第一列為系列標題，第一欄為橫軸；不接受公式。 此為舊快照／未儲存小型工作副本工具；已儲存 Excel 優先 inspect_excel＋chart_excel_range。",
         "parameters": {
           "type": "object",
           "properties": {

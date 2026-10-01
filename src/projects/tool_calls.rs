@@ -369,6 +369,15 @@ mod tests {
     #[test]
     fn catalogue_covers_all_existing_operations_and_defaults() {
         let samples = [
+            ("inspect_excel", json!({"path":"a.xlsx"})),
+            (
+                "read_excel_range",
+                json!({"path":"a.xlsx","revision":"r","sheet":1,"columns":["A","F"],"start_row":2}),
+            ),
+            (
+                "chart_excel_range",
+                json!({"path":"a.xlsx","revision":"r","sheet":1,"x_column":"A","y_columns":["F"],"start_row":2,"kind":"line","title":"T","x_label":"x","y_label":"y"}),
+            ),
             ("load_skill", json!({"id":"paper-evidence"})),
             ("search_files", json!({"paths":["a.txt"],"query":"測試"})),
             (
