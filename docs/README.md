@@ -6,6 +6,8 @@
 
 ## 目前版本
 
+- [待實作：原生工具 desktop-agent-v1 契約](DESKTOP_AGENT_V1_CONTRACT.md)：獨立專案代理路由、原生訊息、能力協商、持久 JSON 與雙方驗收。**僅發布契約，現有 EXE 尚未支援。**
+
 - [0.8.28 契約](DESKTOP_0_8_28_CONTRACT.md)：技能、圖表、跨文件搜尋、批次 Office 與快速摘要委派。
 - [0.8.28 驗證紀錄](VALIDATION_0_8_28.md)。
 

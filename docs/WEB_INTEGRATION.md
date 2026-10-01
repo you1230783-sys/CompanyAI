@@ -1,3 +1,5 @@
+> **待實作：desktop-agent-v1。** 使用者要求先發布雙方契約供網站開發。新增專案專用的代理能力／提交入口，沿用 task 查詢與取消；原生 tools、tool_calls、role=tool、結構約束能力及完整 JSON 保存規則見 [新版完整契約](DESKTOP_AGENT_V1_CONTRACT.md)。**此文件發布不代表目前桌面 EXE 已支援；一般聊天、Outlook、標題及 PDF 路由不變。**
+
 > **0.8.28：** 技能、圖表均由桌面管理。品質模型委派使用既有背景路由 model=fast、skills:false，每段獨立 conversation 並保留 client_request_id；不新增 HTTP tools 欄位。後端不得補入其他對話歷史，通知保留原 task／request 關聯。詳見 [契約](DESKTOP_0_8_28_CONTRACT.md)。
 
 > **0.8.25：** 專案 system 文字包含 Chat Completions 形狀的 tools 定義；模型在回答文字內輸出單一 tool_calls，桌面轉成既有工具執行。HTTP 不新增 tools／tool_choice／response_format，工具結果仍放 user.content，skills:false 不變。網站只需保留 messages 與回答正文，不解析或剝除內層 JSON。舊 action 格式相容，缺漏工具名稱採有限修復。詳見 [契約](DESKTOP_0_8_25_CONTRACT.md)／[驗證](VALIDATION_0_8_25.md)。
