@@ -104,7 +104,48 @@ fn normalize(source: &Value) -> AppResult<Value> {
     {
         result.insert("type".into(), json!("string"));
     }
-    Ok(Value::Object(result))
+    normalize_type_union(result)
+}
+
+/// 契約只允許 type 陣列表達「單一型別加 null」。Office 儲存格與圖表橫軸
+/// 可同時接受文字、數字，須轉為非根位置的 anyOf，不能原樣送給網站。
+/// 各分支保留既有條件，避免覆蓋原有 anyOf 或遺失 enum／items 等限制。
+fn normalize_type_union(mut schema: Map<String, Value>) -> AppResult<Value> {
+    let Some(types) = schema.get("type").and_then(Value::as_array).cloned() else {
+        return Ok(Value::Object(schema));
+    };
+    let mut kinds = Vec::new();
+    for value in &types {
+        let kind = value.as_str().ok_or("Schema type 陣列必須包含型別名稱。")?;
+        if ![
+            "object", "array", "string", "integer", "number", "boolean", "null",
+        ]
+        .contains(&kind)
+            || kinds.contains(&kind)
+        {
+            return Err("Schema type 陣列包含未知或重複型別。".into());
+        }
+        kinds.push(kind);
+    }
+    if kinds.is_empty() {
+        return Err("Schema type 陣列不可空白。".into());
+    }
+    if kinds.len() == 1 {
+        schema.insert("type".into(), json!(kinds[0]));
+        return Ok(Value::Object(schema));
+    }
+    if kinds.len() == 2 && kinds.contains(&"null") {
+        return Ok(Value::Object(schema));
+    }
+    let branches: Vec<_> = kinds
+        .into_iter()
+        .map(|kind| {
+            let mut branch = schema.clone();
+            branch.insert("type".into(), json!(kind));
+            Value::Object(branch)
+        })
+        .collect();
+    Ok(json!({"anyOf": branches}))
 }
 
 fn allows_null(schema: &Value) -> bool {
@@ -289,4 +330,58 @@ pub(super) fn decode_json(text: &str) -> AppResult<Value> {
     serde_json::from_str::<Unique>(text)
         .map(|v| v.0)
         .map_err(|e| format!("JSON 無法解析（行 {}、欄 {}）：{e}", e.line(), e.column()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mixed_types_preserve_values_and_existing_constraints() {
+        // Office 表格允許空白；圖表橫軸不允許 null，兩者不可互相放寬。
+        for nullable in [false, true] {
+            let types = if nullable {
+                json!(["string", "number", "null"])
+            } else {
+                json!(["string", "number"])
+            };
+            let converted = normalize(&json!({"type":types})).unwrap();
+            assert!(converted.get("type").is_none());
+            assert!(matches(&json!("A"), &converted));
+            assert!(matches(&json!(1.25), &converted));
+            assert_eq!(matches(&Value::Null, &converted), nullable);
+            for invalid in [json!(true), json!([]), json!({})] {
+                assert!(!matches(&invalid, &converted));
+            }
+        }
+        let constrained = normalize(&json!({
+            "type":["string","number"], "enum":["A",2],
+            "anyOf":[{"type":"string"},{"type":"number"}]
+        }))
+        .unwrap();
+        assert!(matches(&json!("A"), &constrained));
+        assert!(matches(&json!(2), &constrained));
+        assert!(!matches(&json!("B"), &constrained));
+        assert!(!matches(&json!(3), &constrained));
+    }
+
+    #[test]
+    fn type_arrays_reject_invalid_kinds_and_normalize_single_kind() {
+        for types in [
+            json!([]),
+            json!(["string", "string"]),
+            json!(["unknown"]),
+            json!([1]),
+        ] {
+            assert!(normalize(&json!({"type":types})).is_err());
+        }
+        assert_eq!(
+            normalize(&json!({"type":["string"]})).unwrap()["type"],
+            "string"
+        );
+        assert_eq!(
+            normalize(&json!({"type":["number","null"]})).unwrap()["type"],
+            json!(["number", "null"])
+        );
+    }
 }

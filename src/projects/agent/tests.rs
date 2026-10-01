@@ -166,6 +166,40 @@ fn catalog_is_portable_and_nullable_fields_restore_original_defaults() {
     .unwrap();
     assert!(restored.get("offset").is_none());
 }
+/// 實際傳送的全部工具都需符合契約；不能只驗證幾個 read_file 範例。
+#[test]
+fn every_tool_uses_only_nullable_type_arrays_in_both_modes() {
+    fn check(node: &Value, path: &str) {
+        match node {
+            Value::Object(object) => {
+                if let Some(types) = object.get("type").and_then(Value::as_array) {
+                    assert_eq!(types.len(), 2, "{path}: {types:?}");
+                    assert_eq!(types.iter().filter(|v| **v == "null").count(), 1, "{path}");
+                    assert!(types.iter().all(Value::is_string), "{path}");
+                }
+                for (name, child) in object {
+                    check(child, &format!("{path}.{name}"));
+                }
+            }
+            Value::Array(array) => {
+                for (index, child) in array.iter().enumerate() {
+                    check(child, &format!("{path}[{index}]"));
+                }
+            }
+            _ => (),
+        }
+    }
+    for strict in [false, true] {
+        let tools = schema::definitions(strict).unwrap();
+        for tool in &tools {
+            let parameters = &tool["function"]["parameters"];
+            assert_eq!(parameters["type"], "object");
+            assert!(parameters.get("anyOf").is_none());
+            check(parameters, tool["function"]["name"].as_str().unwrap());
+        }
+    }
+}
+
 #[test]
 fn unsupported_model_and_limits_do_not_fall_back_or_truncate() {
     let mut c = caps();

@@ -67,7 +67,12 @@
 - 使用者明確要求先提供網頁契約時，可先獨立提交／推送契約文件供同步開發；必須標示程式尚未驗收，其他原始碼及 EXE 待完整交付驗證後再提交。
 - 修改功能時同步更新 docs/WEB_INTEGRATION.md 與相應驗收說明。沒有實際操作 Word／Outlook 或取得外觀截圖時，不能宣稱這些驗收通過。
 
-## 0.8.29：desktop-agent-v1 原生工具（最新）
+## 0.8.30：原生工具 Schema 相容性修正（最新）
+
+- 使用者回報第一輪 `UNSUPPORTED_SCHEMA`：type 陣列只允許單一型別加 null。桌面轉換器須將 Office 儲存格與圖表橫軸的多型別改為非根位置 anyOf，不要求網站放寬既有契約。
+- 沿用 EXE／Git 發行授權，執行 Build.ps1 -EmptyCargoCache，涵蓋 v142、空快取、全部工具 Schema 及既有原生代理整合。Office COM 實作未修改，不重跑 Office／NSIS／ZIP；公司網站聯測仍需使用者確認。
+
+## 0.8.29：desktop-agent-v1 原生工具
 
 - 依使用者要求實作已發布的 docs/DESKTOP_AGENT_V1_CONTRACT.md；新專案及快速摘要委派走原生代理路由。一般聊天、Outlook、標題、PDF 不變。
 - 不從模型正文擷取工具 JSON；能力不支援不降級。僅已存在的舊 checkpoint 延續原協定；debug 的 legacy 測試入口不可作正式降級。

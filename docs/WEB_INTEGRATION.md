@@ -1,4 +1,6 @@
-> **0.8.29：desktop-agent-v1 桌面端已接入，待實機聯合驗收。** 新專案及快速摘要委派使用代理能力／提交入口、原生 tools／tool_calls／role=tool；一般聊天、Outlook、標題及 PDF 路由不變。請依 [完整契約](DESKTOP_AGENT_V1_CONTRACT.md) 實作網站，另見 [桌面實作與驗證狀態](VALIDATION_0_8_29.md)。`dist/LM_AI.exe` 更新為 0.8.29；以下 0.8.28／0.8.25 描述保留作舊版本及舊 checkpoint 參考。
+> **0.8.30：修正多型別工具 Schema。** Office 表格與圖表橫軸的 string／number 聯集改用 anyOf，符合既有 desktop-agent-v1；網站不需放寬 type 陣列驗證。詳見 [修正及驗證](VALIDATION_0_8_30.md)。
+
+> **0.8.29：desktop-agent-v1 桌面端已接入，待實機聯合驗收。** 新專案及快速摘要委派使用代理能力／提交入口、原生 tools／tool_calls／role=tool；一般聊天、Outlook、標題及 PDF 路由不變。請依 [完整契約](DESKTOP_AGENT_V1_CONTRACT.md) 實作網站，另見 [桌面實作與驗證狀態](VALIDATION_0_8_29.md)。以下 0.8.28／0.8.25 描述保留作舊版本及舊 checkpoint 參考。
 
 本次追加 `inspect_excel`、`read_excel_range`、`chart_excel_range`，以通用 `tools` 與 `role:tool` 承載，不新增 Excel 專用路由或資料表欄位。後端應按請求的工具定義驗證，不將 28 個舊工具名稱寫死為白名單；目前桌面共提供 31 個工具。
 
