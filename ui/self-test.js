@@ -1048,6 +1048,23 @@ window.runSelfTest = async (structuredFixture) => {
       check($("project-remove-dialog").open && !retryCommands.some(command=>command.command?.action === "remove"), "removal waits for conversation choice");
       $("project-remove-move").click();await frame();
       check(retryCommands.at(-1).command.delete_chats === false, "move conversations selected explicitly");
+      fixture.projects.running=true; fixture.projects.running_id="review-run";
+      fixture.projects.running_conversation=fixture.active_id;
+      fixture.projects.chart_review={request_id:"review-1",review:{title:"含 NG 的趨勢",converted:1,blanks:1,groups:[{column:"F",category:"文字",count:1,samples:["F3：<NG>"],x_axis:false,choices:["gap","skip","zero"]}]}};
+      LMUI.receive(fixture); await frame();
+      const review=document.getElementById("chart-review-dialog");
+      check(review.open && review.querySelector("select").value==="gap","chart review defaults to gap");
+      check(review.textContent.includes("F3：<NG>"),"chart review treats samples as text");
+      review.querySelector("select").value="skip";review.querySelector("button.primary").click();
+      check(retryCommands.at(-1).command.action==="chart_choice" && retryCommands.at(-1).command.choices[0]==="skip","chart review submits user choice with identity");
+      fixture.projects.chart_review=null;LMUI.receive(fixture);await frame();check(!review.open,"chart review closes after native acknowledgement");
+      fixture.projects.chart_review={request_id:"review-2",review:{title:"暫停",converted:0,blanks:0,groups:[]}};
+      LMUI.receive(fixture);await frame();review.dispatchEvent(new Event("cancel",{cancelable:true}));
+      check(retryCommands.at(-1).command.choices===null,"Escape pauses instead of guessing data policy");
+      fixture.projects.chart_review=null;fixture.projects.running=false;LMUI.receive(fixture);
+      const options=ChartUI.option({kind:"line",title:"t",source:"s",x_label:"X",y_label:"Y",x:["001","002","003","004"],series:[{name:"a",values:[1,null,null,4],skip_indices:[1]},{name:"b",values:[1,2,3,4]}]});
+      check(JSON.stringify(options.series[0].data)===JSON.stringify([[0,1],[2,null],[3,4]]),"skip keeps original X and genuine blank breaks");
+      check(options.series[1].data.length===4 && !options.series[0].connectNulls,"other series and blank policy preserved");
       toast("三秒提示"); await new Promise(resolve=>setTimeout(resolve,3100));
       check($("toast").hidden, "toast expires after three seconds");
     } finally {

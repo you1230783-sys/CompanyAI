@@ -91,12 +91,18 @@ fn create_large_excel(folder: &Path) -> AppResult<()> {
         ("F2:F10001", "Formula", "=(ROW()-1)*2".into()),
         ("B2:E10001", "Value2", "不應讀到的中間欄".into()),
         ("H2", "Formula", "=1/0".into()),
+        ("H3", "NumberFormat", "@".into()),
+        ("H3", "Value2", "339".into()),
+        ("H4", "Value2", "NG".into()),
+        ("H6", "Value2", "12 mm".into()),
     ] {
         let range = obj(invoke(&sheet, "Range", vec![address.into()], false)?)?;
         set(&range, property, value)?;
     }
     let blank = obj(invoke(&sheet, "Range", vec!["F3".into()], false)?)?;
     invoke(&blank, "ClearContents", vec![], false)?;
+    let merged = obj(invoke(&sheet, "Range", vec!["H7:H8".into()], false)?)?;
+    invoke(&merged, "Merge", vec![], false)?;
     // 新工作表位於前面，刻意讓測試先依工作表名稱找到序號。
     let offset = obj(invoke(&sheets, "Add", vec![], false)?)?;
     set(&offset, "Name", "偏移表頭".into())?;

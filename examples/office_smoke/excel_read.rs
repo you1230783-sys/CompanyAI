@@ -126,8 +126,8 @@ pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResul
             call(
                 "error_chart",
                 json!({"tool":"chart_excel_range","path":path,"revision":revision,"sheet":sheet,"x_column":"A","y_columns":["H"],"start_row":2,"row_count":1,"kind":"line","title":"錯誤值","x_label":"X","y_label":"Y"})
-            )?["ok"],
-            false
+            )?["result"]["waiting_for_user"],
+            true
         );
         assert_eq!(
             std::fs::read(root.join(&path)).map_err(|e| e.to_string())?,
@@ -161,6 +161,81 @@ pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResul
             std::fs::read(root.join(&path)).map_err(|e| e.to_string())?,
             original
         );
+        use company_ai::projects::charts::quality::Choice;
+        use std::time::{Duration, Instant};
+        let quality = tool(
+            json!({"tool":"chart_excel_range","path":path,"revision":revision,"sheet":sheet,"x_column":"A","y_columns":["H","F"],"start_row":2,"row_count":7,"kind":"line","title":"資料決策","x_label":"X","y_label":"Y"}),
+        )?;
+        let waiting = broker.execute("quality_gap", &quality, worker, cancel)?;
+        assert_eq!(waiting["result"]["waiting_for_user"], true);
+        for (id, choice) in [
+            ("quality_gap", Choice::Gap),
+            ("quality_skip", Choice::Skip),
+            ("quality_zero", Choice::Zero),
+        ] {
+            let selected = choice.clone();
+            broker.set_chart_chooser(
+                Some(Box::new(move |review, _, _| {
+                    assert_eq!(review.converted, 1);
+                    for kind in ["Excel 錯誤", "非數字文字", "格式不明的文字", "合併儲存格"]
+                    {
+                        assert!(
+                            review.groups.iter().any(|g| g.category == kind),
+                            "{review:?}"
+                        );
+                    }
+                    Ok(Some(vec![selected.clone(); review.groups.len()]))
+                })),
+                Instant::now() + Duration::from_secs(60),
+            );
+            let result = broker.execute(id, &quality, worker, cancel)?;
+            assert_eq!(result["ok"], true, "{result}");
+            assert_eq!(
+                broker.execute(id, &quality, worker, cancel)?,
+                result,
+                "已確認建圖不可重複詢問或追加"
+            );
+            let chart = broker.charts().last().unwrap();
+            assert_eq!(chart.x.len(), 7);
+            assert_eq!(chart.series[0].values[1], Some(339.0));
+            assert_eq!(chart.series[0].values[3], None, "原空白不因 zero 而改變");
+            assert_eq!(chart.series[1].values[2], Some(6.0), "其他系列不刪列");
+            assert_eq!(
+                chart.series[0].values[2],
+                if choice == Choice::Zero {
+                    Some(0.0)
+                } else {
+                    None
+                }
+            );
+            assert_eq!(
+                !chart.series[0].skip_indices.is_empty(),
+                choice == Choice::Skip
+            );
+        }
+        // 模擬使用者等待期間更新來源：對舊版本的選擇不得套到新內容。
+        let target = root.join(&path);
+        let mut modified = original.clone();
+        modified.push(0);
+        broker.set_chart_chooser(
+            Some(Box::new(move |review, _, _| {
+                std::fs::write(&target, &modified).map_err(|e| e.to_string())?;
+                Ok(Some(vec![Choice::Zero; review.groups.len()]))
+            })),
+            Instant::now() + Duration::from_secs(60),
+        );
+        let stale_choice = broker.execute("quality_stale", &quality, worker, cancel)?;
+        std::fs::write(root.join(&path), &original).map_err(|e| e.to_string())?;
+        assert_eq!(stale_choice["ok"], false, "{stale_choice}");
+        assert!(stale_choice["error"]
+            .as_str()
+            .unwrap()
+            .contains("版本已變更"));
+        assert_eq!(
+            std::fs::read(root.join(&path)).map_err(|e| e.to_string())?,
+            original
+        );
+        println!("PASS real {ext} chart quality: numeric text, NG, units, errors, merged, all choices, waiting/replay and stale-source rejection.");
         println!("PASS large {ext}: noncontiguous A/F, 100-row pages, headers, native 10000-point chart values/gaps, version and source protection.");
     }
     Ok(())

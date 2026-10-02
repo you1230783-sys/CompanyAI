@@ -61,10 +61,14 @@ pub fn verify(exe: &Path, root: &Path) -> AppResult<()> {
         &mut worker,
         &cancel,
     )?;
-    assert!(loaded["result"]["instructions"]
-        .as_str()
-        .unwrap()
-        .contains("# 論文閱讀與證據整理"));
+    assert_eq!(
+        loaded["result"]["loaded"],
+        json!(["research", "notes", "paper-evidence"])
+    );
+    assert!(
+        loaded["result"].get("instructions").is_none(),
+        "工具結果不重複 system 說明"
+    );
     assert_eq!(
         broker.execute(
             "bad_skill",

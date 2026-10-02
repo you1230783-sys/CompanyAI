@@ -105,7 +105,7 @@ pub(super) fn diagnostic_excerpt(text: &str, limit: usize) -> String {
 }
 
 pub fn run(run: Run, progress: impl FnMut(String)) -> AppResult<String> {
-    run_for(run, progress, SEGMENT_BUDGET, |_| {}, false, None)
+    run_for(run, progress, SEGMENT_BUDGET, |_| {}, false, None, None)
 }
 
 /// 圖表為結構化 UI 事件，不混入模型文字或一般進度字串。
@@ -114,7 +114,7 @@ pub fn run_with_charts(
     progress: impl FnMut(String),
     charts: impl FnMut(Vec<super::charts::Chart>),
 ) -> AppResult<String> {
-    run_for(run, progress, SEGMENT_BUDGET, charts, false, None)
+    run_for(run, progress, SEGMENT_BUDGET, charts, false, None, None)
 }
 
 /// 正式桌面提供固定 PNG 繪製服務；非 UI 測試入口不虛構成功匯出。
@@ -123,8 +123,17 @@ pub fn run_with_chart_export(
     progress: impl FnMut(String),
     charts: impl FnMut(Vec<super::charts::Chart>),
     renderer: super::charts::png::Renderer,
+    chooser: super::charts::quality::Chooser,
 ) -> AppResult<String> {
-    run_for(run, progress, SEGMENT_BUDGET, charts, false, Some(renderer))
+    run_for(
+        run,
+        progress,
+        SEGMENT_BUDGET,
+        charts,
+        false,
+        Some(renderer),
+        Some(chooser),
+    )
 }
 
 /// 僅供 debug 整合測試推進期限，不改正式 EXE 的兩小時政策。
@@ -134,13 +143,13 @@ pub fn run_with_test_budget(
     progress: impl FnMut(String),
     budget: Duration,
 ) -> AppResult<String> {
-    run_for(run, progress, budget, |_| {}, false, None)
+    run_for(run, progress, budget, |_| {}, false, None, None)
 }
 
 /// 舊文字協定的回歸測試入口；正式 EXE 不編入，不能用它降級新任務。
 #[cfg(debug_assertions)]
 pub fn run_legacy_test(run: Run, progress: impl FnMut(String)) -> AppResult<String> {
-    run_for(run, progress, SEGMENT_BUDGET, |_| {}, true, None)
+    run_for(run, progress, SEGMENT_BUDGET, |_| {}, true, None, None)
 }
 #[cfg(debug_assertions)]
 pub fn run_legacy_with_test_budget(
@@ -148,7 +157,7 @@ pub fn run_legacy_with_test_budget(
     progress: impl FnMut(String),
     budget: Duration,
 ) -> AppResult<String> {
-    run_for(run, progress, budget, |_| {}, true, None)
+    run_for(run, progress, budget, |_| {}, true, None, None)
 }
 #[cfg(debug_assertions)]
 pub fn run_legacy_with_charts(
@@ -156,7 +165,7 @@ pub fn run_legacy_with_charts(
     progress: impl FnMut(String),
     charts: impl FnMut(Vec<super::charts::Chart>),
 ) -> AppResult<String> {
-    run_for(run, progress, SEGMENT_BUDGET, charts, true, None)
+    run_for(run, progress, SEGMENT_BUDGET, charts, true, None, None)
 }
 
 fn run_for(
@@ -166,6 +175,7 @@ fn run_for(
     mut charts: impl FnMut(Vec<super::charts::Chart>),
     legacy_test: bool,
     png_renderer: Option<super::charts::png::Renderer>,
+    chart_chooser: Option<super::charts::quality::Chooser>,
 ) -> AppResult<String> {
     let mut activity = Vec::new();
     let journal = run
@@ -267,6 +277,7 @@ fn run_for(
         skill.role = "system".into();
         run.messages.insert(0, skill);
         let deadline = Instant::now() + budget;
+        broker.set_chart_chooser(chart_chooser, deadline);
         let mut failures = 0;
         let mut progress_state = resumed.unwrap_or_else(|| {
             super::progress::Progress::new(
@@ -317,6 +328,9 @@ fn run_for(
                     return pause(&error, &broker, &progress_state, pending_model.as_ref())
                 }
             };
+            if native {
+                messages[0].content = super::agent::system_prompt();
+            }
             let instructions = broker.skill_context()?;
             if !instructions.is_empty() {
                 if native {
@@ -570,6 +584,17 @@ fn run_for(
                         } else {
                             broker.execute(&operation_id, &request, &mut worker, &run.cancel)?
                         };
+                    if result["result"]["waiting_for_user"] == true {
+                        // 預檢及等待未修改文件，不記為成功／失敗；續接重讀同一已完成的模型請求。
+                        record["pending_operation"] = Value::Null;
+                        checkpoint(&journal, &record)?;
+                        return pause(
+                            "等待圖表資料處理選擇",
+                            &broker,
+                            &progress_state,
+                            Some(&task),
+                        );
+                    }
                     broker.remember_result(&operation_id, &request, &result)?;
                     record["charts"] = json!(broker.charts());
                     charts(broker.charts().to_vec());

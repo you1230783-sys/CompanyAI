@@ -2,7 +2,7 @@
 
 CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供日常問答、文件整理、專案副本修訂與 Classic Outlook 郵件分析。
 
-**目前 EXE：0.8.32** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
+**目前 EXE：0.8.33** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
 
 ## 下載與開始使用
 
@@ -12,7 +12,7 @@ CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供�
 
 執行需要 WebView2 Runtime，不需安裝 Rust、Node 或 Python。若啟動時提示缺少 WebView2，請依 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md) 處理。正式功能需要公司服務連線與桌面帳號權限。
 
-目前 `dist/LM_AI_Setup.exe` 仍是 **0.8.15** 安裝包；本版只更新 EXE，請勿將舊安裝包或歷史離線 ZIP 視為 0.8.32。
+目前 `dist/LM_AI_Setup.exe` 仍是 **0.8.15** 安裝包；本版只更新 EXE，請勿將舊安裝包或歷史離線 ZIP 視為 0.8.33。
 
 ## 可以做什麼
 

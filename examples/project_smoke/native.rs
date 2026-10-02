@@ -24,7 +24,7 @@ use std::{
 };
 
 pub fn verify(root: &Path) -> AppResult<()> {
-    for case in 0..=10 {
+    for case in 0..=11 {
         verify_case(root, case)?;
     }
     Ok(())
@@ -78,7 +78,26 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
     let id = format!("native_{case}");
     let workspace = root.join(&id);
     std::fs::create_dir(&workspace).map_err(|e| e.to_string())?;
-    std::fs::write(workspace.join("source.txt"), "原始文字").map_err(|e| e.to_string())?;
+    // 固定 Excel 快照文字用於驗證協調器等待／續接，實際 Excel COM 另由 Office 測試覆蓋。
+    let original = if case == 11 {
+        let blocks = [
+            ("A1", "text", "X"),
+            ("B1", "text", "Y"),
+            ("A2", "number", "1"),
+            ("B2", "number", "1"),
+            ("A3", "number", "2"),
+            ("B3", "text", "NG"),
+            ("A4", "number", "3"),
+            ("B4", "number", "3"),
+        ]
+        .iter()
+        .map(|(id, kind, text)| json!({"id":format!("s1:{id}"),"label":id,"kind":kind,"text":text}))
+        .collect::<Vec<_>>();
+        json!({"scope":"Excel","blocks":blocks}).to_string()
+    } else {
+        "原始文字".into()
+    };
+    std::fs::write(workspace.join("source.txt"), &original).map_err(|e| e.to_string())?;
     let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     let config = Config {
@@ -160,6 +179,18 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                         );
                     }
                 }
+                if posts == 1 {
+                    assert_eq!(
+                        body["tools"].as_array().unwrap().len(),
+                        7,
+                        "首次只提供基本工具"
+                    );
+                    println!(
+                        "Initial native tools: {} bytes, system: {} bytes",
+                        body["tools"].to_string().len(),
+                        body["messages"][0]["content"].as_str().unwrap().len()
+                    );
+                }
                 let previous = last_result(&body);
                 let mut message = if body["model"] == "fast" {
                     fast += 1;
@@ -167,6 +198,41 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     assert_eq!(body["tool_choice"], "none");
                     assert!(body["context"]["parent_request_id"].is_string());
                     json!({"role":"assistant","content":"原文為原始文字，無其他數據。"})
+                } else if case == 11 {
+                    let message = match step {
+                        0 => call(&body, "load_skill", json!({"id":"charts"})),
+                        1 => call(&body, "read_file", json!({"path":"source.txt","offset":0})),
+                        2 => call(
+                            &body,
+                            "chart_from_excel",
+                            json!({"path":"source.txt","revision":previous["result"]["revision"],"sheet":1,"range":"A1:B4","kind":"line","title":"等待決策","x_label":"X","y_label":"Y"}),
+                        ),
+                        _ => {
+                            assert_eq!(previous["ok"], true, "{previous}");
+                            call(
+                                &body,
+                                "finish",
+                                json!({"message":"圖表選擇完成","artifacts":[]}),
+                            )
+                        }
+                    };
+                    step += 1;
+                    message
+                } else if matches!(case, 0..=2 | 5 | 8)
+                    && !body["tools"].as_array().unwrap().iter().any(|t| {
+                        t["function"]["name"]
+                            == if matches!(case, 5 | 8) {
+                                "summarize_document"
+                            } else {
+                                "create_working_copy"
+                            }
+                    })
+                {
+                    call(
+                        &body,
+                        "load_skill",
+                        json!({"id":if matches!(case,5|8) {"paper-evidence"} else {"text-edit"}}),
+                    )
                 } else if case == 3 {
                     call(&body, "read_file", json!({"path":"source.txt","offset":0}))
                 } else if matches!(case, 5 | 8) {
@@ -340,13 +406,35 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         resumed.store(true, Ordering::Relaxed);
         result = runner::run(make_run(true), |s| activity.push(s));
     }
+    if case == 11 {
+        assert!(result.as_ref().unwrap().contains("繼續"), "{result:?}");
+        assert!(runner::paused_available(&root.join("native-app"), &id));
+        result = runner::run_with_chart_export(
+            make_run(true),
+            |s| activity.push(s),
+            |charts| {
+                if let Some(chart) = charts.first() {
+                    assert_eq!(
+                        chart.series[0].values,
+                        vec![Some(1.0), Some(0.0), Some(3.0)]
+                    );
+                }
+            },
+            Box::new(|_, _| Err("未使用 PNG".into())),
+            Box::new(|review, _, _| {
+                Ok(Some(
+                    vec![company_ai::projects::charts::quality::Choice::Zero; review.groups.len()],
+                ))
+            }),
+        );
+    }
     stopped.store(true, Ordering::Relaxed);
     let (posts, fast) = server.join().map_err(|_| "原生測試 server 中斷")??;
     match case {
         0..=2 => {
             let answer = result?;
             assert!(answer.contains("已完成原生工具修訂"), "{answer}");
-            assert_eq!(posts, if case == 1 { 6 } else { 5 });
+            assert_eq!(posts, if case == 1 { 7 } else { 6 });
             assert_eq!(
                 activity
                     .iter()
@@ -379,6 +467,10 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
             assert_eq!(posts, 1);
             assert!(!workspace.join("_AI_Output").exists());
         }
+        11 => {
+            assert!(result?.contains("圖表選擇完成"));
+            assert_eq!(posts, 4, "續接只能查回原工具請求，不重送推論");
+        }
         _ => unreachable!(),
     }
     if case == 10 {
@@ -386,7 +478,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
     }
     assert_eq!(
         std::fs::read_to_string(workspace.join("source.txt")).map_err(|e| e.to_string())?,
-        "原始文字"
+        original
     );
     println!(
         "PASS native agent case {case}: {posts} POST, {fast} delegated calls; original preserved."

@@ -3,24 +3,49 @@ use crate::AppResult;
 use serde_json::{json, Value};
 const SKILLS: &[(&str, &str, &str)] = &[
     (
+        "text-edit",
+        "搜尋、建立與修訂 TXT／MD 副本",
+        include_str!("skills/text-edit.md"),
+    ),
+    (
+        "office-edit",
+        "建立、編輯與排版 Office，插入 PNG",
+        include_str!("skills/office-edit.md"),
+    ),
+    (
+        "excel-read",
+        "Excel 表頭檢視、選欄與分批讀取",
+        include_str!("skills/excel-read.md"),
+    ),
+    (
+        "research",
+        "跨文件搜尋、分段閱讀與快速摘要",
+        include_str!("skills/research.md"),
+    ),
+    (
+        "notes",
+        "保存及修訂文件摘要、任務筆記",
+        include_str!("skills/notes.md"),
+    ),
+    (
+        "charts",
+        "Excel 趨勢圖、異常值處理與 PNG",
+        include_str!("skills/charts.md"),
+    ),
+    (
         "paper-evidence",
-        "論文閱讀與證據整理：讀取論文、比較證據、保留數字單位與來源區段。",
+        "論文閱讀、數據核對與證據整理",
         include_str!("skills/paper-evidence.md"),
     ),
     (
         "weekly-update",
-        "週報增量更新：延續既有週報，核對本週新增事項並保留其餘內容。",
+        "保留舊週報結構，更新本週內容",
         include_str!("skills/weekly-update.md"),
     ),
     (
         "multi-file-excel",
-        "多文件抽取成 Excel：依共同欄位抽取多份資料並建立可追溯的比較表。",
+        "抽取多文件欄位，建立 Excel 比較表",
         include_str!("skills/multi-file-excel.md"),
-    ),
-    (
-        "charts",
-        "資料圖表：使用折線、長條、散佈圖呈現可核對資料。",
-        include_str!("skills/charts.md"),
     ),
 ];
 pub fn catalog() -> Value {
@@ -41,4 +66,68 @@ pub fn context(ids: &[String]) -> AppResult<String> {
         .map(|id| load(id))
         .collect::<AppResult<Vec<_>>>()
         .map(|v| v.join("\n\n"))
+}
+
+/// 高階工作技能載入所需基本組；同一份說明在 system 只出現一次。
+pub fn activate(ids: &mut Vec<String>, id: &str) -> AppResult<()> {
+    load(id)?;
+    let dependencies: &[&str] = match id {
+        "paper-evidence" => &["research", "notes"],
+        "weekly-update" => &["research", "notes", "office-edit"],
+        "multi-file-excel" => &["research", "office-edit", "excel-read"],
+        "charts" => &["excel-read"],
+        _ => &[],
+    };
+    for next in dependencies.iter().copied().chain(std::iter::once(id)) {
+        if !ids.iter().any(|i| i == next) {
+            ids.push(next.into());
+        }
+    }
+    Ok(())
+}
+/// 技能只決定可公告的工具群組；權限、格式與可用副本仍由 broker 驗證。
+pub fn enabled(tool: &str, ids: &[String]) -> bool {
+    let has = |id: &str| ids.iter().any(|i| i == id);
+    match tool {
+        "list_files" | "read_file" | "load_skill" | "ask_user" | "finish" | "read_work_log"
+        | "read_task_result" => true,
+        "inspect_excel" | "read_excel_range" => has("excel-read"),
+        "create_chart" | "chart_from_excel" | "chart_excel_range" | "export_chart_png" => {
+            has("charts")
+        }
+        "create_working_copy" | "save_copy" | "delete_copy" => {
+            has("text-edit") || has("office-edit")
+        }
+        "find_text" | "edit_text" => has("text-edit"),
+        "edit_office" | "office_action" | "office_batch" => has("office-edit"),
+        "search_files" => has("research") || has("text-edit"),
+        "list_document_sections" | "read_document_section" | "summarize_document" => {
+            has("research")
+        }
+        "list_notes"
+        | "read_note"
+        | "create_note"
+        | "update_note"
+        | "delete_note"
+        | "restore_note"
+        | "update_document_note" => has("notes"),
+        _ => false,
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn catalog_is_short_and_groups_load_once() {
+        assert!(SKILLS.iter().all(|(_, d, _)| d.chars().count() <= 30));
+        let mut ids = vec![];
+        assert!(!enabled("office_action", &ids));
+        activate(&mut ids, "weekly-update").unwrap();
+        assert!(enabled("office_action", &ids));
+        let before = context(&ids).unwrap();
+        activate(&mut ids, "weekly-update").unwrap();
+        assert_eq!(before, context(&ids).unwrap());
+        assert!(!enabled("create_chart", &ids));
+        assert!(activate(&mut ids, "../../bad").is_err());
+    }
 }

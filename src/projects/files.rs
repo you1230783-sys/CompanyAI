@@ -652,6 +652,8 @@ pub struct Broker {
     charts: Vec<super::charts::Chart>,
     chart_exports: Vec<ChartExport>,
     png_renderer: Option<super::charts::png::Renderer>,
+    chart_chooser: Option<super::charts::quality::Chooser>,
+    chart_deadline: std::time::Instant,
 }
 impl Broker {
     pub fn new(project: Project, _task: String) -> AppResult<Self> {
@@ -669,6 +671,8 @@ impl Broker {
             charts: vec![],
             chart_exports: vec![],
             png_renderer: None,
+            chart_chooser: None,
+            chart_deadline: std::time::Instant::now(),
         })
     }
     pub(super) fn saved(&self) -> AppResult<SavedBroker> {
@@ -721,7 +725,10 @@ impl Broker {
             self.verify_chart_export(export)?;
         }
         self.chart_exports = state.chart_exports;
-        self.loaded_skills = state.loaded_skills;
+        self.loaded_skills.clear();
+        for id in state.loaded_skills {
+            super::skills::activate(&mut self.loaded_skills, &id)?;
+        }
         self.charts = state.charts;
         self.output_folder = state.output_folder;
         self.copies = state.copies;
@@ -777,8 +784,12 @@ impl Broker {
     /// 新一輪只公告目前有實際操作對象的工具；不改寫已提交／待查回的請求。
     pub(super) fn restrict_tools(&self, request: &mut Value) {
         if let Some(tools) = request["tools"].as_array_mut() {
-            tools.retain(
-                |tool| match tool["function"]["name"].as_str().unwrap_or("") {
+            tools.retain(|tool| {
+                let name = tool["function"]["name"].as_str().unwrap_or("");
+                if !super::skills::enabled(name, &self.loaded_skills) {
+                    return false;
+                }
+                match name {
                     "export_chart_png" => !self.charts.is_empty(),
                     "edit_text" => self.copies.values().any(|c| c.office.is_none()),
                     "edit_office" | "office_action" | "office_batch" => {
@@ -786,12 +797,38 @@ impl Broker {
                     }
                     "save_copy" | "delete_copy" => !self.copies.is_empty(),
                     _ => true,
-                },
-            );
+                }
+            });
         }
     }
     pub fn set_png_renderer(&mut self, renderer: super::charts::png::Renderer) {
         self.png_renderer = Some(renderer);
+    }
+    pub fn set_chart_chooser(
+        &mut self,
+        chooser: Option<super::charts::quality::Chooser>,
+        deadline: std::time::Instant,
+    ) {
+        self.chart_chooser = chooser;
+        self.chart_deadline = deadline;
+    }
+    fn review_chart(
+        &mut self,
+        prepared: super::charts::quality::Prepared,
+        cancel: &AtomicBool,
+    ) -> AppResult<Option<super::charts::Chart>> {
+        let choices = if prepared.review.groups.is_empty() {
+            vec![]
+        } else {
+            let Some(chooser) = self.chart_chooser.as_mut() else {
+                return Ok(None);
+            };
+            let Some(choices) = chooser(&prepared.review, cancel, self.chart_deadline)? else {
+                return Ok(None);
+            };
+            choices
+        };
+        prepared.apply(&choices).map(Some)
     }
     fn add_chart(&mut self, chart: super::charts::Chart) -> AppResult<Value> {
         chart.validate()?;
@@ -806,8 +843,11 @@ impl Broker {
         {
             return Err("本次任務的圖表資料合計超過 16 MiB，請分成另一個任務。".into());
         }
+        let data_note = chart.data_note.clone();
         self.charts.push(chart);
-        Ok(json!({"chart_index":self.charts.len()-1,"displayed_in_conversation":true}))
+        Ok(
+            json!({"chart_index":self.charts.len()-1,"displayed_in_conversation":true,"data_note":data_note}),
+        )
     }
     fn verify_chart_export(&self, export: &ChartExport) -> AppResult<()> {
         let path = relative(&export.path)?;
@@ -1011,7 +1051,9 @@ impl Broker {
             Ok(value) => json!({"ok":true,"result":value}),
             Err(error) => json!({"ok":false,"error":error,"retry_same_operation":false}),
         };
-        self.results.insert(id.into(), (request, result.clone()));
+        if result["result"]["waiting_for_user"] != true {
+            self.results.insert(id.into(), (request, result.clone()));
+        }
         Ok(result)
     }
     pub(super) fn content(
@@ -1170,16 +1212,21 @@ impl Broker {
                 let (page, _) = self.with_excel(path, Some(revision), |target| {
                     office::excel::read_chart(target, &selection, cancel)
                 })?;
-                let chart =
-                    super::charts::from_page(&page, kind, title, x_label, y_label, path, revision)?;
+                let prepared = super::charts::prepare_page(
+                    &page, kind, title, x_label, y_label, path, revision,
+                )?;
+                let Some(chart) = self.review_chart(prepared, cancel)? else {
+                    return Ok(json!({"waiting_for_user":true}));
+                };
+                // 決策期間不佔用 Excel；接受前重新核對來源版本，舊決策不套到新資料。
+                self.with_excel(path, Some(revision), |_| Ok(()))?;
                 self.add_chart(chart)
             }
             Tool::LoadSkill { id } => {
-                let body = super::skills::load(id)?;
-                if !self.loaded_skills.contains(id) {
-                    self.loaded_skills.push(id.clone());
-                }
-                Ok(json!({"id":id,"instructions":body}))
+                super::skills::activate(&mut self.loaded_skills, id)?;
+                Ok(
+                    json!({"id":id,"loaded":self.loaded_skills,"instructions_location":"下一輪 system，工具定義位於 tools；無需重複載入。"}),
+                )
             }
             Tool::SearchFiles { paths, query } => self.search_files(paths, query, worker, cancel),
             Tool::OfficeBatch {
@@ -1187,7 +1234,14 @@ impl Broker {
                 revision,
                 operations,
             } => self.office_batch(copy_id, revision, operations.clone(), cancel),
-            Tool::CreateChart { chart } => self.add_chart(chart.clone()),
+            Tool::CreateChart { chart } => {
+                if !chart.data_note.is_empty()
+                    || chart.series.iter().any(|s| !s.skip_indices.is_empty())
+                {
+                    return Err("圖表的使用者處理紀錄只能由桌面預檢建立。".into());
+                }
+                self.add_chart(chart.clone())
+            }
             Tool::ExportChartPng { chart_index, name } => {
                 self.export_chart_png(*chart_index, name, cancel)
             }
@@ -1205,9 +1259,15 @@ impl Broker {
                 if text::revision(&content) != *revision {
                     return Err("文件版本已變更，請重新讀取。".into());
                 }
-                let chart = super::charts::from_excel(
+                let prepared = super::charts::prepare_excel(
                     &content, *sheet, range, kind, title, x_label, y_label, path, revision,
                 )?;
+                let Some(chart) = self.review_chart(prepared, cancel)? else {
+                    return Ok(json!({"waiting_for_user":true}));
+                };
+                if text::revision(&self.content(path, cancel, worker)?) != *revision {
+                    return Err("文件版本已變更，請重新讀取。".into());
+                }
                 self.add_chart(chart)
             }
             Tool::SummarizeDocument { .. } => Err("摘要委派需由專案任務協調器執行。".into()),
@@ -1716,7 +1776,8 @@ mod tests {
         ] {
             assert!(!has(&request, name));
         }
-        assert!(has(&request, "create_working_copy") && has(&request, "finish"));
+        assert!(!has(&request, "create_working_copy") && has(&request, "finish"));
+        super::super::skills::activate(&mut broker.loaded_skills, "text-edit").unwrap();
         broker.copies.insert(
             "c".into(),
             Copy {
@@ -1754,10 +1815,12 @@ mod tests {
             y_label: "y".into(),
             x: vec![json!(1)],
             series: vec![super::super::charts::Series {
+                skip_indices: vec![],
                 name: "A".into(),
                 values: vec![Some(2.0)],
             }],
             source: "測試".into(),
+            data_note: String::new(),
         };
         broker.add_chart(chart.clone()).unwrap();
         broker.add_chart(chart).unwrap();

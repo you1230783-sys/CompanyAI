@@ -1239,17 +1239,22 @@
       "type": "function",
       "function": {
         "name": "load_skill",
-        "description": "載入內建工作技能；只需載入相關項目。",
+        "description": "載入技能說明與相關工具；下一輪生效，任務續接保留，無需重複。",
         "parameters": {
           "type": "object",
           "properties": {
             "id": {
               "type": "string",
               "enum": [
+                "text-edit",
+                "office-edit",
+                "excel-read",
+                "research",
+                "notes",
+                "charts",
                 "paper-evidence",
                 "weekly-update",
-                "multi-file-excel",
-                "charts"
+                "multi-file-excel"
               ]
             }
           },

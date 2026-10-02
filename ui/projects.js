@@ -4,6 +4,46 @@
   let signature = "", importProject = null, settingsProject = null, removeProject = null;
   let lastNotice = "", pickerRequest = 0, activityKey = "", activitySignature = "";
   const command = value => send({type: "project", command: value});
+  // 決策只由桌面 UI 回傳，工具參數沒有可冒充使用者選擇的欄位。
+  const reviewDialog=document.createElement("dialog");
+  reviewDialog.className="chart-review-dialog"; reviewDialog.id="chart-review-dialog";
+  document.body.append(reviewDialog);
+  let reviewKey="", reviewSelection=null;
+  function replyReview(choices) {
+    if (!reviewSelection) return;
+    command({action:"chart_choice",...reviewSelection,choices});
+    for (const input of reviewDialog.querySelectorAll("button,select")) input.disabled=true;
+  }
+  reviewDialog.addEventListener("cancel",event=>{event.preventDefault();replyReview(null);});
+  function renderReview(projects,visible) {
+    const pending=visible ? projects.chart_review : null;
+    const key=pending ? `${projects.running_id}:${pending.request_id}` : "";
+    if (key===reviewKey) return;
+    reviewKey=key; reviewSelection=null;
+    if (reviewDialog.open) reviewDialog.close();
+    reviewDialog.replaceChildren();
+    if (!pending) return;
+    reviewSelection={run_id:projects.running_id,request_id:pending.request_id};
+    const heading=document.createElement("h2"); heading.textContent="如何處理圖表中的異常值？";
+    const info=document.createElement("p");
+    info.textContent=`${pending.review.title} · ${(pending.review.source || "").split(" | ")[0]}\n已轉換 ${pending.review.converted} 格數字文字；${pending.review.blanks} 格空白保留缺值。僅影響圖表。`;
+    reviewDialog.append(heading,info);
+    const selects=[];
+    for (const group of pending.review.groups) {
+      const label=document.createElement("label"), text=document.createElement("p"), select=document.createElement("select");
+      text.textContent=`${group.column} 欄 · ${group.category} · ${group.count} 格\n${group.samples.join("；")}`;
+      for (const choice of group.choices) {
+        const option=document.createElement("option"); option.value=choice;
+        option.textContent=group.x_axis ? "忽略整列（所有系列同步排除）" : ({gap:"保留缺值（折線中斷）",skip:"略過此點（折線接續，保留原 X 位置）",zero:"設為 0"}[choice]);
+        select.append(option);
+      }
+      label.append(text,select); reviewDialog.append(label); selects.push(select);
+    }
+    const buttons=document.createElement("div"), apply=document.createElement("button"), pause=document.createElement("button");
+    apply.textContent="套用並繼續";apply.className="primary";apply.onclick=()=>replyReview(selects.map(s=>s.value));
+    pause.textContent="暫存，稍後決定";pause.onclick=()=>replyReview(null);
+    buttons.append(pause,apply);reviewDialog.append(buttons);reviewDialog.showModal();
+  }
   const findProject = id => state.projects?.items?.find(project => project.id === id);
   let diagnosticsRequest = null;
   function openDiagnostics(conversation, runId) {
@@ -111,6 +151,7 @@
     render() {
     const projects = state.projects || {items:[]};
     const showActivity = state.logged_in && projects.running && projects.running_conversation === state.active_id;
+    renderReview(projects,showActivity);
     // 診斷只在設定的進階區提供；保留目前對話每次任務的入口，不在聊天區佔位。
     const selector = $("project-diagnostics-run"), old = selector.value;
     const runs = new Map();

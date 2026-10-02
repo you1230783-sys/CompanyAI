@@ -3,6 +3,7 @@ use crate::AppResult;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 pub mod png;
+pub mod quality;
 
 pub const MAX_POINTS: usize = 10_000;
 pub const MAX_SERIES: usize = 8;
@@ -12,6 +13,9 @@ pub const MAX_CHART_BYTES: usize = 8 * 1024 * 1024;
 pub struct Series {
     pub name: String,
     pub values: Vec<Option<f64>>,
+    /// 僅由使用者確認的資料處理產生；保留 X 位置，略過指定缺值點。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skip_indices: Vec<usize>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -23,6 +27,8 @@ pub struct Chart {
     pub x: Vec<Value>,
     pub series: Vec<Series>,
     pub source: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub data_note: String,
 }
 impl Chart {
     pub fn validate(&self) -> AppResult<()> {
@@ -34,7 +40,13 @@ impl Chart {
         {
             return Err("圖表限 line/bar/scatter，1–10000 筆與 1–8 個系列。".into());
         }
-        for label in [&self.title, &self.x_label, &self.y_label, &self.source] {
+        for label in [
+            &self.title,
+            &self.x_label,
+            &self.y_label,
+            &self.source,
+            &self.data_note,
+        ] {
             if label.chars().count() > 500 {
                 return Err("圖表標籤超過 500 字。".into());
             }
@@ -47,6 +59,14 @@ impl Chart {
             }
         }
         for series in &self.series {
+            if series.skip_indices.windows(2).any(|w| w[0] >= w[1])
+                || series
+                    .skip_indices
+                    .iter()
+                    .any(|i| series.values.get(*i) != Some(&None))
+            {
+                return Err("略過點必須是有效且不重複的缺值位置。".into());
+            }
             if series.name.is_empty()
                 || series.name.chars().count() > 100
                 || series.values.len() != self.x.len()
@@ -85,7 +105,7 @@ fn cell(value: &str) -> AppResult<(usize, usize)> {
 }
 /// 從已由原生 Office 讀取的快照取值，避免模型再次抄寫數字。第一列為系列標題。
 #[allow(clippy::too_many_arguments)]
-pub fn from_excel(
+pub fn prepare_excel(
     content: &str,
     sheet: usize,
     range: &str,
@@ -95,7 +115,7 @@ pub fn from_excel(
     y_label: &str,
     path: &str,
     revision: &str,
-) -> AppResult<Chart> {
+) -> AppResult<quality::Prepared> {
     let snapshot: super::office::Snapshot =
         serde_json::from_str(content).map_err(|_| "需要 Excel 文件快照。")?;
     if !snapshot.scope.starts_with("Excel") || sheet == 0 {
@@ -118,53 +138,85 @@ pub fn from_excel(
             cells.insert(cell(address)?, block);
         }
     }
-    let mut chart = Chart {
-        kind: kind.into(),
-        title: title.into(),
-        x_label: x_label.into(),
-        y_label: y_label.into(),
-        x: vec![],
-        series: vec![],
-        source: format!("{path} | {revision} | 工作表 {sheet} {range}"),
-    };
-    for c in c1 + 1..=c2 {
-        let name = cells
-            .get(&(c, r1))
-            .map(|b| b.text.clone())
-            .filter(|s| !s.trim().is_empty())
-            .ok_or("系列標題不可空白。")?;
-        chart.series.push(Series {
-            name,
-            values: vec![],
-        });
-    }
-    for r in r1 + 1..=r2 {
-        let x = cells.get(&(c1, r)).ok_or("橫軸儲存格不存在。")?;
-        if x.kind == "formula" || x.kind == "readonly" || x.text.trim().is_empty() {
-            return Err("橫軸不支援空白、公式或特殊儲存格。".into());
-        }
-        chart.x.push(if kind == "scatter" {
-            serde_json::json!(x.text.parse::<f64>().map_err(|_| "散佈圖橫軸需要數字。")?)
+    use super::office::excel::{column_name, Bounds, Cell, Page, Row};
+    let get = |c: usize, r: usize| {
+        let block = cells.get(&(c, r));
+        let text = block.map(|b| b.text.clone()).unwrap_or_default();
+        let kind = block.map(|b| b.kind.as_str()).unwrap_or("blank");
+        // 舊 Office 快照將 VT_EMPTY 表示成空白 text；保持既有缺值行為。
+        let kind = if kind == "text" && text.trim().is_empty() {
+            "blank"
         } else {
-            Value::String(x.text.clone())
-        });
-        for c in c1 + 1..=c2 {
-            let value = match cells.get(&(c, r)) {
-                None => None,
-                Some(b) if b.text.trim().is_empty() => None,
-                Some(b) if b.kind == "number" => {
-                    Some(b.text.parse::<f64>().map_err(|_| "儲存格無法轉為數字。")?)
-                }
-                _ => return Err("縱軸只能使用原生數值或空白；公式與文字不自行轉換。".into()),
-            };
-            chart.series[c - c1 - 1].values.push(value);
+            kind
+        };
+        Cell {
+            value: if kind == "number" {
+                text.parse::<f64>()
+                    .ok()
+                    .map_or(Value::Null, |n| serde_json::json!(n))
+            } else {
+                Value::String(text.clone())
+            },
+            text,
+            kind: kind.into(),
+            formula: None,
         }
-    }
-    chart.validate()?;
-    Ok(chart)
+    };
+    let page = Page {
+        sheet,
+        sheet_name: String::new(),
+        columns: (c1..=c2).map(column_name).collect(),
+        header_row: r1,
+        headers: (c1..=c2).map(|c| get(c, r1)).collect(),
+        start_row: r1 + 1,
+        rows: (r1 + 1..=r2)
+            .map(|r| Row {
+                row: r,
+                cells: (c1..=c2).map(|c| get(c, r)).collect(),
+            })
+            .collect(),
+        next_row: None,
+        used_range: Bounds {
+            first_row: r1,
+            last_row: r2,
+            first_column: column_name(c1),
+            last_column: column_name(c2),
+        },
+        date_1904: false,
+    };
+    prepare_page(&page, kind, title, x_label, y_label, path, revision)
 }
-/// 直接使用 Excel 選欄工具的原生數值，不經模型抄寫，不因中間欄或空值而位移。
-/// 第一個欄位是 X，後續為 Y；同一版本的公式數值可讀，錯誤／合併格不可冒充空白。
+/// 直接使用選欄取得的 Value2；預檢完整範圍後才詢問使用者。
+pub fn prepare_page(
+    page: &super::office::excel::Page,
+    kind: &str,
+    title: &str,
+    x_label: &str,
+    y_label: &str,
+    path: &str,
+    revision: &str,
+) -> AppResult<quality::Prepared> {
+    quality::prepare(
+        page,
+        Chart {
+            kind: kind.into(),
+            title: title.into(),
+            x_label: x_label.into(),
+            y_label: y_label.into(),
+            x: vec![],
+            series: vec![],
+            data_note: String::new(),
+            source: format!(
+                "{path} | {revision} | 工作表 {} | 欄 {} | 列 {}–{}",
+                page.sheet,
+                page.columns.join(","),
+                page.start_row,
+                page.rows.last().map_or(page.start_row, |r| r.row)
+            ),
+        },
+    )
+}
+/// 無需使用者決策時供既有檢查呼叫；有異常值必須經正式 UI 確認。
 pub fn from_page(
     page: &super::office::excel::Page,
     kind: &str,
@@ -174,82 +226,32 @@ pub fn from_page(
     path: &str,
     revision: &str,
 ) -> AppResult<Chart> {
-    if page.columns.len() < 2 || page.columns.len() > 9 || page.headers.len() != page.columns.len()
-    {
-        return Err("Excel 圖表欄位結構不一致。".into());
-    }
-    let mut chart = Chart {
-        kind: kind.into(),
-        title: title.into(),
-        x_label: x_label.into(),
-        y_label: y_label.into(),
-        x: vec![],
-        series: page
-            .headers
-            .iter()
-            .enumerate()
-            .skip(1)
-            .map(|(i, header)| Series {
-                name: if header.text.trim().is_empty() {
-                    page.columns[i].clone()
-                } else {
-                    header.text.clone()
-                },
-                values: vec![],
-            })
-            .collect(),
-        source: format!(
-            "{path} | {revision} | 工作表 {} | 欄 {} | 列 {}–{}",
-            page.sheet,
-            page.columns.join(","),
-            page.start_row,
-            page.rows.last().map_or(page.start_row, |r| r.row)
-        ),
-    };
-    for row in &page.rows {
-        if row.cells.len() != page.columns.len() {
-            return Err("Excel 資料列與欄位數不一致。".into());
-        }
-        let x = &row.cells[0];
-        if !matches!(x.kind.as_str(), "number" | "text")
-            || x.value.as_str().is_some_and(|s| s.trim().is_empty())
-        {
-            return Err(format!(
-                "橫軸 {}{} 為空白、錯誤或特殊值，請明確縮小範圍；不自動刪列。",
-                page.columns[0], row.row
-            ));
-        }
-        chart.x.push(if kind == "scatter" {
-            serde_json::json!(x.value.as_f64().ok_or("散佈圖橫軸需為 Excel 數值。")?)
-        } else if !x.text.is_empty() {
-            if x.text.chars().all(|c| c == '#') {
-                return Err("橫軸顯示為 ####，請先在 Excel 調整顯示或改選有效標籤欄。".into());
-            }
-            Value::String(x.text.clone())
-        } else {
-            x.value.clone()
-        });
-        for (i, cell) in row.cells.iter().enumerate().skip(1) {
-            let number = match cell.kind.as_str() {
-                "blank" => None,
-                "number" => Some(cell.value.as_f64().ok_or("Excel 數值格式錯誤。")?),
-                _ => {
-                    return Err(format!(
-                        "縱軸 {}{} 不是数值或空白；錯誤、文字與合併格不轉為零。",
-                        page.columns[i], row.row
-                    ))
-                }
-            };
-            chart.series[i - 1].values.push(number);
-        }
-    }
-    chart.validate()?;
-    Ok(chart)
+    prepare_page(page, kind, title, x_label, y_label, path, revision)?.apply(&[])
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn legacy_snapshot_empty_text_remains_a_gap() {
+        let blocks=[("A1","X"),("B1","Y"),("A2","1"),("B2","339"),("A3","2"),("B3","")].iter().map(|(id,text)|serde_json::json!({"id":format!("s1:{id}"),"label":id,"kind":"text","text":text})).collect::<Vec<_>>();
+        let content = serde_json::json!({"scope":"Excel","blocks":blocks}).to_string();
+        let prepared = prepare_excel(
+            &content,
+            1,
+            "A1:B3",
+            "line",
+            "t",
+            "x",
+            "y",
+            "test.xlsx",
+            "r",
+        )
+        .unwrap();
+        assert!(prepared.review.groups.is_empty());
+        let chart = prepared.apply(&[]).unwrap();
+        assert_eq!(chart.series[0].values, vec![Some(339.0), None]);
+    }
     #[test]
     fn ten_thousand_points_are_preserved_without_sampling() {
         let mut chart = Chart {
@@ -262,9 +264,11 @@ mod tests {
                 .map(|i| Series {
                     name: format!("s{i}"),
                     values: vec![Some(1.0); MAX_POINTS],
+                    skip_indices: vec![],
                 })
                 .collect(),
             source: "測試".into(),
+            data_note: String::new(),
         };
         chart.series[0].values[3000] = None;
         chart.validate().unwrap();

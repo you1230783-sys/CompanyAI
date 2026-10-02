@@ -40,6 +40,11 @@ pub(super) enum ProjectCommand {
         run_id: String,
         message_count: usize,
     },
+    ChartChoice {
+        run_id: String,
+        request_id: String,
+        choices: Option<Vec<projects::charts::quality::Choice>>,
+    },
     Stop,
     Diagnostics {
         conversation: String,
@@ -47,6 +52,12 @@ pub(super) enum ProjectCommand {
     },
 }
 pub(super) enum ProjectEvent {
+    ReviewChart(
+        String,
+        String,
+        projects::charts::quality::Review,
+        mpsc::Sender<Option<Vec<projects::charts::quality::Choice>>>,
+    ),
     Progress(String, String),
     Charts(String, Vec<projects::charts::Chart>),
     ExportPng(
@@ -57,7 +68,13 @@ pub(super) enum ProjectEvent {
     Diagnostics(String, String, AppResult<String>),
     Finished(String, String, AppResult<String>),
 }
+struct PendingChart {
+    id: String,
+    review: projects::charts::quality::Review,
+    reply: mpsc::Sender<Option<Vec<projects::charts::quality::Choice>>>,
+}
 pub(super) struct Running {
+    pending_chart: Option<PendingChart>,
     id: String,
     conversation: String,
     activity: Vec<String>,
@@ -200,9 +217,41 @@ impl App {
     }
     pub(super) fn project_state(&self) -> serde_json::Value {
         json!({"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len()})).collect::<Vec<_>>(),
+            "chart_review":self.projects.running.as_ref().and_then(|r|r.pending_chart.as_ref().map(|p|json!({"request_id":p.id,"review":p.review}))),
             "running":self.projects.running.is_some(),"running_id":self.projects.running.as_ref().map(|r|&r.id),"activity":self.projects.running.as_ref().map(|r|&r.activity),"charts":self.projects.running.as_ref().map(|r|&r.charts),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
     }
     pub(super) fn project_command(&mut self, command: ProjectCommand) -> AppResult<()> {
+        if let ProjectCommand::ChartChoice {
+            run_id,
+            request_id,
+            choices,
+        } = &command
+        {
+            if !self.logged_in() {
+                return Err("請先登入。".into());
+            }
+            let run = self
+                .projects
+                .running
+                .as_mut()
+                .filter(|r| r.id == *run_id && !r.cancel.load(Ordering::Relaxed))
+                .ok_or("任務已結束。")?;
+            let pending = run
+                .pending_chart
+                .as_ref()
+                .filter(|p| p.id == *request_id)
+                .ok_or("圖表選擇已失效。")?;
+            if let Some(choices) = choices {
+                pending.review.validate(choices)?;
+            }
+            let pending = run.pending_chart.take().ok_or("找不到圖表選擇。")?;
+            pending
+                .reply
+                .send(choices.clone())
+                .map_err(|_| "圖表等待已結束。")?;
+            self.projects.status = "正在套用圖表選擇…".into();
+            return Ok(());
+        }
         if let ProjectCommand::Diagnostics {
             conversation,
             run_id,
@@ -376,6 +425,7 @@ impl App {
             }
             ProjectCommand::Reveal { .. } => unreachable!("已於上方處理成果定位"),
             ProjectCommand::Diagnostics { .. } => unreachable!("已於上方處理診斷讀取"),
+            ProjectCommand::ChartChoice { .. } => unreachable!("handled above"),
             ProjectCommand::Stop => (),
         }
         Ok(())
@@ -538,6 +588,7 @@ impl App {
             cancel: cancel.clone(),
         };
         self.projects.running = Some(Running {
+            pending_chart: None,
             id: id.clone(),
             conversation: conversation.clone(),
             activity: vec!["準備專案任務…".into()],
@@ -577,6 +628,30 @@ impl App {
                     }
                 }
             });
+            let review_tx = tx.clone();
+            let review_id = id.clone();
+            let chooser: projects::charts::quality::Chooser =
+                Box::new(move |review, cancel, deadline| {
+                    let (reply, response) = mpsc::channel();
+                    review_tx
+                        .send(Event::Project(ProjectEvent::ReviewChart(
+                            review_id.clone(),
+                            crate::jobs::new_id()?,
+                            review.clone(),
+                            reply,
+                        )))
+                        .map_err(|_| "桌面介面已關閉。")?;
+                    loop {
+                        if cancel.load(Ordering::Relaxed) || Instant::now() >= deadline {
+                            return Ok(None);
+                        }
+                        match response.recv_timeout(Duration::from_millis(100)) {
+                            Ok(choice) => return Ok(choice),
+                            Err(mpsc::RecvTimeoutError::Timeout) => (),
+                            Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(None),
+                        }
+                    }
+                });
             let result = projects::runner::run_with_chart_export(
                 run,
                 |text| {
@@ -586,6 +661,7 @@ impl App {
                     let _ = tx.send(Event::Project(ProjectEvent::Charts(id.clone(), charts)));
                 },
                 renderer,
+                chooser,
             );
             let _ = tx.send(Event::Project(ProjectEvent::Finished(
                 id,
@@ -603,6 +679,22 @@ impl App {
     }
     pub(super) fn project_event(&mut self, event: ProjectEvent) -> AppResult<()> {
         match event {
+            ProjectEvent::ReviewChart(id, request_id, review, reply) => {
+                if let Some(run) = self
+                    .projects
+                    .running
+                    .as_mut()
+                    .filter(|r| r.id == id && !r.cancel.load(Ordering::Relaxed))
+                {
+                    run.pending_chart = Some(PendingChart {
+                        id: request_id,
+                        review,
+                        reply,
+                    });
+                    self.projects.status = "等待選擇圖表資料處理方式…".into();
+                    run.activity.push(self.projects.status.clone());
+                }
+            }
             ProjectEvent::Diagnostics(conversation, id, result) => {
                 if self.logged_in() && self.active_id.as_deref() == Some(&conversation) {
                     self.view.post(&json!({"type":"project_diagnostics","conversation":conversation,"run_id":id,"text":result.unwrap_or_else(|e|format!("無法讀取執行紀錄：{e}"))}))?;

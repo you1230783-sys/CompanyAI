@@ -58,3 +58,5 @@
 0.8.0 以前只在更新紀錄保留簡短摘要。需要追查原始協定時，可看 [0.7 契約](DESKTOP_0_7_CONTRACT.md)、[0.6 契約](DESKTOP_0_6_CONTRACT.md)、[0.5 契約](DESKTOP_0_5_CONTRACT.md)、[早期通知／Outlook 契約](NOTIFICATIONS_AND_OUTLOOK.md) 與 [快捷鍵相容性說明](HOTKEY_0_4_1.md)。
 
 [後端規劃](BACKEND_ROADMAP.md) 與 [早期介面說明](UI_AND_STREAMING.md) 是歷史設計資料；目前是否已實作請核對最新契約及程式碼。
+
+- [0.8.33 圖表資料決策與按需工具驗證](VALIDATION_0_8_33.md)

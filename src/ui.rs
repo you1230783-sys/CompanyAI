@@ -750,6 +750,7 @@ impl App {
                             y_label: "量測值".into(),
                             x: (0..10_000).map(|i| json!(i)).collect(),
                             series: vec![crate::projects::charts::Series {
+                                skip_indices: vec![],
                                 name: "量測 A".into(),
                                 values: (0..10_000)
                                     .map(|i| {
@@ -761,6 +762,7 @@ impl App {
                                     })
                                     .collect(),
                             }],
+                            data_note: String::new(),
                             source: "固定測試資料，包含 3000–3099 筆缺值；不讀使用者資料".into(),
                         };
                         let (reply, response) = mpsc::channel();

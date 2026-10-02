@@ -17,12 +17,16 @@ window.ChartUI = (() => {
       tooltip:{trigger:data.kind === "scatter" ? "item" : "axis", renderMode:"richText"},
       grid:{left:exporting ? 100 : 70,right:40,top:exporting ? 140 : 50,bottom:exporting ? 160 : 100},
       title:exporting ? {text:data.title,left:60,top:20,textStyle:{fontSize:20,width:1480,overflow:"break"}} : undefined,
-      graphic:exporting ? [{type:"text",left:60,bottom:20,style:{text:`來源：${data.source}`,fontSize:12,fill:"#444",width:1480,overflow:"break"}}] : [],
+      graphic:exporting ? [{type:"text",left:60,bottom:20,style:{text:`來源：${data.source}\n${data.data_note || ""}`,fontSize:12,fill:"#444",width:1480,overflow:"break"}}] : [],
       dataZoom:exporting ? [] : [{type:"inside",filterMode:"none"},{type:"slider",bottom:10,filterMode:"none"}],
       xAxis:{type:data.kind === "scatter" ? "value" : "category",name:data.x_label,nameLocation:"middle",nameGap:35,...(data.kind === "scatter" ? {} : {data:data.x})},
       yAxis:{type:"value",name:data.y_label},
-      series:data.series.map(s => ({name:s.name,type:data.kind,connectNulls:false,progressive:0,showSymbol:data.x.length <= 300,
-        data:s.values.map((v,i) => data.kind === "scatter" ? [data.x[i],v] : v)}))};
+      series:data.series.map(s => {
+        const skip=new Set(s.skip_indices || []);
+        // 明確 X 座標可略過單系列的異常點；真正空白仍保留 null，不能一起連線。
+        const values=s.values.flatMap((v,i)=>skip.has(i) ? [] : [[data.kind === "scatter" ? data.x[i] : i,v]]);
+        return {name:s.name,type:data.kind,connectNulls:false,progressive:0,showSymbol:data.x.length <= 300,encode:{x:0,y:1},data:values};
+      })};
   }
   function exportPng(data) {
     if (!data || !["line","bar","scatter"].includes(data.kind) || !Array.isArray(data.x) ||
@@ -52,7 +56,7 @@ window.ChartUI = (() => {
       const title = document.createElement("h3"); title.textContent = data.title;
       const plot = document.createElement("div"); plot.className = "chart-plot";
       plot.setAttribute("role", "img"); plot.setAttribute("aria-label", `${data.title}：${data.x_label} / ${data.y_label}`);
-      const source = document.createElement("p"); source.className = "chart-source"; source.textContent = data.source;
+      const source = document.createElement("p"); source.className = "chart-source"; source.textContent = [data.source,data.data_note].filter(Boolean).join("\n");
       const expand = document.createElement("button"); expand.className = "text-button"; expand.textContent = "放大圖表";
       expand.onclick = () => { const large = card.classList.toggle("chart-expanded"); expand.textContent = large ? "縮小圖表" : "放大圖表"; };
       const details = document.createElement("details"), summary = document.createElement("summary"); summary.textContent = "查看資料表";
@@ -84,5 +88,5 @@ window.ChartUI = (() => {
       });
     }
   }
-  return {render, cleanup, exportPng};
+  return {render, cleanup, exportPng, option};
 })();
