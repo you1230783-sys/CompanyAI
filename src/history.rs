@@ -10,6 +10,25 @@ use windows_sys::Win32::Security::Cryptography::{
 const MAX_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 const MAX_CONVERSATIONS: usize = 200;
 
+/// 已明確送出的下一則專案訊息。與對話一起加密保存，重啟後不自動執行。
+#[derive(Clone, Serialize, Deserialize)]
+pub struct QueuedProjectMessage {
+    pub id: String,
+    pub after_run: String,
+    pub project_id: String,
+    pub principal_id: String,
+    pub model: String,
+    pub text: String,
+    pub interrupt: bool,
+    pub auto_start: bool,
+}
+impl QueuedProjectMessage {
+    /// 只有原任務的已知終態可自動接續；暫停、舊事件或已取消排程均不能啟動。
+    pub fn ready_after(&self, run_id: &str, completed: bool, cancelled: bool) -> bool {
+        self.auto_start && self.after_run == run_id && (completed || (self.interrupt && cancelled))
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Conversation {
     pub id: String,
@@ -23,6 +42,8 @@ pub struct Conversation {
     pub created_at: u64,
     pub updated_at: u64,
     pub messages: Vec<Message>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_queued: Option<QueuedProjectMessage>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Archive {
@@ -77,6 +98,7 @@ impl Archive {
             created_at: unix_now(),
             updated_at: unix_now(),
             messages,
+            project_queued: None,
         });
         Ok(id)
     }
@@ -105,6 +127,18 @@ impl Archive {
             return Err("對話紀錄版本或大小不支援。".into());
         }
         for conversation in &self.conversations {
+            if let Some(queued) = &conversation.project_queued {
+                if crate::jobs::validate_id(&queued.id).is_err()
+                    || crate::jobs::validate_id(&queued.after_run).is_err()
+                    || queued.project_id.is_empty()
+                    || queued.principal_id.is_empty()
+                    || queued.model.is_empty()
+                    || queued.text.trim().is_empty()
+                    || queued.text.encode_utf16().count() > 16_000
+                {
+                    return Err("待送專案訊息格式不正確；原檔已保留。".into());
+                }
+            }
             if conversation.id.len() != 32
                 || !conversation.id.bytes().all(|b| b.is_ascii_hexdigit())
                 || !ids.insert(&conversation.id)
@@ -163,6 +197,7 @@ mod tests {
         assert!(
             !conversation.pinned && !conversation.title_manual && conversation.draft.is_empty()
         );
+        assert!(conversation.project_queued.is_none());
         let mut archive = Archive {
             schema: 1,
             conversations: vec![conversation],
@@ -185,11 +220,34 @@ mod tests {
     fn encrypted_history_roundtrip_update_delete_and_corruption() {
         let mut archive = Archive::default();
         let id = archive.insert(vec![Message::user("本機私密測試")]).unwrap();
+        archive.conversations[0].project_queued = Some(QueuedProjectMessage {
+            id: crate::jobs::new_id().unwrap(),
+            after_run: crate::jobs::new_id().unwrap(),
+            project_id: "test-project".into(),
+            principal_id: "test-account".into(),
+            model: "fast".into(),
+            text: "完成後產出週報".into(),
+            interrupt: false,
+            auto_start: true,
+        });
+        let queued = archive.conversations[0].project_queued.as_mut().unwrap();
+        assert!(queued.ready_after(&queued.after_run, true, false));
+        assert!(!queued.ready_after("other-run", true, false));
+        assert!(!queued.ready_after(&queued.after_run, false, false));
+        assert!(!queued.ready_after(&queued.after_run, false, true));
+        queued.interrupt = true;
+        assert!(queued.ready_after(&queued.after_run, false, true));
+        queued.auto_start = false;
+        assert!(!queued.ready_after(&queued.after_run, true, true));
         let root = std::env::temp_dir().join(format!("lm-ai-history-{id}"));
         save(&root, &archive).unwrap();
         let ciphertext = fs::read(root.join("history.dpapi")).unwrap();
         assert!(!String::from_utf8_lossy(&ciphertext).contains("本機私密測試"));
+        assert!(!String::from_utf8_lossy(&ciphertext).contains("完成後產出週報"));
         let mut loaded = load(&root).unwrap();
+        let queued = loaded.conversations[0].project_queued.as_ref().unwrap();
+        assert_eq!(queued.text, "完成後產出週報");
+        assert_eq!(queued.principal_id, "test-account");
         loaded
             .update(
                 &id,
@@ -201,6 +259,14 @@ mod tests {
             .unwrap();
         save(&root, &loaded).unwrap();
         assert_eq!(load(&root).unwrap().conversations[0].messages.len(), 2);
+        assert_eq!(
+            load(&root).unwrap().conversations[0]
+                .project_queued
+                .as_ref()
+                .unwrap()
+                .text,
+            "完成後產出週報"
+        );
         loaded.remove(&id).unwrap();
         save(&root, &loaded).unwrap();
         assert!(load(&root).unwrap().conversations.is_empty());

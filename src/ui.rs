@@ -741,6 +741,10 @@ impl App {
                     if !ok {
                         self.smoke_result = Some(Err(detail));
                     } else {
+                        if let Err(error) = self.verify_project_composer() {
+                            self.smoke_result = Some(Err(error));
+                            return Ok(());
+                        }
                         // 以正式 WebView2 callback 路徑取得 PNG，再由 Rust 驗證及落盤。
                         // 不只檢查 JS 回傳前綴，確保下一次建置能驗收原生跨執行緒橋接。
                         let chart = crate::projects::charts::Chart {

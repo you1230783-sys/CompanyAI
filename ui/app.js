@@ -374,28 +374,44 @@ function showView(view) {
   // 只在真正進入助理頁時更新，狀態推播重繪不重複查詢。
   if (previous !== view && view === "outlook") window.MailUI?.enter();
 }
-/** 進度只作文字呈現；不把模型輸出當成 HTML。summary 永遠顯示最新一步。 */
-function renderProjectActivity(details, events) {
+// 原生 runner 將 progress_note 與工具活動一起保存，舊對話不需要資料遷移。
+const PROJECT_NOTE_PREFIX = "AI 進度筆記：";
+
+/** 工具紀錄以純文字呈現；結束後用固定標題，避免長筆記出現在收合列。 */
+function renderProjectActivity(details, events, finished = false) {
   const history = (events || []).filter(text => typeof text === "string").slice(-120);
   details.className = "project-activity";
   details.replaceChildren();
   if (!history.length) { details.hidden = true; return; }
   details.hidden = false;
-  details.append(node("summary", "", history.at(-1)));
+  const latest = history.at(-1);
+  const label = finished ? "查看工具紀錄與進度筆記"
+    : latest.startsWith(PROJECT_NOTE_PREFIX) ? "AI 已更新進度筆記" : latest;
+  details.append(node("summary", "", label));
   const list = node("ol", "project-activity-history");
   for (const text of history) list.append(node("li", "", text));
   details.append(list);
 }
 
-/** 說明直接顯示在對話中；工具歷程仍可收合，文字不作 HTML 執行。 */
+/** 僅供執行中的區域使用；累積筆記只顯示最新一份，舊版本留在工具紀錄。 */
 function renderProjectNarration(container, events) {
   container.replaceChildren();
-  const notes = (events || []).filter(text => typeof text === "string" && text.startsWith("AI 說明："));
-  container.hidden = !notes.length;
+  const history = (events || []).filter(text => typeof text === "string");
+  const notes = history.filter(text => text.startsWith("AI 說明："));
+  const latestNote = history.filter(text => text.startsWith(PROJECT_NOTE_PREFIX)).at(-1);
+  container.hidden = !notes.length && !latestNote;
   for (const note of notes) {
     const text = node("div", "project-narration markdown");
     text.innerHTML = renderMarkdown(note.slice(6));
     container.append(text);
+  }
+  if (latestNote) {
+    const card = node("section", "project-progress-note");
+    card.setAttribute("aria-label", "AI 進度筆記");
+    card.append(node("strong", "", "AI 進度筆記"));
+    // 筆記只作文字，保留換行；不解譯其中的 HTML 或可執行連結。
+    card.append(node("div", "project-progress-note-text", latestNote.slice(PROJECT_NOTE_PREFIX.length)));
+    container.append(card);
   }
 }
 
@@ -509,12 +525,10 @@ function renderMessages() {
         );
     }
     if (message.project_activity?.length) {
-      const narration = node("div", "project-narrations");
-      renderProjectNarration(narration, message.project_activity);
-      content.append(narration);
+      // 最終答案與過程分開；完成、暫停或失敗後都只在收合紀錄保留中途說明。
       const details = document.createElement("details");
       details.open = activityExpanded.has(String(index));
-      renderProjectActivity(details, message.project_activity);
+      renderProjectActivity(details, message.project_activity, true);
       content.append(details);
     }
     content.append(bubble);
@@ -786,6 +800,7 @@ function receive(next) {
   renderMail();
   showView(activeView);
   window.WorkUI?.render();
+  window.ProjectComposer?.render();
   window.MailUI?.render();
   window.BehaviorUI?.render();
   window.VncUI?.render();
@@ -805,6 +820,7 @@ function resizePrompt() {
   input.style.height = Math.min(160, Math.max(48, input.scrollHeight)) + "px";
 }
 function submit(action = "send") {
+  if (window.ProjectComposer?.submit($("prompt").value, action)) return;
   if (!state.can_send || window.WorkUI?.getFileBusy()) return;
   const text = $("prompt").value;
   if (!text.trim() && !state.work?.attachments?.length) {
@@ -1117,6 +1133,7 @@ if (bridge) {
     else {
       receiveHotkeyMessage(event.data);
       window.ProjectUI?.receive(event.data);
+      window.ProjectComposer?.receive(event.data);
       window.WorkUI?.receive(event.data);
       window.VncUI?.receive(event.data);
     }

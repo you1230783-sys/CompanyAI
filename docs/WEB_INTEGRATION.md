@@ -1,3 +1,5 @@
+> **0.8.35：LOG 定位、主輸入框與進度筆記。** LOG 技能以近似時間定位事件；專案主輸入框可選下一輪提示、停止後新任務、完成後新任務。新增的是桌面原生命令與本機加密排程，不新增網站 API、資料表或工具參數。停止後的新任務使用新 run／request ID；原任務仍照原取消與未知請求契約處理。既有 `arguments.progress_note` 作執行中摘要，結束後收進工具紀錄，不改最終 message。詳見 [本版驗證](VALIDATION_0_8_35.md)。
+
 > **0.8.34：** 桌面新增 LOG 與 Outlook 專案工具，目錄共 38 項，仍按需公告；Outlook 同意由原生 UI 管理。補充作後續 user 訊息；被取代候選有 role=tool、executed=false。每段最長 24 小時，checkpoint 自動換批及 context 精簡；網站必須採用 client_snapshot，不自行把完整歷史加回。未知原請求只 GET 查回，需保留可續接的任務狀態／結果；不要求單一 HTTP 連線存活 24 小時。無新增路由／資料表。詳見 [功能與驗證](VALIDATION_0_8_34.md)。
 
 > **0.8.32：** Office 既有操作新增 `insert_image` 分支，不增加路由或資料庫欄位。工具目錄仍為 32 項，但每次請求依模型及副本／圖表狀態提供其中可用項目，網站不要假設 tools 永遠相同。原生回覆白名單與 `provider_specific_fields` 的處理，見 [本次驗證與配合事項](VALIDATION_0_8_32.md)。

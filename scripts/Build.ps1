@@ -44,6 +44,8 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     & cargo build --workspace --release --frozen
     if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
     $exe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\release\company-ai.exe'
+    $composerReport = Join-Path ([IO.Path]::GetTempPath()) 'CompanyAI-ui-smoke\composer-verification.json'
+    if (Test-Path -LiteralPath $composerReport) { Remove-Item -LiteralPath $composerReport }
     # GUI 程式以隱藏的自我檢查模式驗證控制項，避免編譯腳本停在主視窗。
     $smokeCheck = New-Object Diagnostics.Process
     $smokeCheck.StartInfo.FileName = $exe
@@ -60,6 +62,11 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         }
         if ($smokeCheck.ExitCode -ne 0) { throw ('Executable UI smoke check failed: ' + $smokeCheck.StandardError.ReadToEnd()) }
     } finally { $smokeCheck.Dispose() }
+    # 此檔由本次 EXE 原生控制器自檢產生；缺檔或失敗不能沿用舊驗證紀錄。
+    $composerCheck = Get-Content -LiteralPath $composerReport -Raw | ConvertFrom-Json
+    if ($composerCheck.result -ne 'PASS' -or $composerCheck.cases.Count -lt 9) {
+        throw 'Native project composer verification failed.'
+    }
     # 真正啟動隔離 EXE，驗證 OS 邊界及副本編輯；失敗不可發布看似可用的文件功能。
     & cargo build --example project_smoke --frozen
     if ($LASTEXITCODE -ne 0) { throw 'Project integration harness build failed.' }
@@ -153,6 +160,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     $dist = Join-Path $projectRoot 'dist'
     New-Item -ItemType Directory -Path $dist -Force | Out-Null
     Copy-Item -LiteralPath $exe -Destination (Join-Path $dist 'LM_AI.exe') -Force
+    Copy-Item -LiteralPath $composerReport -Destination (Join-Path $projectRoot 'offline\composer-verification.json') -Force
     Copy-Item -LiteralPath (Join-Path $projectRoot '.build\project-smoke\log-verification.json') -Destination (Join-Path $projectRoot 'offline\log-verification.json') -Force
     # 0.8.1 起僅交付 LM_AI.exe；移除已停用的相容檔名，不再產生第二份主程式。
     $legacyExe = Join-Path $dist 'CompanyAI.exe'
@@ -177,7 +185,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         compiler_report = $compilerReport
         empty_cargo_cache = [bool]$EmptyCargoCache
         cargo_home = $env:CARGO_HOME
-        checks = @('v142 x64 compiler probe','fmt','Clippy','workspace tests','cargo build --release --frozen','WebView2 DOM self-check','AppContainer OS file/network isolation','project copy/edit/publish integration','HTTP skills/tool loops with bounded JSON repair and activity history','DPAPI project memory, versioned notes and reserved .lmai boundary','persistent PDF cache, source/profile/hash invalidation','built-in skills, bounded cross-file search and chart dedup','fast model delegation, multi-section summaries, encrypted cache and pause without repost','offline ECharts canvas and data table','desktop-agent-v1 native HTTP roles, capability checks, cancellation and parent/child request recovery','large Excel headers, selected columns, row paging and native chart values','30 approximately 10 MiB LOG files, time and station filters, pagination and source revision checks','in-flight user instructions, stale tool and finish suppression, persistent original instructions','Outlook consent rejection with no mailbox access, fake-source folder/header/body paging and dedup','file lock close/retry and encrypted resume without repost','chart anomaly defaults and per-cell evidence table','24-hour policy with controlled deadlines, automatic multi-batch continuation and checkpoint interruption recovery','bounded context, preserved user requirements, encrypted operation archive and on-demand old results')
+        checks = @('v142 x64 compiler probe','fmt','Clippy','workspace tests','cargo build --release --frozen','WebView2 DOM self-check','native composer persistence, cancellation, cross-conversation continuation and restart recovery','AppContainer OS file/network isolation','project copy/edit/publish integration','HTTP skills/tool loops with bounded JSON repair and activity history','DPAPI project memory, versioned notes and reserved .lmai boundary','persistent PDF cache, source/profile/hash invalidation','built-in skills, bounded cross-file search and chart dedup','fast model delegation, multi-section summaries, encrypted cache and pause without repost','offline ECharts canvas and data table','desktop-agent-v1 native HTTP roles, capability checks, cancellation and parent/child request recovery','large Excel headers, selected columns, row paging and native chart values','30 approximately 10 MiB LOG files, time and station filters, pagination and source revision checks','in-flight user instructions, stale tool and finish suppression, persistent original instructions','Outlook consent rejection with no mailbox access, fake-source folder/header/body paging and dedup','file lock close/retry and encrypted resume without repost','chart anomaly defaults and per-cell evidence table','24-hour policy with controlled deadlines, automatic multi-batch continuation and checkpoint interruption recovery','bounded context, preserved user requirements, encrypted operation archive and on-demand old results')
         exe_sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
         installer_built = [bool]$IncludeInstaller
         real_vnc_tested = [bool]$TestVnc

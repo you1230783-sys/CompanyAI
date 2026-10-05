@@ -636,8 +636,11 @@ impl App {
             return Ok(());
         }
         let question = self
-            .messages
-            .first()
+            .archive
+            .conversations
+            .iter()
+            .find(|conversation| conversation.id == local)
+            .and_then(|conversation| conversation.messages.first())
             .map(|m| m.content.as_str())
             .unwrap_or_default();
         let prompt =

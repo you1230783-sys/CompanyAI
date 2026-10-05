@@ -219,7 +219,7 @@ function renderWork() {
   // 對话操作已移至各歷史列。每次均依最新狀態設定，接收結束即可恢復，
   // 不依賴原生下一次推播，也不重建歷史清單而丟失焦點。
   const conversationLocked = fileBatchBusy || state.busy !== "none";
-  $("send").disabled = fileBatchBusy || !state.can_send;
+  $("send").disabled = fileBatchBusy || (!state.can_send && !window.ProjectComposer?.canSend());
   $("new-chat").disabled = conversationLocked;
   document.querySelectorAll(".history-item,[data-history-action]")
     .forEach(button => { button.disabled = conversationLocked; });

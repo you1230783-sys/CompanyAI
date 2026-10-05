@@ -1,6 +1,8 @@
 //! 專案 UI 控制器。只有使用者原生命令可新增授權，模型不能建立專案或擴大根目錄。
 use super::*;
 use crate::projects::{self, Store};
+mod composer;
+mod composer_smoke;
 
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
@@ -58,6 +60,22 @@ pub(super) enum ProjectCommand {
         retry: bool,
     },
     Stop,
+    Compose {
+        conversation: String,
+        run_id: String,
+        request_id: u64,
+        mode: composer::ComposeMode,
+        instruction_id: Option<String>,
+        text: String,
+    },
+    CancelQueued {
+        conversation: String,
+        id: String,
+    },
+    SendQueued {
+        conversation: String,
+        id: String,
+    },
     Supplement {
         conversation: String,
         run_id: String,
@@ -238,6 +256,15 @@ impl App {
         let mut archive = self.archive.clone();
         let mut changed = false;
         for conversation in &mut archive.conversations {
+            // 程式重開後保留排程文字，但不沿用上一個程序的自動啟動意圖。
+            if let Some(queued) = conversation
+                .project_queued
+                .as_mut()
+                .filter(|q| q.auto_start)
+            {
+                queued.auto_start = false;
+                changed = true;
+            }
             if !self
                 .projects
                 .store
@@ -279,9 +306,63 @@ impl App {
             "outlook_consent":self.projects.running.as_ref().and_then(|r|r.pending_outlook.as_ref().map(|p|json!({"request_id":p.id}))),
             "file_busy":self.projects.running.as_ref().and_then(|r|r.pending_file.as_ref().map(|p|json!({"request_id":p.id,"message":p.message}))),
             "supplements":self.projects.running.as_ref().and_then(|r|r.instructions.entries().ok()),
+            "queued":self.archive.conversations.iter().find(|c| Some(&c.id)==self.active_id.as_ref()).and_then(|c| c.project_queued.as_ref()).map(|q| json!({"id":q.id,"text":q.text,"after_run":q.after_run,"interrupt":q.interrupt,"auto_start":q.auto_start})),
+            "stopping":self.projects.running.as_ref().is_some_and(|r|r.cancel.load(Ordering::Relaxed)),
             "running":self.projects.running.is_some(),"running_id":self.projects.running.as_ref().map(|r|&r.id),"activity":self.projects.running.as_ref().map(|r|&r.activity),"charts":self.projects.running.as_ref().map(|r|&r.charts),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
     }
     pub(super) fn project_command(&mut self, command: ProjectCommand) -> AppResult<()> {
+        match &command {
+            ProjectCommand::Compose {
+                conversation,
+                run_id,
+                request_id,
+                mode,
+                instruction_id,
+                text,
+            } => {
+                let result = self.compose_project_message(
+                    conversation,
+                    run_id,
+                    *mode,
+                    instruction_id.as_deref(),
+                    text,
+                );
+                if result.is_ok() {
+                    // 不增加 draft_revision，避免狀態推播蓋掉等待 ack 時新輸入的字。
+                    // 原對話的已接受草稿仍要清除，切換頁面才不會再帶回同一則文字。
+                    if self.active_id.as_deref() == Some(conversation) && self.draft == *text {
+                        self.draft.clear();
+                    }
+                    if let Some(chat) = self
+                        .archive
+                        .conversations
+                        .iter_mut()
+                        .find(|c| c.id == *conversation)
+                    {
+                        if chat.draft == *text {
+                            chat.draft.clear();
+                        }
+                    }
+                }
+                // 成功／失敗都回覆精確送出識別碼，UI 僅在成功時清除該次文字。
+                self.view.post(
+                    &json!({"type":"project_compose_ack","conversation":conversation,
+                    "run_id":run_id,"request_id":request_id,"ok":result.is_ok(),
+                    "error":result.err()}),
+                )?;
+                return Ok(());
+            }
+            ProjectCommand::CancelQueued { conversation, id } => {
+                return self.cancel_queued_project(conversation, id);
+            }
+            ProjectCommand::SendQueued { conversation, id } => {
+                if self.active_id.as_deref() != Some(conversation) {
+                    return Err("請在原對話傳送待送訊息。".into());
+                }
+                return self.start_queued_project(conversation, id);
+            }
+            _ => (),
+        }
         if let ProjectCommand::FileReady {
             conversation,
             run_id,
@@ -457,7 +538,16 @@ impl App {
             return projects::files::reveal(project, path);
         }
         if matches!(command, ProjectCommand::Stop) {
+            // 先停止 worker；即使保存排程狀態失敗，也不讓停止按鈕失效。
             self.projects.cancel();
+            if let Some(conversation) = self
+                .projects
+                .running
+                .as_ref()
+                .map(|r| r.conversation.clone())
+            {
+                self.hold_queued_project(&conversation)?;
+            }
             return Ok(());
         }
         // 此入口可在任務忙碌時使用，但仍逐次核對登入、版本、對話及執行 ID。
@@ -608,6 +698,9 @@ impl App {
                 unreachable!("handled above")
             }
             ProjectCommand::Stop
+            | ProjectCommand::Compose { .. }
+            | ProjectCommand::CancelQueued { .. }
+            | ProjectCommand::SendQueued { .. }
             | ProjectCommand::Supplement { .. }
             | ProjectCommand::WithdrawSupplement { .. } => (),
         }
@@ -725,13 +818,26 @@ impl App {
     }
     fn begin_project_segment(
         &mut self,
-        mut messages: Vec<Message>,
+        messages: Vec<Message>,
         resume_id: Option<String>,
     ) -> AppResult<()> {
+        let conversation = self.active_id.clone().ok_or("請先建立專案對話。")?;
+        self.begin_project_for(conversation, messages, resume_id, None)
+    }
+    /// 指定原對話啟動；排程接續不改使用者目前開啟的對話或未送出草稿。
+    fn begin_project_for(
+        &mut self,
+        conversation: String,
+        mut messages: Vec<Message>,
+        resume_id: Option<String>,
+        queued_id: Option<&str>,
+    ) -> AppResult<()> {
+        if self.history_error.is_some() {
+            return Err("本機對話尚未恢復保存，請先處理紀錄錯誤。".into());
+        }
         if self.projects.running.is_some() {
             return Err("第一版一次只執行一個專案任務，請先等待或停止。".into());
         }
-        let conversation = self.active_id.clone().ok_or("請先建立專案對話。")?;
         let project = self
             .projects
             .store
@@ -747,7 +853,10 @@ impl App {
         }
         let id = match resume_id {
             Some(id) => id,
-            None => crate::jobs::new_id()?,
+            None => match queued_id {
+                Some(id) => id.into(),
+                None => crate::jobs::new_id()?,
+            },
         };
         let cancel = Arc::new(AtomicBool::new(false));
         let instructions = projects::steering::Inbox::open(&self.root, &id)?;
@@ -800,8 +909,6 @@ impl App {
         if let Some(message) = messages.last_mut() {
             message.request_id = Some(id.clone());
         }
-        self.messages = messages.clone();
-        self.save_history()?;
         let run = projects::runner::Run {
             resume,
             id: id.clone(),
@@ -820,6 +927,33 @@ impl App {
             outlook_consent: Some(outlook_consent),
             file_waiter: Some(file_waiter),
         };
+        // 所有準備檢查成功後才提交歷史，避免未啟動卻遺失待送文字。
+        let mut archive = self.archive.clone();
+        let chat = archive
+            .conversations
+            .iter_mut()
+            .find(|c| c.id == conversation)
+            .ok_or("專案對話已不存在。")?;
+        if let Some(id) = queued_id {
+            if !chat.project_queued.as_ref().is_some_and(|q| q.id == id) {
+                return Err("待送訊息已變更。".into());
+            }
+            chat.project_queued = None;
+        }
+        chat.messages = messages.clone();
+        chat.updated_at = crate::unix_now();
+        if queued_id.is_none() {
+            chat.draft.clear();
+        }
+        history::save(&self.root, &archive)?;
+        self.archive = archive;
+        // 自動接續可能發生在另一個對話開啟時，標題也必須綁定原對話。
+        let title_conversation = (!resume
+            && messages.iter().filter(|m| m.role == "user").count() == 1)
+            .then(|| conversation.clone());
+        if self.active_id.as_deref() == Some(&conversation) {
+            self.messages = messages;
+        }
         self.projects.running = Some(Running {
             pending_file: None,
             pending_outlook: None,
@@ -832,7 +966,9 @@ impl App {
             started: crate::unix_now(),
             cancel,
         });
-        self.set_draft(String::new());
+        if queued_id.is_none() && self.active_id.as_deref() == Some(&conversation) {
+            self.set_draft(String::new());
+        }
         self.projects.status = "正在建立受限制執行器…".into();
         let tx = self.tx.clone();
         thread::spawn(move || {
@@ -905,9 +1041,8 @@ impl App {
                 result,
             )));
         });
-        if !resume && self.messages.iter().filter(|m| m.role == "user").count() == 1 {
-            if let Err(error) = self.queue_title(&self.active_id.clone().ok_or("找不到對話。")?)
-            {
+        if let Some(conversation) = title_conversation {
+            if let Err(error) = self.queue_title(&conversation) {
                 self.toast(&format!("專案任務已開始；標題暫未產生：{error}"));
             }
         }
@@ -1172,6 +1307,9 @@ impl App {
                         tray(self.window, NIM_MODIFY, Some(&self.projects.status));
                     }
                 }
+                let completed =
+                    succeeded && !paused && !cancelled && self.projects.status != "等待你的補充。";
+                self.finish_queued_project(&conversation, &id, completed, cancelled);
             }
         }
         Ok(())

@@ -55,40 +55,9 @@
     deny.onclick=()=>replyOutlook(false);allow.onclick=()=>replyOutlook(true);
     buttons.append(deny,allow);outlookDialog.append(title,explanation,limit,buttons);outlookDialog.showModal();deny.focus();
   }
-  // 補充使用獨立輸入框，避免把主輸入框的未送出草稿誤當成新任務。
-  const supplementDialog=document.createElement("dialog");
-  supplementDialog.id="project-supplement-dialog";
-  const supplementTitle=node("h2","","補充本次任務的指示");
-  const supplementHint=node("p","","在下一輪 AI 請求帶入，持續到本次任務結束。已開始的操作會先完成；停止任務請使用停止按鈕。");
-  const supplementText=document.createElement("textarea");
-  supplementText.id="project-supplement-text";supplementText.rows=6;supplementText.maxLength=4000;
-  supplementText.setAttribute("aria-label","補充指示內容");
-  const supplementSend=node("button","primary","送出補充"), supplementClose=node("button","","關閉");
-  supplementSend.id="project-supplement-send";
-  const supplementButtons=node("div","dialog-actions");supplementButtons.append(supplementClose,supplementSend);
-  supplementDialog.append(supplementTitle,supplementHint,supplementText,supplementButtons);document.body.append(supplementDialog);
-  let supplementTarget=null, supplementSignature="";
-  function openSupplement(entry=null) {
-    const project=state.projects;
-    if (!state.logged_in || !project?.running || project.running_conversation!==state.active_id) return;
-    supplementTarget={conversation:state.active_id,run_id:project.running_id,instruction_id:entry?.id || null};
-    if (entry) supplementText.value=entry.text;
-    supplementSend.disabled=false;
-    supplementDialog.showModal();supplementText.focus();
-  }
-  supplementClose.onclick=()=>supplementDialog.close();
-  supplementSend.onclick=()=>{
-    if (!supplementTarget || !supplementText.value.trim()) return;
-    supplementSend.disabled=true;
-    command({action:"supplement",...supplementTarget,text:supplementText.value});
-  };
-  $("project-supplement").onclick=()=>openSupplement();
+  // 指示由主輸入框送出；此區只保留已提交項目的狀態與修改／撤回入口。
+  let supplementSignature = "";
   function renderSupplements(project,visible) {
-    $("project-supplement").hidden=!visible;
-    $("project-supplement").disabled=!visible;
-    if (supplementDialog.open && (!visible || supplementTarget?.run_id!==project.running_id)) supplementDialog.close();
-    // 原生錯誤同樣會重繪狀態；保留文字，允許修正後重送。
-    if (supplementDialog.open) supplementSend.disabled=false;
     const entries=visible ? (project.supplements || []) : [];
     $("project-supplements").hidden=!entries.length;
     const signature=JSON.stringify([project.running_id,entries]);
@@ -99,7 +68,7 @@
       const row=node("div","supplement-entry");
       row.append(node("strong","",({pending:"等待下一輪接收",staged:"已接收，準備下一輪",sent:"已帶入模型請求",withdrawn:"已撤回"}[entry.status] || entry.status)),node("p","",entry.text));
       if (entry.status==="pending") {
-        row.append(button("修改",()=>openSupplement(entry),false),button("撤回",()=>command({action:"withdraw_supplement",conversation:state.active_id,run_id:project.running_id,instruction_id:entry.id}),false));
+        row.append(button("修改",()=>window.ProjectComposer?.editSupplement(entry),false),button("撤回",()=>command({action:"withdraw_supplement",conversation:state.active_id,run_id:project.running_id,instruction_id:entry.id}),false));
       }
       list.append(row);
     }
@@ -236,13 +205,6 @@
   window.ProjectUI = {
     openDiagnostics,
     receive(message) {
-      if (message.type==="project_supplement_ack") {
-        if (supplementTarget?.run_id===message.run_id) {
-          supplementText.value="";supplementDialog.close();supplementTarget=null;
-          toast("補充指示已保存，將在下一輪帶入");
-        }
-        return;
-      }
       if (message.type === "project_diagnostics") {
         if (diagnosticsRequest && $("project-diagnostics-dialog").open && message.conversation === state.active_id &&
             message.conversation === diagnosticsRequest.conversation && message.run_id === diagnosticsRequest.run_id) {

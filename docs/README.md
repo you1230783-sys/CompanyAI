@@ -60,3 +60,6 @@
 [後端規劃](BACKEND_ROADMAP.md) 與 [早期介面說明](UI_AND_STREAMING.md) 是歷史設計資料；目前是否已實作請核對最新契約及程式碼。
 
 - [0.8.33 圖表資料決策與按需工具驗證](VALIDATION_0_8_33.md)
+
+- [0.8.34 大型 LOG、Outlook 與長任務驗證](VALIDATION_0_8_34.md)
+- [0.8.35 進度筆記、LOG 定位與主輸入框驗證](VALIDATION_0_8_35.md)

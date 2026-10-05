@@ -106,7 +106,6 @@
                 <div id="project-supplement-list"></div>
               </details>
               <div class="quick-actions">
-                <button id="project-supplement" hidden>補充指示</button>
               <button id="project-stop" hidden>停止專案任務</button>
               <button data-action="translate">
                 <span data-icon="languages"></span>翻譯</button
@@ -117,7 +116,18 @@
               </button>
             </div>
             <div id="attachment-list" class="attachment-list"></div>
+            <div id="project-queued-message" class="project-queued-message" hidden></div>
             <div class="composer">
+              <div id="project-compose-controls" class="project-compose-controls" hidden>
+                <label for="project-send-mode">本次傳送方式</label>
+                <select id="project-send-mode">
+                  <option value="next_turn">下一輪加入提示（預設）</option>
+                  <option value="interrupt">停止目前任務並傳送，開始新任務</option>
+                  <option value="after_task">任務完成後傳送，開始新任務</option>
+                </select>
+                <button id="project-edit-cancel" class="text-button" hidden>取消修改補充</button>
+                <span id="project-compose-hint"></span>
+              </div>
               <textarea
                 id="prompt"
                 aria-label="輸入訊息"
@@ -599,6 +609,7 @@
     <script src="vnc.js"></script>
     <script src="vnc-sync.js"></script>
     <script src="projects.js"></script>
+    <script src="project-composer.js"></script>
     <script src="dialogs.js"></script>
     <script src="auth-gate.js"></script>
   </body>

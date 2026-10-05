@@ -635,8 +635,17 @@ fn run_for(
                 task_summary = parsed.task_summary.clone();
             }
             if progress_state.accept_note(parsed.note.as_deref()) {
-                report(&mut activity, &mut progress, "已更新任務筆記".into());
                 record["progress"] = progress_state.snapshot(broker.progress_snapshot());
+            }
+            // 顯示已通過解析的工作摘要，沿用活動紀錄的保存與大小限制。
+            // 首輪尚無工具結果時也可顯示下一步；不因此放寬上下文縮減的證據條件。
+            if let Some(note) = parsed
+                .note
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                report(&mut activity, &mut progress, format!("AI 進度筆記：{note}"));
             }
             if !parsed.commentary.is_empty() {
                 report(

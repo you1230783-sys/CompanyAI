@@ -1991,7 +1991,7 @@
       "type": "function",
       "function": {
         "name": "search_logs",
-        "description": "跨最多30個大型LOG搜尋時間與任一關鍵字；每頁最多30個命中，原文600字摘錄；有next_cursor必須續頁，不能把未完成當無異常。",
+        "description": "跨最多30個大型LOG搜尋時間與任一關鍵字，支援只有時間的紀錄。約略操作時間先前後各5分鐘定位事件錨點，時間填start_time/end_time，勿將整點字串填terms反覆精確搜尋。每頁最多30個命中、600字摘錄；有next_cursor需續頁，不能把未完成當無異常。",
         "parameters": {
           "type": "object",
           "properties": {

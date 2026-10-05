@@ -395,7 +395,8 @@ fn stamp(line: &str) -> Option<Stamp> {
     if time_text.len() < 5 {
         return None;
     }
-    let millis = time(&time_text.replace(',', "."), false).ok()?;
+    // 逗號可作毫秒小數點，也可分隔時間與訊息；只移除尾端分隔符。
+    let millis = time(&time_text.trim_end_matches(',').replace(',', "."), false).ok()?;
     Some(Stamp { date, millis })
 }
 
@@ -788,5 +789,43 @@ mod tests {
             Some(false)
         );
         assert_eq!(filter.time_matches(None), None);
+    }
+
+    #[test]
+    fn approximate_window_finds_time_only_anchor_with_comma_separator() {
+        let project = fixture();
+        let path = "20260622_system_A01-01.log";
+        std::fs::write(project.root.join(path),
+            "09:54:00.000, 待機\n10:03:21.084, 上料判定\n  批號 A123\n10:04:00,084, 作動\n10:06, 完成\n").unwrap();
+        let mut query = Query {
+            paths: vec![path.into()],
+            start_time: Some("09:55".into()),
+            end_time: Some("10:05".into()),
+            date: Some("2026-06-22".into()),
+            ..Default::default()
+        };
+        let cancel = AtomicBool::new(false);
+        let (result, next) = search(&project, &query, None, &cancel).unwrap();
+        assert!(next.is_none());
+        assert_eq!(result["complete"], true);
+        let lines: Vec<_> = result["matches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["line"].as_u64().unwrap())
+            .collect();
+        assert_eq!(lines, vec![2, 3, 4]);
+        assert_eq!(result["matches"][0]["date"], "2026-06-22");
+        assert_eq!(result["matches"][1]["time_inherited"], true);
+        // 沒有可用日期時仍可搜尋時間，但嚴格日期篩選不能冒充完整。
+        std::fs::copy(project.root.join(path), project.root.join("unknown.log")).unwrap();
+        query.paths = vec!["unknown.log".into()];
+        let (strict, _) = search(&project, &query, None, &cancel).unwrap();
+        assert_eq!(strict["complete"], false);
+        assert!(strict["matches"].as_array().unwrap().is_empty());
+        query.date = None;
+        let (undated, _) = search(&project, &query, None, &cancel).unwrap();
+        assert_eq!(undated["matches"].as_array().unwrap().len(), 3);
+        assert!(undated["matches"][0]["date"].is_null());
     }
 }
