@@ -86,7 +86,9 @@ pub fn verify(root: &Path) -> AppResult<()> {
                     );
                 }
                 if round == 56 {
-                    assert!(body["messages"].to_string().contains("即將暫停"));
+                    let reminder = body["messages"].to_string();
+                    assert!(reminder.contains("arguments.progress_note"));
+                    assert!(reminder.contains("剩餘 24 次模型回覆、4 次工具操作"));
                 }
                 let request = match round {
                     0 => json!({"tool":"create_working_copy","source":null,"name":"接續.txt"}),
@@ -141,6 +143,9 @@ pub fn verify(root: &Path) -> AppResult<()> {
         session: session.clone(),
         root: root.join("app-data"),
         cancel: Arc::new(AtomicBool::new(false)),
+        instructions: None,
+        outlook_consent: None,
+        file_waiter: None,
     };
     let result = (|| -> AppResult<()> {
         let paused = runner::run_legacy_test(run(false), |_| {})?;

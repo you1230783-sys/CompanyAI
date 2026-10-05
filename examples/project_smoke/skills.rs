@@ -229,6 +229,9 @@ fn delegation(root: &Path, pending: bool) -> AppResult<()> {
         session: session.clone(),
         root: root.join("app-data"),
         cancel: Arc::new(AtomicBool::new(false)),
+        instructions: None,
+        outlook_consent: None,
+        file_waiter: None,
     };
     let result = (|| -> AppResult<()> {
         if pending {

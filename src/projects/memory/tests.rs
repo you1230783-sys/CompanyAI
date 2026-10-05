@@ -140,7 +140,7 @@ fn context_keeps_original_results_on_disk_and_only_sends_selected_memory() {
     assert!(!memory.context(&[Message::user("原始要求")]).unwrap()[0]
         .content
         .contains("上一輪已確認"));
-    assert!(!context
+    assert!(context
         .iter()
         .any(|m| m.content.contains("UNIQUE_FULL_ANSWER_")));
     assert!(context[0].content.contains("上一輪已確認數值 42"));
@@ -157,6 +157,66 @@ fn context_keeps_original_results_on_disk_and_only_sends_selected_memory() {
             .unwrap();
     }
     assert!(memory.context(&messages).unwrap()[0].content.len() < 42_000);
+}
+#[test]
+fn next_conversation_uses_final_answers_and_counts_with_chunked_details_on_demand() {
+    let project = fixture();
+    let memory = Memory::open(project.clone(), "chat").unwrap();
+    memory
+        .save_run("prior", "原要求", "最終回覆", "completed", None, &[])
+        .unwrap();
+    let raw = "中間原文不送入下一輪".repeat(30_000);
+    let operations = json!([
+        {"operation_id":"one","request":{"tool":"read_file","path":"x.txt","offset":0},"result":{"ok":true,"result":{"text":raw}}},
+        {"operation_id":"two","request":{"tool":"read_file","path":"x.txt","offset":6000},"result":{"ok":true}},
+        {"operation_id":"list","request":{"tool":"list_files","path":""},"result":{"ok":true}}
+    ]);
+    memory.save_operations("prior", &operations).unwrap();
+    let mut user = Message::user("原要求");
+    user.request_id = Some("prior".into());
+    let mut answer = Message::assistant("最終回覆".into());
+    answer.request_id = Some("prior".into());
+    let context = memory
+        .context(&[user, answer, Message::user("第三輪")])
+        .unwrap();
+    assert!(context.iter().any(|m| m.content == "原要求"));
+    assert!(context.iter().any(|m| m.content == "最終回覆"));
+    assert!(context[0].content.contains("tool_usage"));
+    assert!(!context
+        .iter()
+        .any(|m| m.content.contains("中間原文不送入下一輪")));
+    let index: Index = memory
+        .vault
+        .transaction()
+        .unwrap()
+        .read("project", "index")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        index.runs[0].tool_usage[Tool::ReadFile {
+            path: String::new(),
+            offset: 0
+        }
+        .label()],
+        2
+    );
+    let boundary = OPERATION_CHUNK_CHARS - 100;
+    let part = memory
+        .read_task_result("prior", "operations", boundary)
+        .unwrap();
+    assert_eq!(
+        part["text"].as_str().unwrap(),
+        operations
+            .to_string()
+            .chars()
+            .skip(boundary)
+            .take(6000)
+            .collect::<String>()
+    );
+    assert!(Memory::open(project, "other")
+        .unwrap()
+        .read_task_result("prior", "operations", 0)
+        .is_err());
 }
 #[test]
 fn reserved_folder_and_linked_private_files_are_rejected() {
@@ -182,6 +242,31 @@ fn reserved_folder_and_linked_private_files_are_rejected() {
         std::fs::read_to_string(project.root.join("original.txt")).unwrap(),
         "original"
     );
+}
+
+#[test]
+fn archived_operation_survives_reopen_and_detects_changed_content() {
+    let project = fixture();
+    let memory = Memory::open(project.clone(), "chat").unwrap();
+    let raw = json!([{"tool":"save_copy","copy_id":"copy","revision":"v1"},{"ok":true,"result":{"path":"result.txt"}}]);
+    let hash = memory.archive_operation(&raw).unwrap();
+    let reopened = Memory::open(project, "chat").unwrap();
+    assert_eq!(reopened.archived_operation(&hash).unwrap(), raw);
+    reopened
+        .vault
+        .transaction()
+        .unwrap()
+        .write("operation-parts", &hash, &json!([{}, {}]))
+        .unwrap();
+    assert!(reopened.archived_operation(&hash).is_err());
+}
+
+#[test]
+fn valid_large_tool_result_is_archived_in_bounded_encrypted_chunks() {
+    let memory = Memory::open(fixture(), "chat").unwrap();
+    let result = json!([{"tool":"create_chart"},{"payload":"字".repeat(2_700_000)}]);
+    let hash = memory.archive_operation(&result).unwrap();
+    assert_eq!(memory.archived_operation(&hash).unwrap(), result);
 }
 #[test]
 fn pdf_cache_survives_reopen_checks_hash_and_has_a_bounded_index() {

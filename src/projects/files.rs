@@ -68,7 +68,7 @@ pub(super) fn pin(path: &Path) -> AppResult<Vec<File>> {
 }
 
 /// 以 Windows 正規化後的 handle 路徑排除私有資料；8.3 別名亦不可繞過名稱檢查。
-fn reject_internal(file: &File) -> AppResult<()> {
+pub(super) fn reject_internal(file: &File) -> AppResult<()> {
     let mut name = vec![0u16; 32768];
     let count = unsafe {
         GetFinalPathNameByHandleW(
@@ -176,7 +176,7 @@ fn read_cancel(
         .share_mode(FILE_SHARE_READ)
         .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
         .open(&target)
-        .map_err(|_| "文件不存在、被占用或無讀取權限。")?;
+        .map_err(|e| super::interaction::open_error(&target, e))?;
     reject_internal(&file)?;
     let mut info = BY_HANDLE_FILE_INFORMATION::default();
     if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0
@@ -443,7 +443,7 @@ pub(super) fn checked_file(path: &Path) -> AppResult<File> {
         .share_mode(FILE_SHARE_READ)
         .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
         .open(path)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| super::interaction::open_error(path, e))?;
     let mut info = BY_HANDLE_FILE_INFORMATION::default();
     if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0
         || info.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY) != 0
@@ -625,9 +625,15 @@ struct ChartExport {
 /// 只保存資料，不保存授權、Token、COM 物件或執行中的程序。
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(super) struct SavedBroker {
+    #[serde(default)]
+    outlook: super::mail::Saved,
+    #[serde(default)]
+    log_cursors: BTreeMap<String, super::logs::Cursor>,
     output_folder: Option<String>,
     copies: BTreeMap<String, Copy>,
     results: BTreeMap<String, (Value, Value)>,
+    #[serde(default)]
+    archived_results: BTreeMap<String, Value>,
     published: Vec<String>,
     txt_context: bool,
     #[serde(default)]
@@ -638,6 +644,9 @@ pub(super) struct SavedBroker {
     chart_exports: Vec<ChartExport>,
 }
 pub struct Broker {
+    file_waiter: Option<super::interaction::FileWaiter>,
+    outlook: super::mail::Session,
+    log_cursors: BTreeMap<String, super::logs::Cursor>,
     server_pdf: Option<super::server_pdf::Reader>,
     memory: Option<super::memory::Memory>,
     project: Project,
@@ -645,6 +654,7 @@ pub struct Broker {
     copies: BTreeMap<String, Copy>,
     /// 同一 operation_id 只能配對同一份工具參數，重送僅回傳已記錄的結果。
     results: BTreeMap<String, (Value, Value)>,
+    archived_results: BTreeMap<String, Value>,
     published: Vec<String>,
     /// 任務接觸 TXT 後，不允許把內容混入未加密的 MD 成果。
     txt_context: bool,
@@ -659,12 +669,16 @@ impl Broker {
     pub fn new(project: Project, _task: String) -> AppResult<Self> {
         validate_root(&project.root)?;
         Ok(Self {
+            file_waiter: None,
+            outlook: super::mail::Session::default(),
+            log_cursors: BTreeMap::new(),
             server_pdf: None,
             memory: None,
             project,
             output_folder: None,
             copies: BTreeMap::new(),
             results: BTreeMap::new(),
+            archived_results: BTreeMap::new(),
             published: Vec::new(),
             txt_context: false,
             loaded_skills: vec![],
@@ -676,14 +690,16 @@ impl Broker {
         })
     }
     pub(super) fn saved(&self) -> AppResult<SavedBroker> {
-        // 經序列化建立不含程序資源的快照，只有明確暫停時才呼叫。
+        // 經序列化建立不含程序資源的快照；授權與執行中的 COM 物件不保存。
         serde_json::from_value(
-            json!({"output_folder":self.output_folder,"copies":self.copies,
-            "results":self.results,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports}),
+            json!({"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
+            "results":self.results,"archived_results":self.archived_results,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports}),
         )
         .map_err(|e| e.to_string())
     }
     pub(super) fn restore(&mut self, state: SavedBroker, cancel: &AtomicBool) -> AppResult<()> {
+        self.log_cursors = state.log_cursors;
+        self.outlook.saved = state.outlook;
         if state.copies.len() > 20 {
             return Err("暫存工作副本數不合法。".into());
         }
@@ -733,6 +749,7 @@ impl Broker {
         self.output_folder = state.output_folder;
         self.copies = state.copies;
         self.results = state.results;
+        self.archived_results = state.archived_results;
         self.published = state.published;
         self.txt_context = state.txt_context;
         Ok(())
@@ -803,6 +820,22 @@ impl Broker {
     }
     pub fn set_png_renderer(&mut self, renderer: super::charts::png::Renderer) {
         self.png_renderer = Some(renderer);
+    }
+    pub fn set_outlook_consent(&mut self, consent: Option<super::mail::Consent>) {
+        self.outlook.set_consent(consent);
+    }
+    pub fn set_file_waiter(&mut self, waiter: Option<super::interaction::FileWaiter>) {
+        self.file_waiter = waiter;
+    }
+    fn wait_for_file(&mut self, error: &str, cancel: &AtomicBool) -> AppResult<bool> {
+        match self.file_waiter.as_mut() {
+            Some(waiter) => waiter(
+                &error.replace(super::interaction::BUSY, ""),
+                cancel,
+                self.chart_deadline,
+            ),
+            None => Ok(false),
+        }
     }
     pub fn set_chart_chooser(
         &mut self,
@@ -994,6 +1027,7 @@ impl Broker {
                         matches.push(json!({"path":path,"revision":revision,"offset":offset,"excerpt":content.chars().skip(start).take(300).collect::<String>()}));
                     }
                 }
+                Err(error) if error.contains(super::interaction::DEFERRED) => return Err(error),
                 Err(error) => errors.push(json!({"path":path,"error":error})),
             }
         }
@@ -1004,13 +1038,63 @@ impl Broker {
     pub fn published(&self) -> &[String] {
         &self.published
     }
+    /// 每批結束先封存原文，再縮小快照。索引保留全部 ID，重送不會重做修改。
+    pub(super) fn archive_results(&mut self) -> AppResult<()> {
+        for (id, (request, result)) in &self.results {
+            let hash = self
+                .memory()?
+                .archive_operation(&json!([request, result]))?;
+            self.archived_results.insert(
+                id.clone(),
+                json!({"hash":hash,"tool":request["tool"],"ok":result["ok"]}),
+            );
+        }
+        self.results.clear();
+        Ok(())
+    }
+    fn recorded_operation(&self, id: &str) -> AppResult<Option<(Value, Value)>> {
+        if let Some(pair) = self.results.get(id) {
+            return Ok(Some(pair.clone()));
+        }
+        let Some(entry) = self.archived_results.get(id) else {
+            return Ok(None);
+        };
+        let value = self
+            .memory()?
+            .archived_operation(entry["hash"].as_str().ok_or("操作索引無效。")?)?;
+        serde_json::from_value(value)
+            .map(Some)
+            .map_err(|_| "操作原文格式無效。".into())
+    }
+    pub(super) fn operation_history(&self) -> AppResult<Value> {
+        let mut rows = Vec::new();
+        for id in self
+            .archived_results
+            .keys()
+            .chain(self.results.keys())
+            .collect::<std::collections::BTreeSet<_>>()
+        {
+            let (request, result) = self.recorded_operation(id)?.ok_or("操作紀錄遺失。")?;
+            rows.push(json!({"operation_id":id,"request":request,"result":result}));
+        }
+        Ok(json!(rows))
+    }
     /// 非同步委派也共用操作去重表；不能與一般工具重複使用不同參數的 ID。
     pub(super) fn cached_result(&self, id: &str, tool: &Tool) -> AppResult<Option<Value>> {
         crate::jobs::validate_id(id)?;
         let request = serde_json::to_value(tool).map_err(|e| e.to_string())?;
-        if let Some((previous, result)) = self.results.get(id) {
-            if previous != &request {
+        if let Some((previous, result)) = self.recorded_operation(id)? {
+            if previous != request {
                 return Err("操作識別碼重複但參數不同；已停止。".into());
+            }
+            if matches!(
+                tool,
+                Tool::OutlookFolders { .. }
+                    | Tool::OutlookHeaders { .. }
+                    | Tool::OutlookRead { .. }
+            ) && !self.outlook.is_allowed()
+            {
+                return Ok(None);
             }
             return Ok(Some(result.clone()));
         }
@@ -1040,14 +1124,60 @@ impl Broker {
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
         crate::jobs::validate_id(id)?;
+        // 連重播舊工具結果都先經本次同意；授權不隨 checkpoint 恢復。
+        if matches!(
+            tool,
+            Tool::OutlookFolders { .. } | Tool::OutlookHeaders { .. } | Tool::OutlookRead { .. }
+        ) && !self.outlook.authorize(cancel, self.chart_deadline)?
+        {
+            return Ok(
+                json!({"ok":true,"result":{"declined":true,"executed":false,"message":"使用者未同意本次 Outlook 讀取；未接觸資料夾或郵件，請改用已提供的資料。"}}),
+            );
+        }
         let request = serde_json::to_value(tool).map_err(|e| e.to_string())?;
-        if let Some((old, result)) = self.results.get(id) {
-            if old != &request {
+        if let Some((old, result)) = self.recorded_operation(id)? {
+            if old != request {
                 return Err("操作識別碼重複但參數不同；已停止。".into());
             }
             return Ok(result.clone());
         }
-        let result = match self.perform(tool, worker, cancel) {
+        let outcome = loop {
+            let result = self.perform(tool, worker, cancel);
+            let Err(error) = &result else {
+                break result;
+            };
+            let retryable = matches!(
+                tool,
+                Tool::ReadFile { .. }
+                    | Tool::CreateWorkingCopy {
+                        source: Some(_),
+                        ..
+                    }
+                    | Tool::FindText { .. }
+                    | Tool::SearchFiles { .. }
+                    | Tool::ListDocumentSections { .. }
+                    | Tool::ReadLog { .. }
+                    | Tool::SearchLogs { .. }
+                    | Tool::InspectExcel { .. }
+                    | Tool::ReadExcelRange { .. }
+                    | Tool::ChartExcelRange { .. }
+                    | Tool::ChartFromExcel { .. }
+            );
+            if error.contains(super::interaction::DEFERRED)
+                || (retryable && error.contains(super::interaction::BUSY))
+            {
+                if !error.contains(super::interaction::DEFERRED)
+                    && self.wait_for_file(error, cancel)?
+                {
+                    continue;
+                }
+                return Ok(
+                    json!({"ok":true,"result":{"waiting_for_user":true,"wait_reason":"等待關閉占用檔案後繼續讀取","executed":false}}),
+                );
+            }
+            break result;
+        };
+        let result = match outcome {
             Ok(value) => json!({"ok":true,"result":value}),
             Err(error) => json!({"ok":false,"error":error,"retry_same_operation":false}),
         };
@@ -1076,14 +1206,24 @@ impl Broker {
             .as_ref()
             .map(|m| m.source_stamp(path))
             .transpose()?;
-        let content = read_cancel(
-            &self.project,
-            path,
-            cancel,
-            Some(worker),
-            self.server_pdf.as_mut(),
-        )
-        .map(|(text, _)| text)?;
+        let content = loop {
+            let result = read_cancel(
+                &self.project,
+                path,
+                cancel,
+                Some(worker),
+                self.server_pdf.as_mut(),
+            )
+            .map(|(text, _)| text);
+            match result {
+                Err(error) if error.contains(super::interaction::BUSY) => {
+                    if !self.wait_for_file(&error, cancel)? {
+                        return Err(format!("{} 等待關閉檔案。", super::interaction::DEFERRED));
+                    }
+                }
+                other => break other?,
+            }
+        };
         if let (Some(memory), Some(stamp)) = (self.memory.as_mut(), stamp) {
             memory.register_document(path, &content, &stamp)?;
         }
@@ -1129,6 +1269,98 @@ impl Broker {
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
         match tool {
+            Tool::OutlookFolders {
+                scope,
+                parent_id,
+                offset,
+            } => self.outlook.folders(
+                &mut crate::outlook::project::Reader,
+                scope,
+                parent_id.as_deref(),
+                *offset,
+                cancel,
+            ),
+            Tool::OutlookHeaders {
+                folder_id,
+                start_date,
+                end_date,
+                cursor,
+            } => self.outlook.headers(
+                &mut crate::outlook::project::Reader,
+                folder_id,
+                start_date,
+                end_date,
+                cursor.as_deref(),
+                cancel,
+            ),
+            Tool::OutlookRead { mail_id, offset } => {
+                self.txt_context = true;
+                self.outlook.body(
+                    &mut crate::outlook::project::Reader,
+                    mail_id,
+                    *offset,
+                    cancel,
+                )
+            }
+            Tool::ListLogs {
+                path,
+                date,
+                category,
+                station,
+                offset,
+            } => super::logs::list(
+                &self.project,
+                path,
+                date.as_deref(),
+                category.as_deref(),
+                station.as_deref(),
+                *offset,
+                cancel,
+            ),
+            Tool::ReadLog {
+                path,
+                revision,
+                start_line,
+                start_column,
+                line_count,
+            } => {
+                self.txt_context = true;
+                super::logs::read(
+                    &self.project,
+                    path,
+                    revision.as_deref(),
+                    *start_line,
+                    *start_column,
+                    *line_count,
+                    cancel,
+                )
+            }
+            Tool::SearchLogs { query, cursor } => {
+                self.txt_context = true;
+                let previous = cursor
+                    .as_ref()
+                    .map(|id| {
+                        self.log_cursors
+                            .get(id)
+                            .ok_or("LOG 游標已失效，請從第一頁重新搜尋。")
+                    })
+                    .transpose()?;
+                let (mut result, next) =
+                    super::logs::search(&self.project, query, previous, cancel)?;
+                if let Some(next) = next {
+                    if self.log_cursors.len() >= 240 {
+                        return Err("LOG 續頁已達本次任務上限，請縮小查詢範圍。".into());
+                    }
+                    // 同一查詢／來源／位置取得同一個游標，避免重查製造假進度。
+                    let id =
+                        text::revision(&serde_json::to_string(&next).map_err(|e| e.to_string())?);
+                    self.log_cursors.insert(id.clone(), next);
+                    result["next_cursor"] = json!(id);
+                } else {
+                    result["next_cursor"] = Value::Null;
+                }
+                Ok(result)
+            }
             Tool::InspectExcel {
                 path,
                 sheet,
@@ -1236,6 +1468,7 @@ impl Broker {
             } => self.office_batch(copy_id, revision, operations.clone(), cancel),
             Tool::CreateChart { chart } => {
                 if !chart.data_note.is_empty()
+                    || !chart.data_issues.is_empty()
                     || chart.series.iter().any(|s| !s.skip_indices.is_empty())
                 {
                     return Err("圖表的使用者處理紀錄只能由桌面預檢建立。".into());
@@ -1271,11 +1504,36 @@ impl Broker {
                 self.add_chart(chart)
             }
             Tool::SummarizeDocument { .. } => Err("摘要委派需由專案任務協調器執行。".into()),
-            Tool::ReadWorkLog { offset } => {
-                // 過濾查閱本身，避免紀錄遞迴包含先前紀錄，亦不把排序當成執行順序。
-                let log = serde_json::to_string(&self.results.iter()
-                    .filter(|(_, (request, _))| request["tool"] != "read_work_log")
-                    .map(|(id,(request,result))| json!({"operation_id":id,"request":request,"result":result})).collect::<Vec<_>>()).map_err(|e| e.to_string())?;
+            Tool::ReadWorkLog {
+                operation_id,
+                offset,
+            } => {
+                if let Some(id) = operation_id {
+                    let (request, result) = self
+                        .recorded_operation(id)?
+                        .ok_or("找不到此操作的已保存結果。")?;
+                    let log =
+                        json!({"operation_id":id,"request":request,"result":result}).to_string();
+                    let total = log.chars().count();
+                    if *offset > total {
+                        return Err("操作紀錄位置超過尾端。".into());
+                    }
+                    let part: String = log.chars().skip(*offset).take(6000).collect();
+                    return Ok(
+                        json!({"text":part,"offset":offset,"next_offset":offset+part.chars().count(),"total":total,"operation_id":id}),
+                    );
+                }
+                // 預設只列索引；指定 operation_id 才讀原文，避免每次重建全天紀錄。
+                let mut index = self.archived_results.clone();
+                for (id, (request, result)) in &self.results {
+                    index.insert(
+                        id.clone(),
+                        json!({"tool":request["tool"],"ok":result["ok"]}),
+                    );
+                }
+                let log =
+                    json!({"operations":index,"details":"以 operation_id 及 offset 查回原文"})
+                        .to_string();
                 let total = log.chars().count();
                 if *offset > total {
                     return Err("紀錄讀取位置超出範圍。".into());
@@ -1365,13 +1623,29 @@ impl Broker {
                     if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
                         continue;
                     }
-                    if metadata.is_dir() || extension(&entry.path()).is_ok() {
+                    if metadata.is_dir()
+                        || extension(&entry.path()).is_ok()
+                        || super::logs::supported(&entry.path())
+                    {
                         entries.push(json!({"name":entry.file_name().to_string_lossy(),"directory":metadata.is_dir()}));
                     }
                 }
                 Ok(json!({"entries":entries,"truncated":truncated}))
             }
             Tool::ReadFile { path, offset } => {
+                if super::logs::supported(Path::new(path)) {
+                    if *offset != 0 {
+                        return Err(
+                            "LOG 請載入 log-analysis，使用 read_log 的行號與 revision 續讀。"
+                                .into(),
+                        );
+                    }
+                    self.txt_context = true;
+                    let mut result =
+                        super::logs::read(&self.project, path, None, 1, 0, 30, cancel)?;
+                    result["guidance"] = json!("這是 LOG 首頁。載入 log-analysis，使用 read_log 續讀或 search_logs 搜尋；不可使用全文摘要工具。");
+                    return Ok(result);
+                }
                 let content = self.content(path, cancel, worker)?;
                 let total = content.chars().count();
                 if *offset > total {
@@ -1745,6 +2019,50 @@ impl Broker {
 mod tests {
     use super::*;
     #[test]
+    fn archived_results_keep_operation_identity_and_survive_restore() {
+        let root =
+            std::env::temp_dir().join(format!("lmai-archive-{}", crate::jobs::new_id().unwrap()));
+        fs::create_dir_all(&root).unwrap();
+        let project = Project {
+            id: "archive".into(),
+            name: "archive".into(),
+            root,
+            imports: BTreeMap::new(),
+        };
+        let mut broker = Broker::new(project.clone(), "run".into()).unwrap();
+        broker.enable_memory("chat").unwrap();
+        let tool = Tool::ReadFile {
+            path: "source.txt".into(),
+            offset: 0,
+        };
+        let result = json!({"ok":true,"result":{"text":"已確認證據","revision":"v1"}});
+        broker.remember_result("operation", &tool, &result).unwrap();
+        broker.archive_results().unwrap();
+        assert!(broker.results.is_empty());
+        assert_eq!(
+            broker.cached_result("operation", &tool).unwrap(),
+            Some(result.clone())
+        );
+        let mut restored = Broker::new(project, "run".into()).unwrap();
+        restored.enable_memory("chat").unwrap();
+        restored
+            .restore(broker.saved().unwrap(), &AtomicBool::new(false))
+            .unwrap();
+        assert_eq!(
+            restored.cached_result("operation", &tool).unwrap(),
+            Some(result)
+        );
+        assert!(restored
+            .cached_result(
+                "operation",
+                &Tool::ReadFile {
+                    path: "other.txt".into(),
+                    offset: 0
+                }
+            )
+            .is_err());
+    }
+    #[test]
     fn tools_require_existing_edit_and_export_targets() {
         let mut broker = Broker::new(
             Project {
@@ -1821,6 +2139,7 @@ mod tests {
             }],
             source: "測試".into(),
             data_note: String::new(),
+            data_issues: vec![],
         };
         broker.add_chart(chart.clone()).unwrap();
         broker.add_chart(chart).unwrap();

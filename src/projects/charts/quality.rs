@@ -3,7 +3,11 @@ use super::{Chart, Series};
 use crate::{projects::office::excel::Page, AppResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{collections::BTreeSet, sync::atomic::AtomicBool, time::Instant};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::atomic::AtomicBool,
+    time::Instant,
+};
 
 pub type Chooser = Box<dyn FnMut(&Review, &AtomicBool, Instant) -> AppResult<Option<Vec<Choice>>>>;
 
@@ -51,6 +55,7 @@ impl Review {
 pub struct Prepared {
     pub review: Review,
     chart: Chart,
+    issues: Vec<(usize, usize, super::DataIssue)>,
 }
 
 /// 僅接受不含千分位、單位或百分號的有限十進位數字；不猜地區格式。
@@ -80,8 +85,10 @@ impl Prepared {
         self.review.validate(choices)?;
         let mut removed = BTreeSet::new();
         let mut counts = [0usize; 3];
+        let mut policies = BTreeMap::new();
         for (group, choice) in self.review.groups.iter().zip(choices) {
             for &(row, col) in &group.cells {
+                policies.insert((row, col), choice);
                 if group.x_axis {
                     removed.insert(row);
                     continue;
@@ -99,6 +106,23 @@ impl Prepared {
                 }
             }
         }
+        self.chart.data_issues = self
+            .issues
+            .into_iter()
+            .map(|(row, col, mut issue)| {
+                if removed.contains(&row) {
+                    issue.handling = "排除整列（X 軸無效，所有系列同步排除）".into();
+                } else if let Some(choice) = policies.get(&(row, col)) {
+                    issue.handling = match choice {
+                        Choice::Gap => "保留缺值（折線中斷）",
+                        Choice::Skip => "略過此點（保留 X 位置，折線接續）",
+                        Choice::Zero => "設為 0",
+                    }
+                    .into();
+                }
+                issue
+            })
+            .collect();
         // 只有無法建立 X 座標時才刪整列；其他系列的有效 Y 不受某系列缺值影響。
         self.chart.x = self
             .chart
@@ -143,6 +167,7 @@ pub fn prepare(page: &Page, mut chart: Chart) -> AppResult<Prepared> {
         return Err("Excel 圖表欄位結構不一致。".into());
     }
     chart.x.clear();
+    let mut issues = Vec::new();
     chart.series = page
         .headers
         .iter()
@@ -200,6 +225,46 @@ pub fn prepare(page: &Page, mut chart: Chart) -> AppResult<Prepared> {
             } else {
                 chart.series[col - 1].values.push(number);
             }
+            let converted = numeric_axis && number.is_some() && cell.kind == "text";
+            let blank = col > 0 && cell.kind == "blank";
+            if !valid || converted || blank {
+                let issue = super::DataIssue {
+                    sheet: page.sheet,
+                    row: row.row,
+                    cell: format!("{}{}", page.columns[col], row.row),
+                    series: if col == 0 {
+                        "X 軸".into()
+                    } else {
+                        chart.series[col - 1].name.clone()
+                    },
+                    x_value: row.cells[0].text.clone(),
+                    y_value: if col == 0 {
+                        row.cells
+                            .iter()
+                            .skip(1)
+                            .map(|c| c.text.as_str())
+                            .collect::<Vec<_>>()
+                            .join(" / ")
+                    } else {
+                        cell.text.clone()
+                    },
+                    original_value: cell.value.clone(),
+                    original_text: cell.text.clone(),
+                    category: if converted {
+                        "數字文字".into()
+                    } else {
+                        category(cell).into()
+                    },
+                    handling: if converted {
+                        format!("轉為數值 {}", number.unwrap_or_default())
+                    } else if blank {
+                        "原空白保留缺值（折線中斷）".into()
+                    } else {
+                        String::new()
+                    },
+                };
+                issues.push((row_index, col, issue));
+            }
             if valid {
                 continue;
             }
@@ -237,7 +302,11 @@ pub fn prepare(page: &Page, mut chart: Chart) -> AppResult<Prepared> {
             }
         }
     }
-    Ok(Prepared { review, chart })
+    Ok(Prepared {
+        review,
+        chart,
+        issues,
+    })
 }
 
 #[cfg(test)]
@@ -272,6 +341,19 @@ mod tests {
             assert_eq!(result.series[0].values[0], Some(339.0));
             assert_eq!(result.series[0].values[2], None);
             assert_eq!(result.series[1].values[1], Some(3.0));
+            let issue = result.data_issues.iter().find(|i| i.cell == "F3").unwrap();
+            assert_eq!(issue.row, 3);
+            assert_eq!(issue.x_value, "00124");
+            assert_eq!(issue.original_value, json!("NG"));
+            assert!(issue.handling.contains(match choice {
+                Choice::Gap => "保留缺值",
+                Choice::Skip => "略過此點",
+                Choice::Zero => "設為 0",
+            }));
+            assert!(result
+                .data_issues
+                .iter()
+                .any(|i| i.cell == "F2" && i.handling == "轉為數值 339"));
             assert_eq!(
                 result.series[0].values[1],
                 if choice == Choice::Zero {
@@ -299,5 +381,9 @@ mod tests {
         let c = p.apply(&[Choice::Skip, Choice::Gap]).unwrap();
         assert_eq!(c.x, vec![json!("00124"), json!("00125")]);
         assert_eq!(c.series[1].values, vec![Some(3.0), Some(4.0)]);
+        assert!(c
+            .data_issues
+            .iter()
+            .any(|i| i.row == 2 && i.cell == "A2" && i.handling.contains("排除整列")));
     }
 }

@@ -1420,3 +1420,9 @@ body.collapsed .project-section { overflow: visible; }
 .chart-review-dialog p { white-space:pre-wrap; overflow-wrap:anywhere; }
 .chart-review-dialog select { width:100%; }
 .chart-review-dialog > div { display:flex; justify-content:flex-end; gap:12px; margin-top:20px; }
+/* 補充指示維持可讀的原文，不將使用者文字當成 HTML。 */
+#project-supplement-dialog { width: min(600px, 90vw); }
+#project-supplement-dialog textarea { width: 100%; box-sizing: border-box; resize: vertical; }
+#project-supplements { margin-bottom: 8px; max-height: 200px; overflow: auto; }
+.supplement-entry { padding: 8px; border-bottom: 1px solid var(--border); }
+.supplement-entry p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0; }

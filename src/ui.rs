@@ -763,6 +763,7 @@ impl App {
                                     .collect(),
                             }],
                             data_note: String::new(),
+                            data_issues: vec![],
                             source: "固定測試資料，包含 3000–3099 筆缺值；不讀使用者資料".into(),
                         };
                         let (reply, response) = mpsc::channel();

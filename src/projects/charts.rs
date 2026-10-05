@@ -8,6 +8,21 @@ pub mod quality;
 pub const MAX_POINTS: usize = 10_000;
 pub const MAX_SERIES: usize = 8;
 pub const MAX_CHART_BYTES: usize = 8 * 1024 * 1024;
+/// 桌面由原始 Excel 快照產生的處理明細，保留被排除列的來源位置。
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DataIssue {
+    pub sheet: usize,
+    pub row: usize,
+    pub cell: String,
+    pub series: String,
+    pub x_value: String,
+    pub y_value: String,
+    pub original_value: Value,
+    pub original_text: String,
+    pub category: String,
+    pub handling: String,
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Series {
@@ -29,6 +44,8 @@ pub struct Chart {
     pub source: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub data_note: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub data_issues: Vec<DataIssue>,
 }
 impl Chart {
     pub fn validate(&self) -> AppResult<()> {
@@ -206,6 +223,7 @@ pub fn prepare_page(
             x: vec![],
             series: vec![],
             data_note: String::new(),
+            data_issues: vec![],
             source: format!(
                 "{path} | {revision} | 工作表 {} | 欄 {} | 列 {}–{}",
                 page.sheet,
@@ -269,6 +287,7 @@ mod tests {
                 .collect(),
             source: "測試".into(),
             data_note: String::new(),
+            data_issues: vec![],
         };
         chart.series[0].values[3000] = None;
         chart.validate().unwrap();

@@ -4,6 +4,106 @@
   let signature = "", importProject = null, settingsProject = null, removeProject = null;
   let lastNotice = "", pickerRequest = 0, activityKey = "", activitySignature = "";
   const command = value => send({type: "project", command: value});
+  const fileDialog=document.createElement("dialog");fileDialog.id="project-file-busy";document.body.append(fileDialog);
+  let fileKey="",fileTarget=null;
+  function replyFile(retry) {
+    if (!fileTarget) return;
+    command({action:"file_ready",...fileTarget,retry});
+    for (const button of fileDialog.querySelectorAll("button")) button.disabled=true;
+  }
+  fileDialog.addEventListener("cancel",event=>{event.preventDefault();replyFile(false);});
+  fileDialog.addEventListener("close",()=>{if (fileTarget && !fileDialog.open) replyFile(false);});
+  function renderFileBusy(project,visible) {
+    const pending=visible ? project.file_busy : null;
+    const key=pending ? `${project.running_id}:${pending.request_id}` : "";
+    if (key===fileKey) return;
+    fileKey=key;fileTarget=null;if (fileDialog.open) fileDialog.close();fileDialog.replaceChildren();
+    if (!pending) return;
+    fileTarget={conversation:state.active_id,run_id:project.running_id,request_id:pending.request_id};
+    const title=node("h2","","請關閉檔案後繼續讀取"),message=node("p","",pending.message);
+    const hint=node("p","","請先儲存並關閉相關 Office 視窗或檔案，再按「已關閉，再試一次」。程式會接續目前的讀取，不需要重做整個任務。");
+    const buttons=node("div","dialog-actions"),later=node("button","","保留進度，稍後繼續"),retry=node("button","primary","已關閉，再試一次");
+    later.id="project-file-later";retry.id="project-file-retry";
+    later.onclick=()=>replyFile(false);retry.onclick=()=>replyFile(true);
+    buttons.append(later,retry);fileDialog.append(title,message,hint,buttons);fileDialog.showModal();
+  }
+  const outlookDialog=document.createElement("dialog");
+  outlookDialog.id="project-outlook-consent";
+  document.body.append(outlookDialog);
+  let outlookKey="",outlookTarget=null;
+  function replyOutlook(allow) {
+    if (!outlookTarget) return;
+    command({action:"outlook_consent",...outlookTarget,allow});
+    for (const button of outlookDialog.querySelectorAll("button")) button.disabled=true;
+  }
+  outlookDialog.addEventListener("cancel",event=>{event.preventDefault();replyOutlook(false);});
+  outlookDialog.addEventListener("close",()=>{if (outlookTarget && !outlookDialog.open) replyOutlook(false);});
+  function renderOutlookConsent(project,visible) {
+    const pending=visible ? project.outlook_consent : null;
+    const key=pending ? `${project.running_id}:${pending.request_id}` : "";
+    if (key===outlookKey) return;
+    outlookKey=key;outlookTarget=null;
+    if (outlookDialog.open) outlookDialog.close();
+    outlookDialog.replaceChildren();
+    if (!pending) return;
+    outlookTarget={conversation:state.active_id,run_id:project.running_id,request_id:pending.request_id};
+    const title=node("h2","","允許本次任務讀取 Outlook？");
+    const explanation=node("p","","先提供本地 PST 收件資料夾與線上信箱寄件備份的資料夾名稱，再由 AI 挑選資料夾、讀取指定日期的信件標題，並按需要讀取重要信件內文。這些資料會傳給本次使用的 AI 服務。");
+    const limit=node("p","","僅讀取已開啟 Classic Outlook 中的資料，不寄信、不改信件、不讀附件。授權只到本次執行區段結束；暫停後繼續需重新同意。");
+    const buttons=node("div","dialog-actions"),deny=node("button","","不同意"),allow=node("button","primary","同意讀取標題與選定內文");
+    deny.id="project-outlook-deny";allow.id="project-outlook-allow";
+    deny.onclick=()=>replyOutlook(false);allow.onclick=()=>replyOutlook(true);
+    buttons.append(deny,allow);outlookDialog.append(title,explanation,limit,buttons);outlookDialog.showModal();deny.focus();
+  }
+  // 補充使用獨立輸入框，避免把主輸入框的未送出草稿誤當成新任務。
+  const supplementDialog=document.createElement("dialog");
+  supplementDialog.id="project-supplement-dialog";
+  const supplementTitle=node("h2","","補充本次任務的指示");
+  const supplementHint=node("p","","在下一輪 AI 請求帶入，持續到本次任務結束。已開始的操作會先完成；停止任務請使用停止按鈕。");
+  const supplementText=document.createElement("textarea");
+  supplementText.id="project-supplement-text";supplementText.rows=6;supplementText.maxLength=4000;
+  supplementText.setAttribute("aria-label","補充指示內容");
+  const supplementSend=node("button","primary","送出補充"), supplementClose=node("button","","關閉");
+  supplementSend.id="project-supplement-send";
+  const supplementButtons=node("div","dialog-actions");supplementButtons.append(supplementClose,supplementSend);
+  supplementDialog.append(supplementTitle,supplementHint,supplementText,supplementButtons);document.body.append(supplementDialog);
+  let supplementTarget=null, supplementSignature="";
+  function openSupplement(entry=null) {
+    const project=state.projects;
+    if (!state.logged_in || !project?.running || project.running_conversation!==state.active_id) return;
+    supplementTarget={conversation:state.active_id,run_id:project.running_id,instruction_id:entry?.id || null};
+    if (entry) supplementText.value=entry.text;
+    supplementSend.disabled=false;
+    supplementDialog.showModal();supplementText.focus();
+  }
+  supplementClose.onclick=()=>supplementDialog.close();
+  supplementSend.onclick=()=>{
+    if (!supplementTarget || !supplementText.value.trim()) return;
+    supplementSend.disabled=true;
+    command({action:"supplement",...supplementTarget,text:supplementText.value});
+  };
+  $("project-supplement").onclick=()=>openSupplement();
+  function renderSupplements(project,visible) {
+    $("project-supplement").hidden=!visible;
+    $("project-supplement").disabled=!visible;
+    if (supplementDialog.open && (!visible || supplementTarget?.run_id!==project.running_id)) supplementDialog.close();
+    // 原生錯誤同樣會重繪狀態；保留文字，允許修正後重送。
+    if (supplementDialog.open) supplementSend.disabled=false;
+    const entries=visible ? (project.supplements || []) : [];
+    $("project-supplements").hidden=!entries.length;
+    const signature=JSON.stringify([project.running_id,entries]);
+    if (signature===supplementSignature) return;
+    supplementSignature=signature;
+    const list=$("project-supplement-list");list.replaceChildren();
+    for (const entry of entries) {
+      const row=node("div","supplement-entry");
+      row.append(node("strong","",({pending:"等待下一輪接收",staged:"已接收，準備下一輪",sent:"已帶入模型請求",withdrawn:"已撤回"}[entry.status] || entry.status)),node("p","",entry.text));
+      if (entry.status==="pending") {
+        row.append(button("修改",()=>openSupplement(entry),false),button("撤回",()=>command({action:"withdraw_supplement",conversation:state.active_id,run_id:project.running_id,instruction_id:entry.id}),false));
+      }
+      list.append(row);
+    }
+  }
   // 決策只由桌面 UI 回傳，工具參數沒有可冒充使用者選擇的欄位。
   const reviewDialog=document.createElement("dialog");
   reviewDialog.className="chart-review-dialog"; reviewDialog.id="chart-review-dialog";
@@ -37,6 +137,8 @@
         option.textContent=group.x_axis ? "忽略整列（所有系列同步排除）" : ({gap:"保留缺值（折線中斷）",skip:"略過此點（折線接續，保留原 X 位置）",zero:"設為 0"}[choice]);
         select.append(option);
       }
+      // 常見的 NG／文字缺值預設略過該點，仍讓使用者確認或改選。
+      if (group.choices.includes("skip")) select.value="skip";
       label.append(text,select); reviewDialog.append(label); selects.push(select);
     }
     const buttons=document.createElement("div"), apply=document.createElement("button"), pause=document.createElement("button");
@@ -134,6 +236,13 @@
   window.ProjectUI = {
     openDiagnostics,
     receive(message) {
+      if (message.type==="project_supplement_ack") {
+        if (supplementTarget?.run_id===message.run_id) {
+          supplementText.value="";supplementDialog.close();supplementTarget=null;
+          toast("補充指示已保存，將在下一輪帶入");
+        }
+        return;
+      }
       if (message.type === "project_diagnostics") {
         if (diagnosticsRequest && $("project-diagnostics-dialog").open && message.conversation === state.active_id &&
             message.conversation === diagnosticsRequest.conversation && message.run_id === diagnosticsRequest.run_id) {
@@ -151,7 +260,10 @@
     render() {
     const projects = state.projects || {items:[]};
     const showActivity = state.logged_in && projects.running && projects.running_conversation === state.active_id;
+    renderSupplements(projects,showActivity);
     renderReview(projects,showActivity);
+    renderOutlookConsent(projects,showActivity);
+    renderFileBusy(projects,showActivity);
     // 診斷只在設定的進階區提供；保留目前對話每次任務的入口，不在聊天區佔位。
     const selector = $("project-diagnostics-run"), old = selector.value;
     const runs = new Map();

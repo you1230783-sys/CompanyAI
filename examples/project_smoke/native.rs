@@ -24,7 +24,18 @@ use std::{
 };
 
 pub fn verify(root: &Path) -> AppResult<()> {
-    for case in 0..=11 {
+    let first = if std::env::args().nth(3).as_deref() == Some("--native-only") {
+        std::env::args()
+            .nth(4)
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    if first > 20 {
+        return Err("原生測試案例需介於 0–20。".into());
+    }
+    for case in first..=20 {
         verify_case(root, case)?;
     }
     Ok(())
@@ -98,6 +109,22 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         "原始文字".into()
     };
     std::fs::write(workspace.join("source.txt"), &original).map_err(|e| e.to_string())?;
+    if case == 14 {
+        std::fs::write(
+            workspace.join("20260623_connection_Z01-CY.log"),
+            "2026/06/23, 12:25:48.084 timeout Device02\n2026/06/23, 12:34:00.000 outside\n",
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    if matches!(case, 18 | 19) {
+        for i in 1..=65 {
+            std::fs::write(
+                workspace.join(format!("part{i}.txt")),
+                format!("第 {i} 份證據：{}", "測試".repeat(1900)),
+            )
+            .map_err(|e| e.to_string())?;
+        }
+    }
     let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     let config = Config {
@@ -116,6 +143,23 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
     let server_cancel = cancel.clone();
     let cancel_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let server_cancel_count = cancel_count.clone();
+    let instructions = company_ai::projects::steering::Inbox::open(&root.join("native-app"), &id)?;
+    let server_instructions = instructions.clone();
+    use std::os::windows::fs::OpenOptionsExt;
+    let held = if matches!(case, 16 | 17 | 20) {
+        Some(
+            std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .share_mode(1)
+                .open(workspace.join("source.txt"))
+                .map_err(|e| e.to_string())?,
+        )
+    } else {
+        None
+    };
+    let held = Arc::new(std::sync::Mutex::new(held));
+    let file_prompts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let server = std::thread::spawn(move || -> AppResult<(usize, usize)> {
         let mut posts = 0;
         let mut fast = 0;
@@ -192,12 +236,182 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     );
                 }
                 let previous = last_result(&body);
+                if matches!(case, 18 | 19) && posts == 2 {
+                    let state = messages
+                        .iter()
+                        .filter_map(|m| m["content"].as_str())
+                        .find(|t| t.starts_with("本機續接資料"))
+                        .unwrap();
+                    let state: Value = serde_json::from_str(state.split_once('\n').unwrap().1)
+                        .map_err(|e| e.to_string())?;
+                    copy = state["operations"][0]["id"].as_str().unwrap().to_owned();
+                }
                 let mut message = if body["model"] == "fast" {
                     fast += 1;
                     assert_eq!(body["tools"], json!([]));
                     assert_eq!(body["tool_choice"], "none");
                     assert!(body["context"]["parent_request_id"].is_string());
                     json!({"role":"assistant","content":"原文為原始文字，無其他數據。"})
+                } else if matches!(case, 18 | 19) {
+                    assert!(
+                        body["messages"].to_string().len() < 260_000,
+                        "模型上下文應受控"
+                    );
+                    assert!(messages.iter().any(|m| m["content"]
+                        .as_str()
+                        .unwrap_or("")
+                        .contains("請修訂來源並交付副本")));
+                    match posts {
+                        1..=65 => call(
+                            &body,
+                            "read_file",
+                            json!({"path":format!("part{posts}.txt"),"progress_note":format!("目標：核對 65 份證據。限制：來源唯讀。已完成 {} 份；待辦：讀下一份及查回第一份。",posts-1)}),
+                        ),
+                        66 => call(&body, "read_work_log", json!({"offset":0})),
+                        67 => {
+                            assert!(previous["result"]["text"]
+                                .as_str()
+                                .unwrap()
+                                .contains("operations"));
+                            call(
+                                &body,
+                                "read_work_log",
+                                json!({"operation_id":copy,"offset":0}),
+                            )
+                        }
+                        _ => {
+                            assert!(previous["result"]["text"]
+                                .as_str()
+                                .unwrap()
+                                .contains("證據"));
+                            call(
+                                &body,
+                                "finish",
+                                json!({"message":"跨批次 checkpoint 與查回完成","artifacts":[]}),
+                            )
+                        }
+                    }
+                } else if case == 15 {
+                    match posts {
+                        1 => call(&body, "load_skill", json!({"id":"outlook-research"})),
+                        2 => call(&body, "outlook_folders", json!({"scope":"local_inbox"})),
+                        _ => {
+                            assert_eq!(previous["result"]["declined"], true);
+                            call(
+                                &body,
+                                "finish",
+                                json!({"message":"已尊重 Outlook 拒絕，未讀取郵件","artifacts":[]}),
+                            )
+                        }
+                    }
+                } else if case == 20 {
+                    match posts {
+                        1 => call(&body, "load_skill", json!({"id":"text-edit"})),
+                        2 => call(
+                            &body,
+                            "create_working_copy",
+                            json!({"source":"source.txt","name":"locked-copy.txt"}),
+                        ),
+                        3 => {
+                            copy = previous["result"]["copy_id"].as_str().unwrap().into();
+                            call(
+                                &body,
+                                "save_copy",
+                                json!({"copy_id":copy,"revision":previous["result"]["revision"]}),
+                            )
+                        }
+                        _ => call(
+                            &body,
+                            "finish",
+                            json!({"message":"檔案關閉後已建立副本","artifacts":[copy]}),
+                        ),
+                    }
+                } else if matches!(case, 16 | 17) {
+                    match posts {
+                        1 => call(&body, "read_file", json!({"path":"source.txt"})),
+                        _ => {
+                            assert_eq!(previous["result"]["text"], "原始文字");
+                            call(
+                                &body,
+                                "finish",
+                                json!({"message":"關閉檔案後已接續讀取","artifacts":[]}),
+                            )
+                        }
+                    }
+                } else if case == 14 {
+                    match posts {
+                        1 => call(&body, "load_skill", json!({"id":"log-analysis"})),
+                        2 => call(
+                            &body,
+                            "list_logs",
+                            json!({"path":"","date":"2026-06-23","category":"connection","station":"Z01-CY"}),
+                        ),
+                        3 => {
+                            assert_eq!(previous["result"]["total"], 1);
+                            call(
+                                &body,
+                                "search_logs",
+                                json!({"query":{"paths":["20260623_connection_Z01-CY.log"],"terms":["timeout"],"start_time":"12:25","end_time":"12:33","date":"2026-06-23","case_sensitive":null,"context_lines":null},"cursor":null}),
+                            )
+                        }
+                        4 => {
+                            assert_eq!(previous["result"]["complete"], true, "{previous}");
+                            assert_eq!(previous["result"]["matches"].as_array().unwrap().len(), 1);
+                            call(
+                                &body,
+                                "read_log",
+                                json!({"path":"20260623_connection_Z01-CY.log","revision":previous["result"]["matches"][0]["revision"],"start_line":1,"line_count":1}),
+                            )
+                        }
+                        _ => {
+                            assert!(previous["result"]["lines"][0]["text"]
+                                .as_str()
+                                .unwrap()
+                                .contains("Device02"));
+                            call(
+                                &body,
+                                "finish",
+                                json!({"message":"LOG 原生搜尋完成，來源第 1 行","artifacts":[]}),
+                            )
+                        }
+                    }
+                } else if matches!(case, 12 | 13) {
+                    match posts {
+                        1 => call(&body, "load_skill", json!({"id":"text-edit"})),
+                        2 => {
+                            server_instructions.submit(None, "只看 Device02，先不要產生報告")?;
+                            if case == 12 {
+                                call(
+                                    &body,
+                                    "create_working_copy",
+                                    json!({"source":"source.txt","name":"不應建立.txt"}),
+                                )
+                            } else {
+                                call(
+                                    &body,
+                                    "finish",
+                                    json!({"message":"不應提前完成","artifacts":[]}),
+                                )
+                            }
+                        }
+                        _ => {
+                            assert_eq!(previous["executed"], false, "舊候選操作不得執行");
+                            assert!(messages.iter().any(|m| m["role"] == "user"
+                                && m["content"]
+                                    .as_str()
+                                    .unwrap_or("")
+                                    .contains("只看 Device02")));
+                            assert!(messages.iter().any(|m| m["content"]
+                                .as_str()
+                                .unwrap_or("")
+                                .contains("請修訂來源並交付副本")));
+                            call(
+                                &body,
+                                "finish",
+                                json!({"message":"已依補充重新分析，保留原始目標","artifacts":[]}),
+                            )
+                        }
+                    }
                 } else if case == 11 {
                     let message = match step {
                         0 => call(&body, "load_skill", json!({"id":"charts"})),
@@ -397,9 +611,49 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         session: session.clone(),
         root: root.join("native-app"),
         cancel: cancel.clone(),
+        instructions: matches!(case, 12 | 13).then(|| instructions.clone()),
+        outlook_consent: (case == 15).then(|| {
+            Box::new(|_: &AtomicBool, _| Ok(false)) as company_ai::projects::mail::Consent
+        }),
+        file_waiter: if matches!(case, 16 | 17 | 20) {
+            let held = held.clone();
+            let prompts = file_prompts.clone();
+            Some(Box::new(move |message, _, _| {
+                assert!(message.contains("source.txt"));
+                let count = prompts.fetch_add(1, Ordering::Relaxed);
+                if case == 17 && count == 0 {
+                    return Ok(false);
+                }
+                held.lock().unwrap().take();
+                Ok(true)
+            }))
+        } else {
+            None
+        },
     };
     let mut activity = vec![];
-    let mut result = runner::run(make_run(false), |s| activity.push(s));
+    let mut result = if case == 19 {
+        // 模擬程序在已保存 checkpoint 的界線中斷，跳過 runner 的正常收尾。
+        let interrupted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            runner::run(make_run(false), |s| {
+                if s.contains("已保存階段 checkpoint") {
+                    panic!("fixture: simulated interruption");
+                }
+                activity.push(s);
+            })
+        }));
+        assert!(interrupted.is_err());
+        assert!(runner::paused_available(&root.join("native-app"), &id));
+        assert!(runner::recover(&root.join("native-app"), &id)?.contains("安全 checkpoint"));
+        runner::run(make_run(true), |s| activity.push(s))
+    } else {
+        runner::run(make_run(false), |s| activity.push(s))
+    };
+    if case == 17 {
+        assert!(result.as_ref().unwrap().contains("等待關閉"), "{result:?}");
+        assert!(runner::paused_available(&root.join("native-app"), &id));
+        result = runner::run(make_run(true), |s| activity.push(s));
+    }
     if matches!(case, 2 | 8) {
         assert!(result.as_ref().unwrap().contains("繼續"));
         assert!(runner::paused_available(&root.join("native-app"), &id));
@@ -470,6 +724,43 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         11 => {
             assert!(result?.contains("圖表選擇完成"));
             assert_eq!(posts, 4, "續接只能查回原工具請求，不重送推論");
+        }
+        12 | 13 => {
+            assert!(result?.contains("已依補充重新分析"));
+            assert_eq!(posts, 3);
+            assert!(!workspace.join("_AI_Output").exists());
+            assert_eq!(instructions.entries()?[0].status, "sent");
+            assert!(instructions.submit(None, "最後才送的指示").is_err());
+        }
+        14 => {
+            assert!(result?.contains("LOG 原生搜尋完成"));
+            assert_eq!(posts, 5);
+        }
+        15 => {
+            assert!(result?.contains("Outlook 拒絕"));
+            assert_eq!(posts, 3);
+        }
+        16 | 17 => {
+            assert!(result?.contains("接續讀取"));
+            assert_eq!(posts, 2, "本機讀取等待不能重送原模型請求");
+            assert_eq!(
+                file_prompts.load(Ordering::Relaxed),
+                if case == 17 { 2 } else { 1 }
+            );
+        }
+        20 => {
+            assert!(result?.contains("已建立副本"));
+            assert_eq!(posts, 4);
+            assert_eq!(file_prompts.load(Ordering::Relaxed), 1);
+        }
+        18 | 19 => {
+            assert!(result?.contains("跨批次 checkpoint"));
+            assert_eq!(posts, 68, "崩潰續接不能重做已完成的 60 次閱讀或重送 POST");
+            assert!(
+                !runner::paused_available(&root.join("native-app"), &id),
+                "完成後須關閉 checkpoint"
+            );
+            assert!(activity.iter().any(|s| s.contains("已整理工作筆記")));
         }
         _ => unreachable!(),
     }

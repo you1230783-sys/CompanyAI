@@ -1,3 +1,5 @@
+> **0.8.34：** 桌面新增 LOG 與 Outlook 專案工具，目錄共 38 項，仍按需公告；Outlook 同意由原生 UI 管理。補充作後續 user 訊息；被取代候選有 role=tool、executed=false。每段最長 24 小時，checkpoint 自動換批及 context 精簡；網站必須採用 client_snapshot，不自行把完整歷史加回。未知原請求只 GET 查回，需保留可續接的任務狀態／結果；不要求單一 HTTP 連線存活 24 小時。無新增路由／資料表。詳見 [功能與驗證](VALIDATION_0_8_34.md)。
+
 > **0.8.32：** Office 既有操作新增 `insert_image` 分支，不增加路由或資料庫欄位。工具目錄仍為 32 項，但每次請求依模型及副本／圖表狀態提供其中可用項目，網站不要假設 tools 永遠相同。原生回覆白名單與 `provider_specific_fields` 的處理，見 [本次驗證與配合事項](VALIDATION_0_8_32.md)。
 
 > **0.8.31：** 新增 `export_chart_png`，工具總數由 31 增為 32；仍透過既有原生 tools 通用契約。PNG 在桌面內嵌 ECharts 產生，不增加網站 API、資料庫欄位或伺服器工具。詳見 [驗證紀錄](VALIDATION_0_8_31.md)。
@@ -524,3 +526,12 @@ HTTP 協定保持不變：專案請求 `skills:false`，工具定義／呼叫／
 沿用 desktop-agent-v1；沒有新增路由、能力旗標或資料庫欄位。桌面每輪依已載入技能、模型及副本／圖表狀態建立 `tools`。網站須原樣轉送該輪完整 `messages`／`tools` 快照，不以早期回合的工具快取覆蓋，也不要求歷史 tool_calls 的名稱必須出現在當輪 tools。
 
 `load_skill` 的參數仍為 `{id}`；新增文字、Office、Excel、研究、筆記群組。工具結果只回已載入 ID，完整說明在下一輪唯一的 system 訊息出現。等待圖表資料選擇完全由桌面處理，不新增模型請求、不虛構 role=tool 成功回覆；暫停後續接同一已完成的模型請求，再產生實際工具結果。
+
+
+## 0.8.34 桌面本機互動
+
+- 原生 UI outlook_consent／file_ready 回覆均核對 conversation、run_id、request_id；不能由模型內容或網站通知代替同意。
+- Outlook 工具依序 outlook_folders、outlook_headers、outlook_read；工具结果不含 EntryID、StoreID、PST／OST 磁碟路徑。
+- read_work_log 可選 operation_id，未指定回索引；read_task_result 的 field 新增 operations。offset 以 Unicode 字元計算，完整結果可分頁回讀。
+- 跨對話只帶近期原要求、最終答案、工具計數及所選記憶；模型需尊重 client_snapshot，不能由後端重新加入所有工具輸出。
+- 單次模型／COM／網路呼叫仍有原有有限期限。24 小時是桌面單段總時限，不能將服務端逾時視為可重新 POST 的理由。

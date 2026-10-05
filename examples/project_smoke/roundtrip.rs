@@ -280,6 +280,9 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
             session,
             root: root.join("app-data"),
             cancel: Arc::new(AtomicBool::new(false)),
+            instructions: None,
+            outlook_consent: None,
+            file_waiter: None,
         },
         |_| {},
     );

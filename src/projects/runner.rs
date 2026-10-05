@@ -28,6 +28,9 @@ pub struct Run {
     pub session: Session,
     pub root: PathBuf,
     pub cancel: Arc<AtomicBool>,
+    pub instructions: Option<super::steering::Inbox>,
+    pub outlook_consent: Option<super::mail::Consent>,
+    pub file_waiter: Option<super::interaction::FileWaiter>,
 }
 
 const MAX_TOOLS: usize = 60;
@@ -36,8 +39,8 @@ fn quota_reached(replies: usize, tools: usize) -> bool {
     replies >= MAX_REPLIES || tools >= MAX_TOOLS
 }
 
-const SEGMENT_BUDGET: Duration = Duration::from_secs(2 * 60 * 60);
-pub(super) const TIME_LIMIT_REASON: &str = "本段專案執行已達 2 小時";
+const SEGMENT_BUDGET: Duration = Duration::from_secs(24 * 60 * 60);
+pub(super) const TIME_LIMIT_REASON: &str = "本段專案執行已達 24 小時";
 #[derive(serde::Serialize, serde::Deserialize)]
 struct PausedRun {
     version: u32,
@@ -80,8 +83,9 @@ fn save_pause(
     broker: &Broker,
     progress: &super::progress::Progress,
     pending_model: Option<&Task>,
+    available: bool,
 ) -> AppResult<()> {
-    let state = json!({"version":1,"available":true,"project":run.project.id,"project_root":run.project.root,
+    let state = json!({"version":1,"available":available,"project":run.project.id,"project_root":run.project.root,
         "conversation":run.conversation,"principal":principal,"request_text":request,
         "broker":broker.saved()?,"progress":progress,"pending_model":pending_model});
     checkpoint(&pause_path(&run.root, &run.id)?, &state)
@@ -136,7 +140,7 @@ pub fn run_with_chart_export(
     )
 }
 
-/// 僅供 debug 整合測試推進期限，不改正式 EXE 的兩小時政策。
+/// 僅供 debug 整合測試推進期限，不改正式 EXE 的 24 小時政策。
 #[cfg(debug_assertions)]
 pub fn run_with_test_budget(
     run: Run,
@@ -185,6 +189,8 @@ fn run_for(
     let mut record = json!({"project_id":run.project.id,"conversation_id":run.conversation,"state":"starting","requests":[],"operations":[],"outputs":[]});
     checkpoint(&journal, &record)?;
     let mut broker = Broker::new(run.project.clone(), run.id.clone())?;
+    broker.set_outlook_consent(run.outlook_consent.take());
+    broker.set_file_waiter(run.file_waiter.take());
     if let Some(renderer) = png_renderer {
         broker.set_png_renderer(renderer);
     }
@@ -200,6 +206,9 @@ fn run_for(
     broker
         .memory()?
         .save_run(&run.id, &request_text, "尚未完成", "running", None, &[])?;
+    let explicit_pause = std::cell::Cell::new(false);
+    // 尚未核對帳號／來源前，不能以此次失敗清除另一個有效的續接狀態。
+    let checkpoint_owned = std::cell::Cell::new(!run.resume);
     let result = (|| {
         run.messages = broker.memory()?.context(&run.messages)?;
         let mut worker = Worker::start(
@@ -231,6 +240,7 @@ fn run_for(
                 }
             }
             broker.restore(saved.broker, &run.cancel)?;
+            checkpoint_owned.set(true);
             pending_model = saved.pending_model;
             request_text = saved.request_text;
             saved.progress.resume_segment();
@@ -284,8 +294,22 @@ fn run_for(
                 run.messages.clone().into_iter().map(Into::into).collect(),
             )
         });
+        if !run.resume {
+            progress_state
+                .task_references(run.messages.iter().map(|m| m.request_id.clone()).collect());
+        }
         if progress_state.agent.is_none() {
             progress_state.agent = agent_caps.clone().map(super::agent::State::new);
+        }
+        if let Some(inbox) = &run.instructions {
+            // staged 是已接收但尚未提交的指示；重啟續接仍保留原文。
+            progress_state.add_instructions(
+                inbox
+                    .entries()?
+                    .into_iter()
+                    .filter(|e| matches!(e.status.as_str(), "staged" | "sent"))
+                    .collect(),
+            );
         }
         let mut tool_calls = 0;
         // 只有已確認本機工具結果時才使用此暫停入口；寫入中斷仍是一般錯誤。
@@ -301,15 +325,52 @@ fn run_for(
                 broker,
                 state,
                 pending,
+                true,
             )?;
+            explicit_pause.set(true);
             Ok::<String, String>(format!(
                 "{reason}。目前狀態已加密暫存，請按「繼續」以接續未完成的任務。"
             ))
         };
-        for turn in 0..=MAX_REPLIES {
+        let mut batch_replies = 0;
+        let mut turn = 0;
+        loop {
             check_cancel(&run.cancel)?;
-            if quota_reached(turn, tool_calls) {
-                return pause("來回次數已達到上限", &broker, &progress_state, None);
+            if pending_model.is_none() {
+                if let Some(inbox) = &run.instructions {
+                    let entries = inbox.boundary(false)?;
+                    if !entries.is_empty() {
+                        progress_state.add_instructions(entries);
+                        report(
+                            &mut activity,
+                            &mut progress,
+                            "已接收補充指示，準備帶入下一輪".into(),
+                        );
+                    }
+                }
+            }
+            if quota_reached(batch_replies, tool_calls) {
+                if !native {
+                    return pause("來回次數已達到上限", &broker, &progress_state, None);
+                }
+                broker.archive_results()?;
+                progress_state.compact_batch();
+                save_pause(
+                    &run,
+                    &caps.principal_id,
+                    &request_text,
+                    &broker,
+                    &progress_state,
+                    None,
+                    true,
+                )?;
+                batch_replies = 0;
+                tool_calls = 0;
+                report(
+                    &mut activity,
+                    &mut progress,
+                    "已保存階段 checkpoint，接續下一批工作".into(),
+                );
             }
             if Instant::now() >= deadline {
                 return pause(
@@ -325,7 +386,19 @@ fn run_for(
             let mut messages = match progress_state.messages(broker.progress_snapshot()) {
                 Ok(messages) => messages,
                 Err(error) => {
-                    return pause(&error, &broker, &progress_state, pending_model.as_ref())
+                    if error.contains("無法藉由繼續減少") {
+                        save_pause(
+                            &run,
+                            &caps.principal_id,
+                            &request_text,
+                            &broker,
+                            &progress_state,
+                            pending_model.as_ref(),
+                            false,
+                        )?;
+                        return Err(error);
+                    }
+                    return pause(&error, &broker, &progress_state, pending_model.as_ref());
                 }
             };
             if native {
@@ -342,15 +415,10 @@ fn run_for(
                     messages.insert(1, message);
                 }
             }
-            if turn >= MAX_REPLIES - 4 || tool_calls >= MAX_TOOLS - 4 {
-                messages.push(super::agent::Message::user(&format!("即將暫停：本段剩餘 {} 次模型回覆、{} 次工具操作。請在這次 arguments.progress_note 總結已完成、來源與版本、未完成事項及下一步；保持正常工具呼叫，不要假裝完成。程式會保存工作副本，等待使用者按繼續。",MAX_REPLIES-turn,MAX_TOOLS-tool_calls)));
+            if batch_replies >= MAX_REPLIES - 4 || tool_calls >= MAX_TOOLS - 4 {
+                messages.push(super::agent::Message::user(&format!("本批即將整理：剩餘 {} 次模型回覆、{} 次工具操作。請在這次 arguments.progress_note 總結已完成、來源與版本、未完成事項及下一步；保持正常工具呼叫，不要假裝完成。程式會保存工作副本與 checkpoint；新協定任務在時限內繼續下一批。",MAX_REPLIES-batch_replies,MAX_TOOLS-tool_calls)));
             }
             record["progress"] = progress_state.snapshot(broker.progress_snapshot());
-            report(
-                &mut activity,
-                &mut progress,
-                format!("等待 AI 回覆（第 {} 輪）", turn + 1),
-            );
             let lookup_only = pending_model.is_some();
             let id = pending_model
                 .as_ref()
@@ -400,15 +468,39 @@ fn run_for(
                 .as_array_mut()
                 .ok_or("任務記錄不正確。")?
                 .push(json!({"id":id,"request":task.request}));
+            trim_journal(&mut record);
             checkpoint(&journal, &record)?;
+            // 先保存原請求 ID，再送出 HTTP。崩潰後只能 GET 查回，不另送 POST。
+            save_pause(
+                &run,
+                &caps.principal_id,
+                &request_text,
+                &broker,
+                &progress_state,
+                Some(&task),
+                true,
+            )?;
             super::events::register(&run.root, &id)?;
+            if !lookup_only {
+                if let Some(inbox) = &run.instructions {
+                    inbox.mark_sent()?;
+                }
+            }
+            // 先更新補充狀態再通知 UI，避免等待模型期間仍顯示「準備帶入」。
+            report(
+                &mut activity,
+                &mut progress,
+                format!("等待 AI 回覆（第 {} 輪）", turn + 1),
+            );
+            batch_replies += 1;
+            turn += 1;
             let received =
                 super::model::receive(&run, &mut task, deadline, lookup_only, agent_caps.as_ref());
             record["last_remote_status"] = json!(task.remote);
             // 每輪保留可讀的回覆摘錄與伺服器識別，不依賴網站是否建立聊天紀錄。
             // 不另外複製整份 messages／tools；長回覆明確標示截斷。
             if let Some(entry) = record["requests"].as_array_mut().and_then(|a| a.last_mut()) {
-                entry["turn"] = json!(turn + 1);
+                entry["turn"] = json!(turn);
                 if let Some(status) = &task.remote {
                     entry["task_id"] = json!(status.task_id);
                     entry["state"] = json!(status.state);
@@ -428,10 +520,10 @@ fn run_for(
             }
             checkpoint(&journal, &record)?;
             if let Err(error) = &received {
-                record["request_error"] = json!({"turn":turn+1,"request_id":id,"message":error});
+                record["request_error"] = json!({"turn":turn,"request_id":id,"message":error});
                 checkpoint(&journal, &record)?;
             }
-            let outcome = received.map_err(|e| format!("第 {} 輪：{e}", turn + 1))?;
+            let outcome = received.map_err(|e| format!("第 {} 輪：{e}", turn))?;
             check_cancel(&run.cancel)?;
             // 已拿到完成回覆但剛好到期：保存該回覆，續接後才解析／執行。
             if Instant::now() >= deadline {
@@ -498,6 +590,33 @@ fn run_for(
                 }
             }
             record["last_remote_status"] = json!(task.remote);
+            if let Some(inbox) = &run.instructions {
+                let terminal = parsed.as_ref().is_some_and(|p| {
+                    matches!(
+                        p.decision,
+                        Decision::Finish { .. } | Decision::AskUser { .. }
+                    )
+                });
+                let entries = inbox.boundary(terminal)?;
+                if !entries.is_empty() {
+                    progress_state.add_instructions(entries);
+                    let skipped = json!({"ok":false,"executed":false,"reason":"使用者在本輪期間補充指示；此候選操作未執行，請依新要求重新決定。"});
+                    if let Some((message, call_id)) = native_call {
+                        progress_state.push_native(message, &call_id, &skipped);
+                    } else if !native {
+                        progress_state.push_tool(reply, skipped.to_string());
+                    }
+                    record["superseded_request"] = json!(id);
+                    record["progress"] = progress_state.snapshot(broker.progress_snapshot());
+                    checkpoint(&journal, &record)?;
+                    report(
+                        &mut activity,
+                        &mut progress,
+                        "收到新的補充指示；上一輪候選操作未執行，正在重新安排".into(),
+                    );
+                    continue;
+                }
+            }
             // 已知終態才可發起修復；多 JSON、空白完成均不執行候選工具。
             let Some(parsed) = parsed else {
                 let label = match progress_state.repair(&reason, &reply) {
@@ -557,6 +676,21 @@ fn run_for(
                     if Instant::now() >= deadline {
                         return pause(TIME_LIMIT_REASON, &broker, &progress_state, Some(&task));
                     }
+                    // 讀取可在相同已完成回覆下重試；修改工具一旦開始，舊 checkpoint 立即失效。
+                    // 若寫入期間崩潰，不能以先前狀態重播未知結果。
+                    if replay_safe(&request) {
+                        save_pause(
+                            &run,
+                            &caps.principal_id,
+                            &request_text,
+                            &broker,
+                            &progress_state,
+                            Some(&task),
+                            true,
+                        )?;
+                    } else {
+                        invalidate_pause(&run)?;
+                    }
                     record["pending_operation"]["state"] = json!("started");
                     checkpoint(&journal, &record)?;
                     let result =
@@ -589,7 +723,9 @@ fn run_for(
                         record["pending_operation"] = Value::Null;
                         checkpoint(&journal, &record)?;
                         return pause(
-                            "等待圖表資料處理選擇",
+                            result["result"]["wait_reason"]
+                                .as_str()
+                                .unwrap_or("等待圖表資料處理選擇"),
                             &broker,
                             &progress_state,
                             Some(&task),
@@ -618,7 +754,7 @@ fn run_for(
                     record["operations"]
                         .as_array_mut()
                         .ok_or("任務記錄不正確。")?
-                        .push(json!({"id":operation_id,"request_id":id,"turn":turn+1,"request":request,"result":result}));
+                        .push(json!({"id":operation_id,"request_id":id,"turn":turn,"request":request,"result":result}));
                     progress_state.observe(&operation_id, &request, &result);
                     if let Some((message, call_id)) = native_call {
                         progress_state.push_native(message, &call_id, &result);
@@ -632,6 +768,27 @@ fn run_for(
                     record["progress"] = progress_state.snapshot(broker.progress_snapshot());
                     record["outputs"] = json!(broker.published());
                     record["pending_operation"] = Value::Null;
+                    checkpoint(&journal, &record)?;
+                    // 寫入結果與副本版本都已核對，才能重新提供可恢復 checkpoint。
+                    broker.archive_results()?;
+                    if native && progress_state.needs_compaction() {
+                        progress_state.compact_batch();
+                        report(
+                            &mut activity,
+                            &mut progress,
+                            "已整理工作筆記與上下文；完整工具結果可按需查回".into(),
+                        );
+                    }
+                    save_pause(
+                        &run,
+                        &caps.principal_id,
+                        &request_text,
+                        &broker,
+                        &progress_state,
+                        None,
+                        true,
+                    )?;
+                    trim_journal(&mut record);
                     checkpoint(&journal, &record)?;
                     failures = if result["ok"] == false {
                         failures + 1
@@ -667,6 +824,9 @@ fn run_for(
                             return Ok(format!("{message}{locations}"));
                         }
                         Err(error) => {
+                            if let Some(inbox) = &run.instructions {
+                                inbox.close(false)?;
+                            }
                             failures += 1;
                             if failures >= 3 {
                                 return Err(error);
@@ -694,8 +854,18 @@ fn run_for(
                 }
             }
         }
-        Err("已達本次 80 次模型回覆上限，已停止並保留輸出。".into())
     })();
+    if checkpoint_owned.get() && (!explicit_pause.get() || run.cancel.load(Ordering::Relaxed)) {
+        invalidate_pause(&run)?;
+    }
+    if let Some(inbox) = &run.instructions {
+        inbox.close(true)?;
+        let entries = inbox.entries()?;
+        record["user_instructions"] = json!(entries);
+        for entry in entries.iter().filter(|e| e.status == "sent") {
+            request_text.push_str(&format!("\n\n使用者補充：{}", entry.text));
+        }
+    }
     report(
         &mut activity,
         &mut progress,
@@ -734,14 +904,22 @@ fn run_for(
     } else {
         "completed"
     };
-    if let Err(error) = broker.memory()?.save_run(
-        &run.id,
-        &request_text,
-        outcome,
-        state,
-        task_summary.as_deref(),
-        broker.published(),
-    ) {
+    let saved_memory = broker
+        .memory()?
+        .save_run(
+            &run.id,
+            &request_text,
+            outcome,
+            state,
+            task_summary.as_deref(),
+            broker.published(),
+        )
+        .and_then(|()| {
+            broker
+                .memory()?
+                .save_operations(&run.id, &broker.operation_history()?)
+        });
+    if let Err(error) = saved_memory {
         // 摘要保存失败不能推翻已核對的交付；完整結果仍在本機對話及 DPAPI 任務紀錄。
         report(
             &mut activity,
@@ -817,6 +995,9 @@ pub fn recover(root: &Path, id: &str) -> AppResult<String> {
     if let Some(text) = record["result"]["Ok"].as_str() {
         return Ok(text.into());
     }
+    if paused_available(root, id) {
+        return Ok("上次任務中斷，已找到安全 checkpoint。按「繼續」後會核對來源與帳號，再接續原請求；不會自動重播未知寫入。".into());
+    }
     let reason = record["result"]["Err"].as_str().unwrap_or(
         "應用程式已退出，先前的本機操作未完成；不會自動重播。尚未發布的記憶體副本已釋放。",
     );
@@ -851,12 +1032,53 @@ pub fn recover_charts(root: &Path, id: &str) -> Vec<super::charts::Chart> {
     read().unwrap_or_default()
 }
 
+/// 只列明確唯讀／記憶體操作；新增工具預設不允許崩潰重播。
+fn replay_safe(tool: &super::Tool) -> bool {
+    use super::Tool::*;
+    matches!(
+        tool,
+        ListFiles { .. }
+            | ReadFile { .. }
+            | FindText { .. }
+            | SearchFiles { .. }
+            | ListLogs { .. }
+            | ReadLog { .. }
+            | SearchLogs { .. }
+            | LoadSkill { .. }
+            | ReadWorkLog { .. }
+            | ListNotes { .. }
+            | ReadNote { .. }
+            | ReadTaskResult { .. }
+            | InspectExcel { .. }
+            | ReadExcelRange { .. }
+            | OutlookFolders { .. }
+            | OutlookHeaders { .. }
+            | OutlookRead { .. }
+    )
+}
+fn invalidate_pause(run: &Run) -> AppResult<()> {
+    checkpoint(
+        &pause_path(&run.root, &run.id)?,
+        &json!({"version":1,"available":false}),
+    )
+}
+/// 診斷只保留近期完整請求；操作原文另在加密操作簿，避免每日重複累積整份 context。
+fn trim_journal(record: &mut Value) {
+    for (key, limit) in [("requests", 8), ("operations", 80)] {
+        if let Some(rows) = record[key].as_array_mut() {
+            if rows.len() > limit {
+                rows.drain(..rows.len() - limit);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod pause_tests {
     use super::*;
     #[test]
-    fn segment_budget_is_two_hours_and_cancellation_stays_separate() {
-        assert_eq!(SEGMENT_BUDGET.as_secs(), 7200);
+    fn segment_budget_is_twenty_four_hours_and_cancellation_stays_separate() {
+        assert_eq!(SEGMENT_BUDGET.as_secs(), 86400);
         assert!(check_cancel(&AtomicBool::new(false)).is_ok());
         assert!(check_cancel(&AtomicBool::new(true)).is_err());
     }
@@ -866,5 +1088,20 @@ mod pause_tests {
         assert!(!quota_reached(79, 59));
         assert!(quota_reached(80, 59));
         assert!(quota_reached(79, 60));
+    }
+    #[test]
+    fn recovery_never_replays_unknown_writes() {
+        assert!(replay_safe(&super::super::Tool::ReadFile {
+            path: "a.txt".into(),
+            offset: 0
+        }));
+        assert!(!replay_safe(&super::super::Tool::SaveCopy {
+            copy_id: "copy".into(),
+            revision: "v1".into()
+        }));
+        assert!(!replay_safe(&super::super::Tool::CreateWorkingCopy {
+            source: Some("a.txt".into()),
+            name: "copy.txt".into()
+        }));
     }
 }

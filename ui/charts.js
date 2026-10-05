@@ -46,6 +46,58 @@ window.ChartUI = (() => {
       return instance.getDataURL({type:"png",pixelRatio:1,backgroundColor:"#fff"});
     } finally { instance?.dispose(); canvas.remove(); }
   }
+  // 異常明細使用原生預檢留下的原始列／格；分頁建立 DOM，避免大圖一次建立數萬列。
+  // 所有來源內容只寫入 textContent，檔案中的 HTML 不會被當成介面執行。
+  function renderIssues(data) {
+    const details = document.createElement("details");
+    details.className = "chart-issues";
+    const summary = document.createElement("summary");
+    summary.textContent = "查看異常值";
+    const note = document.createElement("p");
+    note.textContent = data.data_note || "這張圖沒有原始資料處理紀錄。";
+    const table = document.createElement("table");
+    const controls = document.createElement("div");
+    const previous = document.createElement("button"), next = document.createElement("button");
+    const label = document.createElement("span");
+    previous.type = next.type = "button";
+    previous.textContent = "上一頁";
+    next.textContent = "下一頁";
+    const rows = data.data_issues || [];
+    let page = 0;
+
+    function addRow(values, heading = false) {
+      const row = table.insertRow();
+      for (const value of values) {
+        const cell = document.createElement(heading ? "th" : "td");
+        cell.textContent = String(value ?? "—");
+        row.append(cell);
+      }
+    }
+    function showPage() {
+      table.replaceChildren();
+      addRow(["工作表／原始列", "儲存格", "系列", "X 原值", "Y 原值", "原始值／顯示值", "類型", "處理方式"], true);
+      const start = page * 100, end = Math.min(start + 100, rows.length);
+      for (let i = start; i < end; i++) {
+        const row = rows[i];
+        addRow([
+          `${row.sheet}／${row.row}`, row.cell, row.series, row.x_value, row.y_value,
+          `${JSON.stringify(row.original_value)}／${row.original_text}`, row.category, row.handling
+        ]);
+      }
+      label.textContent = rows.length
+        ? ` ${start + 1}–${end} / ${rows.length} 筆 `
+        : " 沒有可列出的明細（舊版圖表可能僅有統計） ";
+      previous.disabled = page === 0;
+      next.disabled = end >= rows.length;
+    }
+    previous.onclick = () => { if (page > 0) { page--; showPage(); } };
+    next.onclick = () => { if ((page + 1) * 100 < rows.length) { page++; showPage(); } };
+    details.ontoggle = () => { if (details.open) showPage(); };
+    controls.append(previous, label, next);
+    details.append(summary, note, controls, table);
+    return details;
+  }
+
   function render(container, values) {
     const signature = JSON.stringify(values || []);
     if (container.dataset.chartSignature === signature) return;
@@ -78,7 +130,8 @@ window.ChartUI = (() => {
       next.onclick = () => { if ((page + 1) * 100 < data.x.length) { page++; showPage(); } };
       details.ontoggle = () => { if (details.open) showPage(); };
       controls.append(previous, label, next);
-      details.append(summary, controls, table); card.append(title, expand, plot, source, details); container.append(card);
+      details.append(summary, controls, table); card.append(title, expand, plot, source, details);
+      card.append(renderIssues(data)); container.append(card);
       requestAnimationFrame(() => {
         if (!plot.isConnected) return;
         try {

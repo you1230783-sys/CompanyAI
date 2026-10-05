@@ -2,7 +2,7 @@
 //! 檔案版本、實際結果及快取完整性由程式管理，全部以目前 Windows 帳號 DPAPI 保存。
 mod context;
 mod vault;
-use super::{files, text, Project};
+use super::{files, text, Project, Tool};
 use crate::{jobs, protocol::Message, unix_now, AppResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -61,12 +61,20 @@ struct RunEntry {
     state: String,
     outputs: Vec<String>,
     updated: u64,
+    #[serde(default)]
+    tool_usage: BTreeMap<String, usize>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 struct RunResult {
     entry: RunEntry,
     request: String,
     result: String,
+}
+const OPERATION_CHUNK_CHARS: usize = 120_000;
+#[derive(Serialize, Deserialize)]
+struct OperationChunks {
+    total: usize,
+    chunks: Vec<String>,
 }
 #[derive(Default, Serialize, Deserialize)]
 struct Index {
@@ -106,6 +114,60 @@ fn accessible(note: &Note, conversation: &str) -> bool {
 }
 
 impl Memory {
+    /// 完整工具結果以內容雜湊分開保存，checkpoint 只帶索引。
+    /// 先寫成功才可釋放記憶體；讀回時再核對內容，缺檔不得當作未執行。
+    pub(super) fn archive_operation(&self, value: &Value) -> AppResult<String> {
+        let serialized = value.to_string();
+        let hash = text::revision(&serialized);
+        let tx = self.vault.transaction()?;
+        if serialized.len() <= 7_500_000 {
+            tx.write("operation-parts", &hash, value)?;
+        } else {
+            // 合法大型圖表可能接近 8 MiB；分塊以免超過私有儲存單檔 8 MB 上限。
+            let mut chars = serialized.chars();
+            let mut chunks = Vec::new();
+            loop {
+                let chunk: String = chars.by_ref().take(OPERATION_CHUNK_CHARS).collect();
+                if chunk.is_empty() {
+                    break;
+                }
+                let key = text::revision(&chunk);
+                tx.write("operation-chunks", &key, &chunk)?;
+                chunks.push(key);
+            }
+            tx.write(
+                "operation-parts",
+                &hash,
+                &json!({"storage":"chunks-v1","chunks":chunks}),
+            )?;
+        }
+        Ok(hash)
+    }
+    pub(super) fn archived_operation(&self, hash: &str) -> AppResult<Value> {
+        let tx = self.vault.transaction()?;
+        let mut value: Value = tx
+            .read("operation-parts", hash)?
+            .ok_or("工具原始結果遺失；停止續接，避免重複執行。")?;
+        if value["storage"] == "chunks-v1" {
+            let mut serialized = String::new();
+            for key in value["chunks"].as_array().ok_or("操作區塊索引無效。")? {
+                let key = key.as_str().ok_or("操作區塊代號無效。")?;
+                let chunk: String = tx.read("operation-chunks", key)?.ok_or("操作區塊遺失。")?;
+                if text::revision(&chunk) != key {
+                    return Err("操作區塊校驗失敗。".into());
+                }
+                serialized.push_str(&chunk);
+                if serialized.len() > 60_000_000 {
+                    return Err("操作原文超過可還原上限。".into());
+                }
+            }
+            value = serde_json::from_str(&serialized).map_err(|_| "操作原文格式無效。")?;
+        }
+        if text::revision(&value.to_string()) != hash {
+            return Err("工具原始結果校驗失敗；未重新執行。".into());
+        }
+        Ok(value)
+    }
     pub fn open(project: Project, conversation: &str) -> AppResult<Self> {
         jobs::validate_id(conversation)?;
         let vault = Vault::new(&project.root)?;
@@ -463,10 +525,43 @@ impl Memory {
         if task.entry.conversation != self.conversation {
             return Err("只能讀取本對話的任務結果。".into());
         }
+        if field == "operations" {
+            let tx = self.vault.transaction()?;
+            let manifest: OperationChunks = tx
+                .read("run-operations", id)?
+                .ok_or("這個舊任務沒有保存可查回的工具明細；請改查最終結果或重新讀取來源。")?;
+            if offset > manifest.total {
+                return Err("工具明細位置超過尾端。".into());
+            }
+            let mut text = String::new();
+            let mut position = offset;
+            while position < manifest.total && text.chars().count() < 6000 {
+                let index = position / OPERATION_CHUNK_CHARS;
+                let key = manifest.chunks.get(index).ok_or("工具明細索引不完整。")?;
+                let chunk: String = tx.read("run-parts", key)?.ok_or("工具明細區塊不存在。")?;
+                if text::revision(&chunk) != *key {
+                    return Err("工具明細區塊版本不符。".into());
+                }
+                let part: String = chunk
+                    .chars()
+                    .skip(position % OPERATION_CHUNK_CHARS)
+                    .take(6000 - text.chars().count())
+                    .collect();
+                let length = part.chars().count();
+                if length == 0 {
+                    return Err("工具明細區塊長度不符。".into());
+                }
+                position += length;
+                text.push_str(&part);
+            }
+            return Ok(
+                json!({"task_id":id,"field":field,"text":text,"offset":offset,"next_offset":position,"total":manifest.total,"has_more":position<manifest.total}),
+            );
+        }
         let content = match field {
             "request" => &task.request,
             "result" => &task.result,
-            _ => return Err("field 只接受 request 或 result。".into()),
+            _ => return Err("field 只接受 request、result 或 operations。".into()),
         };
         let total = content.chars().count();
         if offset > total {
@@ -504,6 +599,7 @@ impl Memory {
             state: state.into(),
             outputs: outputs.to_vec(),
             updated: unix_now(),
+            tool_usage: BTreeMap::new(),
         };
         tx.write(
             "runs",
@@ -520,6 +616,44 @@ impl Memory {
     }
     pub fn context(&self, messages: &[Message]) -> AppResult<Vec<Message>> {
         context::build(self, messages)
+    }
+    /// 新對話只帶工具次數；完整操作另存加密紀錄，按需分頁讀取。
+    pub fn save_operations(&self, id: &str, operations: &Value) -> AppResult<()> {
+        jobs::validate_id(id)?;
+        let tx = self.vault.transaction()?;
+        let mut task: RunResult = tx.read("runs", id)?.ok_or("尚未保存任務結果。")?;
+        if task.entry.conversation != self.conversation {
+            return Err("任務不屬於目前對話。".into());
+        }
+        let mut counts = BTreeMap::new();
+        for operation in operations.as_array().ok_or("工具紀錄格式不正確。")? {
+            if let Ok(tool) = serde_json::from_value::<Tool>(operation["request"].clone()) {
+                *counts.entry(tool.label().to_owned()).or_insert(0usize) += 1;
+            }
+        }
+        task.entry.tool_usage = counts;
+        let mut index: Index = tx.read("project", "index")?.unwrap_or_default();
+        if let Some(entry) = index.runs.iter_mut().find(|r| r.id == id) {
+            *entry = task.entry.clone();
+        }
+        // 內容定址區塊先寫完，最後原子替換索引；中途失敗仍可讀先前完整版本。
+        let serialized = operations.to_string();
+        let mut chars = serialized.chars();
+        let mut chunks = Vec::new();
+        let mut total = 0;
+        loop {
+            let chunk: String = chars.by_ref().take(OPERATION_CHUNK_CHARS).collect();
+            if chunk.is_empty() {
+                break;
+            }
+            total += chunk.chars().count();
+            let key = text::revision(&chunk);
+            tx.write("run-parts", &key, &chunk)?;
+            chunks.push(key);
+        }
+        tx.write("run-operations", id, &OperationChunks { total, chunks })?;
+        tx.write("runs", id, &task)?;
+        tx.write("project", "index", &index)
     }
 }
 

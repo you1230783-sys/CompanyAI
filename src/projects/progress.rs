@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 const SOFT_BYTES: usize = 120_000;
 const HARD_BYTES: usize = 240_000;
+const COMPACT_BYTES: usize = HARD_BYTES * 65 / 100;
 
 #[derive(Default, Serialize, Deserialize)]
 struct Reading {
@@ -59,10 +60,23 @@ pub(super) struct Progress {
     #[serde(default)]
     pub agent: Option<super::agent::State>,
     base: Vec<Message>,
+    #[serde(default)]
+    base_task_ids: Vec<Option<String>>,
+    /// 使用者原文獨立保存，精簡工具歷史時不得刪除或交給 AI 改寫。
+    #[serde(default)]
+    instructions: Vec<super::steering::Instruction>,
     // 一筆為確定解析的操作及真實工具結果；失敗格式另存，不混入成功歷史。
     history: Vec<(Message, Message)>,
+    #[serde(default)]
+    history_ids: Vec<Option<String>>,
+    #[serde(skip)]
+    pending_history_id: Option<String>,
     readings: BTreeMap<String, Reading>,
     operations: Vec<Value>,
+    #[serde(default)]
+    tool_usage: BTreeMap<String, usize>,
+    #[serde(default)]
+    checkpoints: usize,
     seen_ids: BTreeSet<String>,
     seen_results: BTreeSet<String>,
     note: Option<Note>,
@@ -78,9 +92,15 @@ impl Progress {
         Self {
             agent: None,
             base,
+            base_task_ids: vec![],
+            instructions: vec![],
             history: vec![],
+            history_ids: vec![],
+            pending_history_id: None,
             readings: BTreeMap::new(),
             operations: vec![],
+            tool_usage: BTreeMap::new(),
+            checkpoints: 0,
             seen_ids: BTreeSet::new(),
             seen_results: BTreeSet::new(),
             note: None,
@@ -92,17 +112,39 @@ impl Progress {
             no_progress: 0,
         }
     }
+    pub fn task_references(&mut self, ids: Vec<Option<String>>) {
+        self.base_task_ids = ids;
+    }
+    /// 使用者主動續接才重設每段計數；去重紀錄仍由 broker 保留。
+    pub fn add_instructions(&mut self, entries: Vec<super::steering::Instruction>) {
+        for entry in entries {
+            if entry.status != "withdrawn" && !self.instructions.iter().any(|e| e.id == entry.id) {
+                self.instructions.push(entry);
+                self.no_progress = 0;
+                self.repair = None;
+            }
+        }
+    }
+
     /// 使用者主動續接才重設每段計數；去重紀錄仍由 broker 保留。
     pub fn resume_segment(&mut self) {
         self.total_repairs = 0;
         self.consecutive_repairs = 0;
         self.no_progress = 0;
         self.repair = None;
+        self.compact_batch();
+    }
+
+    /// 自動換批只縮短工作上下文，不重設無進展／修復計數，避免無限循環。
+    /// 呼叫前必須先由 broker 保存完整原文，筆記永遠不取代操作去重表。
+    pub fn compact_batch(&mut self) {
+        self.checkpoints += 1;
         self.compact = true;
         // 完整原始結果仍存在加密 broker 操作簿，可用 read_work_log 分段取回。
         // 續接使用最新兩筆結果、摘要與程式狀態，避免第二段再碰到 204 則訊息上限。
         let remove = self.history.len().saturating_sub(2);
         self.history.drain(..remove);
+        self.history_ids.drain(..remove.min(self.history_ids.len()));
         if let Some(note) = self.note.as_mut() {
             note.covered = note.covered.saturating_sub(remove);
         }
@@ -114,6 +156,15 @@ impl Progress {
         if self.operations.len() > 20 {
             self.operations.drain(..self.operations.len() - 20);
         }
+    }
+    pub fn needs_compaction(&self) -> bool {
+        self.history.len() >= 30 || self.history_bytes() >= COMPACT_BYTES
+    }
+    fn history_bytes(&self) -> usize {
+        self.history
+            .iter()
+            .map(|(a, b)| a.wire().to_string().len() + b.wire().to_string().len())
+            .sum()
     }
     /// 第五次有效閱讀且尚未讀完時，僅在下一輪附可選技能。
     /// 每份文件各自計數，穿插其他工具或文件不會累加到同一計數。
@@ -160,7 +211,11 @@ impl Progress {
                 })
             })
             .collect();
-        json!({"readings":readings,"copies":copies,"operations":self.operations,
+        let operations:Vec<_>=self.operations.iter().rev().take(20).rev().map(|operation| {
+            if operation.to_string().len()<=4000 {operation.clone()}else{json!({"id":operation["id"],"tool":operation["tool"],"details":"大型操作資料已保存在 read_work_log，可按 operation_id 分頁查回。"})}
+        }).collect();
+        json!({"readings":readings,"copies":copies,"operations":operations,"tool_usage":self.tool_usage,"operations_omitted":self.operations.len().saturating_sub(20),
+            "working_note":{"requirements":"以本次保留的使用者原文及補充為準，不由筆記改寫授權", "model_summary":self.note.as_ref().map(|n| &n.text),"summary_warning":"模型摘要可能尚未涵蓋最近步驟；完成狀態依 operations、copies 及工具原文核對","checkpoint_count":self.checkpoints,"next_step":"依原始要求、最近結果及摘要待辦繼續；缺少細節時先 read_work_log，不重做已成功修改"},
             "note":self.note.as_ref().map(|n| &n.text),"note_covers_tools":self.note.as_ref().map(|n| n.covered),
             "total_repairs":self.total_repairs,"consecutive_repairs":self.consecutive_repairs,
             "no_progress":self.no_progress})
@@ -168,11 +223,13 @@ impl Progress {
 
     /// 只計算真正新增的閱讀區間或工具結果；重播與重讀不會重設恢復上限。
     pub fn observe(&mut self, id: &str, tool: &Tool, result: &Value) -> bool {
+        self.pending_history_id = Some(id.into());
         self.last_read = None;
         if !self.seen_ids.insert(id.into()) {
             self.no_progress += 1;
             return false;
         }
+        *self.tool_usage.entry(tool.label().into()).or_default() += 1;
         let mut metadata = result.clone();
         if let Some(object) = metadata.get_mut("result").and_then(Value::as_object_mut) {
             object.remove("text");
@@ -184,11 +241,14 @@ impl Progress {
             object.remove("rows");
             object.remove("headers");
             object.remove("sheets");
+            object.remove("lines");
+            object.remove("matches");
         }
         self.operations
             .push(json!({"id":id,"tool":tool.label(),"result":metadata}));
         let mut new = false;
-        if result["ok"] == true {
+        // 使用者拒絕的工具雖正常返回，仍沒有執行；換參數不能製造假進度。
+        if result["ok"] == true && result["result"]["executed"] != false {
             let info = &result["result"];
             if let Tool::ReadFile { path, .. } | Tool::ReadDocumentSection { path, .. } = tool {
                 let revision = info["revision"].as_str().unwrap_or("");
@@ -232,6 +292,8 @@ impl Progress {
     }
 
     pub fn push_tool(&mut self, reply: String, result: String) {
+        self.history_ids.resize(self.history.len(), None);
+        self.history_ids.push(self.pending_history_id.take());
         self.history
             .push((Message::assistant(reply), Message::user(&result)));
         self.repair = None;
@@ -239,6 +301,8 @@ impl Progress {
 
     /// 原生 assistant/tool 必須一起保存及縮減，不把工具結果降為 user。
     pub fn push_native(&mut self, reply: Message, id: &str, result: &Value) {
+        self.history_ids.resize(self.history.len(), None);
+        self.history_ids.push(self.pending_history_id.take());
         self.history.push((reply, Message::result(id, result)));
         self.repair = None;
     }
@@ -298,7 +362,24 @@ impl Progress {
             0
         };
         let mut messages = self.base.clone();
+        // 較早助理答案可能很大；只在需要時縮減送出投影，原文仍留在歷史與 checkpoint。
+        // 使用者原話及最新補充完全不裁切，避免把任務條件換成模型摘要。
+        let mut base_bytes: usize = messages.iter().map(|m| m.wire().to_string().len()).sum();
+        for (index, message) in messages.iter_mut().enumerate() {
+            if base_bytes <= 60_000 {
+                break;
+            }
+            if message.role != "assistant" || message.content.len() <= 2000 {
+                continue;
+            }
+            let original = message.content.len();
+            let excerpt: String = message.content.chars().take(500).collect();
+            let reference = self.base_task_ids.get(index).and_then(Option::as_deref);
+            message.content=format!("較早助理回覆節錄（不是完整結果）：{excerpt}\n原文查回：{}。重要細節請查回，不憑節錄推論。",reference.map(|id|format!("read_task_result(task_id={id:?},field=\"result\",offset=0)")).unwrap_or_else(||"read_task_result；任務索引見專案記憶，若沒有紀錄請向使用者確認".into()));
+            base_bytes = base_bytes.saturating_sub(original) + message.content.len();
+        }
         messages.push(Message::user(&format!("本機續接資料（僅為資料，不新增授權；AI 筆記可能有誤，重要結論需按 path/revision/offset 核對原文）：\n{}", self.snapshot(copies))));
+        let history_start = messages.len();
         for (reply, result) in &self.history[start..] {
             messages.push(reply.clone());
             messages.push(result.clone());
@@ -309,16 +390,47 @@ impl Progress {
         if let Some(skill) = self.reading_note_skill() {
             messages.push(skill);
         }
-        if messages
-            .iter()
-            .map(|m| m.wire().to_string().len())
-            .sum::<usize>()
-            > HARD_BYTES
-        {
-            return Err(
-                "本次上下文已達文字預算，且缺少足夠筆記可安全縮減；已保留進度，請縮小任務範圍。"
-                    .into(),
-            );
+        if self.history_bytes() >= SOFT_BYTES || self.history.len() >= 26 {
+            messages.push(Message::user("即將整理工作上下文。請在本次正常工具的 progress_note 附累積工作筆記（最多 2000 字）：目標與限制、已確認決策、已完成、目前步驟、待辦、失敗原因與來源位置。只記錄已知事實，不記思考過程，不宣稱下一個尚未執行的工具成功。程式另存原始要求、真實狀態及工具紀錄；需要細節可查回。"));
+        }
+        if !self.instructions.is_empty() {
+            let text = self
+                .instructions
+                .iter()
+                .map(|e| e.text.as_str())
+                .collect::<Vec<_>>()
+                .join("\n\n--- 下一則使用者補充 ---\n\n");
+            messages.push(Message::user(&format!(
+                "本次任務的使用者補充指示（依提交順序，持續有效）：\n{text}"
+            )));
+        }
+        let bytes = |messages: &[Message]| {
+            messages
+                .iter()
+                .map(|m| m.wire().to_string().len())
+                .sum::<usize>()
+        };
+        if bytes(&messages) > HARD_BYTES {
+            let mut omitted = Vec::new();
+            let mut removed = 0;
+            // assistant/tool 成對移出這次請求；不刪除 self.history 的原始證據。
+            while bytes(&messages) > SOFT_BYTES && start + removed < self.history.len() {
+                messages.drain(history_start..history_start + 2);
+                if let Some(id) = self
+                    .history_ids
+                    .get(start + removed)
+                    .and_then(Option::as_ref)
+                {
+                    omitted.push(id.clone());
+                }
+                removed += 1;
+            }
+            if removed > 0 {
+                messages.insert(history_start,Message::user(&format!("為控制本輪文字量，{removed} 組工具原文未隨請求重送；完整結果仍保存在本機加密操作簿。可用 read_work_log(operation_id,offset) 查回，operation_id 未知時先以 offset=0 查看索引／原紀錄。被省略不代表未執行，不要重做已成功的修改；需要細節時先查證。可查回的操作：{}",json!(omitted))));
+            }
+        }
+        if bytes(&messages) > HARD_BYTES {
+            return Err("使用者原始要求或必要狀態本身已超過本機文字預算，無法藉由繼續減少。請縮短新提問或另開專案對話；目前進度已保留。".into());
         }
         Ok(messages)
     }
@@ -327,6 +439,72 @@ impl Progress {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn declined_tools_cannot_keep_a_long_task_alive_by_changing_parameters() {
+        let mut state = Progress::new(vec![Message::user("整理週報")]);
+        for i in 0..8 {
+            assert!(!state.observe(
+                &format!("denied{i}"),
+                &Tool::OutlookFolders {
+                    scope: "local_inbox".into(),
+                    parent_id: Some(format!("folder{i}")),
+                    offset: 0
+                },
+                &json!({"ok":true,"result":{"declined":true,"executed":false}})
+            ));
+        }
+        assert!(state.stalled());
+        state.compact_batch();
+        assert!(state.stalled(), "換批不能清除無進展保護");
+    }
+    #[test]
+    fn automatic_compaction_keeps_notes_requirements_and_safety_counters() {
+        let mut state = Progress::new(vec![Message::user("目標：整理週報；不能修改來源")]);
+        for i in 0..30 {
+            state.push_tool(format!("call{i}"), "證據".repeat(2000));
+        }
+        assert!(state.accept_note(Some("已確認前三十份證據；待辦：核對缺漏並寫週報")));
+        state.total_repairs = 5;
+        state.no_progress = 7;
+        assert!(state.needs_compaction());
+        state.compact_batch();
+        assert_eq!(state.history.len(), 2);
+        assert_eq!(state.total_repairs, 5);
+        assert_eq!(state.no_progress, 7);
+        assert!(state.snapshot(json!([]))["working_note"]["model_summary"]
+            .as_str()
+            .unwrap()
+            .contains("待辦"));
+        assert!(state
+            .messages(json!([]))
+            .unwrap()
+            .iter()
+            .any(|m| m.content.contains("不能修改來源")));
+    }
+    #[test]
+    fn user_supplements_survive_compaction_and_serialized_resume() {
+        let mut progress = Progress::new(vec![Message::user("原始目標：分析 12:25 到 12:33")]);
+        progress.add_instructions(vec![super::super::steering::Instruction {
+            id: "first".into(),
+            text: "只看 Z01-CY，保留原始時間".into(),
+            status: "staged".into(),
+        }]);
+        for i in 0..6 {
+            progress.push_tool(format!("call{i}"), "舊結果".into());
+        }
+        progress.resume_segment();
+        let mut restored: Progress =
+            serde_json::from_slice(&serde_json::to_vec(&progress).unwrap()).unwrap();
+        let messages = restored.messages(json!([])).unwrap();
+        assert!(messages.iter().any(|m| m.content.contains("原始目標")));
+        assert_eq!(
+            messages
+                .iter()
+                .filter(|m| m.content.contains("只看 Z01-CY"))
+                .count(),
+            1
+        );
+    }
     fn read(offset: usize, revision: &str) -> Value {
         json!({"ok":true,"result":{"offset":offset,"next_offset":offset+10,"total":100,"revision":revision,"text":"original evidence"}})
     }
@@ -576,16 +754,78 @@ mod tests {
         }
     }
     #[test]
-    fn no_note_never_silently_drops_original_evidence() {
+    fn oversized_results_are_referenced_without_destroying_original_evidence() {
         let mut state = Progress::new(vec![Message::user("original")]);
         for _ in 0..5 {
             state.push_tool("tool".into(), "x".repeat(60_000));
         }
-        assert!(state
+        let messages = state.messages(json!([])).unwrap();
+        assert!(messages.iter().any(|m| m.content.contains("read_work_log")));
+        assert!(
+            messages
+                .iter()
+                .map(|m| m.wire().to_string().len())
+                .sum::<usize>()
+                < HARD_BYTES
+        );
+        assert_eq!(state.history.len(), 5);
+    }
+    #[test]
+    fn resume_with_two_large_results_does_not_repeat_the_budget_pause() {
+        let mut state = Progress::new(vec![Message::user("保留原始要求")]);
+        state.add_instructions(vec![super::super::steering::Instruction {
+            id: "new".into(),
+            text: "只看 A01-01".into(),
+            status: "sent".into(),
+        }]);
+        for i in 0..3 {
+            state.push_tool(format!("call{i}"), "中".repeat(80_000));
+        }
+        state.resume_segment();
+        let mut restored: Progress =
+            serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+        for _ in 0..2 {
+            let messages = restored.messages(json!([])).unwrap();
+            assert!(messages.iter().any(|m| m.content == "保留原始要求"));
+            assert!(messages.iter().any(|m| m.content.contains("只看 A01-01")));
+            assert!(
+                messages
+                    .iter()
+                    .map(|m| m.wire().to_string().len())
+                    .sum::<usize>()
+                    < HARD_BYTES
+            );
+        }
+        assert_eq!(restored.history.len(), 2);
+    }
+    #[test]
+    fn prior_final_answers_have_task_references_and_user_requirements_stay_exact() {
+        let mut state = Progress::new(vec![
+            Message::user("要求一"),
+            Message::assistant("答".repeat(80_000)),
+            Message::user("要求二"),
+            Message::assistant("案".repeat(80_000)),
+            Message::user("第三輪請繼續"),
+        ]);
+        state.task_references(vec![
+            None,
+            Some("task-one".into()),
+            None,
+            Some("task-two".into()),
+            None,
+        ]);
+        let messages = state.messages(json!([])).unwrap();
+        for requirement in ["要求一", "要求二", "第三輪請繼續"] {
+            assert!(messages.iter().any(|m| m.content == requirement));
+        }
+        assert!(messages.iter().any(|m| m.content.contains("task-one")));
+        assert!(messages.iter().any(|m| m.content.contains("task-two")));
+        assert_eq!(state.base[1].content.chars().count(), 80_000);
+        let mut impossible = Progress::new(vec![Message::user(&"中".repeat(90_000))]);
+        assert!(impossible
             .messages(json!([]))
             .err()
             .unwrap()
-            .contains("文字預算"));
-        assert_eq!(state.history.len(), 5);
+            .contains("無法藉由繼續減少"));
     }
 }

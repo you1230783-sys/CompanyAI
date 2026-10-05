@@ -252,7 +252,10 @@ impl Session {
             if unsafe { windows::Win32::System::Ole::GetActiveObject(&class, None, &mut active) }
                 .is_ok()
             {
-                return Err("請先儲存並關閉 PowerPoint，再執行簡報工具。".into());
+                return Err(format!(
+                    "{} 請先儲存並關閉 PowerPoint，再執行簡報工具。",
+                    super::interaction::BUSY
+                ));
             }
         }
         let app: IDispatch = unsafe { CoCreateInstance(&class, None, CLSCTX_LOCAL_SERVER) }
@@ -265,7 +268,10 @@ impl Session {
             restore: Vec::new(),
         };
         if integer(&child(&session.app, collection)?, "Count")? != 0 {
-            return Err("Office 正在使用中，請先儲存並關閉相關視窗後重試。".into());
+            return Err(format!(
+                "{} Office 正在使用中，請先儲存並關閉相關視窗後重試。",
+                super::interaction::BUSY
+            ));
         }
         session.setting(session.app.clone(), "AutomationSecurity", 3i32.into())?; // msoAutomationSecurityForceDisable
         session.setting(

@@ -5,6 +5,9 @@ mod delegation;
 pub mod diagnostics;
 pub mod events;
 pub mod files;
+pub mod interaction;
+pub mod logs;
+pub mod mail;
 pub mod memory;
 mod model;
 pub mod office;
@@ -15,6 +18,7 @@ pub mod runner;
 pub mod sandbox;
 mod server_pdf;
 mod skills;
+pub mod steering;
 pub mod text;
 mod tool_calls;
 
@@ -88,6 +92,45 @@ impl Store {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "tool", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Tool {
+    OutlookFolders {
+        scope: String,
+        parent_id: Option<String>,
+        #[serde(default)]
+        offset: usize,
+    },
+    OutlookHeaders {
+        folder_id: String,
+        start_date: String,
+        end_date: String,
+        cursor: Option<String>,
+    },
+    OutlookRead {
+        mail_id: String,
+        #[serde(default)]
+        offset: usize,
+    },
+    ListLogs {
+        path: String,
+        date: Option<String>,
+        category: Option<String>,
+        station: Option<String>,
+        #[serde(default)]
+        offset: usize,
+    },
+    ReadLog {
+        path: String,
+        revision: Option<String>,
+        #[serde(default = "logs::first_line")]
+        start_line: usize,
+        #[serde(default)]
+        start_column: usize,
+        #[serde(default = "logs::default_lines")]
+        line_count: usize,
+    },
+    SearchLogs {
+        query: logs::Query,
+        cursor: Option<String>,
+    },
     InspectExcel {
         path: String,
         #[serde(default = "office::excel::default_sheet")]
@@ -245,6 +288,7 @@ pub enum Tool {
         summary: String,
     },
     ReadWorkLog {
+        operation_id: Option<String>,
         #[serde(default)]
         offset: usize,
     },
@@ -265,6 +309,12 @@ impl Tool {
     /// 使用者可讀的操作名稱，避免將 JSON 或文件全文當進度訊息。
     pub fn label(&self) -> &'static str {
         match self {
+            Self::OutlookFolders { .. } => "列出授權的 Outlook 資料夾",
+            Self::OutlookHeaders { .. } => "讀取選定資料夾的郵件標題",
+            Self::OutlookRead { .. } => "讀取選定的重要郵件內文",
+            Self::ListLogs { .. } => "依日期與機台篩選 LOG",
+            Self::ReadLog { .. } => "分批讀取 LOG",
+            Self::SearchLogs { .. } => "搜尋 LOG 時間與文字",
             Self::InspectExcel { .. } => "查看 Excel 表頭",
             Self::ReadExcelRange { .. } => "分批讀取 Excel",
             Self::ChartExcelRange { .. } => "依選取欄位建立圖表",

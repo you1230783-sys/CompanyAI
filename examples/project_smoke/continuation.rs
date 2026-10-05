@@ -71,7 +71,7 @@ fn answer(case: Case, round: usize, body: &Value) -> Option<String> {
     assert_eq!(body["skills"], false);
     let decision = match case {
         Case::LongRead | Case::LongReadClean | Case::TransientSubmission => {
-            let reads = state["operations"].as_array().unwrap().len();
+            let reads = state["tool_usage"]["閱讀檔案"].as_u64().unwrap_or(0) as usize;
             // 第五次有效閱讀才提供一次可選技能；正常情境完全略過筆記也須能讀完。
             assert_eq!(all.contains("可選技能：長文件閱讀筆記"), round == 5);
             assert!(!all.contains("已累積三段新閱讀或六次有效操作"));
@@ -303,6 +303,9 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
             session,
             root: root.join("app-data"),
             cancel: Arc::new(AtomicBool::new(false)),
+            instructions: None,
+            outlook_consent: None,
+            file_waiter: None,
         },
         |_| {},
     );

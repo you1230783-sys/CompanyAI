@@ -3,6 +3,16 @@ use crate::AppResult;
 use serde_json::{json, Value};
 const SKILLS: &[(&str, &str, &str)] = &[
     (
+        "outlook-research",
+        "同意後挑選郵件、去重及整理週報",
+        include_str!("skills/outlook-research.md"),
+    ),
+    (
+        "log-analysis",
+        "大型 LOG 分頁、時間及多關鍵字搜尋",
+        include_str!("skills/log-analysis.md"),
+    ),
+    (
         "text-edit",
         "搜尋、建立與修訂 TXT／MD 副本",
         include_str!("skills/text-edit.md"),
@@ -92,6 +102,8 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
         "list_files" | "read_file" | "load_skill" | "ask_user" | "finish" | "read_work_log"
         | "read_task_result" => true,
         "inspect_excel" | "read_excel_range" => has("excel-read"),
+        "list_logs" | "read_log" | "search_logs" => has("log-analysis"),
+        "outlook_folders" | "outlook_headers" | "outlook_read" => has("outlook-research"),
         "create_chart" | "chart_from_excel" | "chart_excel_range" | "export_chart_png" => {
             has("charts")
         }
@@ -117,6 +129,25 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn every_advertised_skill_can_be_loaded_through_tool_schema() {
+        let tools: Value = serde_json::from_str(include_str!("tools.json")).unwrap();
+        let load = tools["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["function"]["name"] == "load_skill")
+            .unwrap();
+        let allowed = load["function"]["parameters"]["properties"]["id"]["enum"]
+            .as_array()
+            .unwrap();
+        let catalog = catalog();
+        let entries = catalog.as_array().unwrap();
+        assert_eq!(entries.len(), allowed.len());
+        for entry in entries {
+            assert!(allowed.contains(&entry["id"]), "{}", entry["id"]);
+        }
+    }
     #[test]
     fn catalog_is_short_and_groups_load_once() {
         assert!(SKILLS.iter().all(|(_, d, _)| d.chars().count() <= 30));

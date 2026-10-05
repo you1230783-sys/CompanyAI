@@ -46,7 +46,12 @@ pub fn summarize(
     if focus.trim().is_empty() || focus.chars().count() > 1000 {
         return Err("摘要焦點需為 1–1000 字。".into());
     }
-    let content = broker.content(path, &run.cancel, worker)?;
+    let content = match broker.content(path, &run.cancel, worker) {
+        Err(error) if error.contains(super::interaction::DEFERRED) => {
+            return Ok(Outcome::Pending("等待關閉占用檔案後繼續摘要".into()))
+        }
+        other => other?,
+    };
     let revision = text::revision(&content);
     let sections = broker.memory()?.delegation_sections(path)?;
     if sections.is_empty() || sections.len() > 64 {
@@ -90,6 +95,9 @@ pub fn summarize(
         session: run.session.clone(),
         root: run.root.clone(),
         cancel: run.cancel.clone(),
+        instructions: None,
+        outlook_consent: None,
+        file_waiter: None,
     };
     if agent_state.is_some() && state.agent_caps.is_none() {
         let caps = super::agent::capabilities(&child.config, &child.session, false)?;

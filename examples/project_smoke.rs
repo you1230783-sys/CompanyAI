@@ -3,6 +3,8 @@
 mod continuation;
 #[path = "project_smoke/interruption.rs"]
 mod interruption;
+#[path = "project_smoke/logs.rs"]
+mod logs;
 #[path = "project_smoke/memory.rs"]
 mod memory;
 #[path = "project_smoke/native.rs"]
@@ -30,6 +32,14 @@ fn run() -> AppResult<()> {
     let root =
         PathBuf::from(args.get(2).ok_or("需要測試根目錄。")?).join(company_ai::jobs::new_id()?);
     std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+    // 開發時可先檢查模型／工具協調器；正式 Build.ps1 仍執行全部驗證。
+    if args.get(3).is_some_and(|value| value == "--native-only") {
+        return native::verify(&root);
+    }
+    if args.get(3).is_some_and(|value| value == "--recovery-only") {
+        pause::verify(&root)?;
+        return interruption::verify(&root);
+    }
     let cancel = AtomicBool::new(false);
     let mut worker = Worker::start(&exe, &cancel)?;
     let source = "原始😀文字\r\n保留原檔。";
@@ -140,6 +150,7 @@ fn run() -> AppResult<()> {
     assert_eq!(paths.len(), 1);
     println!("PASS: AppContainer handshake, OS file/network isolation, Unicode edit, replay, source protection, publish/readback, path escape and hardlink rejection. Fixture: {}", root.display());
     drop(worker);
+    logs::verify(&exe, &root)?;
     native::verify(&root)?;
     skills::verify(&exe, &root)?;
     roundtrip::verify(&root)?;

@@ -117,9 +117,12 @@ pub(super) fn convert(value: Value) -> AppResult<Conversion> {
         }
     };
     // 不能讓模型在參數中再指定另一個工具、操作 ID 或 action 覆蓋映射結果。
-    if ["tool", "action", "operation_id", "request"]
+    // read_work_log 的 operation_id 是「欲查閱的舊操作」，留在 request 內；
+    // 本輪執行識別碼仍只由 call.id 決定，其他工具禁止同名參數。
+    if ["tool", "action", "request"]
         .iter()
         .any(|key| arguments.contains_key(*key))
+        || (arguments.contains_key("operation_id") && call.function.name != "read_work_log")
     {
         return Ok(Conversion::Repair(
             "function.arguments 只放該工具參數，不要重複放 tool、action、operation_id 或 request；名稱使用 function.name，操作代號使用 id。",
@@ -178,6 +181,20 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn reading_old_operation_keeps_current_call_identity_separate() {
+        let value = parsed(&call(
+            "read_work_log",
+            json!({"operation_id":"old_operation","offset":0}),
+        ));
+        assert!(
+            matches!(value.decision, Decision::Tool {operation_id, request: Tool::ReadWorkLog {operation_id:Some(old),offset:0}} if operation_id=="call_001" && old=="old_operation")
+        );
+        repair(&call(
+            "read_file",
+            json!({"path":"a.txt","operation_id":"override"}),
+        ));
+    }
     #[test]
     fn maps_calls_and_results_without_changing_ids_versions_or_text() {
         let arguments = json!({"copy_id":"copy_01", "revision":"exact_revision",
@@ -369,6 +386,18 @@ mod tests {
     #[test]
     fn catalogue_covers_all_existing_operations_and_defaults() {
         let samples = [
+            ("outlook_folders", json!({"scope":"local_inbox"})),
+            (
+                "outlook_headers",
+                json!({"folder_id":"f","start_date":"2026-06-22","end_date":"2026-06-28"}),
+            ),
+            ("outlook_read", json!({"mail_id":"m"})),
+            ("list_logs", json!({"path":"","station":"Z01-CY"})),
+            ("read_log", json!({"path":"a.log"})),
+            (
+                "search_logs",
+                json!({"query":{"paths":["a.log"],"start_time":"12:25","end_time":"12:33"}}),
+            ),
             (
                 "export_chart_png",
                 json!({"chart_index":0,"name":"趨勢.png"}),

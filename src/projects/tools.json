@@ -1130,10 +1130,11 @@
             "field": {
               "type": "string",
               "enum": [
+                "request",
                 "result",
-                "request"
+                "operations"
               ],
-              "default": "result"
+              "description": "request=原要求；result=最終回覆；operations=按需查回工具明細。"
             },
             "offset": {
               "type": "integer",
@@ -1229,6 +1230,10 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000
+            },
+            "operation_id": {
+              "type": "string",
+              "description": "可指定已保存的操作代號，按offset分頁查回該筆完整結果；省略則列操作索引，再以代號查原文。"
             }
           },
           "additionalProperties": false
@@ -1254,8 +1259,15 @@
                 "charts",
                 "paper-evidence",
                 "weekly-update",
-                "multi-file-excel"
+                "multi-file-excel",
+                "log-analysis",
+                "outlook-research"
               ]
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
             }
           },
           "required": [
@@ -1284,6 +1296,11 @@
             "query": {
               "type": "string",
               "description": ""
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
             }
           },
           "required": [
@@ -1683,6 +1700,11 @@
               },
               "minItems": 1,
               "maxItems": 20
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
             }
           },
           "required": [
@@ -1778,6 +1800,11 @@
                 "source"
               ],
               "additionalProperties": false
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
             }
           },
           "required": [
@@ -1831,6 +1858,11 @@
             "y_label": {
               "type": "string",
               "description": ""
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
             }
           },
           "required": [
@@ -1862,6 +1894,11 @@
             "focus": {
               "type": "string",
               "description": ""
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
             }
           },
           "required": [
@@ -1897,6 +1934,270 @@
           "required": [
             "chart_index",
             "name"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_log",
+        "description": "唯讀大型 LOG/OUT/ERR/JSONL/TXT；每檔32 MiB，每頁12000字，依行號與字元位置續讀，原檔版本必須相同。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": ""
+            },
+            "revision": {
+              "type": "string",
+              "description": "第一頁可省略，續頁使用上次回傳版本"
+            },
+            "start_line": {
+              "type": "integer",
+              "description": "一基行號",
+              "minimum": 1,
+              "default": 1
+            },
+            "start_column": {
+              "type": "integer",
+              "description": "零基字元位置，用於長行續讀",
+              "minimum": 0,
+              "default": 0
+            },
+            "line_count": {
+              "type": "integer",
+              "description": "最多200行",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "search_logs",
+        "description": "跨最多30個大型LOG搜尋時間與任一關鍵字；每頁最多30個命中，原文600字摘錄；有next_cursor必須續頁，不能把未完成當無異常。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "object",
+              "description": "固定搜尋條件，續頁不可改動",
+              "properties": {
+                "paths": {
+                  "type": "array",
+                  "description": "專案相對路徑，最多30檔",
+                  "items": {
+                    "type": "string",
+                    "description": ""
+                  },
+                  "minItems": 1,
+                  "maxItems": 30
+                },
+                "terms": {
+                  "type": "array",
+                  "description": "任一字面關鍵字；空陣列搜尋區間全部紀錄",
+                  "items": {
+                    "type": "string",
+                    "description": ""
+                  },
+                  "maxItems": 12
+                },
+                "start_time": {
+                  "type": "string",
+                  "description": "HH:MM 或 HH:MM:SS.sss；與 end_time 同時提供"
+                },
+                "end_time": {
+                  "type": "string",
+                  "description": "HH:MM 包含整分鐘；早於開始表示跨午夜"
+                },
+                "date": {
+                  "type": "string",
+                  "description": "YYYY-MM-DD，省略則每一天皆符合"
+                },
+                "case_sensitive": {
+                  "type": "boolean",
+                  "description": "是否區分大小寫",
+                  "default": false
+                },
+                "context_lines": {
+                  "type": "integer",
+                  "description": "每個命中前後文行數，可能超出時間範圍",
+                  "minimum": 0,
+                  "maximum": 5,
+                  "default": 0
+                }
+              },
+              "required": [
+                "paths"
+              ],
+              "additionalProperties": false
+            },
+            "cursor": {
+              "type": "string",
+              "description": "第一頁省略，續頁使用 next_cursor"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+            }
+          },
+          "required": [
+            "query"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "list_logs",
+        "description": "唯讀列出 LOG 檔名，依 YYYYMMDD_分類_站別.log 篩選；每頁100檔，續頁使用 next_offset。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "專案相對資料夾，根目錄用空字串"
+            },
+            "date": {
+              "type": "string",
+              "description": "檔名日期 YYYY-MM-DD；不代表內文日期，跨日紀錄另以 search_logs 篩選"
+            },
+            "category": {
+              "type": "string",
+              "description": "完整分類，例如 system、message、connection"
+            },
+            "station": {
+              "type": "string",
+              "description": "完整站別，例如 A01-01、Z01-CY"
+            },
+            "offset": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "outlook_folders",
+        "description": "取得本次使用者同意後，列出本地 PST 收件資料夾或線上信箱寄件備份；只列一層名稱，不讀郵件。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string",
+              "enum": [
+                "local_inbox",
+                "online_sent"
+              ]
+            },
+            "parent_id": {
+              "type": "string",
+              "description": "省略時列來源；否則使用已回傳的 folder_id。"
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "progress_note": {
+              "type": "string",
+              "description": "可選的本輪進度摘要。"
+            }
+          },
+          "required": [
+            "scope"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "outlook_headers",
+        "description": "讀取選定資料夾指定日期的標題與地址，不含內文；最多40封一頁，跨資料夾去重，續頁條件保持一致。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "folder_id": {
+              "type": "string"
+            },
+            "start_date": {
+              "type": "string"
+            },
+            "end_date": {
+              "type": "string"
+            },
+            "cursor": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "description": "可選的本輪進度摘要。"
+            }
+          },
+          "required": [
+            "folder_id",
+            "start_date",
+            "end_date"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "outlook_read",
+        "description": "只讀標題清單選定的重要郵件純文字內文；最多12000字一頁，以 next_offset 接續，不含附件。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "mail_id": {
+              "type": "string"
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "progress_note": {
+              "type": "string",
+              "description": "可選的本輪進度摘要。"
+            }
+          },
+          "required": [
+            "mail_id"
           ],
           "additionalProperties": false
         }

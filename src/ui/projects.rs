@@ -45,13 +45,38 @@ pub(super) enum ProjectCommand {
         request_id: String,
         choices: Option<Vec<projects::charts::quality::Choice>>,
     },
+    OutlookConsent {
+        conversation: String,
+        run_id: String,
+        request_id: String,
+        allow: bool,
+    },
+    FileReady {
+        conversation: String,
+        run_id: String,
+        request_id: String,
+        retry: bool,
+    },
     Stop,
+    Supplement {
+        conversation: String,
+        run_id: String,
+        instruction_id: Option<String>,
+        text: String,
+    },
+    WithdrawSupplement {
+        conversation: String,
+        run_id: String,
+        instruction_id: String,
+    },
     Diagnostics {
         conversation: String,
         run_id: String,
     },
 }
 pub(super) enum ProjectEvent {
+    FileBusy(String, String, String, mpsc::Sender<bool>),
+    OutlookConsent(String, String, mpsc::Sender<bool>),
     ReviewChart(
         String,
         String,
@@ -73,7 +98,19 @@ struct PendingChart {
     review: projects::charts::quality::Review,
     reply: mpsc::Sender<Option<Vec<projects::charts::quality::Choice>>>,
 }
+struct PendingOutlook {
+    id: String,
+    reply: mpsc::Sender<bool>,
+}
+struct PendingFile {
+    id: String,
+    message: String,
+    reply: mpsc::Sender<bool>,
+}
 pub(super) struct Running {
+    pending_file: Option<PendingFile>,
+    pending_outlook: Option<PendingOutlook>,
+    instructions: projects::steering::Inbox,
     pending_chart: Option<PendingChart>,
     id: String,
     conversation: String,
@@ -173,6 +210,27 @@ fn choose_path(owner: HWND, project_root: Option<&std::path::Path>) -> AppResult
 }
 
 impl App {
+    fn supplement_inbox(
+        &self,
+        conversation: &str,
+        id: &str,
+    ) -> AppResult<projects::steering::Inbox> {
+        if !self.logged_in()
+            || self.versions.blocked()
+            || self.active_id.as_deref() != Some(conversation)
+        {
+            return Err("請確認登入與目前專案對話後再補充指示。".into());
+        }
+        let run = self
+            .projects
+            .running
+            .as_ref()
+            .filter(|r| {
+                r.id == id && r.conversation == conversation && !r.cancel.load(Ordering::Relaxed)
+            })
+            .ok_or("任務已結束或正在停止，補充尚未送出。")?;
+        Ok(run.instructions.clone())
+    }
     pub(super) fn recover_project_history(&mut self) -> AppResult<()> {
         if self.history_error.is_some() || self.projects.error.is_some() {
             return Ok(());
@@ -218,9 +276,102 @@ impl App {
     pub(super) fn project_state(&self) -> serde_json::Value {
         json!({"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len()})).collect::<Vec<_>>(),
             "chart_review":self.projects.running.as_ref().and_then(|r|r.pending_chart.as_ref().map(|p|json!({"request_id":p.id,"review":p.review}))),
+            "outlook_consent":self.projects.running.as_ref().and_then(|r|r.pending_outlook.as_ref().map(|p|json!({"request_id":p.id}))),
+            "file_busy":self.projects.running.as_ref().and_then(|r|r.pending_file.as_ref().map(|p|json!({"request_id":p.id,"message":p.message}))),
+            "supplements":self.projects.running.as_ref().and_then(|r|r.instructions.entries().ok()),
             "running":self.projects.running.is_some(),"running_id":self.projects.running.as_ref().map(|r|&r.id),"activity":self.projects.running.as_ref().map(|r|&r.activity),"charts":self.projects.running.as_ref().map(|r|&r.charts),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
     }
     pub(super) fn project_command(&mut self, command: ProjectCommand) -> AppResult<()> {
+        if let ProjectCommand::FileReady {
+            conversation,
+            run_id,
+            request_id,
+            retry,
+        } = &command
+        {
+            if !self.logged_in()
+                || self.versions.blocked()
+                || self.active_id.as_deref() != Some(conversation.as_str())
+            {
+                return Err("請在原專案對話回覆檔案提示。".into());
+            }
+            let run = self
+                .projects
+                .running
+                .as_mut()
+                .filter(|r| {
+                    r.id == *run_id
+                        && r.conversation == *conversation
+                        && !r.cancel.load(Ordering::Relaxed)
+                })
+                .ok_or("檔案等待已結束。")?;
+            if run
+                .pending_file
+                .as_ref()
+                .is_none_or(|p| p.id != *request_id)
+            {
+                return Err("檔案提示已失效。".into());
+            }
+            run.pending_file
+                .take()
+                .ok_or("缺少檔案提示。")?
+                .reply
+                .send(*retry)
+                .map_err(|_| "讀取等待已結束。")?;
+            self.projects.status = if *retry {
+                "正在重新嘗試讀取檔案…"
+            } else {
+                "正在保存目前讀取進度…"
+            }
+            .into();
+            return Ok(());
+        }
+        if let ProjectCommand::OutlookConsent {
+            conversation,
+            run_id,
+            request_id,
+            allow,
+        } = &command
+        {
+            if !self.logged_in()
+                || self.versions.blocked()
+                || self.active_id.as_deref() != Some(conversation.as_str())
+            {
+                return Err("請在已登入的原專案對話確認 Outlook 讀取。".into());
+            }
+            let run = self
+                .projects
+                .running
+                .as_mut()
+                .filter(|r| {
+                    r.id == *run_id
+                        && r.conversation == *conversation
+                        && !r.cancel.load(Ordering::Relaxed)
+                })
+                .ok_or("Outlook 確認已失效。")?;
+            if run
+                .pending_outlook
+                .as_ref()
+                .is_none_or(|p| p.id != *request_id)
+            {
+                return Err("Outlook 確認不屬於目前請求。".into());
+            }
+            let pending = run
+                .pending_outlook
+                .take()
+                .ok_or("找不到待確認的 Outlook 請求。")?;
+            pending
+                .reply
+                .send(*allow)
+                .map_err(|_| "Outlook 等待已結束，未新增授權。")?;
+            self.projects.status = if *allow {
+                "已同意本次 Outlook 讀取…"
+            } else {
+                "已拒絕 Outlook 讀取…"
+            }
+            .into();
+            return Ok(());
+        }
         if let ProjectCommand::ChartChoice {
             run_id,
             request_id,
@@ -308,6 +459,32 @@ impl App {
         if matches!(command, ProjectCommand::Stop) {
             self.projects.cancel();
             return Ok(());
+        }
+        // 此入口可在任務忙碌時使用，但仍逐次核對登入、版本、對話及執行 ID。
+        match &command {
+            ProjectCommand::Supplement {
+                conversation,
+                run_id,
+                instruction_id,
+                text,
+            } => {
+                let inbox = self.supplement_inbox(conversation, run_id)?;
+                let id = inbox.submit(instruction_id.as_deref(), text)?;
+                self.view.post(
+                    &json!({"type":"project_supplement_ack","run_id":run_id,"instruction_id":id}),
+                )?;
+                return Ok(());
+            }
+            ProjectCommand::WithdrawSupplement {
+                conversation,
+                run_id,
+                instruction_id,
+            } => {
+                self.supplement_inbox(conversation, run_id)?
+                    .withdraw(instruction_id)?;
+                return Ok(());
+            }
+            _ => (),
         }
         if self.projects.running.is_some() {
             return Err("請先完成或停止專案任務，再修改專案設定。".into());
@@ -425,8 +602,14 @@ impl App {
             }
             ProjectCommand::Reveal { .. } => unreachable!("已於上方處理成果定位"),
             ProjectCommand::Diagnostics { .. } => unreachable!("已於上方處理診斷讀取"),
-            ProjectCommand::ChartChoice { .. } => unreachable!("handled above"),
-            ProjectCommand::Stop => (),
+            ProjectCommand::ChartChoice { .. }
+            | ProjectCommand::OutlookConsent { .. }
+            | ProjectCommand::FileReady { .. } => {
+                unreachable!("handled above")
+            }
+            ProjectCommand::Stop
+            | ProjectCommand::Supplement { .. }
+            | ProjectCommand::WithdrawSupplement { .. } => (),
         }
         Ok(())
     }
@@ -567,6 +750,53 @@ impl App {
             None => crate::jobs::new_id()?,
         };
         let cancel = Arc::new(AtomicBool::new(false));
+        let instructions = projects::steering::Inbox::open(&self.root, &id)?;
+        let file_tx = self.tx.clone();
+        let file_run = id.clone();
+        let file_waiter: projects::interaction::FileWaiter =
+            Box::new(move |message, cancel, deadline| {
+                let (reply, response) = mpsc::channel();
+                file_tx
+                    .send(Event::Project(ProjectEvent::FileBusy(
+                        file_run.clone(),
+                        crate::jobs::new_id()?,
+                        message.into(),
+                        reply,
+                    )))
+                    .map_err(|_| "桌面介面已關閉。")?;
+                loop {
+                    if cancel.load(Ordering::Relaxed) || Instant::now() >= deadline {
+                        return Ok(false);
+                    }
+                    match response.recv_timeout(Duration::from_millis(100)) {
+                        Ok(retry) => return Ok(retry),
+                        Err(mpsc::RecvTimeoutError::Timeout) => (),
+                        Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(false),
+                    }
+                }
+            });
+        let consent_tx = self.tx.clone();
+        let consent_run = id.clone();
+        let outlook_consent: projects::mail::Consent = Box::new(move |cancel, deadline| {
+            let (reply, response) = mpsc::channel();
+            consent_tx
+                .send(Event::Project(ProjectEvent::OutlookConsent(
+                    consent_run.clone(),
+                    crate::jobs::new_id()?,
+                    reply,
+                )))
+                .map_err(|_| "桌面介面已關閉，Outlook 未讀取。")?;
+            loop {
+                if cancel.load(Ordering::Relaxed) || Instant::now() >= deadline {
+                    return Ok(false);
+                }
+                match response.recv_timeout(Duration::from_millis(100)) {
+                    Ok(allow) => return Ok(allow),
+                    Err(mpsc::RecvTimeoutError::Timeout) => (),
+                    Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(false),
+                }
+            }
+        });
         if let Some(message) = messages.last_mut() {
             message.request_id = Some(id.clone());
         }
@@ -586,8 +816,14 @@ impl App {
             session: self.session.clone().ok_or("請先登入。")?,
             root: self.root.clone(),
             cancel: cancel.clone(),
+            instructions: Some(instructions.clone()),
+            outlook_consent: Some(outlook_consent),
+            file_waiter: Some(file_waiter),
         };
         self.projects.running = Some(Running {
+            pending_file: None,
+            pending_outlook: None,
+            instructions,
             pending_chart: None,
             id: id.clone(),
             conversation: conversation.clone(),
@@ -679,6 +915,37 @@ impl App {
     }
     pub(super) fn project_event(&mut self, event: ProjectEvent) -> AppResult<()> {
         match event {
+            ProjectEvent::FileBusy(id, request_id, message, reply) => {
+                if let Some(run) = self
+                    .projects
+                    .running
+                    .as_mut()
+                    .filter(|r| r.id == id && !r.cancel.load(Ordering::Relaxed))
+                {
+                    run.pending_file = Some(PendingFile {
+                        id: request_id,
+                        message,
+                        reply,
+                    });
+                    self.projects.status = "等待關閉檔案，再繼續讀取…".into();
+                    run.activity.push(self.projects.status.clone());
+                }
+            }
+            ProjectEvent::OutlookConsent(id, request_id, reply) => {
+                if let Some(run) = self
+                    .projects
+                    .running
+                    .as_mut()
+                    .filter(|r| r.id == id && !r.cancel.load(Ordering::Relaxed))
+                {
+                    run.pending_outlook = Some(PendingOutlook {
+                        id: request_id,
+                        reply,
+                    });
+                    self.projects.status = "等待同意本次 Outlook 資料讀取…".into();
+                    run.activity.push(self.projects.status.clone());
+                }
+            }
             ProjectEvent::ReviewChart(id, request_id, review, reply) => {
                 if let Some(run) = self
                     .projects
@@ -741,7 +1008,10 @@ impl App {
                     .projects
                     .running
                     .take()
-                    .map(|run| run.activity)
+                    .map(|run| {
+                        let _ = run.instructions.close(true);
+                        run.activity
+                    })
                     .unwrap_or_default();
                 let paused = projects::runner::paused_available(&self.root, &id);
                 self.projects.status = if paused {
@@ -767,6 +1037,32 @@ impl App {
                     .iter_mut()
                     .find(|c| c.id == conversation)
                     .ok_or("專案對話已不存在。")?;
+                // 每則補充只在聊天歷史保留一份；暫停後續接更新其傳遞狀態。
+                if let Ok(inbox) = projects::steering::Inbox::open(&self.root, &id) {
+                    for instruction in inbox
+                        .entries()?
+                        .into_iter()
+                        .filter(|e| e.status != "withdrawn")
+                    {
+                        let status = if instruction.status == "sent" {
+                            "已帶入模型請求"
+                        } else {
+                            "尚未帶入模型請求"
+                        };
+                        let mut note =
+                            Message::user(&format!("補充指示（{status}）：\n{}", instruction.text));
+                        note.request_id = Some(instruction.id.clone());
+                        if let Some(previous) = c
+                            .messages
+                            .iter_mut()
+                            .find(|m| m.request_id.as_deref() == Some(&instruction.id))
+                        {
+                            *previous = note;
+                        } else {
+                            c.messages.push(note);
+                        }
+                    }
+                }
                 let mut message = Message::assistant(text);
                 message.project_paused = paused;
                 message.project_activity = activity;

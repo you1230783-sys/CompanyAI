@@ -316,7 +316,7 @@ fn history_pairs_and_request_scoped_ids_survive_repeated_calls() {
 #[test]
 fn catalog_is_portable_and_nullable_fields_restore_original_defaults() {
     let tools = schema::definitions(true).unwrap();
-    assert_eq!(tools.len(), 32);
+    assert_eq!(tools.len(), 38);
     let encoded = serde_json::to_string(&tools).unwrap();
     for key in [
         "\"oneOf\":",
@@ -333,6 +333,13 @@ fn catalog_is_portable_and_nullable_fields_restore_original_defaults() {
     )
     .unwrap();
     assert!(restored.get("offset").is_none());
+    let query=schema::restore_optional("search_logs",json!({"query":{"paths":["20260623_system_A01-01.log"],"terms":null,"date":null,"start_time":null,"end_time":null,"case_sensitive":null,"context_lines":null},"cursor":null})).unwrap();
+    let mut request = query.as_object().unwrap().clone();
+    request.insert("tool".into(), json!("search_logs"));
+    let tool: crate::projects::Tool = serde_json::from_value(Value::Object(request)).unwrap();
+    assert!(
+        matches!(tool,crate::projects::Tool::SearchLogs { query, cursor:None } if query.terms.is_empty() && !query.case_sensitive)
+    );
 }
 /// 實際傳送的全部工具都需符合契約；不能只驗證幾個 read_file 範例。
 #[test]

@@ -166,7 +166,7 @@ fn received_date(days: f64) -> AppResult<NaiveDate> {
         .checked_add_signed(Duration::days(days.floor() as i64))
         .ok_or("郵件日期超出範圍。".into())
 }
-fn connect() -> AppResult<(ComApartment, IDispatch)> {
+pub(super) fn connect() -> AppResult<(ComApartment, IDispatch)> {
     unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }
         .map_err(|_| "無法初始化 Outlook COM。")?;
     let apartment = ComApartment;

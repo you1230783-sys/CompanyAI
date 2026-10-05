@@ -1,6 +1,6 @@
 {
-  "recorded_at": "2026-10-02T07:38:45.3680621+08:00",
-  "version": "0.8.33.0",
+  "recorded_at": "2026-10-05T12:08:13.4589903+08:00",
+  "version": "0.8.34.0",
   "result": "PASS",
   "msvc": "14.29.30133",
   "compiler_report": [
@@ -8,7 +8,7 @@
     "Verified _MSC_FULL_VER=192930159 x64"
   ],
   "empty_cargo_cache": true,
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-4fc0219075d744daa2da229f2cbd0760",
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-a3ca91b341c54dbe87db0aa658e0b207",
   "checks": [
     "v142 x64 compiler probe",
     "fmt",
@@ -25,9 +25,16 @@
     "fast model delegation, multi-section summaries, encrypted cache and pause without repost",
     "offline ECharts canvas and data table",
     "desktop-agent-v1 native HTTP roles, capability checks, cancellation and parent/child request recovery",
-    "large Excel headers, selected columns, row paging and native chart values"
+    "large Excel headers, selected columns, row paging and native chart values",
+    "30 approximately 10 MiB LOG files, time and station filters, pagination and source revision checks",
+    "in-flight user instructions, stale tool and finish suppression, persistent original instructions",
+    "Outlook consent rejection with no mailbox access, fake-source folder/header/body paging and dedup",
+    "file lock close/retry and encrypted resume without repost",
+    "chart anomaly defaults and per-cell evidence table",
+    "24-hour policy with controlled deadlines, automatic multi-batch continuation and checkpoint interruption recovery",
+    "bounded context, preserved user requirements, encrypted operation archive and on-demand old results"
   ],
-  "exe_sha256": "e75f6a912e5c6ae8c6d75949896ccb2c90bca1ae69c9344e0eef3ec4a9b48a49",
+  "exe_sha256": "31be4a7642010e3336cb58ee9d0d54d3f8ec9b508979887e612981d525a8a463",
   "installer_built": false,
   "real_vnc_tested": false,
   "real_office_tested": true,

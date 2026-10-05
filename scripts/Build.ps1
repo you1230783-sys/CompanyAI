@@ -153,6 +153,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     $dist = Join-Path $projectRoot 'dist'
     New-Item -ItemType Directory -Path $dist -Force | Out-Null
     Copy-Item -LiteralPath $exe -Destination (Join-Path $dist 'LM_AI.exe') -Force
+    Copy-Item -LiteralPath (Join-Path $projectRoot '.build\project-smoke\log-verification.json') -Destination (Join-Path $projectRoot 'offline\log-verification.json') -Force
     # 0.8.1 起僅交付 LM_AI.exe；移除已停用的相容檔名，不再產生第二份主程式。
     $legacyExe = Join-Path $dist 'CompanyAI.exe'
     if (Test-Path -LiteralPath $legacyExe) { Remove-Item -LiteralPath $legacyExe }
@@ -176,7 +177,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         compiler_report = $compilerReport
         empty_cargo_cache = [bool]$EmptyCargoCache
         cargo_home = $env:CARGO_HOME
-        checks = @('v142 x64 compiler probe','fmt','Clippy','workspace tests','cargo build --release --frozen','WebView2 DOM self-check','AppContainer OS file/network isolation','project copy/edit/publish integration','HTTP skills/tool loops with bounded JSON repair and activity history','DPAPI project memory, versioned notes and reserved .lmai boundary','persistent PDF cache, source/profile/hash invalidation','built-in skills, bounded cross-file search and chart dedup','fast model delegation, multi-section summaries, encrypted cache and pause without repost','offline ECharts canvas and data table','desktop-agent-v1 native HTTP roles, capability checks, cancellation and parent/child request recovery','large Excel headers, selected columns, row paging and native chart values')
+        checks = @('v142 x64 compiler probe','fmt','Clippy','workspace tests','cargo build --release --frozen','WebView2 DOM self-check','AppContainer OS file/network isolation','project copy/edit/publish integration','HTTP skills/tool loops with bounded JSON repair and activity history','DPAPI project memory, versioned notes and reserved .lmai boundary','persistent PDF cache, source/profile/hash invalidation','built-in skills, bounded cross-file search and chart dedup','fast model delegation, multi-section summaries, encrypted cache and pause without repost','offline ECharts canvas and data table','desktop-agent-v1 native HTTP roles, capability checks, cancellation and parent/child request recovery','large Excel headers, selected columns, row paging and native chart values','30 approximately 10 MiB LOG files, time and station filters, pagination and source revision checks','in-flight user instructions, stale tool and finish suppression, persistent original instructions','Outlook consent rejection with no mailbox access, fake-source folder/header/body paging and dedup','file lock close/retry and encrypted resume without repost','chart anomaly defaults and per-cell evidence table','24-hour policy with controlled deadlines, automatic multi-batch continuation and checkpoint interruption recovery','bounded context, preserved user requirements, encrypted operation archive and on-demand old results')
         exe_sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
         installer_built = [bool]$IncludeInstaller
         real_vnc_tested = [bool]$TestVnc

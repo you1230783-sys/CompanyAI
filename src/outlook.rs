@@ -2,6 +2,7 @@
 //! 不寄信、不修改信箱；多封流程經使用者授權後可匯出 MSG 副本。
 pub mod batch;
 pub mod msg;
+pub mod project;
 use crate::{wide, AppResult};
 use serde::Serialize;
 use windows::{

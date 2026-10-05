@@ -100,8 +100,13 @@
           <button id="jump-bottom" class="jump-button" hidden>
             <span data-icon="arrow-down"></span>查看最新回覆
           </button>
-          <div class="compose-area">
-            <div class="quick-actions">
+            <div class="compose-area">
+              <details id="project-supplements" hidden>
+                <summary>本次任務的補充指示</summary>
+                <div id="project-supplement-list"></div>
+              </details>
+              <div class="quick-actions">
+                <button id="project-supplement" hidden>補充指示</button>
               <button id="project-stop" hidden>停止專案任務</button>
               <button data-action="translate">
                 <span data-icon="languages"></span>翻譯</button

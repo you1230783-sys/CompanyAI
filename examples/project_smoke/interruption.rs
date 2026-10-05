@@ -1,4 +1,4 @@
-//! 以縮短的測試時鐘驗證逾時／壞回覆續接；正式 EXE 仍固定兩小時。
+//! 以縮短的測試時鐘驗證逾時／壞回覆續接；正式 EXE 每段固定最長 24 小時。
 //! 真實 HTTP、DPAPI 與 AppContainer，確認既有副本及待查模型請求不被重做。
 use company_ai::{
     config::Config,
@@ -192,6 +192,9 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
         session: session.clone(),
         root: root.join("app-data"),
         cancel: Arc::new(AtomicBool::new(false)),
+        instructions: None,
+        outlook_consent: None,
+        file_waiter: None,
     };
     let result = (|| -> AppResult<()> {
         let budget = if matches!(case, Case::Deadline | Case::LateCompleted) {
