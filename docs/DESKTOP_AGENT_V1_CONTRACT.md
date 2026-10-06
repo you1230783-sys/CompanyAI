@@ -194,7 +194,7 @@ conversations 路由仍以 owner＋client_conversation_id 去重。`by-request` 
 context 固定包含 `project_id`、`run_id`、`turn_index`（從 1 起的正整數）、`parent_request_id`（字串或 null）、`context_policy:"client_snapshot"`。
 
 - run 表示一次使用者工作，暫停後繼續沿用；「重新再試一次」建立新 run。turn_index 在同 run 由桌面配置，不是去重鍵。
-- parent_request_id 若非 null，指向引發本次委派／後續推論的已接受請求，必須屬於同 owner、同 run。主流程第一輪為 null；不得引用自己。
+- parent_request_id 若非 null，指向引發本次委派／後續推論的已接受請求，必須屬於同 owner、同 project、同 run、同遠端 conversation。主流程第一輪為 null；不得引用自己。
 - 多個 run 可屬於同 conversation。所有關聯仍須 owner 驗證，不能以猜得 project_id 取得其他資料。
 - context_policy 禁止網頁自行補回舊 messages、附件、網頁記憶、RAG 或壓縮／改寫快照。conversation_id 用來歸屬與稽核，不是要求 server 拼接歷史。
 - tools 非空時 response_format 只能省略或 text；json_schema 模式要求 tools=[]、tool_choice=none。先避免同時約束工具與回答所產生的服務差異。

@@ -2629,7 +2629,7 @@
       "type": "function",
       "function": {
         "name": "analyze_image",
-        "description": "辨識專案內單張 JPG／PNG（試驗）；由目前模型讀圖後回傳文字與來源。每圖最多1MiB，不讀Outlook附件或網址。",
+        "description": "依需求辨識專案 JPG／PNG（試驗）；每次任務限1張、最大5 MB（5,000,000 bytes），超過請使用者自行縮小。只回文字重點及來源，後續不附原圖。快速模型不支援；不讀Outlook附件或網址。",
         "parameters": {
           "type": "object",
           "properties": {

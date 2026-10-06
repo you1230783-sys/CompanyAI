@@ -22,6 +22,9 @@
   }
   function begin(kind) {
     if (pending) return;
+    if (kind === "image" && state.config.model === "fast") {
+      toast("此模型不支援圖片傳入，請切換至支援圖片的模型。"); return;
+    }
     clear();
     target = {conversation:state.active_id, request_id:crypto.randomUUID(), kind};
     pending = true;
@@ -52,6 +55,9 @@
         $(id).hidden = !project;
         $(id).disabled = !state.can_send || !!state.projects?.running || !!state.work?.incoming;
       }
+      $("project-image-start").title = state.config.model === "fast"
+        ? "此模型不支援圖片傳入，請切換至支援圖片的模型。"
+        : "依需求辨識專案圖片；每次任務1張、最大5 MB，後續只保留文字重點。";
       if (target && (!current() || (state.projects?.running && !pending))) clear();
     },
     receive(message) {

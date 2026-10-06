@@ -28,12 +28,15 @@ pub(super) fn analyze(
     broker: &mut Broker,
     operation: &str,
     agent: Option<&mut agent::State>,
-    parent: &str,
+    parent: &Task,
     path: &str,
     focus: &str,
     deadline: Instant,
     mut progress: impl FnMut(String),
 ) -> AppResult<Outcome> {
+    if !input::model_supported(&run.config.model) {
+        return Ok(failed(input::UNSUPPORTED_MODEL));
+    }
     let Some(agent) = agent else {
         return Ok(failed("圖片試驗需要原生專案代理；請建立新任務。"));
     };
@@ -84,17 +87,20 @@ pub(super) fn analyze(
             .delegation_read::<Vec<String>>(&budget_key)?
             .unwrap_or_default();
         if !attempts.contains(&key) {
-            if attempts.len() >= 20 {
+            if !attempts.is_empty() {
                 return Ok(failed(
-                    "圖片試驗每次任務最多 20 次不同辨識要求；請依已取得結果整理。",
+                    "本版每次任務限辨識 1 張圖片；請沿用已取得的文字重點，其他圖片請另開任務。",
                 ));
             }
             attempts.push(key.clone());
             broker.memory()?.delegation_write(&budget_key, &attempts)?;
         }
         let id = jobs::new_id()?;
-        let remote = jobs::conversation(&run.config, &run.session, &id)?;
-        let request = agent.image_request(run, &remote, &id, parent, &image, focus)?;
+        // 直接沿用已核對父請求的遠端 ID；不可誤用本機對話 ID 或另建對話。
+        let remote = parent.request["conversation_id"]
+            .as_str()
+            .ok_or("父請求缺少遠端對話。")?;
+        let request = agent.image_request(run, remote, &id, &parent.request_id, &image, focus)?;
         state.pending = Some(Task {
             request_id: id.clone(),
             conversation_id: run.conversation.clone(),
@@ -127,6 +133,9 @@ pub(super) fn analyze(
     let response = model::receive(run, task, deadline, lookup_only, Some(&caps));
     broker.memory()?.delegation_write(&key, &state)?;
     let result = match response? {
+        model::Reply::Rejected(error) => {
+            json!({"ok":false,"error":error,"retry_same_operation":false})
+        }
         model::Reply::Pending(reason) => return Ok(Outcome::Pending(reason)),
         model::Reply::Native => {
             let task = state.pending.as_ref().ok_or("缺少圖片原請求。")?;
@@ -139,6 +148,7 @@ pub(super) fn analyze(
                 agent::Parsed::Text(answer) if answer.chars().count() <= 6000 => {
                     json!({"ok":true,"result":{
                     "image":image.metadata(),"focus":focus,"model":run.config.model,"analysis":answer,
+                    "context_note":"後續只使用這份文字重點及來源；不再附原圖。未辨識或不確定的內容不可視為已讀取。",
                     "evidence_status":"模型對單張圖片的辨識，並非已核實事實；看不清的文字、數字及推測需另行確認。"}})
                 }
                 agent::Parsed::Repair { reason, .. } => json!({"ok":false,"error":reason}),

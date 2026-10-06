@@ -105,6 +105,15 @@ fn fast_model_does_not_receive_delegation_and_blank_copy_is_repairable() {
         .unwrap()
         .iter()
         .any(|t| t["function"]["name"] == "summarize_document"));
+    assert!(!request.to_string().contains("analyze_image"));
+    assert!(!request.to_string().contains("image-read"));
+    let prompt = system_prompt_for("fast");
+    assert!(!prompt.contains("image-read") && !prompt.contains("analyze_image"));
+    assert!(prompt.contains("此模型不支援圖片傳入"));
+    assert_eq!(
+        crate::projects::skills::context_for(&["image-read".into()], "fast").unwrap(),
+        ""
+    );
     let mut capabilities = caps();
     capabilities.strict_tool_arguments = false;
     let task = task(

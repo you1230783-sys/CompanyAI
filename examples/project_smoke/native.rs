@@ -222,7 +222,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
             } else if route.contains("/capabilities") {
                 json!({"contract_version":1,"principal_id":"fixture_owner","execution_modes":["background"],"attachments":{"enabled":false,"max_count":0,"max_file_bytes":0,"max_total_bytes":0,"allowed_extensions":[]}})
             } else if route.ends_with("/conversations") {
-                json!({"conversation_id":"fixture_conversation"})
+                json!({"conversation_id":format!("remote_{}", body["client_conversation_id"].as_str().unwrap())})
             } else if route.ends_with("/models") {
                 json!({"models":[{"id":"quality","label":"品質"},{"id":"fast","label":"快速"}],"default_model":"quality"})
             } else if route.ends_with("/agent/turns") {
@@ -278,6 +278,13 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     assert_eq!(body["tools"], json!([]));
                     assert_eq!(body["tool_choice"], "none");
                     assert!(body["context"]["parent_request_id"].is_string());
+                    let parent = statuses
+                        .get(body["context"]["parent_request_id"].as_str().unwrap())
+                        .expect("委派父請求已受理");
+                    assert_eq!(parent["conversation_id"], body["conversation_id"]);
+                    for key in ["project_id", "run_id"] {
+                        assert_eq!(parent["context"][key], body["context"][key]);
+                    }
                     json!({"role":"assistant","content":"原文為原始文字，無其他數據。"})
                 } else if case == 21 {
                     let state_text = messages

@@ -861,8 +861,8 @@ impl Broker {
             }))
             .collect::<Vec<_>>())
     }
-    pub(super) fn skill_context(&self) -> AppResult<String> {
-        super::skills::context(&self.loaded_skills)
+    pub(super) fn skill_context(&self, model: &str) -> AppResult<String> {
+        super::skills::context_for(&self.loaded_skills, model)
     }
     pub fn charts(&self) -> &[super::charts::Chart] {
         &self.charts

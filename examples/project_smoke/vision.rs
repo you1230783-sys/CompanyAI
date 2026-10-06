@@ -24,7 +24,7 @@ use std::{
 };
 
 pub fn verify(root: &Path) -> AppResult<()> {
-    for case in 0..5 {
+    for case in 0..9 {
         verify_case(root, case)?;
     }
     Ok(())
@@ -34,17 +34,24 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
     let id = format!("vision_{case}");
     let workspace = root.join(&id);
     std::fs::create_dir(&workspace).map_err(|e| e.to_string())?;
-    let jpeg = case == 1;
+    let jpeg = matches!(case, 1 | 5);
     let bytes: &[u8] = if jpeg {
         include_bytes!("../fixtures/vision.jpg")
     } else {
         include_bytes!("../fixtures/vision.png")
     };
+    let bytes = if case == 5 {
+        jpeg_with_comments(bytes, 5_000_000)
+    } else {
+        bytes.to_vec()
+    };
     let name = if jpeg { "sample.jpg" } else { "sample.png" };
-    std::fs::write(workspace.join(name), bytes).map_err(|e| e.to_string())?;
+    std::fs::write(workspace.join(name), &bytes).map_err(|e| e.to_string())?;
+    if case == 8 {
+        std::fs::write(workspace.join("second.png"), &bytes).map_err(|e| e.to_string())?;
+    }
     if case == 4 {
-        std::fs::write(workspace.join(name), vec![0; 1024 * 1024 + 1])
-            .map_err(|e| e.to_string())?;
+        std::fs::write(workspace.join(name), vec![0; 5_000_001]).map_err(|e| e.to_string())?;
     }
     let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
@@ -53,7 +60,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
             "http://{}",
             listener.local_addr().map_err(|e| e.to_string())?
         ),
-        model: "quality".into(),
+        model: if case == 6 { "fast" } else { "quality" }.into(),
         ..Config::default()
     };
     let stopped = Arc::new(AtomicBool::new(false));
@@ -76,18 +83,40 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
             let (route, body) = super::roundtrip::request(&mut stream)?;
             let mut http = 200;
             let response = if route.contains("/agent/capabilities") {
-                super::native::capability("quality", true)
+                let mut caps =
+                    super::native::capability(if case == 6 { "fast" } else { "quality" }, true);
+                caps["limits"]["request_bytes"] = json!(10_000_000);
+                caps
             } else if route.contains("/capabilities") {
                 json!({"contract_version":1,"principal_id":"fixture_owner","execution_modes":["background"],"attachments":{"enabled":false,"max_count":0,"max_file_bytes":0,"max_total_bytes":0,"allowed_extensions":[]}})
             } else if route.ends_with("/conversations") {
-                json!({"conversation_id":"fixture_conversation"})
+                json!({"conversation_id":format!("remote_{}", body["client_conversation_id"].as_str().unwrap())})
             } else if route.ends_with("/agent/turns") {
-                assert_eq!(body["model"], "quality");
+                assert_eq!(body["model"], if case == 6 { "fast" } else { "quality" });
                 assert_eq!(body["skills"], false);
+                if let Some(parent) = body["context"]["parent_request_id"].as_str() {
+                    let accepted = statuses.get(parent).expect("父請求必須已受理");
+                    assert_eq!(accepted["principal_id"], "fixture_owner");
+                    assert_eq!(
+                        accepted["conversation_id"], body["conversation_id"],
+                        "父子請求必須同一對話"
+                    );
+                    for key in ["project_id", "run_id"] {
+                        assert_eq!(accepted["context"][key], body["context"][key]);
+                    }
+                }
                 let child = body["tool_choice"] == "none";
                 let message = if child {
                     children += 1;
-                    assert!(case < 3, "無效來源不得送圖");
+                    assert!(
+                        case < 3 || matches!(case, 5 | 7 | 8),
+                        "無效來源與快速模型不得送圖"
+                    );
+                    if case == 7 {
+                        let error = json!({"error_code":"INVALID_REQUEST","task_accepted":false,"message":"fixture: 明確拒絕圖片"}).to_string();
+                        write!(stream,"HTTP/1.1 422 Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{error}",error.len()).map_err(|e|e.to_string())?;
+                        continue;
+                    }
                     assert_eq!(body["tools"], json!([]));
                     assert!(body["context"]["parent_request_id"].is_string());
                     let content = &body["messages"][1]["content"];
@@ -122,7 +151,12 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                         },
                         0
                     );
-                    assert_eq!(&decoded[..size as usize], bytes);
+                    assert_eq!(&decoded[..size as usize], bytes.as_slice());
+                    assert_eq!(
+                        body["messages"].as_array().unwrap().len(),
+                        2,
+                        "圖片子請求沒有其他對話或圖片"
+                    );
                     child_id = body["client_request_id"].as_str().unwrap().into();
                     json!({"role":"assistant","content":"測試回覆：左紅右藍，未辨識文字。"})
                 } else {
@@ -131,41 +165,68 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                         !body.to_string().contains("data:image/"),
                         "主上下文不得重複攜帶圖片"
                     );
-                    match parents {
-                        1 => super::native::call(&body, "load_skill", json!({"id":"image-read"})),
-                        2 | 3 => {
-                            if parents == 3 {
-                                let result = super::native::last_result(&body);
-                                assert_eq!(result["ok"], case < 3, "{result}");
-                                if case < 3 {
-                                    assert!(result["result"]["image"]["sha256"]
-                                        .as_str()
-                                        .is_some_and(|s| s.len() == 64));
+                    if case == 6 {
+                        let wire = body.to_string();
+                        assert!(!wire.contains("image-read") && !wire.contains("analyze_image"));
+                        assert!(wire.contains("此模型不支援圖片傳入"));
+                        super::native::call(
+                            &body,
+                            "finish",
+                            json!({"message":"圖片測試完成","artifacts":[]}),
+                        )
+                    } else {
+                        match parents {
+                            1 => {
+                                super::native::call(&body, "load_skill", json!({"id":"image-read"}))
+                            }
+                            2 | 3 => {
+                                if parents == 3 {
+                                    let result = super::native::last_result(&body);
+                                    assert_eq!(
+                                        result["ok"],
+                                        case < 3 || matches!(case, 5 | 8),
+                                        "{result}"
+                                    );
+                                    if case < 3 || matches!(case, 5 | 8) {
+                                        assert!(result["result"]["image"]["sha256"]
+                                            .as_str()
+                                            .is_some_and(|s| s.len() == 64));
+                                    }
+                                }
+                                if parents == 3 && matches!(case, 3 | 4 | 7) {
+                                    super::native::call(
+                                        &body,
+                                        "finish",
+                                        json!({"message":"圖片測試完成","artifacts":[]}),
+                                    )
+                                } else {
+                                    super::native::call(
+                                        &body,
+                                        "analyze_image",
+                                        json!({"path":if case==3 {"../outside.png"} else if case==8 && parents==3 {"second.png"} else {name},"focus":"描述顏色"}),
+                                    )
                                 }
                             }
-                            if parents == 3 && case >= 3 {
+                            _ => {
+                                if case == 8 {
+                                    let result = super::native::last_result(&body);
+                                    assert_eq!(result["ok"], false, "第二張圖片必須被原生額度阻擋");
+                                    assert!(result["error"]
+                                        .as_str()
+                                        .unwrap()
+                                        .contains("限辨識 1 張"));
+                                }
                                 super::native::call(
                                     &body,
                                     "finish",
                                     json!({"message":"圖片測試完成","artifacts":[]}),
                                 )
-                            } else {
-                                super::native::call(
-                                    &body,
-                                    "analyze_image",
-                                    json!({"path":if case==3 {"../outside.png"} else {name},"focus":"描述顏色"}),
-                                )
                             }
                         }
-                        _ => super::native::call(
-                            &body,
-                            "finish",
-                            json!({"message":"圖片測試完成","artifacts":[]}),
-                        ),
                     }
                 };
                 let request = body["client_request_id"].as_str().unwrap();
-                let completed = json!({"contract_version":"desktop-agent-v1","principal_id":"fixture_owner","task_id":format!("task_{request}"),"client_request_id":request,"conversation_id":body["conversation_id"],"context":body["context"],"state":"completed","result":{"id":"fixture_completion","object":"chat.completion","created":1,"model":"quality","choices":[{"index":0,"finish_reason":if child {"stop"} else {"tool_calls"},"message":message}]}});
+                let completed = json!({"contract_version":"desktop-agent-v1","principal_id":"fixture_owner","task_id":format!("task_{request}"),"client_request_id":request,"conversation_id":body["conversation_id"],"context":body["context"],"state":"completed","result":{"id":"fixture_completion","object":"chat.completion","created":1,"model":body["model"],"choices":[{"index":0,"finish_reason":if child {"stop"} else {"tool_calls"},"message":message}]}});
                 statuses.insert(request.into(), completed.clone());
                 if case == 2 && child {
                     continue;
@@ -226,8 +287,41 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
     stopped.store(true, Ordering::Relaxed);
     let (parents, children) = server.join().map_err(|_| "圖片測試伺服器中斷")??;
     assert!(result?.contains("圖片測試完成"));
-    assert_eq!(children, usize::from(case < 3), "快取與續接不得重送圖片");
-    assert_eq!(parents, if case < 3 { 4 } else { 3 });
+    assert_eq!(
+        children,
+        usize::from(case < 3 || matches!(case, 5 | 7 | 8)),
+        "快取與續接不得重送圖片"
+    );
+    assert_eq!(
+        parents,
+        if case < 3 || matches!(case, 5 | 8) {
+            4
+        } else if case == 6 {
+            1
+        } else {
+            3
+        }
+    );
     println!("PASS vision case {case}: {parents} parent POST, {children} image POST; exact bytes, cache and request identity checked.");
     Ok(())
+}
+
+/// 加入合法 JPEG 註解區段，保留原始像素；測試真正的 5 MB 邊界而非假影像標頭。
+fn jpeg_with_comments(source: &[u8], size: usize) -> Vec<u8> {
+    let mut result = source[..2].to_vec();
+    let mut remaining = size - source.len();
+    while remaining > 0 {
+        let mut chunk = remaining.min(65_000);
+        if (1..4).contains(&(remaining - chunk)) {
+            chunk -= 4;
+        }
+        assert!(chunk >= 4);
+        result.extend_from_slice(&[0xff, 0xfe]);
+        result.extend_from_slice(&((chunk - 2) as u16).to_be_bytes());
+        result.resize(result.len() + chunk - 4, 0);
+        remaining -= chunk;
+    }
+    result.extend_from_slice(&source[2..]);
+    assert_eq!(result.len(), size);
+    result
 }

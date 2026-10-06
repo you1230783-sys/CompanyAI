@@ -46,6 +46,9 @@ impl App {
     fn prepare_quick(&mut self, conversation: &str, id: &str, kind: Kind) -> AppResult<()> {
         crate::jobs::validate_id(id)?;
         let project = self.weekly_project(conversation)?;
+        if kind == Kind::Image && !projects::vision::input::model_supported(&self.config.model) {
+            return Err(projects::vision::input::UNSUPPORTED_MODEL.into());
+        }
         self.projects.quick = Some(Pending {
             id: id.into(),
             conversation: conversation.into(),

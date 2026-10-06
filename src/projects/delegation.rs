@@ -31,7 +31,7 @@ pub fn summarize(
     principal: &str,
     operation: &str,
     mut agent_state: Option<&mut super::agent::State>,
-    parent_request: &str,
+    parent_request: &Task,
     path: &str,
     focus: &str,
     deadline: Instant,
@@ -124,8 +124,16 @@ pub fn summarize(
         let lookup_only = state.pending.is_some();
         if state.pending.is_none() {
             let id = jobs::new_id()?;
-            // 每個區段用獨立遠端對話，避免服務端混入品質模型對話或先前區段。
-            let remote = jobs::conversation(&child.config, &child.session, &id)?;
+            // 原生代理以 client_snapshot 隔離區段，父子仍屬同一對話。
+            // 舊聊天協定無此約定，維持獨立對話，不能讓網站自行補入先前區段。
+            let remote = if agent_state.is_some() {
+                parent_request.request["conversation_id"]
+                    .as_str()
+                    .ok_or("父請求缺少遠端對話。")?
+                    .to_owned()
+            } else {
+                jobs::conversation(&child.config, &child.session, &id)?
+            };
             let mut system = Message::user(&format!(
                 "{GUIDE}\n本段請控制在 {} 字內。",
                 summary_limit / 2
@@ -152,7 +160,7 @@ pub fn summarize(
                     &id,
                     &messages,
                     false,
-                    Some(parent_request),
+                    Some(&parent_request.request_id),
                 )?
             } else {
                 jobs::project_chat_request("fast", &messages, &remote, &id)?
@@ -207,6 +215,13 @@ pub fn summarize(
             reply => reply,
         };
         match reply {
+            model::Reply::Rejected(error) => {
+                state.pending = None;
+                broker.memory()?.delegation_write(&key, &state)?;
+                return Ok(Outcome::Complete(
+                    json!({"ok":false,"error":error,"retry_same_operation":false}),
+                ));
+            }
             model::Reply::Native => return Err("委派原生回覆尚未轉換。".into()),
             model::Reply::Pending(reason) => return Ok(Outcome::Pending(reason)),
             model::Reply::Invalid { reason, .. } => {

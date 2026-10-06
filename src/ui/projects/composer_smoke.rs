@@ -62,11 +62,18 @@ impl App {
         self.history_error = None;
         self.busy = "none";
         self.models = Some(crate::service::ModelCatalog {
-            models: vec![crate::service::ModelOption {
-                id: "fast".into(),
-                label: "自檢".into(),
-                description: String::new(),
-            }],
+            models: vec![
+                crate::service::ModelOption {
+                    id: "fast".into(),
+                    label: "自檢".into(),
+                    description: String::new(),
+                },
+                crate::service::ModelOption {
+                    id: "quality".into(),
+                    label: "圖片自檢".into(),
+                    description: String::new(),
+                },
+            ],
             default_model: Some("fast".into()),
         });
         let mut cases = vec![];
@@ -443,10 +450,21 @@ impl App {
         verify(count() >= created, "啟動取消均保留素材資料夾")?;
         cases.push("native weekly folder preparation, confirmation, conversation binding, dated prompt and one-time start");
         // 快速入口仍由原生層綁定身分；準備或無效來源都不能啟動 runner。
+        let quick_model = self.config.model.clone();
         for kind in [quick::Kind::Outlook, quick::Kind::Image] {
             let (chat, _) = self.composer_fixture()?;
             self.projects.running = None;
             let request = crate::jobs::new_id()?;
+            if kind == quick::Kind::Image {
+                self.config.model = "fast".into();
+                let rejected = self.project_command(ProjectCommand::QuickPrepare {
+                    conversation: chat.clone(),
+                    request_id: request.clone(),
+                    kind,
+                });
+                self.config.model = "quality".into();
+                verify(rejected.is_err(), "快速模型不能由原生入口準備圖片")?;
+            }
             self.project_command(ProjectCommand::QuickPrepare {
                 conversation: chat.clone(),
                 request_id: request.clone(),
@@ -514,6 +532,7 @@ impl App {
                 "native Outlook quick action: dates, identity, skill and one-time start"
             });
         }
+        self.config.model = quick_model;
         let (chat, run) = self.composer_fixture()?;
         self.projects.running = None;
         let chart:projects::charts::Chart=serde_json::from_value(json!({"kind":"line","title":"原圖","x_label":"時間","y_label":"量測","x":["12:00","12:01"],"series":[{"name":"原值","values":[168.4,169.1]}],"source":"測試.xlsx"})).map_err(|e|e.to_string())?;

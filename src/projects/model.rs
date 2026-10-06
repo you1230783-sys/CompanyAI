@@ -7,6 +7,8 @@ use crate::{
 use std::time::{Duration, Instant};
 
 pub(super) enum Reply {
+    /// 網站明確未受理；與提交結果不明分開，子請求可清除待查圖片。
+    Rejected(String),
     Text(String),
     Native,
     Invalid {
@@ -31,7 +33,7 @@ pub(super) fn receive(
     } else if let Some(caps) = agent_caps {
         match super::agent::submit(&run.config, &run.session, task, caps) {
             super::agent::Submission::Accepted(status) => (Some(status), None),
-            super::agent::Submission::Rejected(error) => return Err(error),
+            super::agent::Submission::Rejected(error) => return Ok(Reply::Rejected(error)),
             super::agent::Submission::Unknown(error) => (None, Some(error)),
         }
     } else {

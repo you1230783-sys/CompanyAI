@@ -1,6 +1,6 @@
 {
-  "recorded_at": "2026-10-06T19:59:09.3177984+08:00",
-  "version": "0.8.40.0",
+  "recorded_at": "2026-10-06T21:07:09.0265756+08:00",
+  "version": "0.8.41.0",
   "result": "PASS",
   "msvc": "14.29.30133",
   "compiler_report": [
@@ -9,6 +9,10 @@
   ],
   "empty_cargo_cache": true,
   "image_trial_checks": [
+    "same owner/project/run/conversation parent binding for images and native delegation",
+    "5 MB image accepted and 5 MB plus one byte rejected",
+    "one-image budget, fast-model prohibition and definite-rejection cleanup",
+    "incremental tool history and preserved scroll positions",
     "native Outlook/image quick actions and identity binding",
     "JPEG/PNG exact bytes in text+image_url JSON through existing agent API",
     "same-model tool-free child, text-only parent result and source hash",
@@ -23,7 +27,7 @@
     "six chart kinds, user axis ranges, reference lines and colors",
     "native customized PNG callback and verified manual _AI_Output write"
   ],
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-0e9b371966734835850236a050991a7d",
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-fda0a0d1bd1847318a8b7533777fd126",
   "checks": [
     "weekly wizard prepare/confirm/cancel and conversation binding",
     "online inbox COM fixture",
@@ -57,7 +61,7 @@
     "Outlook folder picker, DPAPI policy and ancestor enforcement, native forged/stale selection rejection",
     "local mail coverage with 1000-message limit, no raw-body tool output, independent 50-message AI limit, branches and gaps"
   ],
-  "exe_sha256": "434db9da29c1766177b6f5fd397f7394566f7e800262df8dadb8520399204ca6",
+  "exe_sha256": "3faafb37352025b906098d135b82ee4648dd03c4c37739a808b06b942e7a7373",
   "installer_built": false,
   "real_vnc_tested": false,
   "real_office_tested": true,

@@ -575,11 +575,11 @@
         <p>預設本週一至今天，補充中明確指定的日期優先。不寄信、不修改信件。</p>
       </section>
       <section id="project-quick-image" hidden>
-        <p>先把圖片放入目前專案資料夾，再選擇 JPG／JPEG／PNG。每張最多 1 MiB，尺寸最多 8192×8192、總計 1600 萬像素。</p>
+        <p>先把圖片放入目前專案資料夾，再選擇 JPG／JPEG／PNG。每次任務限1張，最大5 MB（5,000,000 bytes），超過請自行縮小；程式不會自動壓縮。尺寸最多8192×8192、總計1600萬像素。</p>
         <p class="weekly-warning">送出後圖片會交由目前 AI 服務分析。這是圖片傳送試驗，服務與模型必須支援圖片；文字與數字辨識結果請核對。</p>
         <label>專案相對圖片路徑<input id="project-quick-path" maxlength="1000" placeholder="例如：素材/截圖.png" /></label>
         <button id="project-quick-choose">選擇圖片</button>
-        <p>目前不直接擷取 Outlook 圖片附件，也不處理掃描 PDF。圖片辨識結果會回到本專案對話。</p>
+        <p>圖片僅送出當次辨識，下一輪只帶入文字重點及來源，不再附原圖。目前不直接擷取 Outlook 圖片附件，也不處理掃描 PDF。</p>
       </section>
       <label>要提醒 AI 的內容（選填）<textarea id="project-quick-notes" maxlength="1000" rows="5"></textarea></label>
       <div class="dialog-actions"><button id="project-quick-cancel">取消</button><button id="project-quick-send" class="primary-button">送出</button></div>

@@ -1035,6 +1035,11 @@ window.runSelfTest = async (structuredFixture) => {
       await frame();
       check(!$("weekly-input-dialog").open && !$("weekly-confirm-dialog").open, "weekly accepted submission closes wizard");
       check($("project-outlook-start").title.includes("處理"), "Outlook hover explains purpose");
+      const imageModel = fixture.config.model, beforeImageCommands = retryCommands.length;
+      fixture.config.model = "fast"; LMUI.receive(fixture);
+      $("project-image-start").click();
+      check(retryCommands.length === beforeImageCommands && $("project-image-start").title.includes("此模型不支援圖片傳入"), "fast image action explains unsupported model without preparing request");
+      fixture.config.model = "quality"; LMUI.receive(fixture);
       for (const kind of ["outlook", "image"]) {
         $(kind === "outlook" ? "project-outlook-start" : "project-image-start").click();
         const quick = retryCommands.at(-1).command;
@@ -1060,6 +1065,7 @@ window.runSelfTest = async (structuredFixture) => {
         ProjectQuickUI.receive({type:"project_quick_ack", conversation:fixture.active_id, request_id:quick.request_id, ok:true}); await frame();
         check(!$("project-quick-dialog").open, "accepted quick submission closes dialog");
       }
+      fixture.config.model = imageModel; LMUI.receive(fixture);
 
       fixture.messages = [{role:"user",content:"請修訂",request_id:"request-one"}];
       fixture.retry = {user_index:0,message_count:1,request_id:"request-one",enabled:false};
@@ -1104,6 +1110,38 @@ window.runSelfTest = async (structuredFixture) => {
       } finally { toast = projectToast; fixture.work.tasks = projectTasks; }
       LMUI.receive(fixture);
       check($("project-activity").open && $("project-activity").querySelectorAll("li").length === 3, "progress preserves expanded history");
+      // 真正建立可捲動的清單，核對追加與120筆輪替都不搶走正在閱讀的列。
+      const scrollFixture = document.createElement("details");
+      scrollFixture.open = true;
+      scrollFixture.style.cssText = "position:fixed;left:0;top:0;width:400px;z-index:99999";
+      document.body.append(scrollFixture);
+      try {
+        const rows = Array.from({length:120}, (_, i) => `紀錄 ${i}：` + "測試閱讀位置與保留內容。".repeat(8));
+        renderProjectActivity(scrollFixture, rows.slice(0, 100)); await frame();
+        const list = scrollFixture.querySelector("ol"), first = list.firstElementChild;
+        list.scrollTop = 800;
+        const top = list.scrollTop;
+        renderProjectActivity(scrollFixture, rows.slice(0, 101)); await frame();
+        check(list === scrollFixture.querySelector("ol") && list.firstElementChild === first && Math.abs(list.scrollTop-top)<2, "activity append keeps DOM and middle scroll position");
+        list.scrollTop = list.scrollHeight;
+        renderProjectActivity(scrollFixture, rows); await frame();
+        check(list.scrollHeight-list.clientHeight-list.scrollTop<2, "activity at bottom follows newly appended rows");
+        list.scrollTop = 1500;
+        const anchor = [...list.children].find(li => li.getBoundingClientRect().bottom > list.getBoundingClientRect().top);
+        const before = anchor.getBoundingClientRect().top - list.getBoundingClientRect().top;
+        renderProjectActivity(scrollFixture, [...rows, "新增第121筆"]); await frame();
+        const after = anchor.getBoundingClientRect().top - list.getBoundingClientRect().top;
+        check(anchor.isConnected && Math.abs(after-before)<2, `rolling activity retains visible row: before=${before}, after=${after}`);
+        const narration = node("div"); scrollFixture.append(narration);
+        const note = PROJECT_NOTE_PREFIX + "目前工作與已完成的重點。\n".repeat(100);
+        renderProjectNarration(narration, [note]); await frame();
+        const noteText = narration.querySelector(".project-progress-note-text");
+        noteText.scrollTop = 120;
+        renderProjectNarration(narration, [note, "新的工具紀錄"]);
+        check(narration.querySelector(".project-progress-note-text") === noteText && noteText.scrollTop === 120, "tool updates do not recreate the unchanged progress note");
+        renderProjectNarration(narration, [note + "新進度"]); await frame();
+        check(narration.querySelector(".project-progress-note-text").scrollTop === 120, "updated progress note preserves its reading position");
+      } finally { scrollFixture.remove(); }
       check(document.querySelector(".retry-message").disabled, "retry disabled while running");
       fixture.projects.running = false;
       fixture.messages.push({role:"assistant",content:"本次未完成",project_activity:[...fixture.projects.activity]});

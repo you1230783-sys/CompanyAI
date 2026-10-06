@@ -1,3 +1,5 @@
+> **0.8.41：父子請求必須同一遠端對話。** 圖片與原生快速摘要直接沿用父請求的 conversation_id，同owner/project/run；client_request_id仍各自唯一。圖片最大5,000,000 bytes，Base64後整份JSON最多10,000,000 bytes且不超過capabilities.limits.request_bytes；網站需同步公告實際可接受上限。每次任務只試1張，fast不送圖片。辨識結果只含文字重點與來源；後續主請求沒有image_url或Base64。既有client_snapshot規則不變，網站不能因conversation相同自行拼接歷史。明確拒絕請回task_accepted=false，桌面會清除待查圖片；結果不明仍只查原ID。
+
 > **0.8.40：** 新增 `plan_excel_analysis(proposal)`、`export_planned_excel(plan_id,start_row,scan_rows,window,name)`，工具目錄47項，依技能按需公告；JSON Schema見 `src/projects/tools.json`。圖表kind增加 `step`、`area`、`horizontal_bar`。網站依當次工具定義驗證參數，不固定舊名稱／圖型清單。使用者圖表編輯及PNG保存都是桌面本機操作，不新增網站端點、不傳顯示設定給模型。圖片子請求仍採下方0.8.39格式。
 
 > **0.8.39：圖片試驗需要轉發多模態 content。** 專案 Outlook 快速入口沿用既有郵件工具。新增 `analyze_image(path,focus)`（工具目錄 45 項，載入 `image-read` 才公告）；圖片工具由桌面發出獨立的無工具子請求，仍走 `/lm_server/api/desktop/agent/turns`、目前 model、Bearer 與 `desktop-agent-v1`。主請求仍是文字／原生工具訊息，不改一般附件上傳流程。

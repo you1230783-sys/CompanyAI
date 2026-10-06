@@ -381,24 +381,52 @@ const PROJECT_NOTE_PREFIX = "AI 進度筆記：";
 function renderProjectActivity(details, events, finished = false) {
   const history = (events || []).filter(text => typeof text === "string").slice(-120);
   details.className = "project-activity";
-  details.replaceChildren();
-  if (!history.length) { details.hidden = true; return; }
+  if (!history.length) { details.hidden = true; details.replaceChildren(); return; }
   details.hidden = false;
   const latest = history.at(-1);
   const label = finished ? "查看工具紀錄與進度筆記"
     : latest.startsWith(PROJECT_NOTE_PREFIX) ? "AI 已更新進度筆記" : latest;
-  details.append(node("summary", "", label));
-  const list = node("ol", "project-activity-history");
-  for (const text of history) list.append(node("li", "", text));
-  details.append(list);
+  let summary = details.querySelector("summary");
+  let list = details.querySelector(".project-activity-history");
+  if (!list) {
+    summary = node("summary"); list = node("ol", "project-activity-history");
+    details.append(summary, list);
+  }
+  summary.textContent = label;
+  const previous = [...list.children];
+  const oldTop = list.scrollTop;
+  const follow = details.open && list.scrollHeight - list.clientHeight - oldTop < 12;
+  const top = list.getBoundingClientRect().top;
+  const anchor = previous.find(item => item.getBoundingClientRect().bottom > top);
+  const offset = anchor ? anchor.getBoundingClientRect().top - top : 0;
+  // 找出舊尾段與新開頭的重疊；新增紀錄只 append，120筆輪替時仍保留可見的節點。
+  let keep = 0;
+  for (let count = Math.min(previous.length, history.length); count > 0; count--) {
+    if (previous.slice(-count).every((item, index) => item.textContent === history[index])) {
+      keep = count; break;
+    }
+  }
+  previous.slice(0, previous.length - keep).forEach(item => item.remove());
+  history.slice(keep).forEach(text => list.append(node("li", "", text)));
+  if (follow) list.scrollTop = list.scrollHeight;
+  else if (anchor?.isConnected && list.contains(anchor)) {
+    list.scrollTop += anchor.getBoundingClientRect().top - list.getBoundingClientRect().top - offset;
+  } else list.scrollTop = oldTop;
 }
 
 /** 僅供執行中的區域使用；累積筆記只顯示最新一份，舊版本留在工具紀錄。 */
 function renderProjectNarration(container, events) {
-  container.replaceChildren();
   const history = (events || []).filter(text => typeof text === "string");
   const notes = history.filter(text => text.startsWith("AI 說明："));
   const latestNote = history.filter(text => text.startsWith(PROJECT_NOTE_PREFIX)).at(-1);
+  // 一般工具活動沒有改變說明／筆記時，不重建正在閱讀的內容。
+  const signature = JSON.stringify([notes, latestNote]);
+  if (container.dataset.signature === signature) return;
+  container.dataset.signature = signature;
+  const previousNote = container.querySelector(".project-progress-note-text");
+  const noteTop = previousNote?.scrollTop || 0;
+  const followNote = previousNote && previousNote.scrollHeight - previousNote.clientHeight - noteTop < 12;
+  container.replaceChildren();
   container.hidden = !notes.length && !latestNote;
   for (const note of notes) {
     const text = node("div", "project-narration markdown");
@@ -412,6 +440,8 @@ function renderProjectNarration(container, events) {
     // 筆記只作文字，保留換行；不解譯其中的 HTML 或可執行連結。
     card.append(node("div", "project-progress-note-text", latestNote.slice(PROJECT_NOTE_PREFIX.length)));
     container.append(card);
+    const text = card.querySelector(".project-progress-note-text");
+    text.scrollTop = followNote ? text.scrollHeight : noteTop;
   }
 }
 
@@ -485,6 +515,7 @@ function renderMessages() {
   const container = $("messages");
   const expanded = new Set(changed ? [] : [...container.querySelectorAll(".answer-details[open]")].map((details) => details.closest("article").dataset.index));
   const activityExpanded = new Set(changed ? [] : [...container.querySelectorAll(".project-activity[open]")].map(details => details.closest("article").dataset.index));
+  const activityScroll = new Map(changed ? [] : [...container.querySelectorAll(".project-activity-history")].map(list => [list.closest("article").dataset.index, list.scrollTop]));
   container.replaceChildren();
   if (!state.messages.length && state.busy !== "chat") {
     const welcome = node("div", "welcome");
@@ -563,6 +594,8 @@ function renderMessages() {
     content.append(tools);
     article.append(avatar, content);
     container.append(article);
+    const activityList = article.querySelector(".project-activity-history");
+    if (activityList && activityScroll.has(String(index))) activityList.scrollTop = activityScroll.get(String(index));
   });
   if (state.busy === "chat") {
     const item = node("div", "message assistant");

@@ -1391,7 +1391,8 @@ body.collapsed .project-section { overflow: visible; }
 /* 工具歷程收合時只占一行，展開後可捲動查看，不搶走閱讀位置。 */
 .project-activity { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); margin: 10px 0; font-size: .85rem; overflow-wrap: anywhere; }
 .project-activity summary { cursor: pointer; padding: 10px 14px; color: var(--accent); }
-.project-activity-history { margin: 0; padding: 0 18px 12px 36px; max-height: 260px; overflow-y: auto; color: var(--muted); }
+/* 閱讀錨點由清單更新程式維護，避免瀏覽器再自動補償一次捲動。 */
+.project-activity-history { margin: 0; padding: 0 18px 12px 36px; max-height: 260px; overflow-y: auto; overflow-anchor: none; color: var(--muted); }
 .project-activity-history li { padding: 3px 0; white-space: pre-wrap; }
 #project-diagnostics-dialog { width: min(960px, 92vw); }
 #project-diagnostics-text { box-sizing: border-box; width: 100%; height: min(65vh, 680px); padding: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); resize: vertical; font-family: Consolas, monospace; white-space: pre-wrap; }

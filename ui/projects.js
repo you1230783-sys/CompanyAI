@@ -280,11 +280,17 @@
     const nextActivity = JSON.stringify([key, events]);
     const activity = $("project-activity");
     if (nextActivity !== activitySignature) {
-      if (key !== activityKey) activity.open = false;
+      const oldTop = $("transcript").scrollTop, follow = stickToBottom;
+      if (key !== activityKey) {
+        activity.open = false; activity.replaceChildren();
+        $("project-narration").replaceChildren();
+        delete $("project-narration").dataset.signature;
+      }
       activityKey = key; activitySignature = nextActivity;
       renderProjectActivity(activity, events);
       renderProjectNarration($("project-narration"), events);
-      if (showActivity && stickToBottom) bottom();
+      if (showActivity && follow) bottom();
+      else $("transcript").scrollTop = oldTop;
     }
     $("new-project").disabled = !!projects.running || state.busy !== "none" || !!state.work?.incoming;
     const notice = JSON.stringify([projects.error || projects.status || "", !!projects.error]);

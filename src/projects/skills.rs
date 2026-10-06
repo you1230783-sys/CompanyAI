@@ -79,8 +79,12 @@ const SKILLS: &[(&str, &str, &str)] = &[
     ),
 ];
 pub fn catalog() -> Value {
+    catalog_for("quality")
+}
+pub fn catalog_for(model: &str) -> Value {
     json!(SKILLS
         .iter()
+        .filter(|(id, _, _)| *id != "image-read" || super::vision::input::model_supported(model))
         .map(|(id, description, _)| json!({"id":id,"description":description}))
         .collect::<Vec<_>>())
 }
@@ -96,6 +100,15 @@ pub fn context(ids: &[String]) -> AppResult<String> {
         .map(|id| load(id))
         .collect::<AppResult<Vec<_>>>()
         .map(|v| v.join("\n\n"))
+}
+
+pub fn context_for(ids: &[String], model: &str) -> AppResult<String> {
+    let available: Vec<_> = ids
+        .iter()
+        .filter(|id| id.as_str() != "image-read" || super::vision::input::model_supported(model))
+        .cloned()
+        .collect();
+    context(&available)
 }
 
 /// 高階工作技能載入所需基本組；同一份說明在 system 只出現一次。

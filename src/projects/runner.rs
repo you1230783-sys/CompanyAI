@@ -281,7 +281,7 @@ fn run_for(
             report(&mut activity, &mut progress, agent.mode_label().into());
         }
         let prompt = if native {
-            super::agent::system_prompt()
+            super::agent::system_prompt_for(&run.config.model)
         } else {
             super::tool_calls::system_prompt()?
         };
@@ -418,9 +418,9 @@ fn run_for(
                 )));
             }
             if native {
-                messages[0].content = super::agent::system_prompt();
+                messages[0].content = super::agent::system_prompt_for(&run.config.model);
             }
-            let instructions = broker.skill_context()?;
+            let instructions = broker.skill_context(&run.config.model)?;
             if !instructions.is_empty() {
                 if native {
                     // 契約僅一則最前面的 system；按需技能併入同一則。
@@ -511,7 +511,11 @@ fn run_for(
             batch_replies += 1;
             turn += 1;
             let received =
-                super::model::receive(&run, &mut task, deadline, lookup_only, agent_caps.as_ref());
+                super::model::receive(&run, &mut task, deadline, lookup_only, agent_caps.as_ref())
+                    .and_then(|reply| match reply {
+                        super::model::Reply::Rejected(error) => Err(error),
+                        reply => Ok(reply),
+                    });
             record["last_remote_status"] = json!(task.remote);
             // 每輪保留可讀的回覆摘錄與伺服器識別，不依賴網站是否建立聊天紀錄。
             // 不另外複製整份 messages／tools；長回覆明確標示截斷。
@@ -547,6 +551,7 @@ fn run_for(
             }
             let mut native_call = None;
             let (reply, parsed, reason) = match outcome {
+                super::model::Reply::Rejected(error) => return Err(error),
                 super::model::Reply::Native => {
                     if let Some(agent) = progress_state.agent.as_mut() {
                         agent.parent = Some(id.clone());
@@ -725,48 +730,53 @@ fn run_for(
                     }
                     record["pending_operation"]["state"] = json!("started");
                     checkpoint(&journal, &record)?;
-                    let result =
-                        if let Some(result) = broker.cached_result(&operation_id, &request)? {
-                            result
-                        } else if let super::Tool::AnalyzeImage { path, focus } = &request {
-                            match super::vision::analyze(
-                                &run,
-                                &mut broker,
-                                &operation_id,
-                                progress_state.agent.as_mut(),
-                                &id,
-                                path,
-                                focus,
-                                deadline,
-                                |text| report(&mut activity, &mut progress, text),
-                            )? {
-                                super::delegation::Outcome::Complete(result) => result,
-                                super::delegation::Outcome::Pending(reason) => {
-                                    return pause(&reason, &broker, &progress_state, Some(&task))
-                                }
+                    let result = if let Some(result) =
+                        broker.cached_result(&operation_id, &request)?
+                    {
+                        result
+                    } else if matches!(&request, super::Tool::LoadSkill { id } if id == "image-read")
+                        && !super::vision::input::model_supported(&run.config.model)
+                    {
+                        json!({"ok":false,"error":super::vision::input::UNSUPPORTED_MODEL})
+                    } else if let super::Tool::AnalyzeImage { path, focus } = &request {
+                        match super::vision::analyze(
+                            &run,
+                            &mut broker,
+                            &operation_id,
+                            progress_state.agent.as_mut(),
+                            &task,
+                            path,
+                            focus,
+                            deadline,
+                            |text| report(&mut activity, &mut progress, text),
+                        )? {
+                            super::delegation::Outcome::Complete(result) => result,
+                            super::delegation::Outcome::Pending(reason) => {
+                                return pause(&reason, &broker, &progress_state, Some(&task))
                             }
-                        } else if let super::Tool::SummarizeDocument { path, focus } = &request {
-                            match super::delegation::summarize(
-                                &run,
-                                &mut broker,
-                                &mut worker,
-                                &caps.principal_id,
-                                &operation_id,
-                                progress_state.agent.as_mut(),
-                                &id,
-                                path,
-                                focus,
-                                deadline,
-                                |text| report(&mut activity, &mut progress, text),
-                            )? {
-                                super::delegation::Outcome::Complete(result) => result,
-                                super::delegation::Outcome::Pending(reason) => {
-                                    return pause(&reason, &broker, &progress_state, Some(&task))
-                                }
+                        }
+                    } else if let super::Tool::SummarizeDocument { path, focus } = &request {
+                        match super::delegation::summarize(
+                            &run,
+                            &mut broker,
+                            &mut worker,
+                            &caps.principal_id,
+                            &operation_id,
+                            progress_state.agent.as_mut(),
+                            &task,
+                            path,
+                            focus,
+                            deadline,
+                            |text| report(&mut activity, &mut progress, text),
+                        )? {
+                            super::delegation::Outcome::Complete(result) => result,
+                            super::delegation::Outcome::Pending(reason) => {
+                                return pause(&reason, &broker, &progress_state, Some(&task))
                             }
-                        } else {
-                            broker.execute(&operation_id, &request, &mut worker, &run.cancel)?
-                        };
+                        }
+                    } else {
+                        broker.execute(&operation_id, &request, &mut worker, &run.cancel)?
+                    };
                     if result["result"]["waiting_for_user"] == true {
                         // 預檢及等待未修改文件，不記為成功／失敗；續接重讀同一已完成的模型請求。
                         record["pending_operation"] = Value::Null;

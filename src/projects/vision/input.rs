@@ -7,8 +7,14 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{io::Read, path::Path};
 
-/// 先以單張 1 MiB 試驗，編碼後仍須通過代理整份請求的大小限制。
-pub const MAX_BYTES: usize = 1024 * 1024;
+/// 介面使用十進位 MB：5 MB = 5,000,000 bytes；Base64 後另檢查整份請求。
+pub const MAX_BYTES: usize = 5_000_000;
+
+/// 快速模型沒有圖片能力；技能公告、原生入口與工具執行共用此判斷。
+pub fn model_supported(model: &str) -> bool {
+    model != "fast"
+}
+pub const UNSUPPORTED_MODEL: &str = "此模型不支援圖片傳入，請切換至支援圖片的模型。";
 
 pub struct Image {
     pub path: String,
@@ -91,7 +97,9 @@ impl Image {
 /// 檢查容器與尺寸，不在桌面執行影像解碼。JPEG 的像素可解碼性由模型端回報。
 fn inspect(bytes: &[u8]) -> AppResult<(&'static str, u32, u32)> {
     if bytes.is_empty() || bytes.len() > MAX_BYTES {
-        return Err("單張圖片限 1 MiB，請先縮小圖片後再試。".into());
+        return Err(
+            "單張圖片最大 5 MB（5,000,000 bytes），請自行縮小圖片後再試；程式不會自動壓縮。".into(),
+        );
     }
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         let (w, h) = crate::projects::charts::png::dimensions(bytes)?;
