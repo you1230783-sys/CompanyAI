@@ -484,6 +484,88 @@ fn excerpt(line: &str) -> Value {
     json!({"text":text,"excerpt_truncated":chars.next().is_some()})
 }
 
+/// 批次擷取只在本地處理；不受搜尋預覽的 30 筆上限影響，也不回傳整批原文。
+/// 任一來源讀取失敗即停止，不把缺檔或解碼錯誤當成完整 CSV。
+pub(super) fn dataset(
+    project: &Project,
+    query: &Query,
+    revisions: &[String],
+    fields: &[super::datasets::Field],
+    cancel: &AtomicBool,
+) -> AppResult<(super::datasets::Table, Value)> {
+    let filter = Filter::new(query)?;
+    if query.context_lines != 0 || (!revisions.is_empty() && revisions.len() != query.paths.len()) {
+        return Err("CSV 擷取不含前後文；revisions 請留空或依 paths 順序提供全部版本。".into());
+    }
+    for field in fields {
+        field.validate()?;
+    }
+    let mut table = super::datasets::Table::new(fields.iter().map(|f| f.name.clone()).collect())?;
+    let mut sources = Vec::new();
+    let mut scanned = 0usize;
+    let mut unknown_time = 0usize;
+    let mut seen = std::collections::BTreeSet::new();
+    for (i, path) in query.paths.iter().enumerate() {
+        if !seen.insert(path.replace('\\', "/").to_lowercase()) {
+            return Err("CSV 來源不可重複。".into());
+        }
+        let mut source = Source::open(project, path, revisions.get(i).map(String::as_str), cancel)?;
+        let file_date = name_parts(Path::new(path)).map(|p| p.0);
+        let mut current: Option<Stamp> = None;
+        let before = table.rows.len();
+        while let Some(line) = source.next(cancel)? {
+            scanned += 1;
+            if let Some(mut parsed) = stamp(&line) {
+                parsed.date = parsed
+                    .date
+                    .or(current.as_ref().and_then(|s| s.date))
+                    .or(file_date);
+                current = Some(parsed);
+            } else {
+                let prefix = line.trim_start_matches(|c: char| c.is_whitespace() || c == '[');
+                if prefix.as_bytes().first().is_some_and(u8::is_ascii_digit)
+                    && prefix.chars().take(32).any(|c| c == ':')
+                {
+                    current = None;
+                }
+            }
+            let matches = filter.time_matches(current.as_ref());
+            if matches.is_none() {
+                unknown_time += 1;
+            }
+            let haystack = if query.case_sensitive {
+                line.clone()
+            } else {
+                line.to_lowercase()
+            };
+            if matches != Some(true)
+                || !(filter.terms.is_empty() || filter.terms.iter().any(|t| haystack.contains(t)))
+            {
+                continue;
+            }
+            let values = fields
+                .iter()
+                .map(|f| f.extract(&line, current.as_ref().map(|s| s.millis)))
+                .collect::<AppResult<Vec<_>>>()?;
+            table.push(super::datasets::Row {
+                path: path.clone(),
+                revision: source.revision.clone(),
+                sheet: 0,
+                row: source.line,
+                values,
+                kinds: vec![],
+                texts: vec![],
+            })?;
+        }
+        sources.push(json!({"path":path,"revision":source.revision,"scanned_lines":source.line,"selected_rows":table.rows.len()-before}));
+    }
+    Ok((
+        table,
+        json!({"sources":sources,"scanned_lines":scanned,"unknown_time_excluded":unknown_time,
+        "time_rule":"內文日期優先，純時間可沿用前文／檔名日期；續行沿用上一筆時間，不推斷跨午夜日期。timestamp_seconds 是當日秒數。"}),
+    ))
+}
+
 /// 每次最多掃描 25 萬行、回傳 30 個命中；無命中也可能需要續頁。
 /// 先驗證所有檔案的版本，避免先前頁讀過的文件在後續頁被悄悄替換。
 pub(super) fn search(
@@ -651,6 +733,49 @@ pub(super) fn search(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dataset_extracts_all_rows_with_time_only_or_terms_missing_fields_and_version_checks() {
+        let project = fixture();
+        let cancel = AtomicBool::new(false);
+        let path = "20260623_system_A01-01.log";
+        std::fs::write(project.root.join(path),"unknown EVENT p=9;\n09:59:00.000 EVENT p=1;\n10:03:00.000 EVENT p=2;\n10:04:00.000 RETRY no value\n10:09:00.000 EVENT p=4;\n").unwrap();
+        let mut query = Query {
+            paths: vec![path.into()],
+            terms: vec!["EVENT".into(), "RETRY".into()],
+            start_time: Some("10:00".into()),
+            end_time: Some("10:08".into()),
+            date: Some("2026-06-23".into()),
+            ..Default::default()
+        };
+        let fields = vec![super::super::datasets::Field {
+            name: "p".into(),
+            mode: "between".into(),
+            start: Some("p=".into()),
+            end: Some(";".into()),
+            delimiter: None,
+            index: None,
+        }];
+        let (table, meta) = dataset(&project, &query, &[], &fields, &cancel).unwrap();
+        assert_eq!(table.rows.len(), 2);
+        assert_eq!(table.rows[0].row, 3);
+        assert_eq!(table.rows[0].values[0], "2");
+        assert_eq!(table.rows[1].values[0], "");
+        assert_eq!(meta["unknown_time_excluded"], 1);
+        assert!(dataset(
+            &project,
+            &query,
+            &["wrong_revision".into()],
+            &fields,
+            &cancel
+        )
+        .is_err());
+        query.paths.push("missing.log".into());
+        assert!(dataset(&project, &query, &[], &fields, &cancel).is_err());
+        query.paths.pop();
+        cancel.store(true, Ordering::Relaxed);
+        assert!(dataset(&project, &query, &[], &fields, &cancel).is_err());
+        std::fs::remove_dir_all(project.root).unwrap();
+    }
     #[test]
     fn utf8_bom_never_falls_back_to_big5() {
         let project = fixture();

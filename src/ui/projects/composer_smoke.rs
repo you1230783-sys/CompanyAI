@@ -321,6 +321,70 @@ impl App {
         )?;
         self.projects.running = None;
         cases.push("history write failure leaves old worker and queue unchanged");
+        let (chat, old) = self.composer_fixture()?;
+        let (reply, receiver) = mpsc::channel();
+        let folders = vec![
+            crate::outlook::privacy::Choice {
+                id: "root".into(),
+                parent: None,
+                name: "本機信箱".into(),
+                depth: 0,
+                selected: true,
+            },
+            crate::outlook::privacy::Choice {
+                id: "private".into(),
+                parent: Some("root".into()),
+                name: "私人".into(),
+                depth: 1,
+                selected: true,
+            },
+        ];
+        self.project_event(ProjectEvent::OutlookConsent(
+            old.clone(),
+            "picker".into(),
+            folders,
+            reply,
+        ))?;
+        let selection = |conversation: &str, ids: Vec<String>| ProjectCommand::OutlookConsent {
+            conversation: conversation.into(),
+            run_id: old.clone(),
+            request_id: "picker".into(),
+            allow: true,
+            selected: ids,
+        };
+        verify(
+            self.project_command(selection("wrong", vec!["root".into()]))
+                .is_err(),
+            "資料夾授權不可跨對話",
+        )?;
+        verify(
+            self.project_command(selection(&chat, vec!["unknown".into()]))
+                .is_err(),
+            "未知資料夾不可授權",
+        )?;
+        verify(
+            self.project_command(selection(&chat, vec!["private".into()]))
+                .is_err(),
+            "未勾選祖先的資料夾不可授權",
+        )?;
+        verify(
+            receiver.try_recv().is_err(),
+            "拒絕偽造選擇時不消耗待確認請求",
+        )?;
+        self.project_command(selection(&chat, vec!["root".into()]))?;
+        verify(
+            receiver.try_recv().ok() == Some(Some(vec!["root".into()])),
+            "原生確認只交接勾選範圍",
+        )?;
+        verify(
+            self.projects
+                .running
+                .as_ref()
+                .is_some_and(|r| r.pending_outlook.is_none()),
+            "確認後移除待處理請求",
+        )?;
+        self.projects.running = None;
+        cases.push("native Outlook folder selection rejects stale identity and unknown or hidden-parent ids");
         Ok(cases)
     }
 

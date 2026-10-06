@@ -116,6 +116,9 @@ fn folder(ns: &IDispatch, reference: &Folder) -> AppResult<IDispatch> {
     {
         return Err("Outlook 資料夾身分已改變。".into());
     }
+    if !privacy::folder_allowed(&privacy::Policy::current()?, &value)? {
+        return Err("資料夾不在已確認的 Outlook 範圍。".into());
+    }
     Ok(value)
 }
 fn snapshot_folder(
@@ -134,9 +137,19 @@ fn snapshot_folder(
         name: text(value, "Name", 1000)?,
         path: text(value, "FolderPath", 4096)?,
         scope: scope.into(),
-        store,
+        store: store.clone(),
         entry,
-        children: count(&folders)?.max(0) as usize,
+        children: {
+            let policy = privacy::Policy::current()?;
+            let mut visible = 0;
+            for i in 1..=count(&folders)? {
+                let child = item(&folders, i)?;
+                if policy.permits(&store, &text(&child, "EntryID", 4096)?) {
+                    visible += 1;
+                }
+            }
+            visible
+        },
         readable: readable && mail_folder,
         excluded: excluded.to_vec(),
     })
@@ -146,7 +159,13 @@ fn header(item: &IDispatch, folder: &Folder) -> AppResult<Header> {
     let sender = sender(item)?;
     let recipients = recipients(item)?;
     let duplicate_key = mail::duplicate_key(&sent_at, &sender, &recipients);
+    let conversation = text(item, "ConversationID", 4096).unwrap_or_default();
     Ok(Header {
+        thread_id: if conversation.is_empty() {
+            String::new()
+        } else {
+            crate::projects::text::revision(&format!("{}\n{conversation}", folder.store))
+        },
         id: crate::jobs::new_id()?,
         folder_id: folder.id.clone(),
         subject: text(item, "Subject", 3000)?,
@@ -166,7 +185,44 @@ fn check(cancel: &AtomicBool, started: Instant) -> AppResult<()> {
     }
     Ok(())
 }
+/// 回傳經資料夾權限、身分與版本核對的郵件；呼叫期間 COM Apartment 必須仍有效。
+fn checked_item(ns: &IDispatch, reference: &Folder, snapshot: &Header) -> AppResult<IDispatch> {
+    let item = object(&get(
+        ns,
+        "GetItemFromID",
+        &mut [
+            VARIANT::from(reference.store.as_str()),
+            VARIANT::from(snapshot.entry.as_str()),
+        ],
+    )?)?;
+    let parent = object(&get(&item, "Parent", &mut [])?)?;
+    if text(&parent, "EntryID", 4096)? != reference.entry
+        || text(&parent, "StoreID", 4096)? != reference.store
+        || i32::try_from(&get(&item, "Class", &mut [])?).ok() != Some(43)
+    {
+        return Err("郵件已移動或身分改變，請重新列出標題。".into());
+    }
+    privacy::require_item(&privacy::Policy::current()?, &item)?;
+    let current = header(&item, reference)?;
+    if current.entry != snapshot.entry
+        || current.modified != snapshot.modified
+        || current.subject != snapshot.subject
+        || current.sender != snapshot.sender
+        || current.recipients != snapshot.recipients
+        || current.sent_at != snapshot.sent_at
+    {
+        return Err("郵件在標題預覽後已變更，未讀取內文；請重新列出。".into());
+    }
+    Ok(item)
+}
 impl Source for Reader {
+    fn verify(&mut self, folder: &Folder, header: &Header, cancel: &AtomicBool) -> AppResult<()> {
+        batch::check_cancel(cancel)?;
+        let (_apartment, app) = batch::connect()?;
+        checked_item(&namespace(&app)?, folder, header)?;
+        Ok(())
+    }
+
     fn folders(
         &mut self,
         scope: &str,
@@ -192,7 +248,9 @@ impl Source for Reader {
                 if parent.excluded.contains(&text(&child, "EntryID", 4096)?) {
                     continue;
                 }
-                result.push(snapshot_folder(&child, scope, &parent.excluded, true)?);
+                if privacy::folder_allowed(&privacy::Policy::current()?, &child)? {
+                    result.push(snapshot_folder(&child, scope, &parent.excluded, true)?);
+                }
             }
         } else {
             let stores = object(&get(&ns, "Stores", &mut [])?)?;
@@ -230,7 +288,9 @@ impl Source for Reader {
                         }
                     }
                     // 規則可能把郵件放在 PST 根目錄下的平行資料夾，先列資料檔再讓 AI 選擇。
-                    result.push(snapshot_folder(&root, scope, &excluded, false)?);
+                    if privacy::folder_allowed(&privacy::Policy::current()?, &root)? {
+                        result.push(snapshot_folder(&root, scope, &excluded, false)?);
+                    }
                 } else if matches!(kind, 0 | 1 | 4)
                     || (kind == 3
                         && Path::new(&text(&store, "FilePath", 32768)?)
@@ -241,11 +301,12 @@ impl Source for Reader {
                     match get(&store, "GetDefaultFolder", &mut [VARIANT::from(5i32)])
                         .and_then(|v| object(&v))
                     {
-                        Ok(sent) => result.push(snapshot_folder(&sent, scope, &[], true)?),
-                        Err(_) => notices.push(format!(
-                            "{} 沒有可讀取的寄件備份。",
-                            text(&store, "DisplayName", 1000)?
-                        )),
+                        Ok(sent) => {
+                            if privacy::folder_allowed(&privacy::Policy::current()?, &sent)? {
+                                result.push(snapshot_folder(&sent, scope, &[], true)?);
+                            }
+                        }
+                        Err(_) => notices.push("部分資料檔沒有可讀取的寄件備份。".into()),
                     }
                 }
             }
@@ -322,6 +383,7 @@ impl Source for Reader {
                 if day > end {
                     return Ok((false, None));
                 }
+                privacy::require_item(&privacy::Policy::current()?, &item)?;
                 Ok((false, Some(header(&item, reference)?)))
             })();
             match candidate {
@@ -352,31 +414,7 @@ impl Source for Reader {
         batch::check_cancel(cancel)?;
         let (_apartment, app) = batch::connect()?;
         let ns = namespace(&app)?;
-        let item = object(&get(
-            &ns,
-            "GetItemFromID",
-            &mut [
-                VARIANT::from(reference.store.as_str()),
-                VARIANT::from(snapshot.entry.as_str()),
-            ],
-        )?)?;
-        let parent = object(&get(&item, "Parent", &mut [])?)?;
-        if text(&parent, "EntryID", 4096)? != reference.entry
-            || text(&parent, "StoreID", 4096)? != reference.store
-            || i32::try_from(&get(&item, "Class", &mut [])?).ok() != Some(43)
-        {
-            return Err("郵件已移動或身分改變，請重新列出標題。".into());
-        }
-        let current = header(&item, reference)?;
-        if current.entry != snapshot.entry
-            || current.modified != snapshot.modified
-            || current.subject != snapshot.subject
-            || current.sender != snapshot.sender
-            || current.recipients != snapshot.recipients
-            || current.sent_at != snapshot.sent_at
-        {
-            return Err("郵件在標題預覽後已變更，未讀取內文；請重新列出。".into());
-        }
+        let item = checked_item(&ns, reference, snapshot)?;
         let body = text(&item, "Body", 256_000)?;
         if timestamp(&item, "LastModificationTime")? != snapshot.modified {
             return Err("郵件在讀取內文期間改變，此次內容未使用。".into());

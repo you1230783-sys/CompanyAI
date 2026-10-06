@@ -213,6 +213,48 @@ pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResul
                 choice == Choice::Skip
             );
         }
+        // 相同真實 Excel 經本地 CSV 往返，完整型別／精度／異常來源仍須保持。
+        let exported=broker.execute("csv_export", &tool(json!({"tool":"export_excel_dataset","path":path,"revision":revision,"sheet":sheet,"columns":["A","H","F"],"header_row":1,"start_row":2,"row_count":7,"name":"來源追蹤.csv"}))?, worker,cancel)?;
+        assert_eq!(exported["ok"], true, "{exported}");
+        let dataset = &exported["result"]["dataset"];
+        assert_eq!(dataset["rows"], 7);
+        let csv_chart = tool(
+            json!({"tool":"chart_dataset","path":dataset["path"],"revision":dataset["revision"],"x_column":"A","y_columns":["H","F"],"start_row":1,"row_count":7,"kind":"line","title":"CSV 往返","x_label":"X","y_label":"Y"}),
+        )?;
+        broker.set_chart_chooser(
+            Some(Box::new(|review, _, _| {
+                assert_eq!(review.converted, 1);
+                for category in ["Excel 錯誤", "非數字文字", "格式不明的文字", "合併儲存格"]
+                {
+                    assert!(review.groups.iter().any(|g| g.category == category));
+                }
+                Ok(Some(vec![Choice::Skip; review.groups.len()]))
+            })),
+            Instant::now() + Duration::from_secs(60),
+        );
+        let result = broker.execute("csv_chart", &csv_chart, worker, cancel)?;
+        assert_eq!(result["ok"], true, "{result}");
+        assert!(result["result"].get("series").is_none());
+        let chart = broker.charts().last().unwrap();
+        assert_eq!(chart.series[0].values[1], Some(339.0));
+        assert_eq!(chart.series[0].values[3], None);
+        assert_eq!(chart.series[1].values[2], Some(6.0));
+        assert!(chart
+            .data_issues
+            .iter()
+            .any(|i| i.cell.contains(&path) && i.row == 4));
+        let csv_path = root.join(dataset["path"].as_str().unwrap());
+        let csv_original = std::fs::read(&csv_path).map_err(|e| e.to_string())?;
+        let mut modified_csv = csv_original.clone();
+        modified_csv.push(b' ');
+        std::fs::write(&csv_path, modified_csv).map_err(|e| e.to_string())?;
+        assert_eq!(
+            broker.execute("csv_stale", &csv_chart, worker, cancel)?["ok"],
+            false
+        );
+        std::fs::write(&csv_path, &csv_original).map_err(|e| e.to_string())?;
+        assert!(broker.finish(&[])?.iter().any(|p| p.ends_with(".csv")));
+        println!("PASS real {ext} CSV: preserved Value2, original kinds/errors/merged/blanks, provenance and changed-CSV rejection.");
         // 模擬使用者等待期間更新來源：對舊版本的選擇不得套到新內容。
         let target = root.join(&path);
         let mut modified = original.clone();

@@ -1435,3 +1435,10 @@ body.collapsed .project-section { overflow: visible; }
 #project-supplements { margin-bottom: 8px; max-height: 200px; overflow: auto; }
 .supplement-entry { padding: 8px; border-bottom: 1px solid var(--border); }
 .supplement-entry p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0; }
+/* 資料夾名稱只供本機授權選擇；大信箱保持可捲動，不把按鈕推到視窗外。 */
+#project-outlook-consent { width: min(760px, 90vw); max-height: 90vh; overflow: auto; }
+.outlook-folder-tree { max-height: 40vh; overflow: auto; padding: 10px; border: 1px solid var(--border, #777); border-radius: 8px; }
+.outlook-folder-row label { display: flex; align-items: center; gap: 8px; padding: 5px 0; overflow-wrap: anywhere; }
+.outlook-folder-row input { width: auto; flex: 0 0 auto; }
+.outlook-folder-row details { margin-left: 22px; }
+.outlook-folder-row summary { cursor: pointer; }

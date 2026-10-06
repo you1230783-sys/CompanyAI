@@ -1,6 +1,7 @@
 //! 專案資料與固定工具契約。授權及副本所有權由桌面保存，不由模型文字決定。
 pub(crate) mod agent;
 pub mod charts;
+pub mod datasets;
 mod delegation;
 pub mod diagnostics;
 pub mod events;
@@ -104,6 +105,11 @@ pub enum Tool {
         end_date: String,
         cursor: Option<String>,
     },
+    OutlookCompare {
+        mail_ids: Vec<String>,
+        #[serde(default)]
+        offset: usize,
+    },
     OutlookRead {
         mail_id: String,
         #[serde(default)]
@@ -163,6 +169,44 @@ pub enum Tool {
         header_row: usize,
         start_row: usize,
         #[serde(default = "office::excel::default_rows")]
+        row_count: usize,
+        kind: String,
+        title: String,
+        x_label: String,
+        y_label: String,
+    },
+    /// 保存交接筆記後移出已封存的工具原文；不刪除證據或重設任務上限。
+    CompactContext {
+        working_note: String,
+        superseded: Vec<String>,
+        next_step: String,
+    },
+    ExportLogDataset {
+        query: logs::Query,
+        revisions: Vec<String>,
+        fields: Vec<datasets::Field>,
+        name: String,
+    },
+    ExportExcelDataset {
+        path: String,
+        revision: String,
+        sheet: usize,
+        columns: Vec<String>,
+        header_row: usize,
+        start_row: usize,
+        row_count: usize,
+        name: String,
+    },
+    InspectDataset {
+        path: String,
+        revision: Option<String>,
+    },
+    ChartDataset {
+        path: String,
+        revision: String,
+        x_column: String,
+        y_columns: Vec<String>,
+        start_row: usize,
         row_count: usize,
         kind: String,
         title: String,
@@ -311,6 +355,7 @@ impl Tool {
         match self {
             Self::OutlookFolders { .. } => "列出授權的 Outlook 資料夾",
             Self::OutlookHeaders { .. } => "讀取選定資料夾的郵件標題",
+            Self::OutlookCompare { .. } => "本機比對郵件前文並建議閱讀",
             Self::OutlookRead { .. } => "讀取選定的重要郵件內文",
             Self::ListLogs { .. } => "依日期與機台篩選 LOG",
             Self::ReadLog { .. } => "分批讀取 LOG",
@@ -318,6 +363,11 @@ impl Tool {
             Self::InspectExcel { .. } => "查看 Excel 表頭",
             Self::ReadExcelRange { .. } => "分批讀取 Excel",
             Self::ChartExcelRange { .. } => "依選取欄位建立圖表",
+            Self::CompactContext { .. } => "保存筆記並精簡上下文",
+            Self::ExportLogDataset { .. } => "將 LOG 擷取為本地 CSV",
+            Self::ExportExcelDataset { .. } => "將 Excel 選欄保存為本地 CSV",
+            Self::InspectDataset { .. } => "查看 CSV 欄位、統計與首尾預覽",
+            Self::ChartDataset { .. } => "直接以本地 CSV 建立圖表",
             Self::LoadSkill { .. } => "載入工作技能",
             Self::SearchFiles { .. } => "跨文件搜尋",
             Self::OfficeBatch { .. } => "批次編輯 Office",

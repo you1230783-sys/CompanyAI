@@ -6,6 +6,10 @@
 
 ## 目前版本
 
+- [0.8.36 本地 CSV 與主動上下文整理](VALIDATION_0_8_36.md)：批次擷取、首尾預覽、本地畫圖、補充更正與加密交接。
+- [0.8.35 LOG 定位與主輸入框](VALIDATION_0_8_35.md)：近似時間、三種傳送模式與進度筆記。
+- [0.8.34 大型 LOG 與長任務](VALIDATION_0_8_34.md)：Outlook 同意、24 小時與 checkpoint。
+
 - [0.8.32 Office 圖片與進階診斷](VALIDATION_0_8_32.md)：PNG 嵌入、工具可用條件與網站上游正規化配合。
 - [0.8.31 圖表與本機診斷驗證](VALIDATION_0_8_31.md)：10000 筆圖表、PNG 匯出、工具錯誤及逐輪執行紀錄。
 - [0.8.30 Schema 修正及驗證](VALIDATION_0_8_30.md)：修正 Office 表格與圖表多型別造成第一輪 UNSUPPORTED_SCHEMA。
@@ -63,3 +67,5 @@
 
 - [0.8.34 大型 LOG、Outlook 與長任務驗證](VALIDATION_0_8_34.md)
 - [0.8.35 進度筆記、LOG 定位與主輸入框驗證](VALIDATION_0_8_35.md)
+
+- [0.8.37 Outlook資料夾／本機前文比對／閱讀額度](VALIDATION_0_8_37.md)

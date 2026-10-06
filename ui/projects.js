@@ -33,7 +33,8 @@
   let outlookKey="",outlookTarget=null;
   function replyOutlook(allow) {
     if (!outlookTarget) return;
-    command({action:"outlook_consent",...outlookTarget,allow});
+    const selected=Array.from(outlookDialog.querySelectorAll("input[data-folder-id]:checked"),input=>input.dataset.folderId);
+    command({action:"outlook_consent",...outlookTarget,allow,selected});
     for (const button of outlookDialog.querySelectorAll("button")) button.disabled=true;
   }
   outlookDialog.addEventListener("cancel",event=>{event.preventDefault();replyOutlook(false);});
@@ -47,13 +48,40 @@
     outlookDialog.replaceChildren();
     if (!pending) return;
     outlookTarget={conversation:state.active_id,run_id:project.running_id,request_id:pending.request_id};
-    const title=node("h2","","允許本次任務讀取 Outlook？");
-    const explanation=node("p","","先提供本地 PST 收件資料夾與線上信箱寄件備份的資料夾名稱，再由 AI 挑選資料夾、讀取指定日期的信件標題，並按需要讀取重要信件內文。這些資料會傳給本次使用的 AI 服務。");
-    const limit=node("p","","僅讀取已開啟 Classic Outlook 中的資料，不寄信、不改信件、不讀附件。授權只到本次執行區段結束；暫停後繼續需重新同意。");
-    const buttons=node("div","dialog-actions"),deny=node("button","","不同意"),allow=node("button","primary","同意讀取標題與選定內文");
+    const title=node("h2","","選擇可供 AI 使用的 Outlook 資料夾");
+    const explanation=node("p","","這份清單只在本機顯示。第一次預設全選，之後沿用上次選擇；取消上層會一併取消子資料夾。未勾選的資料夾不提供 AI，也不允許讀信或匯出。");
+    const limit=node("p","","確認後只開放使用範圍，不會立即上傳全部郵件。本機前文比對最多 1,000 封，AI 內文閱讀最多 50 封；不寄信、不修改郵件、不讀附件。設定供本機 Outlook 功能共用；既有對話中已送出的資料無法撤回，變更範圍後請用新對話。");
+    const tree=node("div","outlook-folder-tree"), controls=node("div","dialog-actions");
+    const folders=pending.folders || [], checks=new Map(), branches=new Map();
+    const selectAll=node("button","","全選"),selectNone=node("button","","全部取消");
+    const count=node("span","","");
+    function refreshCount(){count.textContent=`已勾選 ${Array.from(checks.values()).filter(input=>input.checked).length} / ${folders.length} 個資料夾`;}
+    selectAll.onclick=()=>{for(const input of checks.values()) input.checked=true;refreshCount();};
+    selectNone.onclick=()=>{for(const input of checks.values()) input.checked=false;refreshCount();};
+    controls.append(selectAll,selectNone,count);
+    // 清單由原生層先序列舉；使用 textContent，資料夾名稱不能成為 HTML 或指令。
+    for(const folder of folders){
+      const row=node("div","outlook-folder-row"),label=node("label","","");
+      const input=document.createElement("input");input.type="checkbox";input.checked=!!folder.selected;input.dataset.folderId=folder.id;
+      checks.set(folder.id,input);label.append(input,document.createTextNode(folder.name));row.append(label);
+      const children=document.createElement("details");
+      const summary=node("summary","","子資料夾");children.append(summary);row.append(children);branches.set(folder.id,children);
+      (branches.get(folder.parent) || tree).append(row);
+      input.onchange=()=>{
+        for(const child of row.querySelectorAll("input[data-folder-id]")) child.checked=input.checked;
+        if(input.checked){
+          let parent=folder.parent;
+          while(parent){checks.get(parent).checked=true;parent=folders.find(item=>item.id===parent)?.parent;}
+        }
+        refreshCount();
+      };
+    }
+    for(const branch of branches.values()) if(branch.children.length===1) branch.hidden=true;
+    refreshCount();
+    const buttons=node("div","dialog-actions"),deny=node("button","","取消本次讀取"),allow=node("button","primary","確認可供 AI 使用的資料夾");
     deny.id="project-outlook-deny";allow.id="project-outlook-allow";
     deny.onclick=()=>replyOutlook(false);allow.onclick=()=>replyOutlook(true);
-    buttons.append(deny,allow);outlookDialog.append(title,explanation,limit,buttons);outlookDialog.showModal();deny.focus();
+    buttons.append(deny,allow);outlookDialog.append(title,explanation,controls,tree,limit,buttons);outlookDialog.showModal();deny.focus();
   }
   // 指示由主輸入框送出；此區只保留已提交項目的狀態與修改／撤回入口。
   let supplementSignature = "";

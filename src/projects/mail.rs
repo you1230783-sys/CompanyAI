@@ -12,7 +12,11 @@ use std::{
 #[cfg(test)]
 mod tests;
 
-pub type Consent = Box<dyn FnMut(&AtomicBool, Instant) -> AppResult<bool> + Send>;
+pub type Consent = Box<
+    dyn FnMut(&AtomicBool, Instant) -> AppResult<Option<crate::outlook::privacy::Policy>> + Send,
+>;
+
+mod comparison;
 
 /// 所有內部定位資料只寫入 DPAPI checkpoint，不直接序列化成工具回覆。
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -35,6 +39,8 @@ impl Folder {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Header {
+    #[serde(default)]
+    pub thread_id: String,
     pub id: String,
     pub folder_id: String,
     pub subject: String,
@@ -55,7 +61,7 @@ impl Header {
             .take(8)
             .map(|s| s.chars().take(500).collect::<String>())
             .collect();
-        json!({"mail_id":self.id,"folder_id":self.folder_id,"subject":self.subject,
+        json!({"mail_id":self.id,"thread_id":self.thread_id,"folder_id":self.folder_id,"subject":self.subject,
             "sender":self.sender,"recipients":recipients,"recipient_count":self.recipients.len(),"recipients_preview_truncated":self.recipients.len()>8 || self.recipients.iter().any(|s|s.chars().count()>500),"sent_at":self.sent_at,
             "received_at":self.received_at,"dedup_available":self.duplicate_key.is_some()})
     }
@@ -68,6 +74,15 @@ pub struct Scan {
 }
 /// 介面只提供唯讀操作；測試來源可驗證未同意時完全沒有呼叫讀取端。
 pub trait Source {
+    /// 快取回傳前仍核對原件與目前資料夾授權；測試來源可明確模擬移動／變更。
+    fn verify(
+        &mut self,
+        _folder: &Folder,
+        _header: &Header,
+        _cancel: &AtomicBool,
+    ) -> AppResult<()> {
+        Ok(())
+    }
     fn folders(
         &mut self,
         scope: &str,
@@ -95,6 +110,12 @@ struct PageSet {
 }
 #[derive(Default, Serialize, Deserialize)]
 pub(super) struct Saved {
+    #[serde(default)]
+    privacy_revision: String,
+    #[serde(default)]
+    comparisons: BTreeMap<String, comparison::Report>,
+    #[serde(default)]
+    compared: std::collections::BTreeSet<String>,
     folders: BTreeMap<String, Folder>,
     mails: BTreeMap<String, Header>,
     pages: BTreeMap<String, PageSet>,
@@ -106,8 +127,24 @@ pub(super) struct Session {
     pub saved: Saved,
     consent: Option<Consent>,
     allowed: Option<bool>,
+    policy: crate::outlook::privacy::Policy,
+    pub policy_root: Option<std::path::PathBuf>,
 }
 impl Session {
+    pub fn has_snapshot(&self) -> bool {
+        !self.saved.folders.is_empty()
+    }
+    pub fn check_policy(&self) -> AppResult<()> {
+        let Some(root) = &self.policy_root else {
+            return Ok(());
+        };
+        if self.policy.configured
+            && self.policy.revision() != crate::outlook::privacy::Policy::load(root)?.revision()
+        {
+            return Err("Outlook 資料夾設定已改變，停止使用舊結果；請開新對話。".into());
+        }
+        Ok(())
+    }
     pub fn is_allowed(&self) -> bool {
         self.allowed == Some(true)
     }
@@ -122,18 +159,27 @@ impl Session {
         if let Some(allowed) = self.allowed {
             return Ok(allowed);
         }
-        let allowed = match self.consent.as_mut() {
+        let selected = match self.consent.as_mut() {
             Some(confirm) => confirm(cancel, deadline)?,
-            None => false,
+            None => None,
         };
-        self.allowed = Some(allowed);
-        Ok(allowed)
+        self.allowed = Some(selected.is_some());
+        if let Some(policy) = selected {
+            let revision = policy.revision();
+            if !self.saved.folders.is_empty() && self.saved.privacy_revision != revision {
+                self.allowed = Some(false);
+                return Err("Outlook 資料夾範圍已變更；舊快照不再使用，請開啟新對話執行。".into());
+            }
+            self.saved.privacy_revision = revision;
+            self.policy = policy;
+        }
+        Ok(self.allowed == Some(true))
     }
     fn require_consent(&self) -> AppResult<()> {
         if self.allowed != Some(true) {
             return Err("尚未取得本次 Outlook 讀取同意。".into());
         }
-        Ok(())
+        self.check_policy()
     }
     pub fn folders(
         &mut self,
@@ -157,6 +203,7 @@ impl Session {
             })
             .transpose()?;
         let (mut folders, notices) = source.folders(scope, parent, cancel)?;
+        folders.retain(|f| self.policy.permits(&f.store, &f.entry));
         folders.sort_by(|a, b| a.path.cmp(&b.path));
         if offset > folders.len() {
             return Err("資料夾清單已改變，請從第一頁重新列出。".into());
@@ -305,7 +352,17 @@ impl Session {
         let mut headers = Vec::new();
         let mut characters = 0;
         for id in page.ids.iter().skip(offset).take(40) {
-            let header = self.saved.mails.get(id).ok_or("郵件快照不完整。")?.public();
+            let saved = self.saved.mails.get(id).ok_or("郵件快照不完整。")?;
+            let folder = self
+                .saved
+                .folders
+                .get(&saved.folder_id)
+                .ok_or("郵件資料夾快照不完整。")?;
+            if !self.policy.permits(&folder.store, &folder.entry) {
+                return Err("郵件不在已勾選範圍。".into());
+            }
+            source.verify(folder, saved, cancel)?;
+            let header = saved.public();
             let length = header.to_string().chars().count();
             if !headers.is_empty() && characters + length > 12_000 {
                 break;
@@ -333,9 +390,18 @@ impl Session {
             .mails
             .get(mail_id)
             .ok_or("請先從標題清單挑選本次郵件代號。")?;
+        let folder = self
+            .saved
+            .folders
+            .get(&header.folder_id)
+            .ok_or("缺少原郵件資料夾。")?;
+        if !self.policy.permits(&folder.store, &folder.entry) {
+            return Err("郵件不在已勾選範圍。".into());
+        }
+        source.verify(folder, header, cancel)?;
         if !self.saved.bodies.contains_key(mail_id) {
-            if self.saved.bodies.len() >= 30 {
-                return Err("本次最多讀取 30 封重要郵件內文。".into());
+            if self.saved.bodies.len() >= 50 {
+                return Err("本次 AI 最多閱讀 50 封不同郵件內文；請依已讀證據整理交付，不反覆查回相同內容。".into());
             }
             let folder = self
                 .saved
@@ -360,7 +426,7 @@ impl Session {
         let text: String = body.chars().skip(offset).take(12_000).collect();
         let next = offset + text.chars().count();
         Ok(
-            json!({"mail":header.public(),"text":text,"offset":offset,"next_offset":next,"has_more":next<total,"total_chars":total,"attachments_included":false,
+            json!({"mail":header.public(),"text":text,"offset":offset,"next_offset":next,"has_more":next<total,"total_chars":total,"ai_read_count":self.saved.bodies.len(),"ai_read_remaining":50-self.saved.bodies.len(),"attachments_included":false,
             "scope":"本次選定郵件的唯讀純文字快照；附件未讀取，未更改未讀狀態。"}),
         )
     }

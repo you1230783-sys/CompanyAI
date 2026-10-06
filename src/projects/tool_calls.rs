@@ -469,7 +469,25 @@ mod tests {
                 json!({"path":"a.txt","revision":"r","note_revision":"1","summary":"摘要"}),
             ),
             ("read_work_log", json!({})),
+            ("outlook_compare", json!({"mail_ids":["m1"],"offset":0})),
             ("read_task_result", json!({"task_id":"t"})),
+            (
+                "compact_context",
+                json!({"working_note":"保留目標","superseded":[],"next_step":"重畫"}),
+            ),
+            (
+                "export_log_dataset",
+                json!({"query":{"paths":["a.log"]},"revisions":[],"fields":[{"name":"秒","mode":"timestamp_seconds"}],"name":"data.csv"}),
+            ),
+            (
+                "export_excel_dataset",
+                json!({"path":"a.xlsx","revision":"r","sheet":1,"columns":["A","F"],"header_row":1,"start_row":2,"row_count":100,"name":"data.csv"}),
+            ),
+            ("inspect_dataset", json!({"path":"_AI_Output/data.csv"})),
+            (
+                "chart_dataset",
+                json!({"path":"_AI_Output/data.csv","revision":"r","x_column":"A","y_columns":["F"],"start_row":1,"row_count":100,"kind":"scatter","title":"T","x_label":"x","y_label":"y"}),
+            ),
         ];
         let definitions: Value = serde_json::from_str(DEFINITIONS).unwrap();
         assert_eq!(

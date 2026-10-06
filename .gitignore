@@ -24,3 +24,6 @@ site-notifications.dpapi
 /outlook-exports/
 
 /.private/
+
+# 本機Outlook資料夾隱私設定，不納入交付。
+outlook-folders.dpapi

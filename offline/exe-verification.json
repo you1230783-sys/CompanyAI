@@ -1,6 +1,6 @@
 {
-  "recorded_at": "2026-10-05T15:13:38.2794081+08:00",
-  "version": "0.8.35.0",
+  "recorded_at": "2026-10-06T10:08:02.6218537+08:00",
+  "version": "0.8.37.0",
   "result": "PASS",
   "msvc": "14.29.30133",
   "compiler_report": [
@@ -8,7 +8,7 @@
     "Verified _MSC_FULL_VER=192930159 x64"
   ],
   "empty_cargo_cache": true,
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-5253eec7729e4609a0d7b3f03eff36cd",
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-5a3ef4bb9b5a41ed8837e6d8260711c5",
   "checks": [
     "v142 x64 compiler probe",
     "fmt",
@@ -33,9 +33,13 @@
     "file lock close/retry and encrypted resume without repost",
     "chart anomaly defaults and per-cell evidence table",
     "24-hour policy with controlled deadlines, automatic multi-batch continuation and checkpoint interruption recovery",
-    "bounded context, preserved user requirements, encrypted operation archive and on-demand old results"
+    "bounded context, preserved user requirements, encrypted operation archive and on-demand old results",
+    "local LOG/Excel CSV datasets with bounded previews, native charting and source provenance",
+    "explicit context handoff and correction compaction without losing user instructions or archived evidence",
+    "Outlook folder picker, DPAPI policy and ancestor enforcement, native forged/stale selection rejection",
+    "local mail coverage with 1000-message limit, no raw-body tool output, independent 50-message AI limit, branches and gaps"
   ],
-  "exe_sha256": "4259e44c5da220bf29617b0557a24ea27a51fd2354bf9f8906d61a22356432f9",
+  "exe_sha256": "4091a43d755f2367c872f7813abe31e139a4f0f1025191965e4c084287a55495",
   "installer_built": false,
   "real_vnc_tested": false,
   "real_office_tested": true,

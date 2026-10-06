@@ -1094,8 +1094,12 @@ window.runSelfTest = async (structuredFixture) => {
       check(retryCommands.at(-1).command.allow===false && retryCommands.at(-1).command.run_id==="mail-run","Outlook refusal binds current run");
       fixture.projects.outlook_consent=null;LMUI.receive(fixture);await frame();
       check(!mailConsent.open,"Outlook consent closes after native acknowledgement");
-      fixture.projects.outlook_consent={request_id:"consent-2"};LMUI.receive(fixture);await frame();
+      fixture.projects.outlook_consent={request_id:"consent-2",folders:[{id:"root",parent:null,name:"信箱",depth:0,selected:true},{id:"private",parent:"root",name:"私人 <img src=x>",depth:1,selected:true},{id:"child",parent:"private",name:"子層",depth:2,selected:true},{id:"work",parent:"root",name:"工作",depth:1,selected:true}]};LMUI.receive(fixture);await frame();
+      const privateBox=mailConsent.querySelector('[data-folder-id="private"]');privateBox.checked=false;privateBox.dispatchEvent(new Event("change"));
+      check(!mailConsent.querySelector('[data-folder-id="child"]').checked,"Outlook folder exclusion includes descendants");
+      check(!mailConsent.querySelector("img") && mailConsent.textContent.includes("私人 <img src=x>"),"Outlook folder names remain inert text");
       $("project-outlook-allow").click();
+      check(JSON.stringify(retryCommands.at(-1).command.selected)===JSON.stringify(["root","work"]),"Only selected folder ids leave the local picker");
       check(retryCommands.at(-1).command.allow===true && retryCommands.at(-1).command.request_id==="consent-2" && retryCommands.at(-1).command.conversation===fixture.active_id,"Outlook approval includes conversation and pending request identity");
       fixture.projects.outlook_consent=null;fixture.projects.running=false;LMUI.receive(fixture);
       fixture.projects.running=true;fixture.projects.file_busy={request_id:"file-wait-1",message:"<source.xlsx> 正在使用中"};

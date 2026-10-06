@@ -31,7 +31,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build.ps1 -Emp
 
 依賴由 `Cargo.lock`、`vendor` 與 `.cargo/config.toml` 固定，使用空 Cargo 快取及 `--frozen` 驗證。環境腳本優先使用專案內的 `toolchain`，否則使用共用 `.tools`，並設定本專案的 target 目錄。
 
-`toolchain/` 與 `vendor/` 不直接提交 Git。**現存離線 ZIP 是歷史交付包，不代表目前 0.8.32 原始碼。** 全新環境需先準備指定工具鏈與符合 Cargo.lock 的 vendor；不要將舊 ZIP 整包覆蓋到新版原始碼。完整離線包操作見 [離線交付與 Git](OFFLINE_AND_GIT.md)。
+`toolchain/` 與 `vendor/` 不直接提交 Git。**現存離線 ZIP 是歷史交付包，不代表目前 0.8.37 原始碼。** 全新環境需先準備指定工具鏈與符合 Cargo.lock 的 vendor；不要將舊 ZIP 整包覆蓋到新版原始碼。完整離線包操作見 [離線交付與 Git](OFFLINE_AND_GIT.md)。
 
 | Build 選項 | 用途 |
 | --- | --- |
@@ -125,3 +125,16 @@ EXE／ZIP 由 Git LFS 管理。更新簽署私鑰位於 `.private/`，不提交�
 ### 新增專案工作技能
 
 內建技能目錄位於 `src/projects/skills.rs` 與 `src/projects/skills/*.md`，只包含工作方法；工具參數集中在 `tools.json`，操作實作仍由 Rust 決定授權。圖表在 `charts.rs`／`ui/charts.js`，快速模型委派在 `delegation.rs`。修改 Office 或批次邏輯須使用 `-TestOffice`；摘要 HTTP／快取／續接測試在 `examples/project_smoke/skills.rs`。
+
+## CSV 與上下文整理的維護位置
+
+- `src/projects/datasets.rs`：固定來源追蹤 CSV 方言、可逆公式文字保護、有界預覽、型別保留與圖表來源註記；不執行腳本，未加入新依賴。
+- `src/projects/logs.rs::dataset`：沿用 LOG 的串流解碼／檔案锁／時間判斷，本地一次掃描所選檔案，不走模型逐頁迴圈。
+- `src/projects/files.rs`：受控成果目錄、CSV 讀回／版本驗證、checkpoint 資料集索引、Excel COM 擷取與本地繪圖。
+- `src/projects/progress.rs`／`runner.rs`：交接與更正的上下文投影，封存先於精簡，不更動已提交請求；模型摘要不是執行證據。
+- 原生 HTTP 新增 case 21，檢查 CSV 後請求縮短、圖表回覆不含座標、用戶更正覆蓋舊候選、按需查回原文。真實 Excel 的 CSV 往返位於 `examples/office_smoke/excel_read.rs`。
+
+
+## 0.8.37 Outlook 授權與比對
+
+`src/outlook/privacy.rs`管理本機資料夾選擇／DPAPI／祖先鏈檢查；`src/projects/mail/comparison.rs`管理不向AI回傳原文的前文比對；UI由原生run/conversation/request配對接受勾選代號。技能目錄與tools.json同步加入outlook-coverage／outlook_compare，網站通用契約不變。資料夾選擇不是追溯清除聊天或引用文字；限制與驗收見[本版紀錄](VALIDATION_0_8_37.md)。

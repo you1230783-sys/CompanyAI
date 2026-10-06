@@ -1,5 +1,8 @@
 > **0.8.35：LOG 定位、主輸入框與進度筆記。** LOG 技能以近似時間定位事件；專案主輸入框可選下一輪提示、停止後新任務、完成後新任務。新增的是桌面原生命令與本機加密排程，不新增網站 API、資料表或工具參數。停止後的新任務使用新 run／request ID；原任務仍照原取消與未知請求契約處理。既有 `arguments.progress_note` 作執行中摘要，結束後收進工具紀錄，不改最終 message。詳見 [本版驗證](VALIDATION_0_8_35.md)。
 
+> **0.8.37：** 新增桌面 `outlook_compare(mail_ids,offset)`，工具目錄44項，按需公告。只回本機前文比較摘要、字數及建議閱讀，最多1000封本機比較、50封AI閱讀；資料夾完整選擇清單與比較原文不送伺服器。後端按當次Schema處理，不固定舊工具白名單；無新增路由／資料表。詳見[本版契約與驗證](VALIDATION_0_8_37.md)。
+
+
 > **0.8.34：** 桌面新增 LOG 與 Outlook 專案工具，目錄共 38 項，仍按需公告；Outlook 同意由原生 UI 管理。補充作後續 user 訊息；被取代候選有 role=tool、executed=false。每段最長 24 小時，checkpoint 自動換批及 context 精簡；網站必須採用 client_snapshot，不自行把完整歷史加回。未知原請求只 GET 查回，需保留可續接的任務狀態／結果；不要求單一 HTTP 連線存活 24 小時。無新增路由／資料表。詳見 [功能與驗證](VALIDATION_0_8_34.md)。
 
 > **0.8.32：** Office 既有操作新增 `insert_image` 分支，不增加路由或資料庫欄位。工具目錄仍為 32 項，但每次請求依模型及副本／圖表狀態提供其中可用項目，網站不要假設 tools 永遠相同。原生回覆白名單與 `provider_specific_fields` 的處理，見 [本次驗證與配合事項](VALIDATION_0_8_32.md)。
@@ -537,3 +540,13 @@ HTTP 協定保持不變：專案請求 `skills:false`，工具定義／呼叫／
 - read_work_log 可選 operation_id，未指定回索引；read_task_result 的 field 新增 operations。offset 以 Unicode 字元計算，完整結果可分頁回讀。
 - 跨對話只帶近期原要求、最終答案、工具計數及所選記憶；模型需尊重 client_snapshot，不能由後端重新加入所有工具輸出。
 - 單次模型／COM／網路呼叫仍有原有有限期限。24 小時是桌面單段總時限，不能將服務端逾時視為可重新 POST 的理由。
+
+## 0.8.36：本地資料集與交接整理
+
+不新增網站路由。desktop-agent-v1 的 client_snapshot 維持不變；桌面 catalog 增加 export_log_dataset、export_excel_dataset、inspect_dataset、chart_dataset、compact_context，共 43 項（含終態），初始 8 項基本工具。內建技能共 13 項，新增 dataset-charts／context-management；圖表技能啟用 CSV 工具。新增工具同樣由既有 Schema 正規化器處理 strict／nullable 參數。
+
+匯出只回 dataset {path,revision,rows,columns}、statistics、head／tail 各最多 10 筆（每格預覽最多 80 字）及有界來源資訊。CSV 正文及圖表座標不進 tool response；圖表透過既有本地 UI 事件顯示。跨任務 inspect_dataset 可省略 revision 取得目前版本；chart_dataset 必須帶版本並在使用者異常值決策後再次核對。CSV 發布／checkpoint 恢復／finish 均核對內容，原始檔不修改。
+
+CSV 成功：archive_results → compact_now（僅最近一對工具訊息）→ 加密 checkpoint。compact_context 先驗證 working_note（2000 字）、superseded（最多 12 條，各 200 字）與 next_step（500 字）；封存成功後才套用交接並縮減。補充於模型／工具界線處理，舊筆記 instruction_review_required=true，新候選若過期仍 executed=false。用戶原文保留，來源／副本與資料集索引由程式管理，主動整理不重設修復或無進展計數。任何封存失敗不宣稱整理成功。
+
+已提交／未知模型請求保持原 client_request_id、原 request payload；整理僅作用於下一個新請求。舊 checkpoint 新欄位使用 serde default。原始加密操作簿與 read_work_log／read_task_result 查回入口不變。

@@ -1261,7 +1261,10 @@
                 "weekly-update",
                 "multi-file-excel",
                 "log-analysis",
-                "outlook-research"
+                "outlook-research",
+                "dataset-charts",
+                "context-management",
+                "outlook-coverage"
               ]
             },
             "progress_note": {
@@ -2180,7 +2183,7 @@
       "type": "function",
       "function": {
         "name": "outlook_read",
-        "description": "只讀標題清單選定的重要郵件純文字內文；最多12000字一頁，以 next_offset 接續，不含附件。",
+        "description": "只讀標題清單選定的重要郵件純文字內文；最多12000字一頁，以 next_offset 接續，不含附件。；优先讀outlook_compare建議的最新信及缺口補充信，不逐封閱讀。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -2198,6 +2201,411 @@
           },
           "required": [
             "mail_id"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "compact_context",
+        "description": "先保存交接筆記，再主動移出舊工具原文，縮小下一次請求。欄位更正、方向改變、完成階段或重複閱讀時使用；原始要求、補充、檔案、去重與時間上限保留，舊操作可 read_work_log 查回。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "working_note": {
+              "type": "string",
+              "description": "累積已確認目標、限制、進度、來源位置與待辦；不得把尚未執行步驟寫成完成。",
+              "maxLength": 2000
+            },
+            "superseded": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "被最新更正否定的欄位／結論／成果；不代表刪除檔案。",
+                "maxLength": 200
+              },
+              "minItems": 0,
+              "maxItems": 12
+            },
+            "next_step": {
+              "type": "string",
+              "description": "下一個具體操作與待核對欄位／來源。",
+              "maxLength": 500
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+            }
+          },
+          "required": [
+            "working_note",
+            "superseded",
+            "next_step"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "export_log_dataset",
+        "description": "由本地整批掃描 LOG，依固定欄位規則擷取並保存 CSV；不讓模型逐筆抄值。先讀少量樣本／定位事件確認欄位。每批最多 30 檔、250000 筆、16 欄、64 MiB，不截斷。僅回前後各10筆、總數與統計，成功後移出舊工具原文。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "object",
+              "description": "固定搜尋條件，續頁不可改動",
+              "properties": {
+                "paths": {
+                  "type": "array",
+                  "description": "專案相對路徑，最多30檔",
+                  "items": {
+                    "type": "string",
+                    "description": ""
+                  },
+                  "minItems": 1,
+                  "maxItems": 30
+                },
+                "terms": {
+                  "type": "array",
+                  "description": "任一字面關鍵字；空陣列搜尋區間全部紀錄",
+                  "items": {
+                    "type": "string",
+                    "description": ""
+                  },
+                  "maxItems": 12
+                },
+                "start_time": {
+                  "type": "string",
+                  "description": "HH:MM 或 HH:MM:SS.sss；與 end_time 同時提供"
+                },
+                "end_time": {
+                  "type": "string",
+                  "description": "HH:MM 包含整分鐘；早於開始表示跨午夜"
+                },
+                "date": {
+                  "type": "string",
+                  "description": "YYYY-MM-DD，省略則每一天皆符合"
+                },
+                "case_sensitive": {
+                  "type": "boolean",
+                  "description": "是否區分大小寫",
+                  "default": false
+                },
+                "context_lines": {
+                  "type": "integer",
+                  "description": "每個命中前後文行數，可能超出時間範圍",
+                  "minimum": 0,
+                  "maximum": 5,
+                  "default": 0
+                }
+              },
+              "required": [
+                "paths"
+              ],
+              "additionalProperties": false
+            },
+            "revisions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "依 query.paths 順序提供版本；空陣列由工具記錄本次實際版本。",
+                "maxLength": 100
+              },
+              "minItems": 0,
+              "maxItems": 30
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "CSV 欄名，不重複、不以 __ 起始。",
+                    "maxLength": 60
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "delimited",
+                      "between",
+                      "timestamp_seconds"
+                    ]
+                  },
+                  "delimiter": {
+                    "type": "string",
+                    "description": "固定分隔字串；delimited 必填，不解讀 CSV 引號。",
+                    "maxLength": 100
+                  },
+                  "index": {
+                    "type": "integer",
+                    "description": "delimited 分隔後第幾欄（1 起算）。",
+                    "minimum": 1,
+                    "maximum": 256
+                  },
+                  "start": {
+                    "type": "string",
+                    "description": "between 的起始標記，從第一個符合位置擷取。",
+                    "maxLength": 100
+                  },
+                  "end": {
+                    "type": "string",
+                    "description": "between 的結束標記；省略時取到行尾。",
+                    "maxLength": 100
+                  }
+                },
+                "required": [
+                  "name",
+                  "mode"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 1,
+              "maxItems": 16
+            },
+            "name": {
+              "type": "string",
+              "description": "新的 CSV 檔名；自動存於 _AI_Output，重名加序號。",
+              "maxLength": 100
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+            }
+          },
+          "required": [
+            "query",
+            "revisions",
+            "fields",
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "export_excel_dataset",
+        "description": "先檢視表頭確認選欄，再由 Excel COM 將 Value2、型別、顯示文字與來源列號存成 CSV。只回欄名、筆數、統計、首尾各10筆；成功後移出舊工具原文。日期仍為序號，未更新外部連結。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "專案內已儲存 Excel 的相對路徑，不接受工作 copy_id。"
+            },
+            "revision": {
+              "type": "string",
+              "description": "inspect_excel 回傳的 excel: 版本，與 read_file 文字版本不同。",
+              "minLength": 1
+            },
+            "sheet": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "header_row": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048576,
+              "default": 1
+            },
+            "start_row": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048576
+            },
+            "row_count": {
+              "type": "integer",
+              "description": "本次選取列數，不自動讀整張；最多10000列、9欄、合計90000格。",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "欄名，例如 A 或 F；可不連續，不接受 A:F 或 A1。"
+              },
+              "minItems": 1,
+              "maxItems": 9
+            },
+            "name": {
+              "type": "string",
+              "description": "輸出 CSV 檔名。",
+              "maxLength": 100
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+            }
+          },
+          "required": [
+            "path",
+            "revision",
+            "sheet",
+            "header_row",
+            "start_row",
+            "row_count",
+            "columns",
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_dataset",
+        "description": "核對本地 CSV 版本，只回欄位、總數、統計及首尾各10筆；不回整批資料。跨輪直接引用上次路徑與 revision。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "專案 _AI_Output 下的 CSV 相對路徑。",
+              "maxLength": 500
+            },
+            "revision": {
+              "type": "string",
+              "description": "已知時提供以防資料被改動；跨任務不知道版本可省略，工具將回傳目前版本。",
+              "maxLength": 100
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "chart_dataset",
+        "description": "直接從本地 CSV 取完整選取範圍畫圖，不經模型重抄數字；只回圖號與處理摘要。異常值由用戶選擇，保留原行號；已更正欄位就用正確 CSV 欄名重畫。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "專案內已儲存 Excel 的相對路徑，不接受工作 copy_id。"
+            },
+            "revision": {
+              "type": "string",
+              "description": "inspect_excel 回傳的 excel: 版本，與 read_file 文字版本不同。",
+              "minLength": 1
+            },
+            "start_row": {
+              "type": "integer",
+              "description": "CSV 資料列，從1開始，不含表頭；來源行號另存。",
+              "minimum": 1,
+              "maximum": 250000
+            },
+            "row_count": {
+              "type": "integer",
+              "description": "確切筆數，最多10000筆，超過範圍報錯，不抽樣。",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            "x_column": {
+              "type": "string",
+              "description": "CSV 中的確切欄名；Excel 匯出使用原欄字母，LOG 使用 fields.name。",
+              "maxLength": 100
+            },
+            "y_columns": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "CSV 確切欄名。",
+                "maxLength": 100
+              },
+              "minItems": 1,
+              "maxItems": 8
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "line",
+                "bar",
+                "scatter"
+              ]
+            },
+            "title": {
+              "type": "string"
+            },
+            "x_label": {
+              "type": "string"
+            },
+            "y_label": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+            }
+          },
+          "required": [
+            "path",
+            "revision",
+            "start_row",
+            "row_count",
+            "x_column",
+            "y_columns",
+            "kind",
+            "title",
+            "x_label",
+            "y_label"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "outlook_compare",
+        "description": "只在本機比較已列出郵件的純文字前文；只回字數、涵蓋關係與建議閱讀，不回內文。最多1000封；同一組mail_ids配offset續頁。字數增加不等於前文完整。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "mail_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "maxItems": 1000
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "累積工作筆記，不含內部思考。"
+            }
+          },
+          "required": [
+            "mail_ids",
+            "offset"
           ],
           "additionalProperties": false
         }

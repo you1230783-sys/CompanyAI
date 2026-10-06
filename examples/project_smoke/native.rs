@@ -32,10 +32,10 @@ pub fn verify(root: &Path) -> AppResult<()> {
     } else {
         0
     };
-    if first > 20 {
-        return Err("原生測試案例需介於 0–20。".into());
+    if first > 21 {
+        return Err("原生測試案例需介於 0–21。".into());
     }
-    for case in first..=20 {
+    for case in first..=21 {
         verify_case(root, case)?;
     }
     Ok(())
@@ -52,14 +52,23 @@ fn capability(model: &str, strict: bool) -> Value {
     caps
 }
 fn fill_optional(args: &mut Value, schema: &Value) {
-    if let Some(props) = schema["properties"].as_object() {
-        for (name, _) in props {
-            if args.get(name).is_none() {
-                args[name] = Value::Null;
+    if args.is_object() {
+        if let Some(props) = schema["properties"].as_object() {
+            for (name, child) in props {
+                if args.get(name).is_none() {
+                    args[name] = Value::Null;
+                } else {
+                    fill_optional(&mut args[name], child);
+                }
             }
+        }
+    } else if let Some(items) = args.as_array_mut() {
+        for item in items {
+            fill_optional(item, &schema["items"]);
         }
     }
 }
+
 fn call(body: &Value, name: &str, mut args: Value) -> Value {
     let tool = body["tools"]
         .as_array()
@@ -105,10 +114,25 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         .map(|(id, kind, text)| json!({"id":format!("s1:{id}"),"label":id,"kind":kind,"text":text}))
         .collect::<Vec<_>>();
         json!({"scope":"Excel","blocks":blocks}).to_string()
+    } else if case == 21 {
+        "原始文字".repeat(3000)
     } else {
         "原始文字".into()
     };
     std::fs::write(workspace.join("source.txt"), &original).map_err(|e| e.to_string())?;
+    if case == 21 {
+        let log = (1..=100)
+            .map(|i| {
+                format!(
+                    "10:03:00.000 sample x={i}; pressure={}; corrected={};\n",
+                    i * 2,
+                    i * 3
+                )
+            })
+            .collect::<String>();
+        std::fs::write(workspace.join("20260623_system_A01-01.log"), log)
+            .map_err(|e| e.to_string())?;
+    }
     if case == 14 {
         std::fs::write(
             workspace.join("20260623_connection_Z01-CY.log"),
@@ -162,6 +186,9 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
     let file_prompts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let server = std::thread::spawn(move || -> AppResult<(usize, usize)> {
         let mut posts = 0;
+        let mut dataset = Value::Null;
+        let mut before_csv_bytes = 0usize;
+        let mut old_operation = String::new();
         let mut fast = 0;
         let mut step = 0;
         let mut statuses = BTreeMap::<String, Value>::new();
@@ -226,7 +253,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                 if posts == 1 {
                     assert_eq!(
                         body["tools"].as_array().unwrap().len(),
-                        7,
+                        8,
                         "首次只提供基本工具"
                     );
                     println!(
@@ -252,6 +279,114 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     assert_eq!(body["tool_choice"], "none");
                     assert!(body["context"]["parent_request_id"].is_string());
                     json!({"role":"assistant","content":"原文為原始文字，無其他數據。"})
+                } else if case == 21 {
+                    let state_text = messages
+                        .iter()
+                        .filter_map(|m| m["content"].as_str())
+                        .find(|s| s.starts_with("本機續接資料"))
+                        .unwrap();
+                    let state: Value = serde_json::from_str(state_text.split_once('\n').unwrap().1)
+                        .map_err(|e| e.to_string())?;
+                    if posts == 3 {
+                        before_csv_bytes = body["messages"].to_string().len();
+                    }
+                    if posts == 4 {
+                        let after = body["messages"].to_string().len();
+                        assert!(
+                            after < before_csv_bytes,
+                            "CSV 後舊原文應移出：{before_csv_bytes} -> {after}"
+                        );
+                        println!("CSV native request messages: {before_csv_bytes} -> {after} bytes (100 rows retained locally)");
+                    }
+                    match posts {
+                        1 => call(&body, "read_file", json!({"path":"source.txt","offset":0})),
+                        2 => {
+                            old_operation = state["operations"][0]["id"].as_str().unwrap().into();
+                            call(&body, "load_skill", json!({"id":"dataset-charts"}))
+                        }
+                        3 => call(
+                            &body,
+                            "export_log_dataset",
+                            json!({"query":{"paths":["20260623_system_A01-01.log"],"terms":["sample"],"start_time":"09:58","end_time":"10:08","date":"2026-06-23","context_lines":0},"revisions":[],"fields":[
+                            {"name":"x","mode":"between","start":"x=","end":";"},
+                            {"name":"pressure","mode":"between","start":"pressure=","end":";"},
+                            {"name":"corrected","mode":"between","start":"corrected=","end":";"}],"name":"量測.csv"}),
+                        ),
+                        4 => {
+                            assert_eq!(previous["ok"], true, "{previous}");
+                            dataset = previous["result"]["dataset"].clone();
+                            assert_eq!(dataset["rows"], 100);
+                            assert_eq!(previous["result"]["head"].as_array().unwrap().len(), 10);
+                            assert_eq!(previous["result"]["tail"].as_array().unwrap().len(), 10);
+                            assert!(
+                                !body["messages"].to_string().contains("原始文字"),
+                                "CSV 後不重送舊原文"
+                            );
+                            call(
+                                &body,
+                                "chart_dataset",
+                                json!({"path":dataset["path"],"revision":dataset["revision"],"x_column":"x","y_columns":["pressure"],"start_row":1,"row_count":100,"kind":"scatter","title":"舊圖","x_label":"x","y_label":"y"}),
+                            )
+                        }
+                        5 => {
+                            assert_eq!(previous["result"]["chart_index"], 0);
+                            assert!(
+                                previous["result"].get("x").is_none()
+                                    && previous["result"].get("series").is_none()
+                            );
+                            server_instructions.submit(
+                                None,
+                                "改用 corrected 欄，舊 pressure 圖無效；保留原目標。",
+                            )?;
+                            call(
+                                &body,
+                                "finish",
+                                json!({"message":"這個舊候選不得執行","artifacts":[]}),
+                            )
+                        }
+                        6 => {
+                            assert!(state["working_note"]["instruction_review_required"] == true);
+                            assert!(body["messages"].to_string().contains("改用 corrected 欄"));
+                            assert!(!body["messages"].to_string().contains("原始文字"));
+                            call(
+                                &body,
+                                "compact_context",
+                                json!({"working_note":format!("CSV {} 100筆，欄x/corrected；原始操作 {} 可查回",dataset["path"],old_operation),"superseded":["pressure 欄及舊圖無效"],"next_step":"用 corrected 重畫，不重讀 LOG"}),
+                            )
+                        }
+                        7 => {
+                            assert_eq!(
+                                state["working_note"]["superseded_conclusions"][0],
+                                "pressure 欄及舊圖無效"
+                            );
+                            assert_eq!(messages.iter().filter(|m| m["role"] == "tool").count(), 1);
+                            call(
+                                &body,
+                                "chart_dataset",
+                                json!({"path":dataset["path"],"revision":dataset["revision"],"x_column":"x","y_columns":["corrected"],"start_row":1,"row_count":100,"kind":"scatter","title":"更正圖","x_label":"x","y_label":"y"}),
+                            )
+                        }
+                        8 => {
+                            assert_eq!(previous["result"]["chart_index"], 1);
+                            call(
+                                &body,
+                                "read_work_log",
+                                json!({"operation_id":old_operation,"offset":0}),
+                            )
+                        }
+                        9 => {
+                            assert!(
+                                previous.to_string().contains("原始文字"),
+                                "整理後原文仍可按需查回"
+                            );
+                            call(
+                                &body,
+                                "finish",
+                                json!({"message":"CSV 與更正整理完成","artifacts":[]}),
+                            )
+                        }
+                        _ => panic!("不應額外重讀原檔或重跑操作"),
+                    }
                 } else if matches!(case, 18 | 19) {
                     assert!(
                         body["messages"].to_string().len() < 260_000,
@@ -611,10 +746,9 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         session: session.clone(),
         root: root.join("native-app"),
         cancel: cancel.clone(),
-        instructions: matches!(case, 12 | 13).then(|| instructions.clone()),
-        outlook_consent: (case == 15).then(|| {
-            Box::new(|_: &AtomicBool, _| Ok(false)) as company_ai::projects::mail::Consent
-        }),
+        instructions: matches!(case, 12 | 13 | 21).then(|| instructions.clone()),
+        outlook_consent: (case == 15)
+            .then(|| Box::new(|_: &AtomicBool, _| Ok(None)) as company_ai::projects::mail::Consent),
         file_waiter: if matches!(case, 16 | 17 | 20) {
             let held = held.clone();
             let prompts = file_prompts.clone();
@@ -632,7 +766,19 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         },
     };
     let mut activity = vec![];
-    let mut result = if case == 19 {
+    let mut result = if case == 21 {
+        runner::run_with_charts(
+            make_run(false),
+            |s| activity.push(s),
+            |charts| {
+                if charts.len() == 2 {
+                    assert_eq!(charts[0].series[0].values[49], Some(100.0));
+                    assert_eq!(charts[1].series[0].values[49], Some(150.0));
+                    assert_eq!(charts[1].x.len(), 100);
+                }
+            },
+        )
+    } else if case == 19 {
         // 模擬程序在已保存 checkpoint 的界線中斷，跳過 runner 的正常收尾。
         let interrupted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             runner::run(make_run(false), |s| {
@@ -761,6 +907,12 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                 "完成後須關閉 checkpoint"
             );
             assert!(activity.iter().any(|s| s.contains("已整理工作筆記")));
+        }
+        21 => {
+            assert!(result?.contains("CSV 與更正整理完成"));
+            assert_eq!(posts, 9);
+            assert!(activity.iter().any(|s| s.contains("CSV 已保存")));
+            assert!(activity.iter().any(|s| s.contains("已保存交接筆記")));
         }
         _ => unreachable!(),
     }

@@ -336,15 +336,12 @@ fn reserve_output(folder: &Path, name: &str) -> AppResult<(String, File)> {
         .file_stem()
         .and_then(|s| s.to_str())
         .ok_or("檔名無效。")?;
-    // PNG 僅在專用匯出流程使用，不擴大一般文件閱讀／工作副本支援格式。
-    let ext = if path
-        .extension()
-        .and_then(|s| s.to_str())
-        .is_some_and(|s| s.eq_ignore_ascii_case("png"))
-    {
-        "png".into()
-    } else {
-        extension(path)?
+    // PNG／CSV 僅由專用匯出流程建立，不擴大一般文件編輯的格式。
+    let ext = match path.extension().and_then(|s| s.to_str()) {
+        Some(ext) if ext.eq_ignore_ascii_case("png") || ext.eq_ignore_ascii_case("csv") => {
+            ext.to_lowercase()
+        }
+        _ => extension(path)?,
     };
     for number in 1..=10000 {
         let candidate = if number == 1 {
@@ -642,6 +639,8 @@ pub(super) struct SavedBroker {
     charts: Vec<super::charts::Chart>,
     #[serde(default)]
     chart_exports: Vec<ChartExport>,
+    #[serde(default)]
+    datasets: Vec<super::datasets::Reference>,
 }
 pub struct Broker {
     file_waiter: Option<super::interaction::FileWaiter>,
@@ -661,6 +660,7 @@ pub struct Broker {
     loaded_skills: Vec<String>,
     charts: Vec<super::charts::Chart>,
     chart_exports: Vec<ChartExport>,
+    datasets: Vec<super::datasets::Reference>,
     png_renderer: Option<super::charts::png::Renderer>,
     chart_chooser: Option<super::charts::quality::Chooser>,
     chart_deadline: std::time::Instant,
@@ -684,6 +684,7 @@ impl Broker {
             loaded_skills: vec![],
             charts: vec![],
             chart_exports: vec![],
+            datasets: vec![],
             png_renderer: None,
             chart_chooser: None,
             chart_deadline: std::time::Instant::now(),
@@ -693,7 +694,7 @@ impl Broker {
         // 經序列化建立不含程序資源的快照；授權與執行中的 COM 物件不保存。
         serde_json::from_value(
             json!({"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
-            "results":self.results,"archived_results":self.archived_results,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports}),
+            "results":self.results,"archived_results":self.archived_results,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets}),
         )
         .map_err(|e| e.to_string())
     }
@@ -740,6 +741,10 @@ impl Broker {
         for export in &state.chart_exports {
             self.verify_chart_export(export)?;
         }
+        for dataset in &state.datasets {
+            super::datasets::load(&self.project, &dataset.path, &dataset.revision, cancel)?;
+        }
+        self.datasets = state.datasets;
         self.chart_exports = state.chart_exports;
         self.loaded_skills.clear();
         for id in state.loaded_skills {
@@ -792,6 +797,10 @@ impl Broker {
             }))
             .collect::<Vec<_>>())
     }
+    /// 可重用資料集只附路徑與結構，不在續接快照重送所有資料列。
+    pub(super) fn dataset_index(&self) -> Value {
+        json!(self.datasets)
+    }
     pub(super) fn skill_context(&self) -> AppResult<String> {
         super::skills::context(&self.loaded_skills)
     }
@@ -821,8 +830,22 @@ impl Broker {
     pub fn set_png_renderer(&mut self, renderer: super::charts::png::Renderer) {
         self.png_renderer = Some(renderer);
     }
+    pub(super) fn set_outlook_root(&mut self, root: &Path) {
+        self.outlook.policy_root = Some(root.into());
+    }
     pub fn set_outlook_consent(&mut self, consent: Option<super::mail::Consent>) {
         self.outlook.set_consent(consent);
+    }
+    /// 恢復模型歷史前先重新授權；拒絕或範圍改變時不能先送出舊郵件結果。
+    pub(super) fn reauthorize_outlook(
+        &mut self,
+        cancel: &AtomicBool,
+        deadline: std::time::Instant,
+    ) -> AppResult<()> {
+        if self.outlook.has_snapshot() && !self.outlook.authorize(cancel, deadline)? {
+            return Err("未確認 Outlook 範圍，未恢復舊任務。".into());
+        }
+        self.outlook.check_policy()
     }
     pub fn set_file_waiter(&mut self, waiter: Option<super::interaction::FileWaiter>) {
         self.file_waiter = waiter;
@@ -907,6 +930,71 @@ impl Broker {
             return Err("PNG 成果已變更，請確認後重新匯出。".into());
         }
         Ok(())
+    }
+
+    /// CSV 只建立新成果，讀回核對成功才加入可引用索引；不覆寫原始資料。
+    fn save_dataset(
+        &mut self,
+        name: &str,
+        table: &super::datasets::Table,
+        cancel: &AtomicBool,
+    ) -> AppResult<Value> {
+        let rel = relative(name)?;
+        if rel.components().count() != 1
+            || rel
+                .extension()
+                .is_none_or(|s| !s.eq_ignore_ascii_case("csv"))
+        {
+            return Err("資料集名稱需為單一 CSV 檔名。".into());
+        }
+        if self.datasets.len() >= 30 {
+            return Err("每個任務最多 30 份 CSV 資料集。".into());
+        }
+        let csv = table.csv()?;
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err("CSV 匯出已取消。".into());
+        }
+        let _root = pin(&self.project.root)?;
+        let base = self.project.root.join("_AI_Output");
+        match fs::create_dir(&base) {
+            Ok(()) => (),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => (),
+            Err(e) => return Err(e.to_string()),
+        }
+        let _base = pin(&base)?;
+        if self.output_folder.is_none() {
+            self.output_folder = Some(create_output_folder(&base)?);
+        }
+        let folder_name = self
+            .output_folder
+            .as_deref()
+            .ok_or("CSV 輸出資料夾不存在。")?;
+        let folder = base.join(folder_name);
+        let _folder = pin(&folder)?;
+        let (actual_name, mut file) = reserve_output(&folder, name)?;
+        let path = format!("_AI_Output/{folder_name}/{actual_name}");
+        self.published.push(path.clone());
+        file.write_all(csv.as_bytes())
+            .and_then(|_| file.sync_all())
+            .map_err(|e| format!("CSV 可能已部分寫入 {path}，尚未交付：{e}"))?;
+        file.rewind().map_err(|e| e.to_string())?;
+        let mut readback = String::new();
+        Read::by_ref(&mut file)
+            .take((super::datasets::MAX_BYTES + 1) as u64)
+            .read_to_string(&mut readback)
+            .map_err(|e| e.to_string())?;
+        if readback != csv {
+            return Err(format!("CSV {path} 讀回不一致，尚未交付。"));
+        }
+        let reference = super::datasets::Reference {
+            path,
+            revision: text::revision(&csv),
+            rows: table.rows.len(),
+            columns: table.columns.clone(),
+        };
+        let result = table.summary(&reference);
+        self.datasets.push(reference);
+        Ok(result)
     }
 
     fn export_chart_png(
@@ -1081,6 +1169,7 @@ impl Broker {
     }
     /// 非同步委派也共用操作去重表；不能與一般工具重複使用不同參數的 ID。
     pub(super) fn cached_result(&self, id: &str, tool: &Tool) -> AppResult<Option<Value>> {
+        self.outlook.check_policy()?;
         crate::jobs::validate_id(id)?;
         let request = serde_json::to_value(tool).map_err(|e| e.to_string())?;
         if let Some((previous, result)) = self.recorded_operation(id)? {
@@ -1091,6 +1180,7 @@ impl Broker {
                 tool,
                 Tool::OutlookFolders { .. }
                     | Tool::OutlookHeaders { .. }
+                    | Tool::OutlookCompare { .. }
                     | Tool::OutlookRead { .. }
             ) && !self.outlook.is_allowed()
             {
@@ -1123,15 +1213,19 @@ impl Broker {
         worker: &mut Worker,
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
+        self.reauthorize_outlook(cancel, self.chart_deadline)?;
         crate::jobs::validate_id(id)?;
         // 連重播舊工具結果都先經本次同意；授權不隨 checkpoint 恢復。
         if matches!(
             tool,
-            Tool::OutlookFolders { .. } | Tool::OutlookHeaders { .. } | Tool::OutlookRead { .. }
+            Tool::OutlookFolders { .. }
+                | Tool::OutlookHeaders { .. }
+                | Tool::OutlookCompare { .. }
+                | Tool::OutlookRead { .. }
         ) && !self.outlook.authorize(cancel, self.chart_deadline)?
         {
             return Ok(
-                json!({"ok":true,"result":{"declined":true,"executed":false,"message":"使用者未同意本次 Outlook 讀取；未接觸資料夾或郵件，請改用已提供的資料。"}}),
+                json!({"ok":true,"result":{"declined":true,"executed":false,"message":"使用者未確認 Outlook 使用範圍；資料夾名稱僅在本機預覽，未讀取郵件或交給 AI。"}}),
             );
         }
         let request = serde_json::to_value(tool).map_err(|e| e.to_string())?;
@@ -1161,6 +1255,10 @@ impl Broker {
                     | Tool::InspectExcel { .. }
                     | Tool::ReadExcelRange { .. }
                     | Tool::ChartExcelRange { .. }
+                    | Tool::ExportExcelDataset { .. }
+                    | Tool::ExportLogDataset { .. }
+                    | Tool::InspectDataset { .. }
+                    | Tool::ChartDataset { .. }
                     | Tool::ChartFromExcel { .. }
             );
             if error.contains(super::interaction::DEFERRED)
@@ -1291,6 +1389,12 @@ impl Broker {
                 start_date,
                 end_date,
                 cursor.as_deref(),
+                cancel,
+            ),
+            Tool::OutlookCompare { mail_ids, offset } => self.outlook.compare(
+                &mut crate::outlook::project::Reader,
+                mail_ids,
+                *offset,
                 cancel,
             ),
             Tool::OutlookRead { mail_id, offset } => {
@@ -1452,6 +1556,101 @@ impl Broker {
                 };
                 // 決策期間不佔用 Excel；接受前重新核對來源版本，舊決策不套到新資料。
                 self.with_excel(path, Some(revision), |_| Ok(()))?;
+                self.add_chart(chart)
+            }
+            Tool::CompactContext {
+                working_note,
+                superseded,
+                next_step,
+            } => {
+                super::progress::validate_handoff(working_note, superseded, next_step)?;
+                // runner 在本結果封存成功後才套用；此處不可自行丟棄正在執行的對話。
+                self.archive_results()?;
+                Ok(
+                    json!({"handoff_validated":true,"apply_at":"本工具結果封存後、下一次模型請求前","raw_history":"read_work_log"}),
+                )
+            }
+            Tool::ExportLogDataset {
+                query,
+                revisions,
+                fields,
+                name,
+            } => {
+                self.txt_context = true;
+                let (table, extraction) =
+                    super::logs::dataset(&self.project, query, revisions, fields, cancel)?;
+                let mut result = self.save_dataset(name, &table, cancel)?;
+                result["extraction"] = extraction;
+                result["field_rules"] = json!(fields);
+                Ok(result)
+            }
+            Tool::ExportExcelDataset {
+                path,
+                revision,
+                sheet,
+                columns,
+                header_row,
+                start_row,
+                row_count,
+                name,
+            } => {
+                self.txt_context = true;
+                let selection = office::excel::Selection {
+                    sheet: *sheet,
+                    columns: columns.clone(),
+                    header_row: *header_row,
+                    start_row: *start_row,
+                    row_count: *row_count,
+                };
+                selection.validate_chart()?;
+                let (page, _) = self.with_excel(path, Some(revision), |target| {
+                    office::excel::read_chart(target, &selection, cancel)
+                })?;
+                let table = super::datasets::Table::from_excel(&page, path, revision)?;
+                let mut result = self.save_dataset(name, &table, cancel)?;
+                result["headers"] = json!(page
+                    .headers
+                    .iter()
+                    .map(|h| h.text.chars().take(100).collect::<String>())
+                    .collect::<Vec<_>>());
+                result["next_source_row"] = json!(page.next_row);
+                result["date_1904"] = json!(page.date_1904);
+                Ok(result)
+            }
+            Tool::InspectDataset { path, revision } => {
+                let (table, actual_revision) =
+                    super::datasets::inspect(&self.project, path, revision.as_deref(), cancel)?;
+                let reference = super::datasets::Reference {
+                    path: path.clone(),
+                    revision: actual_revision,
+                    rows: table.rows.len(),
+                    columns: table.columns.clone(),
+                };
+                Ok(table.summary(&reference))
+            }
+            Tool::ChartDataset {
+                path,
+                revision,
+                x_column,
+                y_columns,
+                start_row,
+                row_count,
+                kind,
+                title,
+                x_label,
+                y_label,
+            } => {
+                let table = super::datasets::load(&self.project, path, revision, cancel)?;
+                let page = table.page(x_column, y_columns, *start_row, *row_count)?;
+                let prepared = super::charts::prepare_page(
+                    &page, kind, title, x_label, y_label, path, revision,
+                )?;
+                let Some(mut chart) = self.review_chart(prepared, cancel)? else {
+                    return Ok(json!({"waiting_for_user":true}));
+                };
+                // 使用者選擇異常值處理期間，CSV 也可能被外部程式改動。
+                super::datasets::load(&self.project, path, revision, cancel)?;
+                table.annotate(&mut chart);
                 self.add_chart(chart)
             }
             Tool::LoadSkill { id } => {
@@ -2003,6 +2202,10 @@ impl Broker {
         {
             return Err("仍有未儲存的工作副本，請先儲存或捨棄。".into());
         }
+        for dataset in &self.datasets {
+            super::datasets::load(&self.project, &dataset.path, &dataset.revision, cancel)?;
+            paths.push(dataset.path.clone());
+        }
         // PNG 已由匯出工具發布，不是文字工作副本；自動併入交付清單並重新核對。
         for export in &self.chart_exports {
             if cancel.load(std::sync::atomic::Ordering::Relaxed) {
@@ -2018,6 +2221,49 @@ impl Broker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dataset_checkpoint_reopens_and_rejects_modified_csv_without_touching_sources() {
+        let root = std::env::temp_dir().join(format!(
+            "dataset-checkpoint-{}",
+            crate::jobs::new_id().unwrap()
+        ));
+        fs::create_dir(&root).unwrap();
+        let project = Project {
+            id: "dataset-test".into(),
+            name: "CSV".into(),
+            root: root.clone(),
+            imports: Default::default(),
+        };
+        let cancel = AtomicBool::new(false);
+        let mut broker = Broker::new(project.clone(), "task".into()).unwrap();
+        let mut table = super::super::datasets::Table::new(vec!["x".into(), "y".into()]).unwrap();
+        table
+            .push(super::super::datasets::Row {
+                path: "source.log".into(),
+                revision: "r".into(),
+                sheet: 0,
+                row: 123,
+                values: vec!["1".into(), "2".into()],
+                kinds: vec![],
+                texts: vec![],
+            })
+            .unwrap();
+        let result = broker.save_dataset("資料.csv", &table, &cancel).unwrap();
+        let mut restored = Broker::new(project.clone(), "task".into()).unwrap();
+        restored.restore(broker.saved().unwrap(), &cancel).unwrap();
+        assert_eq!(restored.dataset_index()[0]["rows"], 1);
+        let path = result["dataset"]["path"].as_str().unwrap();
+        let (_, revision) = super::super::datasets::inspect(&project, path, None, &cancel).unwrap();
+        assert_eq!(revision, result["dataset"]["revision"].as_str().unwrap());
+        assert_eq!(restored.finish(&[]).unwrap(), vec![path]);
+        fs::write(root.join(path), "externally changed").unwrap();
+        assert!(restored.finish(&[]).is_err());
+        assert!(Broker::new(project, "task".into())
+            .unwrap()
+            .restore(broker.saved().unwrap(), &cancel)
+            .is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn archived_results_keep_operation_identity_and_survive_restore() {
         let root =

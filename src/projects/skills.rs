@@ -3,6 +3,21 @@ use crate::AppResult;
 use serde_json::{json, Value};
 const SKILLS: &[(&str, &str, &str)] = &[
     (
+        "outlook-coverage",
+        "本機比對郵件前文與建議閱讀",
+        include_str!("skills/outlook-coverage.md"),
+    ),
+    (
+        "dataset-charts",
+        "大量資料存 CSV、預覽與本地直接畫圖",
+        include_str!("skills/dataset-charts.md"),
+    ),
+    (
+        "context-management",
+        "更正方向、交接筆記與主動精簡上下文",
+        include_str!("skills/context-management.md"),
+    ),
+    (
         "outlook-research",
         "同意後挑選郵件、去重及整理週報",
         include_str!("skills/outlook-research.md"),
@@ -82,10 +97,13 @@ pub fn context(ids: &[String]) -> AppResult<String> {
 pub fn activate(ids: &mut Vec<String>, id: &str) -> AppResult<()> {
     load(id)?;
     let dependencies: &[&str] = match id {
+        "outlook-research" => &["outlook-coverage"],
+        "outlook-coverage" => &["outlook-research"],
         "paper-evidence" => &["research", "notes"],
         "weekly-update" => &["research", "notes", "office-edit"],
         "multi-file-excel" => &["research", "office-edit", "excel-read"],
-        "charts" => &["excel-read"],
+        "charts" => &["excel-read", "dataset-charts"],
+        "dataset-charts" => &["excel-read", "log-analysis", "charts"],
         _ => &[],
     };
     for next in dependencies.iter().copied().chain(std::iter::once(id)) {
@@ -99,8 +117,12 @@ pub fn activate(ids: &mut Vec<String>, id: &str) -> AppResult<()> {
 pub fn enabled(tool: &str, ids: &[String]) -> bool {
     let has = |id: &str| ids.iter().any(|i| i == id);
     match tool {
+        "outlook_compare" => has("outlook-coverage"),
         "list_files" | "read_file" | "load_skill" | "ask_user" | "finish" | "read_work_log"
-        | "read_task_result" => true,
+        | "read_task_result" | "compact_context" => true,
+        "export_log_dataset" | "export_excel_dataset" | "inspect_dataset" | "chart_dataset" => {
+            has("dataset-charts")
+        }
         "inspect_excel" | "read_excel_range" => has("excel-read"),
         "list_logs" | "read_log" | "search_logs" => has("log-analysis"),
         "outlook_folders" | "outlook_headers" | "outlook_read" => has("outlook-research"),

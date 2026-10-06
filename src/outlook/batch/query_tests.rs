@@ -198,6 +198,79 @@ fn app(inbox: IDispatch, current: IDispatch, stores: Vec<IDispatch>) -> IDispatc
 }
 
 #[test]
+fn privacy_checks_real_dispatch_ancestry_before_body_or_export() {
+    use crate::outlook::privacy::{self, Policy};
+    let namespace = dispatch(vec![fixed("Class", 1i32)]);
+    let root = dispatch(vec![
+        fixed("Class", 2i32),
+        fixed("StoreID", "s"),
+        fixed("EntryID", "root"),
+        fixed("Parent", namespace),
+    ]);
+    let blocked = dispatch(vec![
+        fixed("Class", 2i32),
+        fixed("StoreID", "s"),
+        fixed("EntryID", "hidden"),
+        fixed("Parent", root.clone()),
+    ]);
+    let leaf = dispatch(vec![
+        fixed("Class", 2i32),
+        fixed("StoreID", "s"),
+        fixed("EntryID", "leaf"),
+        fixed("Parent", blocked),
+    ]);
+    let policy = Policy {
+        configured: true,
+        allowed: [privacy::key("s", "root"), privacy::key("s", "leaf")]
+            .into_iter()
+            .collect(),
+    };
+    assert!(privacy::folder_allowed(&policy, &root).unwrap());
+    // 即使 leaf ID 曾經被允許，移到未勾選祖先下仍須拒絕。
+    assert!(!privacy::folder_allowed(&policy, &leaf).unwrap());
+    let mail = dispatch(vec![fixed("Parent", leaf)]);
+    assert!(privacy::require_item(&policy, &mail).is_err());
+    // Fixture 不提供 Body／SaveAs，確認權限檢查完全沒有先讀信或匯出。
+}
+
+#[test]
+fn local_catalog_lists_names_without_mail_access_and_remembers_selection() {
+    use crate::outlook::privacy::{self, Policy};
+    let child = dispatch(vec![
+        fixed("StoreID", "s"),
+        fixed("EntryID", "private"),
+        fixed("Name", "私人 <img>"),
+        fixed("Folders", collection(vec![])),
+    ]);
+    let root = dispatch(vec![
+        fixed("StoreID", "s"),
+        fixed("EntryID", "root"),
+        fixed("Name", "信箱"),
+        fixed("Folders", collection(vec![child])),
+    ]);
+    let application = dispatch(vec![fixed(
+        "GetNamespace",
+        dispatch(vec![fixed(
+            "Stores",
+            collection(vec![dispatch(vec![fixed("GetRootFolder", root)])]),
+        )]),
+    )]);
+    let cancel = AtomicBool::new(false);
+    let initial = privacy::catalog_from_app(&Policy::default(), &cancel, &application).unwrap();
+    assert_eq!(initial.len(), 2);
+    assert!(initial.iter().all(|c| c.selected));
+    assert_eq!(initial[1].parent.as_deref(), Some(initial[0].id.as_str()));
+    let policy = Policy::from_selection(&initial, &[initial[0].id.clone()]).unwrap();
+    let next = privacy::catalog_from_app(&policy, &cancel, &application).unwrap();
+    assert!(next[0].selected);
+    assert!(!next[1].selected);
+    let encoded = serde_json::to_string(&next).unwrap();
+    assert!(!encoded.contains("StoreID"));
+    assert!(!encoded.contains("EntryID"));
+    assert!(privacy::catalog_from_app(&policy, &AtomicBool::new(true), &application).is_err());
+}
+
+#[test]
 fn date_and_unread_presets_find_moved_pst_mail_but_skip_system_and_search_folders() {
     let base = today()
         .unwrap()

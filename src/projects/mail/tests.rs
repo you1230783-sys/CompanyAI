@@ -45,6 +45,7 @@ impl Source for Fixture {
             let sender = "sender@example.test".to_owned();
             let recipients = vec!["to:reader@example.test".into()];
             headers.push(Header {
+                thread_id: "thread".into(),
                 id: jobs::new_id()?,
                 folder_id: folder.id.clone(),
                 subject: format!("工作 {index}"),
@@ -79,7 +80,9 @@ impl Source for Fixture {
 }
 fn allowed() -> Session {
     let mut session = Session::default();
-    session.set_consent(Some(Box::new(|_, _| Ok(true))));
+    session.set_consent(Some(Box::new(|_, _| {
+        Ok(Some(crate::outlook::privacy::Policy::default()))
+    })));
     assert!(session
         .authorize(&AtomicBool::new(false), Instant::now())
         .unwrap());
@@ -272,4 +275,53 @@ fn incomplete_scan_is_not_a_complete_weekly_report() {
         .unwrap();
     assert_eq!(page["scan_complete"], false);
     assert_eq!(page["notices"][0], "測試讀取失敗");
+}
+
+#[test]
+fn selected_folders_are_filtered_before_model_output_and_changed_scope_rejects_resume() {
+    let mut source = Fixture::default();
+    let allowed_folder = folder("first");
+    let policy = crate::outlook::privacy::Policy {
+        configured: true,
+        allowed: [crate::outlook::privacy::key(
+            &allowed_folder.store,
+            &allowed_folder.entry,
+        )]
+        .into_iter()
+        .collect(),
+    };
+    let mut session = Session::default();
+    session.set_consent(Some(Box::new(move |_, _| Ok(Some(policy.clone())))));
+    let cancel = AtomicBool::new(false);
+    session.authorize(&cancel, Instant::now()).unwrap();
+    let result = session
+        .folders(&mut source, "local_inbox", None, 0, &cancel)
+        .unwrap();
+    assert_eq!(result["total"], 1);
+    assert!(!result.to_string().contains("second"));
+    assert!(!result.to_string().contains("PRIVATE_STORE"));
+    let before = source.calls;
+    assert!(session
+        .headers(
+            &mut source,
+            "second",
+            "2026-06-22",
+            "2026-06-28",
+            None,
+            &cancel
+        )
+        .is_err());
+    assert_eq!(source.calls, before);
+    let mut resumed = Session {
+        saved: session.saved,
+        ..Default::default()
+    };
+    resumed.set_consent(Some(Box::new(|_, _| {
+        Ok(Some(crate::outlook::privacy::Policy {
+            configured: true,
+            allowed: Default::default(),
+        }))
+    })));
+    assert!(resumed.authorize(&cancel, Instant::now()).is_err());
+    assert!(!resumed.is_allowed());
 }

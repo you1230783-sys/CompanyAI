@@ -91,6 +91,9 @@ pub fn decision(reply: &str, mails: &[Mail], allow: bool, maximum: usize) -> App
     Ok(result)
 }
 pub fn prompt(mails: &[Mail], allow: bool, maximum: usize) -> AppResult<String> {
+    for mail in mails {
+        super::validate_preview(&mail.preview)?;
+    }
     let data =
         serde_json::json!({"allow_export":allow,"max_exports":maximum.min(20),"mails":mails});
     let prompt = format!("{SKILL}\n\n本次資料：\n{data}");
@@ -182,12 +185,15 @@ pub(super) fn connect() -> AppResult<(ComApartment, IDispatch)> {
     Ok((apartment, app))
 }
 fn snapshot(item: &IDispatch) -> AppResult<Mail> {
+    super::privacy::require_item(&super::privacy::Policy::current()?, item)?;
     let parent = object(&get(item, "Parent", &mut [])?)?;
     Ok(Mail {
         id: jobs::new_id()?,
         folder: text(&parent, "FolderPath", 4096)?,
         store_id: text(&parent, "StoreID", 4096)?,
         preview: MailPreview {
+            privacy_revision: Some(super::privacy::Policy::current()?.revision()),
+            store_id: text(&parent, "StoreID", 4096)?,
             subject: text(item, "Subject", 3000)?,
             sender: text(item, "SenderName", 3000)?,
             to: text(item, "To", 4096)?,
@@ -222,7 +228,12 @@ pub fn list(
         if i32::try_from(&get(&item, "Class", &mut [])?).ok() != Some(43) {
             return Err("目前項目不是郵件。".into());
         }
-        list.mails.push(snapshot(&item)?);
+        if super::privacy::folder_allowed(
+            &super::privacy::Policy::current()?,
+            &object(&get(&item, "Parent", &mut [])?)?,
+        )? {
+            list.mails.push(snapshot(&item)?);
+        }
         return Ok(list);
     }
     let collection = object(&get(&window, "Selection", &mut [])?)?;
@@ -238,7 +249,12 @@ pub fn list(
             list.truncated = true;
             break;
         }
-        list.mails.push(snapshot(&item)?);
+        if super::privacy::folder_allowed(
+            &super::privacy::Policy::current()?,
+            &object(&get(&item, "Parent", &mut [])?)?,
+        )? {
+            list.mails.push(snapshot(&item)?);
+        }
     }
     if count > 10_000 {
         list.truncated = true;
@@ -279,6 +295,7 @@ pub fn export(
     {
         return Err("原郵件已移動或不存在，請重新取得清單。".into());
     }
+    super::privacy::require_item(&super::privacy::Policy::load(root)?, &item)?;
     // 快照關鍵欄位改變時停止，不能把新內容當成先前授權的郵件。
     if text(&item, "Subject", 3000)? != mail.preview.subject
         || text(&item, "SenderName", 3000)? != mail.preview.sender

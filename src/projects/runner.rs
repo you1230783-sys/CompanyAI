@@ -189,6 +189,7 @@ fn run_for(
     let mut record = json!({"project_id":run.project.id,"conversation_id":run.conversation,"state":"starting","requests":[],"operations":[],"outputs":[]});
     checkpoint(&journal, &record)?;
     let mut broker = Broker::new(run.project.clone(), run.id.clone())?;
+    broker.set_outlook_root(&run.root);
     broker.set_outlook_consent(run.outlook_consent.take());
     broker.set_file_waiter(run.file_waiter.take());
     if let Some(renderer) = png_renderer {
@@ -240,6 +241,7 @@ fn run_for(
                 }
             }
             broker.restore(saved.broker, &run.cancel)?;
+            broker.reauthorize_outlook(&run.cancel, Instant::now() + budget)?;
             checkpoint_owned.set(true);
             pending_model = saved.pending_model;
             request_text = saved.request_text;
@@ -340,7 +342,9 @@ fn run_for(
                 if let Some(inbox) = &run.instructions {
                     let entries = inbox.boundary(false)?;
                     if !entries.is_empty() {
+                        broker.archive_results()?;
                         progress_state.add_instructions(entries);
+                        progress_state.compact_for_instruction();
                         report(
                             &mut activity,
                             &mut progress,
@@ -401,6 +405,12 @@ fn run_for(
                     return pause(&error, &broker, &progress_state, pending_model.as_ref());
                 }
             };
+            let datasets = broker.dataset_index();
+            if datasets.as_array().is_some_and(|v| !v.is_empty()) {
+                messages.push(super::agent::Message::user(&format!(
+                    "已保存的本地 CSV 資料集（只送索引，不重送原始資料）：{datasets}"
+                )));
+            }
             if native {
                 messages[0].content = super::agent::system_prompt();
             }
@@ -599,7 +609,9 @@ fn run_for(
                 });
                 let entries = inbox.boundary(terminal)?;
                 if !entries.is_empty() {
+                    broker.archive_results()?;
                     progress_state.add_instructions(entries);
+                    progress_state.compact_for_instruction();
                     let skipped = json!({"ok":false,"executed":false,"reason":"使用者在本輪期間補充指示；此候選操作未執行，請依新要求重新決定。"});
                     if let Some((message, call_id)) = native_call {
                         progress_state.push_native(message, &call_id, &skipped);
@@ -780,6 +792,33 @@ fn run_for(
                     checkpoint(&journal, &record)?;
                     // 寫入結果與副本版本都已核對，才能重新提供可恢復 checkpoint。
                     broker.archive_results()?;
+                    if result["ok"] == true {
+                        match &request {
+                            super::Tool::CompactContext {
+                                working_note,
+                                superseded,
+                                next_step,
+                            } => {
+                                progress_state.handoff(working_note, superseded, next_step);
+                                report(
+                                    &mut activity,
+                                    &mut progress,
+                                    "已保存交接筆記並精簡上下文；舊紀錄仍可查回".into(),
+                                );
+                            }
+                            super::Tool::ExportLogDataset { .. }
+                            | super::Tool::ExportExcelDataset { .. } => {
+                                progress_state.compact_now();
+                                report(
+                                    &mut activity,
+                                    &mut progress,
+                                    "CSV 已保存；後續僅帶欄位、統計與首尾預覽，已移出先前工具原文"
+                                        .into(),
+                                );
+                            }
+                            _ => (),
+                        }
+                    }
                     if native && progress_state.needs_compaction() {
                         progress_state.compact_batch();
                         report(
@@ -1062,6 +1101,7 @@ fn replay_safe(tool: &super::Tool) -> bool {
             | ReadExcelRange { .. }
             | OutlookFolders { .. }
             | OutlookHeaders { .. }
+            | OutlookCompare { .. }
             | OutlookRead { .. }
     )
 }

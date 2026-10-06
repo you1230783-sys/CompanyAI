@@ -299,6 +299,12 @@ pub(super) fn list(
         }
         search.folders += 1;
         let result = (|| -> AppResult<()> {
+            if !super::super::privacy::folder_allowed(
+                &super::super::privacy::Policy::current()?,
+                &folder,
+            )? {
+                return Ok(());
+            }
             let key = folder_key(&folder)?;
             if search.excluded.contains(&key) || !search.visited.insert(key) {
                 return Ok(());

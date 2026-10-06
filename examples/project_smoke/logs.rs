@@ -87,6 +87,31 @@ pub fn verify(exe: &Path, root: &Path) -> AppResult<()> {
             found["line"].as_u64().unwrap()
         )));
     }
+    let mut dataset_query = query.clone();
+    dataset_query.context_lines = 0;
+    let dataset_started = std::time::Instant::now();
+    let dataset = call(Tool::ExportLogDataset {
+        query: dataset_query,
+        revisions: vec![],
+        fields: vec![company_ai::projects::datasets::Field {
+            name: "time_seconds".into(),
+            mode: "timestamp_seconds".into(),
+            delimiter: None,
+            index: None,
+            start: None,
+            end: None,
+        }],
+        name: "三十台時間.csv".into(),
+    })?;
+    let dataset_seconds = dataset_started.elapsed().as_secs_f64();
+    assert_eq!(dataset["dataset"]["rows"], 60);
+    assert_eq!(dataset["head"].as_array().unwrap().len(), 10);
+    assert_eq!(dataset["tail"].as_array().unwrap().len(), 10);
+    assert!(dataset.to_string().len() < 20000);
+    assert_eq!(
+        dataset["extraction"]["sources"].as_array().unwrap().len(),
+        30
+    );
     let read = call(Tool::ReadLog {
         path: paths[0].clone(),
         revision: None,
@@ -154,7 +179,7 @@ pub fn verify(exe: &Path, root: &Path) -> AppResult<()> {
         &cancel,
     )?;
     assert_eq!(outside["ok"], false);
-    let report = json!({"files":30,"bytes_per_file":padding.len(),"pages":pages,"matches":found.len(),"elapsed_seconds":started.elapsed().as_secs_f64(),"source_revision_rejection":true,"long_line_continuation":true});
+    let report = json!({"files":30,"bytes_per_file":padding.len(),"pages":pages,"matches":found.len(),"elapsed_seconds":started.elapsed().as_secs_f64(),"source_revision_rejection":true,"long_line_continuation":true,"csv_rows":60,"csv_summary_bytes":dataset.to_string().len(),"csv_scan_seconds":dataset_seconds});
     std::fs::write(
         root.join("verification.json"),
         serde_json::to_vec_pretty(&report).unwrap(),

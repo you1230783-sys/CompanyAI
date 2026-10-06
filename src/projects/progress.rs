@@ -10,6 +10,25 @@ const SOFT_BYTES: usize = 120_000;
 const HARD_BYTES: usize = 240_000;
 const COMPACT_BYTES: usize = HARD_BYTES * 65 / 100;
 
+/// 交接資料有界且必須包含下一步；摘要不改寫使用者授權。
+pub(super) fn validate_handoff(note: &str, superseded: &[String], next: &str) -> AppResult<()> {
+    if note.trim().is_empty()
+        || note.chars().count() > 2000
+        || next.trim().is_empty()
+        || next.chars().count() > 500
+        || superseded.len() > 12
+        || superseded
+            .iter()
+            .any(|s| s.trim().is_empty() || s.chars().count() > 200)
+    {
+        return Err(
+            "交接需包含 1–2000 字工作筆記、1–500 字下一步，及最多 12 條各 200 字的失效結論。"
+                .into(),
+        );
+    }
+    Ok(())
+}
+
 #[derive(Default, Serialize, Deserialize)]
 struct Reading {
     revision: String,
@@ -82,6 +101,14 @@ pub(super) struct Progress {
     note: Option<Note>,
     last_read: Option<String>,
     compact: bool,
+    #[serde(default)]
+    lean_context: bool,
+    #[serde(default)]
+    instruction_review_required: bool,
+    #[serde(default)]
+    superseded: Vec<String>,
+    #[serde(default)]
+    next_step: String,
     repair: Option<String>,
     consecutive_repairs: usize,
     total_repairs: usize,
@@ -106,6 +133,10 @@ impl Progress {
             note: None,
             last_read: None,
             compact: false,
+            lean_context: false,
+            instruction_review_required: false,
+            superseded: vec![],
+            next_step: String::new(),
             repair: None,
             consecutive_repairs: 0,
             total_repairs: 0,
@@ -120,6 +151,7 @@ impl Progress {
         for entry in entries {
             if entry.status != "withdrawn" && !self.instructions.iter().any(|e| e.id == entry.id) {
                 self.instructions.push(entry);
+                self.instruction_review_required = true;
                 self.no_progress = 0;
                 self.repair = None;
             }
@@ -138,11 +170,36 @@ impl Progress {
     /// 自動換批只縮短工作上下文，不重設無進展／修復計數，避免無限循環。
     /// 呼叫前必須先由 broker 保存完整原文，筆記永遠不取代操作去重表。
     pub fn compact_batch(&mut self) {
+        self.compact_keep(2);
+    }
+
+    /// 呼叫端需先封存 broker 原文；主動整理僅留下本次工具的一對訊息。
+    pub fn compact_now(&mut self) {
+        self.lean_context = true;
+        self.compact_keep(1);
+    }
+    /// 新補充尚未經模型核對，不杜撰新筆記；舊筆記明示需要重新檢查。
+    pub fn compact_for_instruction(&mut self) {
+        self.lean_context = true;
+        self.instruction_review_required = true;
+        self.compact_keep(0);
+    }
+    pub fn handoff(&mut self, note: &str, superseded: &[String], next: &str) {
+        self.note = Some(Note {
+            text: note.trim().into(),
+            covered: self.history.len(),
+        });
+        self.superseded = superseded.to_vec();
+        self.next_step = next.trim().into();
+        self.instruction_review_required = false;
+        self.compact_now();
+    }
+    fn compact_keep(&mut self, keep: usize) {
         self.checkpoints += 1;
         self.compact = true;
         // 完整原始結果仍存在加密 broker 操作簿，可用 read_work_log 分段取回。
-        // 續接使用最新兩筆結果、摘要與程式狀態，避免第二段再碰到 204 則訊息上限。
-        let remove = self.history.len().saturating_sub(2);
+        // 依切換原因留下 0–2 對結果、摘要與程式狀態，避免續接再碰到訊息上限。
+        let remove = self.history.len().saturating_sub(keep);
         self.history.drain(..remove);
         self.history_ids.drain(..remove.min(self.history_ids.len()));
         if let Some(note) = self.note.as_mut() {
@@ -215,7 +272,7 @@ impl Progress {
             if operation.to_string().len()<=4000 {operation.clone()}else{json!({"id":operation["id"],"tool":operation["tool"],"details":"大型操作資料已保存在 read_work_log，可按 operation_id 分頁查回。"})}
         }).collect();
         json!({"readings":readings,"copies":copies,"operations":operations,"tool_usage":self.tool_usage,"operations_omitted":self.operations.len().saturating_sub(20),
-            "working_note":{"requirements":"以本次保留的使用者原文及補充為準，不由筆記改寫授權", "model_summary":self.note.as_ref().map(|n| &n.text),"summary_warning":"模型摘要可能尚未涵蓋最近步驟；完成狀態依 operations、copies 及工具原文核對","checkpoint_count":self.checkpoints,"next_step":"依原始要求、最近結果及摘要待辦繼續；缺少細節時先 read_work_log，不重做已成功修改"},
+            "working_note":{"requirements":"以本次保留的使用者原文及補充為準，不由筆記改寫授權", "model_summary":self.note.as_ref().map(|n| &n.text),"superseded_conclusions":self.superseded,"planned_next_step":self.next_step,"instruction_review_required":self.instruction_review_required,"summary_warning":"模型摘要可能尚未涵蓋最近步驟；instruction_review_required=true 時必須先依最新補充重新核對欄位與結論，不沿用被否定的圖表。完成狀態依 operations、copies 及工具原文核對","checkpoint_count":self.checkpoints,"next_step":"依原始要求、最近結果及摘要待辦繼續；缺少細節時先 read_work_log，不重做已成功修改"},
             "note":self.note.as_ref().map(|n| &n.text),"note_covers_tools":self.note.as_ref().map(|n| n.covered),
             "total_repairs":self.total_repairs,"consecutive_repairs":self.consecutive_repairs,
             "no_progress":self.no_progress})
@@ -243,12 +300,17 @@ impl Progress {
             object.remove("sheets");
             object.remove("lines");
             object.remove("matches");
+            object.remove("head");
+            object.remove("tail");
         }
         self.operations
             .push(json!({"id":id,"tool":tool.label(),"result":metadata}));
         let mut new = false;
         // 使用者拒絕的工具雖正常返回，仍沒有執行；換參數不能製造假進度。
-        if result["ok"] == true && result["result"]["executed"] != false {
+        if result["ok"] == true
+            && result["result"]["executed"] != false
+            && !matches!(tool, Tool::CompactContext { .. })
+        {
             let info = &result["result"];
             if let Tool::ReadFile { path, .. } | Tool::ReadDocumentSection { path, .. } = tool {
                 let revision = info["revision"].as_str().unwrap_or("");
@@ -366,7 +428,7 @@ impl Progress {
         // 使用者原話及最新補充完全不裁切，避免把任務條件換成模型摘要。
         let mut base_bytes: usize = messages.iter().map(|m| m.wire().to_string().len()).sum();
         for (index, message) in messages.iter_mut().enumerate() {
-            if base_bytes <= 60_000 {
+            if base_bytes <= 60_000 && !self.lean_context {
                 break;
             }
             if message.role != "assistant" || message.content.len() <= 2000 {
@@ -439,6 +501,57 @@ impl Progress {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn explicit_handoff_survives_checkpoint_without_raw_history_or_counter_reset() {
+        let mut state = Progress::new(vec![Message::user("原始要求：保持來源唯讀")]);
+        for i in 0..6 {
+            state.push_tool(format!("tool{i}"), "大量原始資料".repeat(1000));
+        }
+        state.total_repairs = 3;
+        state.no_progress = 5;
+        let request = Tool::CompactContext {
+            working_note: "正確欄位 F；資料集 data.csv 100筆".into(),
+            superseded: vec!["C 欄錯誤".into()],
+            next_step: "由 F 重畫".into(),
+        };
+        state.observe("compact", &request, &json!({"ok":true,"result":{}}));
+        state.push_tool("compact_context".into(), "已封存".into());
+        state.handoff(
+            "正確欄位 F；資料集 data.csv 100筆",
+            &["C 欄錯誤".into()],
+            "由 F 重畫",
+        );
+        let encoded = serde_json::to_vec(&state).unwrap();
+        let mut restored: Progress = serde_json::from_slice(&encoded).unwrap();
+        let messages = restored.messages(json!([])).unwrap();
+        let wire = serde_json::to_string(&messages).unwrap();
+        assert!(!wire.contains("大量原始資料"));
+        assert!(wire.contains("保持來源唯讀"));
+        assert!(wire.contains("C 欄錯誤"));
+        assert_eq!(restored.total_repairs, 3);
+        assert_eq!(restored.no_progress, 6);
+        assert!(restored.seen_ids.contains("compact"));
+        assert!(validate_handoff("", &[], "下一步").is_err());
+    }
+    #[test]
+    fn correction_retains_verbatim_instruction_and_marks_old_note_for_review() {
+        let mut state = Progress::new(vec![Message::user("原始要求")]);
+        state.push_tool("read".into(), "舊大量數值".repeat(2000));
+        state.accept_note(Some("用 C 欄"));
+        state.add_instructions(vec![super::super::steering::Instruction {
+            id: "i".into(),
+            text: "改用 F，原件唯讀".into(),
+            status: "staged".into(),
+        }]);
+        state.compact_for_instruction();
+        let messages = serde_json::to_string(&state.messages(json!([])).unwrap()).unwrap();
+        assert!(!messages.contains("舊大量數值"));
+        assert!(messages.contains("改用 F，原件唯讀"));
+        assert_eq!(
+            state.snapshot(json!([]))["working_note"]["instruction_review_required"],
+            true
+        );
+    }
     #[test]
     fn declined_tools_cannot_keep_a_long_task_alive_by_changing_parameters() {
         let mut state = Progress::new(vec![Message::user("整理週報")]);

@@ -52,6 +52,8 @@ pub(super) enum ProjectCommand {
         run_id: String,
         request_id: String,
         allow: bool,
+        #[serde(default)]
+        selected: Vec<String>,
     },
     FileReady {
         conversation: String,
@@ -94,7 +96,12 @@ pub(super) enum ProjectCommand {
 }
 pub(super) enum ProjectEvent {
     FileBusy(String, String, String, mpsc::Sender<bool>),
-    OutlookConsent(String, String, mpsc::Sender<bool>),
+    OutlookConsent(
+        String,
+        String,
+        Vec<crate::outlook::privacy::Choice>,
+        mpsc::Sender<Option<Vec<String>>>,
+    ),
     ReviewChart(
         String,
         String,
@@ -118,7 +125,8 @@ struct PendingChart {
 }
 struct PendingOutlook {
     id: String,
-    reply: mpsc::Sender<bool>,
+    folders: Vec<crate::outlook::privacy::Choice>,
+    reply: mpsc::Sender<Option<Vec<String>>>,
 }
 struct PendingFile {
     id: String,
@@ -303,7 +311,7 @@ impl App {
     pub(super) fn project_state(&self) -> serde_json::Value {
         json!({"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len()})).collect::<Vec<_>>(),
             "chart_review":self.projects.running.as_ref().and_then(|r|r.pending_chart.as_ref().map(|p|json!({"request_id":p.id,"review":p.review}))),
-            "outlook_consent":self.projects.running.as_ref().and_then(|r|r.pending_outlook.as_ref().map(|p|json!({"request_id":p.id}))),
+            "outlook_consent":self.projects.running.as_ref().and_then(|r|r.pending_outlook.as_ref().map(|p|json!({"request_id":p.id,"folders":p.folders}))),
             "file_busy":self.projects.running.as_ref().and_then(|r|r.pending_file.as_ref().map(|p|json!({"request_id":p.id,"message":p.message}))),
             "supplements":self.projects.running.as_ref().and_then(|r|r.instructions.entries().ok()),
             "queued":self.archive.conversations.iter().find(|c| Some(&c.id)==self.active_id.as_ref()).and_then(|c| c.project_queued.as_ref()).map(|q| json!({"id":q.id,"text":q.text,"after_run":q.after_run,"interrupt":q.interrupt,"auto_start":q.auto_start})),
@@ -412,6 +420,7 @@ impl App {
             run_id,
             request_id,
             allow,
+            selected,
         } = &command
         {
             if !self.logged_in()
@@ -437,13 +446,22 @@ impl App {
             {
                 return Err("Outlook 確認不屬於目前請求。".into());
             }
+            if *allow {
+                crate::outlook::privacy::Policy::from_selection(
+                    &run.pending_outlook
+                        .as_ref()
+                        .ok_or("缺少資料夾清單。")?
+                        .folders,
+                    selected,
+                )?;
+            }
             let pending = run
                 .pending_outlook
                 .take()
                 .ok_or("找不到待確認的 Outlook 請求。")?;
             pending
                 .reply
-                .send(*allow)
+                .send(allow.then(|| selected.clone()))
                 .map_err(|_| "Outlook 等待已結束，未新增授權。")?;
             self.projects.status = if *allow {
                 "已同意本次 Outlook 讀取…"
@@ -886,23 +904,36 @@ impl App {
             });
         let consent_tx = self.tx.clone();
         let consent_run = id.clone();
+        let consent_root = self.root.clone();
         let outlook_consent: projects::mail::Consent = Box::new(move |cancel, deadline| {
+            let previous = crate::outlook::privacy::Policy::load(&consent_root)?;
+            let folders = crate::outlook::privacy::catalog(&previous, cancel)?;
             let (reply, response) = mpsc::channel();
             consent_tx
                 .send(Event::Project(ProjectEvent::OutlookConsent(
                     consent_run.clone(),
                     crate::jobs::new_id()?,
+                    folders.clone(),
                     reply,
                 )))
                 .map_err(|_| "桌面介面已關閉，Outlook 未讀取。")?;
             loop {
                 if cancel.load(Ordering::Relaxed) || Instant::now() >= deadline {
-                    return Ok(false);
+                    return Ok(None);
                 }
                 match response.recv_timeout(Duration::from_millis(100)) {
-                    Ok(allow) => return Ok(allow),
+                    Ok(Some(selected)) => {
+                        let policy =
+                            crate::outlook::privacy::Policy::from_selection(&folders, &selected)?;
+                        if cancel.load(Ordering::Relaxed) || Instant::now() >= deadline {
+                            return Ok(None);
+                        }
+                        policy.save(&consent_root)?;
+                        return Ok(Some(policy));
+                    }
+                    Ok(None) => return Ok(None),
                     Err(mpsc::RecvTimeoutError::Timeout) => (),
-                    Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(false),
+                    Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(None),
                 }
             }
         });
@@ -1066,7 +1097,7 @@ impl App {
                     run.activity.push(self.projects.status.clone());
                 }
             }
-            ProjectEvent::OutlookConsent(id, request_id, reply) => {
+            ProjectEvent::OutlookConsent(id, request_id, folders, reply) => {
                 if let Some(run) = self
                     .projects
                     .running
@@ -1075,9 +1106,10 @@ impl App {
                 {
                     run.pending_outlook = Some(PendingOutlook {
                         id: request_id,
+                        folders,
                         reply,
                     });
-                    self.projects.status = "等待同意本次 Outlook 資料讀取…".into();
+                    self.projects.status = "等待確認 AI 可使用的 Outlook 資料夾…".into();
                     run.activity.push(self.projects.status.clone());
                 }
             }
