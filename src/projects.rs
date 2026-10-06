@@ -5,6 +5,7 @@ pub mod datasets;
 mod delegation;
 pub mod diagnostics;
 pub mod events;
+pub mod excel_plan;
 pub mod files;
 pub mod interaction;
 pub mod logs;
@@ -204,6 +205,18 @@ pub enum Tool {
         path: String,
         revision: Option<String>,
     },
+    /// 模型提出欄位用途，本機用表頭與樣本核對後鎖定。
+    PlanExcelAnalysis {
+        proposal: Box<excel_plan::Proposal>,
+    },
+    ExportPlannedExcel {
+        plan_id: String,
+        start_row: usize,
+        scan_rows: usize,
+        window: Option<excel_plan::Window>,
+        name: String,
+    },
+    // 以下沿用既有本地 CSV 畫圖入口。
     ChartDataset {
         path: String,
         revision: String,
@@ -382,6 +395,8 @@ impl Tool {
             Self::CreateChart { .. } | Self::ChartFromExcel { .. } => "建立圖表",
             Self::ExportChartPng { .. } => "儲存圖表 PNG",
             Self::AnalyzeImage { .. } => "辨識專案圖片（試驗）",
+            Self::PlanExcelAnalysis { .. } => "核對並鎖定 Excel 分析欄位",
+            Self::ExportPlannedExcel { .. } => "依規劃篩選 Excel 並匯出 CSV",
             Self::SummarizeDocument { .. } => "快速模型摘要",
             Self::ListFiles { .. } => "讀取檔案清單",
             Self::ReadFile { .. } => "閱讀檔案",

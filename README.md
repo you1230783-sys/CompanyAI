@@ -1,8 +1,10 @@
+> **0.8.40：Excel 欄位核對與圖表自訂。** 時間／X／Y先規劃再本機篩選。完成圖表可雙擊或按「編輯圖表」，調整標題、軸範圍、圖例、色彩與參考線；可恢復原樣，或直接存PNG至_AI_Output。類別軸使用實際標籤（時間請含完整秒數），重複標籤可用 #資料序號。新增階梯線、面積及水平長條。詳見 [本版驗證與限制](docs/VALIDATION_0_8_40.md)。
+
 # LM_AI — Windows 工作助理
 
 CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供日常問答、文件整理、專案副本修訂與 Classic Outlook 郵件分析。
 
-**目前 EXE：0.8.39** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
+**目前 EXE：0.8.40** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
 
 ## 下載與開始使用
 
@@ -12,7 +14,7 @@ CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供�
 
 執行需要 WebView2 Runtime，不需安裝 Rust、Node 或 Python。若啟動時提示缺少 WebView2，請依 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md) 處理。正式功能需要公司服務連線與桌面帳號權限。
 
-目前 `dist/LM_AI_Setup.exe` 仍是 **0.8.15** 安裝包；本版只更新 EXE，請勿將舊安裝包或歷史離線 ZIP 視為 0.8.39。
+目前 `dist/LM_AI_Setup.exe` 仍是 **0.8.15** 安裝包；本版只更新 EXE，請勿將舊安裝包或歷史離線 ZIP 視為 0.8.40。
 
 ## 可以做什麼
 

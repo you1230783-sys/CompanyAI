@@ -114,6 +114,17 @@ window.runSelfTest = async (structuredFixture) => {
     chartHost.querySelector("button").click(); check(!!chartHost.querySelector(".chart-expanded"), "chart expand");
     const largeChart = {kind:"line",title:"一萬筆趨勢",x_label:"時間",y_label:"數值",x:Array.from({length:10000},(_,i)=>i),series:[{name:"A",values:Array.from({length:10000},(_,i)=>i===3000?null:i)}],source:"本機測試"};
     const png = ChartUI.exportPng(largeChart);
+    const custom=ChartEditor.defaults(largeChart);custom.title="自訂標題";custom.y_min=140;custom.y_max=180;custom.legend="bottom_right";custom.lines=[{axis:"y",value:170,name:"上限",color:"#ff0000"}];custom.series[0].color="#008800";
+    const customOption=ChartUI.option(largeChart,true,custom);
+    check(customOption.title.left==="center" && customOption.title.text==="自訂標題" && customOption.yAxis.min===140 && customOption.yAxis.max===180,"chart custom title and axis range");
+    check(customOption.series[0].markLine.data[0].yAxis===170 && customOption.series[0].itemStyle.color==="#008800","chart reference line and series color");
+    check(ChartUI.sourceLabel("量測.xlsx | excel:"+"a".repeat(64)+" | 工作表1 | 原始列2–60")==="量測.xlsx | 工作表1 | 原始列2–60","chart source hides revision only");
+    for(const kind of ["step","area","horizontal_bar"]){const data={...largeChart,kind};const out=ChartUI.exportPng(data);check(out.startsWith("data:image/png;base64,"),`chart PNG supports ${kind}`);}
+    check(ChartEditor.position({x:["12:00:00","13:00:00"]},"line","x","13:00:00")===1,"category time range uses original label");
+    let applied=null;ChartEditor.open(largeChart,custom,value=>{applied=value;});
+    const editor=document.querySelector(".chart-edit-dialog");editor.querySelector("input").value="使用者標題";editor.querySelector("form").requestSubmit();
+    check(applied?.title==="使用者標題" && !document.querySelector(".chart-edit-dialog"),"chart editor applies validated settings");
+    check(largeChart.title==="一萬筆趨勢" && largeChart.series[0].values[0]===0,"chart editing preserves original data");
     const pngHeader = atob(png.slice("data:image/png;base64,".length, "data:image/png;base64,".length + 32));
     check(png.startsWith("data:image/png;base64,") && pngHeader.slice(1,4)==="PNG", "PNG export returns PNG bytes");
     ChartUI.render(chartHost,[largeChart]); await frame();

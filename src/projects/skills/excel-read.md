@@ -1,6 +1,10 @@
-# Excel 選欄讀取
+# Excel 選欄與分析規劃
 
-Excel 大量資料：先 inspect_excel 取得工作表、表頭與 excel: 版本，再 read_excel_range 選 columns（可不連續，例如 ["A","F"]）、start_row、row_count（預設 100，最多 2000 資料格／批）。只讀所需欄，依 next_row 續讀；表頭不一定第 1 列，必要時指定 header_row。部分欄／列不代表全文已讀，不要求全文件摘要；保留有用的範圍與結論即可。畫圖優先 export_excel_dataset 將已確認欄位及範圍保存為本地 CSV，再 chart_dataset 直接讀 CSV；不要為畫圖逐頁傳回所有數值。chart_excel_range 保留作使用者明確要求不建立 CSV 時的直接繪圖方式。全期間要求不能擅自只取前 100 列；單張最多 10000 筆、8 個 Y 系列，X 加 Y 最多 90000 格（與一般閱讀 2000 格分開），超過時分圖或詢問範圍，不自行抽樣。Y 空白保留 null；畫圖異常值由桌面詢問使用者，不自行填零；公式可讀 Excel 提供的數值，日期 Value2 是序號，text 為格式化文字。這些工具只讀已儲存路徑；未儲存小型工作副本沿用 read_file／chart_from_excel。大型文件編輯仍受原快照上限。
+1. 分析或畫圖先 inspect_excel 核對每個檔案自己的工作表、表頭、excel: 版本與 used_range。需要樣本時 read_excel_range，只讀少量必要欄；最多2000資料格／批。不要把檔案A的欄字母直接套到檔案B。
+2. 由你理解使用者用詞，再呼叫 plan_excel_analysis：purpose 保留使用者需求原文；reason 簡述用詞和表頭／樣本的對應。分開指定 x、y、time（篩選欄）；每欄帶原始大寫欄字母與真實表頭。例：「透光值」可能是 D／圖樣Mean值；B／紀錄時間應供時間篩選或X，不能因 Value2 為數字就選為量測Y。別名不是固定字典；若多欄都合理，先 ask_user。
+3. y_kind=measurement 是量測值；只有使用者確實要求時間作Y才用time，不為通過檢查而改用途。time_mode=time_of_day 表示一天中的時間，elapsed 表示經過時間；HH:MM 永遠表示時:分。含日期的序號不能默默去日期；資料意義不清楚先詢問。
+4. 沿用 plan_id 呼叫 export_planned_excel，指定表頭後 start_row、scan_rows 與 window。時間由本機篩選，起點包含、終點不含，例如12:00–13:00；time_of_day的終點可24:00，終點小於起點表示跨午夜。無篩選填window=null。最多掃描250000列／120秒，符合最多10000列／9欄／90000格，超過需縮小範圍或分批，不自行抽樣。依used_range涵蓋要求；scan_complete=false時沿next_source_row完成剩餘範圍，不把部分結果當作完整時段。
+5. chart_dataset 直接讀CSV；x_column/y_columns 必須沿用規劃。只選B/D仍叫B/D，不重新編成A/B。CSV保存表頭、格式、來源版本、規劃與時間條件；精簡上下文後用inspect_dataset取回，不重抄所有數值。更正需求需重新規劃並匯出；不要改走create_chart／舊工具繞過鎖定。
+6. 多檔案多時段：每檔核對並規劃一次，每個時段分別匯出及作圖。標題／檔名包含來源與時段，保留完成清單；同一plan只可用於同檔同版本。3檔×5時段應產生15張，沒有資料或失敗的組合明確列出，不能當作成功。
 
-
-畫圖先載入 charts 技能。
+畫圖先載入charts。Excel Value2是原值，text是顯示文字，number_format是格式；時間的小數是儲存表示，不是量測值。Y空白保留null，文字／錯誤沿用桌面異常值處理，不猜成0。公式只讀當次結果，不刷新外部連結。一般閱讀依next_row續讀，不將選欄視為全文。未儲存小型工作副本沿用read_file／chart_from_excel；已儲存分析走上述規劃流程。

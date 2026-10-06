@@ -2,6 +2,10 @@
 "use strict";
 window.ChartUI = (() => {
   const charts = new Map();
+  let pendingSave = null;
+  const command=value=>send({type:"project",command:value});
+  // 版本仍在原生資料保存，只在顯示／PNG拿掉完整版本碼。
+  function sourceLabel(source) {return String(source || "").split("|").filter(s=>!/^\s*(?:excel:)?[a-f0-9]{64}\s*$/i.test(s)).map(s=>s.trim()).join(" | ");}
   const observer = new ResizeObserver(entries => {
     for (const {target} of entries) charts.get(target)?.resize();
   });
@@ -11,25 +15,33 @@ window.ChartUI = (() => {
     }
   }
   // 畫面與 PNG 共用資料／座標規則；匯出另建畫布，避免跟隨聊天室縮放或隱藏狀態。
-  function option(data, exporting = false) {
+  function option(data, exporting = false, style = null) {
+    const view=style || ChartEditor.defaults(data), horizontal=view.kind==="horizontal_bar", scatter=view.kind==="scatter";
+    const legend={show:view.legend!=="hidden",type:"scroll",...(view.legend==="right"?{orient:"vertical",right:12,top:80,bottom:exporting?170:110}:view.legend==="top"?{top:55,left:"center"}:view.legend==="bottom_right"?{bottom:exporting?100:65,right:20}:{bottom:exporting?100:65,left:"center"})};
+    const axis=(name,type,values,min,max)=>({type,name,nameLocation:"middle",nameGap:40,...(values?{data:values}:{}),...(min!=null?{min}:{}),...(max!=null?{max}:{}),axisLabel:{hideOverlap:true}});
+    const xa=axis(view.x_label,horizontal||scatter?"value":"category",horizontal||scatter?null:data.x,view.x_min,view.x_max);
+    const ya=axis(view.y_label,horizontal?"category":"value",horizontal?data.x:null,view.y_min,view.y_max);
     return {animation:false, backgroundColor: exporting ? "#fff" : "transparent",
-      aria:{enabled:true}, legend:{top:exporting ? 80 : 0},
-      tooltip:{trigger:data.kind === "scatter" ? "item" : "axis", renderMode:"richText"},
-      grid:{left:exporting ? 100 : 70,right:40,top:exporting ? 140 : 50,bottom:exporting ? 160 : 100},
-      title:exporting ? {text:data.title,left:60,top:20,textStyle:{fontSize:20,width:1480,overflow:"break"}} : undefined,
-      graphic:exporting ? [{type:"text",left:60,bottom:20,style:{text:`來源：${data.source}\n${data.data_note || ""}`,fontSize:12,fill:"#444",width:1480,overflow:"break"}}] : [],
-      dataZoom:exporting ? [] : [{type:"inside",filterMode:"none"},{type:"slider",bottom:10,filterMode:"none"}],
-      xAxis:{type:data.kind === "scatter" ? "value" : "category",name:data.x_label,nameLocation:"middle",nameGap:35,...(data.kind === "scatter" ? {} : {data:data.x})},
-      yAxis:{type:"value",name:data.y_label},
-      series:data.series.map(s => {
+      aria:{enabled:true}, legend,
+      tooltip:{trigger:scatter ? "item" : "axis", renderMode:"richText"},
+      grid:{left:exporting ? 110 : 75,right:view.legend==="right"?(exporting?240:170):40,top:view.legend==="top"?105:80,bottom:exporting ? 200 : 145,containLabel:true},
+      title:{text:view.title,left:"center",top:16,textStyle:{fontSize:exporting?22:18,width:exporting?1450:550,overflow:"break"}},
+      graphic:exporting ? [{type:"text",left:60,bottom:20,style:{text:`來源：${sourceLabel(data.source)}\n${data.data_note || ""}`,fontSize:12,fill:"#444",width:1480,overflow:"break"}}] : [],
+      dataZoom:exporting ? [] : [{type:"inside",filterMode:"none",...(horizontal?{yAxisIndex:0}:{xAxisIndex:0})},{type:"slider",bottom:10,filterMode:"none",...(horizontal?{yAxisIndex:0,orient:"vertical",right:0,top:80,bottom:145}:{xAxisIndex:0})}],
+      xAxis:xa,yAxis:ya,
+      series:data.series.map((s,index) => {
         const skip=new Set(s.skip_indices || []);
         // 明確 X 座標可略過單系列的異常點；真正空白仍保留 null，不能一起連線。
-        const values=s.values.flatMap((v,i)=>skip.has(i) ? [] : [[data.kind === "scatter" ? data.x[i] : i,v]]);
-        return {name:s.name,type:data.kind,connectNulls:false,progressive:0,showSymbol:data.x.length <= 300,encode:{x:0,y:1},data:values};
+        const values=s.values.flatMap((v,i)=>skip.has(i) ? [] : [horizontal?[v,i]:[scatter?data.x[i]:i,v]]);
+        return {name:view.series[index].name,type:["area","step"].includes(view.kind)?"line":horizontal?"bar":view.kind,
+          ...(view.kind==="step"?{step:"end"}:{}),...(view.kind==="area"?{areaStyle:{opacity:0.2}}:{}),
+          itemStyle:{color:view.series[index].color},lineStyle:{color:view.series[index].color},
+          markLine:index===0?{symbol:["none","none"],silent:true,data:view.lines.map(l=>({name:l.name,[l.axis==="x"?"xAxis":"yAxis"]:l.value,lineStyle:{color:l.color,type:"dashed"},label:{formatter:l.name || String(l.value),color:l.color}}))}:undefined,
+          connectNulls:false,progressive:0,showSymbol:data.x.length <= 300,encode:{x:0,y:1},data:values};
       })};
   }
-  function exportPng(data) {
-    if (!data || !["line","bar","scatter"].includes(data.kind) || !Array.isArray(data.x) ||
+  function exportPng(data,style = null) {
+    if (!data || !["line","bar","scatter","step","area","horizontal_bar"].includes(data.kind) || !Array.isArray(data.x) ||
         data.x.length < 1 || data.x.length > 10000 || !Array.isArray(data.series) ||
         data.series.length < 1 || data.series.length > 8 || data.series.some(s => s.values.length !== data.x.length)) {
       throw new Error("圖表資料不合法");
@@ -40,7 +52,7 @@ window.ChartUI = (() => {
     let instance;
     try {
       instance = echarts.init(canvas, null, {renderer:"canvas",width:1600,height:1000,devicePixelRatio:1});
-      instance.setOption(option(data, true), {notMerge:true,lazyUpdate:false});
+      instance.setOption(option(data, true, style), {notMerge:true,lazyUpdate:false});
       // ECharts 可能對大型系列分批繪製；匯出必須同步完成全圖。
       instance.getZr().flush();
       return instance.getDataURL({type:"png",pixelRatio:1,backgroundColor:"#fff"});
@@ -98,19 +110,36 @@ window.ChartUI = (() => {
     return details;
   }
 
-  function render(container, values) {
-    const signature = JSON.stringify(values || []);
+  function render(container, values, context = null) {
+    const signature = JSON.stringify([values || [],context]);
     if (container.dataset.chartSignature === signature) return;
     container.dataset.chartSignature = signature;
     container.replaceChildren(); container.hidden = !values?.length; cleanup();
-    for (const data of values || []) {
+    for (const [chart_index,data] of (values || []).entries()) {
+      let style=context?.styles?.[chart_index] || null;
       const card = document.createElement("section"); card.className = "chart-card";
-      const title = document.createElement("h3"); title.textContent = data.title;
+      const title = document.createElement("h3"); title.textContent = data.title;title.className="chart-accessible-title";
       const plot = document.createElement("div"); plot.className = "chart-plot";
       plot.setAttribute("role", "img"); plot.setAttribute("aria-label", `${data.title}：${data.x_label} / ${data.y_label}`);
-      const source = document.createElement("p"); source.className = "chart-source"; source.textContent = [data.source,data.data_note].filter(Boolean).join("\n");
+      const source = document.createElement("p"); source.className = "chart-source"; source.textContent = [sourceLabel(data.source),data.data_note].filter(Boolean).join("\n");
       const expand = document.createElement("button"); expand.className = "text-button"; expand.textContent = "放大圖表";
       expand.onclick = () => { const large = card.classList.toggle("chart-expanded"); expand.textContent = large ? "縮小圖表" : "放大圖表"; };
+      const toolbar=document.createElement("div");toolbar.className="chart-toolbar";toolbar.append(expand);
+      if(context?.request_id) {
+        const target={conversation:context.conversation,message_index:context.message_index,request_id:context.request_id,chart_index};
+        const edit=document.createElement("button"),reset=document.createElement("button"),save=document.createElement("button");
+        edit.textContent="編輯圖表";reset.textContent="恢復原樣";save.textContent="儲存此圖片";
+        const apply=value=>{style=value;charts.get(plot)?.setOption(option(data,false,style),{notMerge:true});command({action:"chart_customize",target,style});};
+        edit.onclick=()=>ChartEditor.open(data,style,apply);plot.ondblclick=edit.onclick;reset.onclick=()=>apply(null);
+        save.onclick=()=>{
+          if(pendingSave){toast("圖片正在儲存，請稍候。");return;}
+          const pending={target,button:save};pendingSave=pending;save.disabled=true;
+          command({action:"chart_save",target,style});
+          // 登出或關閉頁面可能收不到ack；不永久鎖住按鈕，也不把逾時當作成功。
+          setTimeout(()=>{if(pendingSave===pending){pendingSave=null;save.disabled=false;toast("尚未收到存圖結果，請先查看專案輸出資料夾。");}},65000);
+        };
+        toolbar.append(edit,reset,save);
+      }
       const details = document.createElement("details"), summary = document.createElement("summary"); summary.textContent = "查看資料表";
       const table = document.createElement("table");
       const addRow = (values, header) => { const row = table.insertRow(); for (const value of values) { const cell = document.createElement(header ? "th" : "td"); cell.textContent = value == null ? "—" : String(value); row.append(cell); } };
@@ -130,16 +159,28 @@ window.ChartUI = (() => {
       next.onclick = () => { if ((page + 1) * 100 < data.x.length) { page++; showPage(); } };
       details.ontoggle = () => { if (details.open) showPage(); };
       controls.append(previous, label, next);
-      details.append(summary, controls, table); card.append(title, expand, plot, source, details);
+      details.append(summary, controls, table); card.append(title, toolbar, plot, source, details);
       card.append(renderIssues(data)); container.append(card);
       requestAnimationFrame(() => {
         if (!plot.isConnected) return;
         try {
           const instance = echarts.init(plot, null, {renderer:"canvas"}); charts.set(plot, instance); observer.observe(plot);
-          instance.setOption(option(data));
+          instance.setOption(option(data,false,style));
         } catch { plot.textContent = "圖表無法顯示，請展開資料表查看。"; }
       });
     }
   }
-  return {render, cleanup, exportPng, option};
+  function receive(message) {
+    if(message.type!=="chart_saved") return;
+    if(pendingSave) pendingSave.button.disabled=false;
+    const target=pendingSave?.target;pendingSave=null;
+    toast(message.ok?`圖片已儲存：${message.message}`:message.message);
+    if(message.ok && target && target.conversation===message.conversation){
+      const notice=document.createElement("div");notice.className="chart-saved-notice";
+      const text=document.createElement("span");text.textContent=`圖片已儲存：${message.message}`;
+      const reveal=document.createElement("button");reveal.textContent="開啟所在資料夾";reveal.onclick=()=>command({action:"reveal",conversation:message.conversation,path:message.message});
+      const close=document.createElement("button");close.textContent="關閉";close.onclick=()=>notice.remove();notice.append(text,reveal,close);document.body.append(notice);
+    }
+  }
+  return {render, cleanup, exportPng, option, receive, sourceLabel};
 })();

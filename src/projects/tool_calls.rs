@@ -486,6 +486,14 @@ mod tests {
             ),
             ("inspect_dataset", json!({"path":"_AI_Output/data.csv"})),
             (
+                "plan_excel_analysis",
+                json!({"proposal":{"path":"a.xlsx","revision":"r","sheet":1,"header_row":1,"purpose":"畫透光值","reason":"D是圖樣Mean值","x":{"column":"B","header":"時間"},"y":[{"column":"D","header":"圖樣Mean值"}],"time":{"column":"B","header":"時間"},"time_mode":"time_of_day","y_kind":"measurement"}}),
+            ),
+            (
+                "export_planned_excel",
+                json!({"plan_id":"p","start_row":2,"scan_rows":1440,"window":{"start":"12:00","end":"13:00"},"name":"測試.csv"}),
+            ),
+            (
                 "chart_dataset",
                 json!({"path":"_AI_Output/data.csv","revision":"r","x_column":"A","y_columns":["F"],"start_row":1,"row_count":100,"kind":"scatter","title":"T","x_label":"x","y_label":"y"}),
             ),

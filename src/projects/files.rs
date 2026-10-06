@@ -307,6 +307,37 @@ fn with_reader_copy<T>(
 }
 
 /// 使用本機時間命名；create_dir 本身決定是否撞名，同秒任務不共用目錄。
+/// 手動儲存使用相同專案邊界、無覆寫預留及讀回驗證；每次產生當前成果資料夾。
+pub fn save_user_chart(project: &Project, bytes: &[u8]) -> AppResult<String> {
+    super::charts::png::validate(bytes)?;
+    validate_root(&project.root)?;
+    let _root = pin(&project.root)?;
+    let base = project.root.join("_AI_Output");
+    match fs::create_dir(&base) {
+        Ok(()) => (),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => (),
+        Err(e) => return Err(e.to_string()),
+    }
+    let _base = pin(&base)?;
+    let folder_name = create_output_folder(&base)?;
+    let folder = base.join(&folder_name);
+    let _folder = pin(&folder)?;
+    let (name, mut file) = reserve_output(&folder, "自訂圖表.png")?;
+    let path = format!("_AI_Output/{folder_name}/{name}");
+    file.write_all(bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|e| format!("可能部分寫入 {path}，未完成：{e}"))?;
+    file.rewind().map_err(|e| e.to_string())?;
+    let mut check = Vec::new();
+    Read::by_ref(&mut file)
+        .take((super::charts::png::MAX_BYTES + 1) as u64)
+        .read_to_end(&mut check)
+        .map_err(|e| e.to_string())?;
+    if check != bytes {
+        return Err(format!("{path} 讀回不一致，未完成。"));
+    }
+    Ok(path)
+}
 fn create_output_folder(base: &Path) -> AppResult<String> {
     let mut time = windows_sys::Win32::Foundation::SYSTEMTIME::default();
     unsafe { windows_sys::Win32::System::SystemInformation::GetLocalTime(&mut time) };
@@ -623,6 +654,8 @@ struct ChartExport {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(super) struct SavedBroker {
     #[serde(default)]
+    excel_plans: BTreeMap<String, super::excel_plan::Plan>,
+    #[serde(default)]
     outlook: super::mail::Saved,
     #[serde(default)]
     log_cursors: BTreeMap<String, super::logs::Cursor>,
@@ -643,6 +676,7 @@ pub(super) struct SavedBroker {
     datasets: Vec<super::datasets::Reference>,
 }
 pub struct Broker {
+    excel_plans: BTreeMap<String, super::excel_plan::Plan>,
     file_waiter: Option<super::interaction::FileWaiter>,
     outlook: super::mail::Session,
     log_cursors: BTreeMap<String, super::logs::Cursor>,
@@ -669,6 +703,7 @@ impl Broker {
     pub fn new(project: Project, _task: String) -> AppResult<Self> {
         validate_root(&project.root)?;
         Ok(Self {
+            excel_plans: BTreeMap::new(),
             file_waiter: None,
             outlook: super::mail::Session::default(),
             log_cursors: BTreeMap::new(),
@@ -693,12 +728,22 @@ impl Broker {
     pub(super) fn saved(&self) -> AppResult<SavedBroker> {
         // 經序列化建立不含程序資源的快照；授權與執行中的 COM 物件不保存。
         serde_json::from_value(
-            json!({"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
+            json!({"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
             "results":self.results,"archived_results":self.archived_results,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets}),
         )
         .map_err(|e| e.to_string())
     }
     pub(super) fn restore(&mut self, state: SavedBroker, cancel: &AtomicBool) -> AppResult<()> {
+        if state.excel_plans.len() > 30 {
+            return Err("保存的 Excel 規劃超過上限。".into());
+        }
+        for (id, plan) in &state.excel_plans {
+            plan.validate()?;
+            if id != &plan.id {
+                return Err("Excel 規劃索引不符。".into());
+            }
+        }
+        self.excel_plans = state.excel_plans;
         self.log_cursors = state.log_cursors;
         self.outlook.saved = state.outlook;
         if state.copies.len() > 20 {
@@ -800,6 +845,21 @@ impl Broker {
     /// 可重用資料集只附路徑與結構，不在續接快照重送所有資料列。
     pub(super) fn dataset_index(&self) -> Value {
         json!(self.datasets)
+    }
+    /// 精簡上下文後仍提供確定的欄位角色，不附原始資料。
+    pub(super) fn excel_plan_index(&self) -> Value {
+        // 每輪只带識別碼及欄位角色；原始要求／理由已在規劃與操作簿保存，
+        // 不隨檔案數量反覆塞回上下文。
+        json!(self
+            .excel_plans
+            .values()
+            .map(|p| json!({
+                "plan_id":p.id,"path":p.proposal.path,"revision":p.proposal.revision,
+                "sheet":p.proposal.sheet,"header_row":p.proposal.header_row,
+                "x":p.proposal.x,"y":p.proposal.y,"time":p.proposal.time,
+                "time_mode":p.proposal.time_mode,"y_kind":p.proposal.y_kind
+            }))
+            .collect::<Vec<_>>())
     }
     pub(super) fn skill_context(&self) -> AppResult<String> {
         super::skills::context(&self.loaded_skills)
@@ -1256,6 +1316,8 @@ impl Broker {
                     | Tool::ReadExcelRange { .. }
                     | Tool::ChartExcelRange { .. }
                     | Tool::ExportExcelDataset { .. }
+                    | Tool::PlanExcelAnalysis { .. }
+                    | Tool::ExportPlannedExcel { .. }
                     | Tool::ExportLogDataset { .. }
                     | Tool::InspectDataset { .. }
                     | Tool::ChartDataset { .. }
@@ -1360,6 +1422,18 @@ impl Broker {
         Ok((value, revision))
     }
 
+    /// 舊工具保留給既有任務；已規劃的來源必須走帶欄位鎖的匯出流程。
+    fn require_planned_export(&self, path: &str, sheet: usize) -> AppResult<()> {
+        let canonical = relative(path)?.to_string_lossy().to_lowercase();
+        if self.excel_plans.values().any(|p| {
+            p.proposal.sheet == sheet
+                && relative(&p.proposal.path)
+                    .is_ok_and(|v| v.to_string_lossy().to_lowercase() == canonical)
+        }) {
+            return Err("此Excel已建立欄位規劃，請用export_planned_excel，之後chart_dataset會核對鎖定的X/Y；不要改走未帶規劃的舊工具。".into());
+        }
+        Ok(())
+    }
     fn perform(
         &mut self,
         tool: &Tool,
@@ -1367,6 +1441,66 @@ impl Broker {
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
         match tool {
+            Tool::PlanExcelAnalysis { proposal } => {
+                let columns = proposal.columns()?;
+                let selection = office::excel::Selection {
+                    sheet: proposal.sheet,
+                    columns,
+                    header_row: proposal.header_row,
+                    start_row: proposal.header_row.checked_add(1).ok_or("表頭列號無效。")?,
+                    row_count: 5,
+                };
+                let (page, _) =
+                    self.with_excel(&proposal.path, Some(&proposal.revision), |path| {
+                        office::excel::read(path, &selection, cancel)
+                    })?;
+                let plan = super::excel_plan::Plan::create(proposal.as_ref().clone(), &page)?;
+                if self.excel_plans.len() >= 30 && !self.excel_plans.contains_key(&plan.id) {
+                    return Err("每次任務最多30份Excel欄位規劃。".into());
+                }
+                let summary = plan.summary();
+                self.excel_plans.insert(plan.id.clone(), plan);
+                Ok(summary)
+            }
+            Tool::ExportPlannedExcel {
+                plan_id,
+                start_row,
+                scan_rows,
+                window,
+                name,
+            } => {
+                let plan = self
+                    .excel_plans
+                    .get(plan_id)
+                    .ok_or("找不到本任務的plan_id；請先plan_excel_analysis核對欄位。")?
+                    .clone();
+                plan.validate()?;
+                let ((page, scanned), _) =
+                    self.with_excel(&plan.proposal.path, Some(&plan.proposal.revision), |path| {
+                        office::excel::planned::read(
+                            path,
+                            &plan,
+                            *start_row,
+                            *scan_rows,
+                            window.as_ref(),
+                            cancel,
+                        )
+                    })?;
+                let mut table = super::datasets::Table::from_excel(
+                    &page,
+                    &plan.proposal.path,
+                    &plan.proposal.revision,
+                )?;
+                if let Some(metadata) = table.excel.as_mut() {
+                    metadata.plan = Some(plan);
+                    metadata.filter = window.clone();
+                    metadata.scanned_rows = scanned;
+                }
+                let mut result = self.save_dataset(name, &table, cancel)?;
+                result["next_source_row"] = json!(page.next_row);
+                result["scan_complete"] = json!(page.next_row.is_none());
+                Ok(result)
+            }
             Tool::OutlookFolders {
                 scope,
                 parent_id,
@@ -1530,6 +1664,7 @@ impl Broker {
                 x_label,
                 y_label,
             } => {
+                self.require_planned_export(path, *sheet)?;
                 self.txt_context = true;
                 if y_columns.is_empty() || y_columns.len() > 8 {
                     return Err("圖表需選擇 1–8 個縱軸欄位。".into());
@@ -1548,6 +1683,7 @@ impl Broker {
                 let (page, _) = self.with_excel(path, Some(revision), |target| {
                     office::excel::read_chart(target, &selection, cancel)
                 })?;
+                super::excel_plan::check_unplanned_y(&page)?;
                 let prepared = super::charts::prepare_page(
                     &page, kind, title, x_label, y_label, path, revision,
                 )?;
@@ -1594,6 +1730,7 @@ impl Broker {
                 row_count,
                 name,
             } => {
+                self.require_planned_export(path, *sheet)?;
                 self.txt_context = true;
                 let selection = office::excel::Selection {
                     sheet: *sheet,
@@ -1642,6 +1779,9 @@ impl Broker {
             } => {
                 let table = super::datasets::load(&self.project, path, revision, cancel)?;
                 let page = table.page(x_column, y_columns, *start_row, *row_count)?;
+                if table.excel.as_ref().is_none_or(|m| m.plan.is_none()) {
+                    super::excel_plan::check_unplanned_y(&page)?;
+                }
                 let prepared = super::charts::prepare_page(
                     &page, kind, title, x_label, y_label, path, revision,
                 )?;
@@ -1651,6 +1791,48 @@ impl Broker {
                 // 使用者選擇異常值處理期間，CSV 也可能被外部程式改動。
                 super::datasets::load(&self.project, path, revision, cancel)?;
                 table.annotate(&mut chart);
+                if let Some(meta) = &table.excel {
+                    let mapping = page
+                        .columns
+                        .iter()
+                        .zip(&page.headers)
+                        .map(|(c, h)| {
+                            format!("{c}/{}", h.text.chars().take(40).collect::<String>())
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let selected = &table.rows[*start_row - 1..*start_row - 1 + *row_count];
+                    let first = &selected[0];
+                    let min = selected.iter().map(|r| r.row).min().unwrap_or(first.row);
+                    let max = selected.iter().map(|r| r.row).max().unwrap_or(first.row);
+                    chart.source = format!(
+                        "{} | {} | 工作表 {} ({}) | X/Y: {} | 原始列 {}–{}（選取{}筆，可能不連續）",
+                        first.path,
+                        first.revision,
+                        first.sheet,
+                        meta.sheet_name,
+                        mapping,
+                        min,
+                        max,
+                        selected.len()
+                    )
+                    .chars()
+                    .take(500)
+                    .collect();
+                    if let Some(window) = &meta.filter {
+                        chart.data_note = format!(
+                            "時間 [{} 至 {})；掃描{}列／符合{}筆。{}",
+                            window.start,
+                            window.end,
+                            meta.scanned_rows,
+                            table.rows.len(),
+                            chart.data_note
+                        )
+                        .chars()
+                        .take(500)
+                        .collect();
+                    }
+                }
                 self.add_chart(chart)
             }
             Tool::LoadSkill { id } => {
@@ -1666,6 +1848,9 @@ impl Broker {
                 operations,
             } => self.office_batch(copy_id, revision, operations.clone(), cancel),
             Tool::CreateChart { chart } => {
+                if !self.excel_plans.is_empty() {
+                    return Err("本任務已鎖定Excel分析欄位，請使用export_planned_excel及chart_dataset；不可手抄數列繞過來源核對。".into());
+                }
                 if !chart.data_note.is_empty()
                     || !chart.data_issues.is_empty()
                     || chart.series.iter().any(|s| !s.skip_indices.is_empty())
@@ -1687,6 +1872,7 @@ impl Broker {
                 x_label,
                 y_label,
             } => {
+                self.require_planned_export(path, *sheet)?;
                 let content = self.content(path, cancel, worker)?;
                 if text::revision(&content) != *revision {
                     return Err("文件版本已變更，請重新讀取。".into());
@@ -2361,6 +2547,33 @@ mod tests {
         assert!(!has(&request, "office_action") && !has(&request, "export_chart_png"));
     }
     #[test]
+    fn excel_binding_survives_broker_checkpoint_and_blocks_unplanned_export() {
+        let project = Project {
+            id: "p".into(),
+            name: "p".into(),
+            root: std::env::current_dir().unwrap(),
+            imports: BTreeMap::new(),
+        };
+        let mut broker = Broker::new(project.clone(), "r".into()).unwrap();
+        let (proposal, page) = super::super::excel_plan::tests::fixture();
+        let plan = super::super::excel_plan::Plan::create(proposal, &page).unwrap();
+        broker.excel_plans.insert(plan.id.clone(), plan);
+        let mut restored = Broker::new(project, "r".into()).unwrap();
+        restored
+            .restore(broker.saved().unwrap(), &AtomicBool::new(false))
+            .unwrap();
+        assert_eq!(broker.excel_plan_index(), restored.excel_plan_index());
+        assert!(restored.require_planned_export("a.xlsx", 1).is_err());
+        assert!(restored.require_planned_export("other.xlsx", 1).is_ok());
+        assert!(restored
+            .excel_plans
+            .values()
+            .next()
+            .unwrap()
+            .check_axes("B", &["B".into()])
+            .is_err());
+    }
+    #[test]
     fn png_exports_preserve_names_reuse_verified_files_and_survive_restore() {
         let root = std::env::current_dir()
             .unwrap()
@@ -2469,6 +2682,34 @@ mod tests {
         assert_eq!(fs::read_dir(root.join("_AI_Output")).unwrap().count(), 0);
         drop(source);
         fs::remove_file(original).unwrap();
+        fs::remove_dir(root.join("_AI_Output")).unwrap();
+        fs::remove_dir(root).unwrap();
+    }
+    #[test]
+    fn user_chart_save_creates_verified_new_folders_without_overwrite() {
+        let root = std::env::current_dir()
+            .unwrap()
+            .join(".build")
+            .join(format!("user-chart-{}", crate::jobs::new_id().unwrap()));
+        fs::create_dir_all(&root).unwrap();
+        let project = Project {
+            id: "test".into(),
+            name: "test".into(),
+            root: root.clone(),
+            imports: BTreeMap::new(),
+        };
+        let bytes = super::super::charts::png::fixture();
+        let first = save_user_chart(&project, &bytes).unwrap();
+        let second = save_user_chart(&project, &bytes).unwrap();
+        assert_ne!(first, second);
+        assert!(first.starts_with("_AI_Output/"));
+        assert_eq!(fs::read(root.join(&first)).unwrap(), bytes);
+        assert!(save_user_chart(&project, b"invalid").is_err());
+        for path in [first, second] {
+            let file = root.join(path);
+            fs::remove_file(&file).unwrap();
+            fs::remove_dir(file.parent().unwrap()).unwrap();
+        }
         fs::remove_dir(root.join("_AI_Output")).unwrap();
         fs::remove_dir(root).unwrap();
     }

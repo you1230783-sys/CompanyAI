@@ -1,6 +1,7 @@
 //! 專案 UI 控制器。只有使用者原生命令可新增授權，模型不能建立專案或擴大根目錄。
 use super::*;
 use crate::projects::{self, Store};
+mod chart_edit;
 mod composer;
 mod composer_smoke;
 mod quick;
@@ -9,6 +10,14 @@ mod weekly;
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(super) enum ProjectCommand {
+    ChartCustomize {
+        target: chart_edit::Target,
+        style: Option<projects::charts::style::Style>,
+    },
+    ChartSave {
+        target: chart_edit::Target,
+        style: Option<projects::charts::style::Style>,
+    },
     QuickPrepare {
         conversation: String,
         request_id: String,
@@ -142,6 +151,7 @@ pub(super) enum ProjectCommand {
     },
 }
 pub(super) enum ProjectEvent {
+    UserChartSaved(String, AppResult<String>),
     FileBusy(String, String, String, mpsc::Sender<bool>),
     OutlookConsent(
         String,
@@ -380,6 +390,16 @@ impl App {
             "running":self.projects.running.is_some(),"running_id":self.projects.running.as_ref().map(|r|&r.id),"activity":self.projects.running.as_ref().map(|r|&r.activity),"charts":self.projects.running.as_ref().map(|r|&r.charts),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
     }
     pub(super) fn project_command(&mut self, command: ProjectCommand) -> AppResult<()> {
+        match self.chart_edit_command(&command) {
+            Ok(true) => return Ok(()),
+            Err(error) if matches!(command, ProjectCommand::ChartSave { .. }) => {
+                self.view
+                    .post(&json!({"type":"chart_saved","ok":false,"message":error}))?;
+                return Ok(());
+            }
+            Err(error) => return Err(error),
+            Ok(false) => (),
+        }
         if self.weekly_command(&command)? || self.quick_command(&command)? {
             return Ok(());
         }
@@ -795,6 +815,8 @@ impl App {
                 unreachable!("handled above")
             }
             ProjectCommand::Stop
+            | ProjectCommand::ChartCustomize { .. }
+            | ProjectCommand::ChartSave { .. }
             | ProjectCommand::WeeklyPrepare { .. }
             | ProjectCommand::WeeklySubmit { .. }
             | ProjectCommand::QuickPrepare { .. }
@@ -1168,6 +1190,12 @@ impl App {
     }
     pub(super) fn project_event(&mut self, event: ProjectEvent) -> AppResult<()> {
         match event {
+            ProjectEvent::UserChartSaved(conversation, result) => {
+                // 使用者可以在存圖期間切換對話，仍需回覆結果以解除前端的儲存中狀態。
+                if self.logged_in() {
+                    self.view.post(&json!({"type":"chart_saved","conversation":conversation,"ok":result.is_ok(),"message":result.unwrap_or_else(|e|e)}))?;
+                }
+            }
             ProjectEvent::FileBusy(id, request_id, message, reply) => {
                 if let Some(run) = self
                     .projects

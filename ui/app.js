@@ -534,7 +534,7 @@ function renderMessages() {
     content.append(bubble);
     if (message.project_charts?.length) {
       const charts = node("div", "project-charts"); content.append(charts);
-      ChartUI.render(charts, message.project_charts);
+      ChartUI.render(charts, message.project_charts, {conversation:state.active_id,message_index:index,request_id:message.request_id,styles:message.project_chart_styles || {}});
     }
     if (message.incomplete) content.append(node("p", "incomplete-warning", "回覆中斷，後續內容未收到；這裡保留已收到的部分。"));
     const tools = node("div", "message-tools");
@@ -1134,7 +1134,8 @@ if (bridge) {
     else if (event.data.type === "self_test") window.runSelfTest?.(event.data.reply_fixture);
     else {
       receiveHotkeyMessage(event.data);
-      window.ProjectUI?.receive(event.data);
+        window.ProjectUI?.receive(event.data);
+        window.ChartUI?.receive(event.data);
       window.WeeklyUI?.receive(event.data);
       window.ProjectQuickUI?.receive(event.data);
       window.ProjectComposer?.receive(event.data);

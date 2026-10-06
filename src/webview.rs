@@ -235,9 +235,22 @@ impl WebView {
         chart: &crate::projects::charts::Chart,
         reply: mpsc::Sender<AppResult<String>>,
     ) -> AppResult<()> {
+        self.export_custom_chart_png(chart, None, reply)
+    }
+    /// 顯示設定由使用者命令及原生驗證取得；不接受 ECharts option／回呼程式碼。
+    pub fn export_custom_chart_png(
+        &self,
+        chart: &crate::projects::charts::Chart,
+        style: Option<&crate::projects::charts::style::Style>,
+        reply: mpsc::Sender<AppResult<String>>,
+    ) -> AppResult<()> {
         chart.validate()?;
+        if let Some(style) = style {
+            style.validate(chart)?;
+        }
         let data = serde_json::to_string(chart).map_err(|e| e.to_string())?;
-        let script = wide(&format!("window.ChartUI.exportPng({data})"));
+        let style = serde_json::to_string(&style).map_err(|e| e.to_string())?;
+        let script = wide(&format!("window.ChartUI.exportPng({data},{style})"));
         let callback = ExecuteScriptCompletedHandler::create(Box::new(move |status, result| {
             let result = status
                 .map_err(|e| format!("PNG 繪製失敗：{e}"))

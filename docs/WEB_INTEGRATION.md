@@ -1,6 +1,8 @@
+> **0.8.40：** 新增 `plan_excel_analysis(proposal)`、`export_planned_excel(plan_id,start_row,scan_rows,window,name)`，工具目錄47項，依技能按需公告；JSON Schema見 `src/projects/tools.json`。圖表kind增加 `step`、`area`、`horizontal_bar`。網站依當次工具定義驗證參數，不固定舊名稱／圖型清單。使用者圖表編輯及PNG保存都是桌面本機操作，不新增網站端點、不傳顯示設定給模型。圖片子請求仍採下方0.8.39格式。
+
 > **0.8.39：圖片試驗需要轉發多模態 content。** 專案 Outlook 快速入口沿用既有郵件工具。新增 `analyze_image(path,focus)`（工具目錄 45 項，載入 `image-read` 才公告）；圖片工具由桌面發出獨立的無工具子請求，仍走 `/lm_server/api/desktop/agent/turns`、目前 model、Bearer 與 `desktop-agent-v1`。主請求仍是文字／原生工具訊息，不改一般附件上傳流程。
 
-圖片子請求 `tools=[]`、`tool_choice=none`、`skills=false`，`context.parent_request_id` 指向父請求。最後一則 user 訊息形狀如下（不可把陣列轉成字串、刪除 image_url 或自行補回其他歷史）：
+圖片子請求 `tools=[]`、`tool_choice=none`、`skills=false`，`context.parent_request_id` 指向父請求。完整請求範例見 [IMAGE_REQUEST_EXAMPLE.json](IMAGE_REQUEST_EXAMPLE.json)（ID、模型、圖片資訊及Base64為佔位範例，不是實際封包）。目前不送 `detail`、`max_tokens`、`attachments` 或 `image_base64`。最後一則 user 訊息形狀如下（不可把陣列轉成字串、刪除 image_url 或自行補回其他歷史）：
 
 ```json
 {"role":"user","content":[{"type":"text","text":"辨識要求與來源資訊"},{"type":"image_url","image_url":{"url":"data:image/png;base64,..."}}]}

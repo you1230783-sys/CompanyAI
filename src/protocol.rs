@@ -43,6 +43,10 @@ pub struct Message {
     pub project_activity: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub project_charts: Vec<crate::projects::charts::Chart>,
+    /// 使用者的顯示設定只在本機加密歷史保存，不送模型、不改圖表原始值。
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub project_chart_styles:
+        std::collections::BTreeMap<usize, crate::projects::charts::style::Style>,
     /// 本機暫停狀態；模型無法藉回覆文字建立可續接授權。
     #[serde(default)]
     pub project_paused: bool,
@@ -65,6 +69,7 @@ impl Message {
             received_replies: Vec::new(),
             project_activity: Vec::new(),
             project_charts: Vec::new(),
+            project_chart_styles: Default::default(),
             project_paused: false,
             retry_settings: None,
             retry_context_index: None,
@@ -81,6 +86,7 @@ impl Message {
             received_replies: Vec::new(),
             project_activity: Vec::new(),
             project_charts: Vec::new(),
+            project_chart_styles: Default::default(),
             project_paused: false,
             retry_settings: None,
             retry_context_index: None,

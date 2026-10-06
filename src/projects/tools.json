@@ -164,7 +164,7 @@
       "type": "function",
       "function": {
         "name": "chart_excel_range",
-        "description": "Excel 畫圖優先使用：直接讀 x_column 和 y_columns 指定範圍，不需模型抄寫。單張最多 10000 筆、8 個 Y 系列（X 加 Y 最多 90000 格），與一般 read_excel_range 的 2000 格額度分開。公式使用 Excel 數值，空白 Y 保留缺值；不自動抽樣。回傳 chart_index，可用 export_chart_png 儲存完整圖。",
+        "description": "未建立欄位規劃的相容入口：直接讀 x_column 和 y_columns 指定範圍，不需模型抄寫。單張最多 10000 筆、8 個 Y 系列（X 加 Y 最多 90000 格），與一般 read_excel_range 的 2000 格額度分開。公式使用 Excel 數值，空白 Y 保留缺值；不自動抽樣。回傳 chart_index，可用 export_chart_png 儲存完整圖。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -215,7 +215,10 @@
               "enum": [
                 "line",
                 "bar",
-                "scatter"
+                "scatter",
+                "step",
+                "area",
+                "horizontal_bar"
               ]
             },
             "title": {
@@ -1724,7 +1727,7 @@
       "type": "function",
       "function": {
         "name": "create_chart",
-        "description": "建立對話圖表，最多 10000 筆、8 個系列；回傳 chart_index，可用 export_chart_png 儲存。大量 Excel 優先 chart_excel_range，避免將全部數字塞入模型參數。不接受腳本。",
+        "description": "建立對話圖表，最多 10000 筆、8 個系列；回傳 chart_index，可用 export_chart_png 儲存。大量 Excel 先plan_excel_analysis、export_planned_excel再chart_dataset，避免將全部數字塞入模型參數。不接受腳本。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -1736,7 +1739,10 @@
                   "enum": [
                     "line",
                     "bar",
-                    "scatter"
+                    "scatter",
+                    "step",
+                    "area",
+                    "horizontal_bar"
                   ]
                 },
                 "title": {
@@ -1848,7 +1854,10 @@
               "enum": [
                 "line",
                 "bar",
-                "scatter"
+                "scatter",
+                "step",
+                "area",
+                "horizontal_bar"
               ]
             },
             "title": {
@@ -2396,7 +2405,7 @@
       "type": "function",
       "function": {
         "name": "export_excel_dataset",
-        "description": "先檢視表頭確認選欄，再由 Excel COM 將 Value2、型別、顯示文字與來源列號存成 CSV。只回欄名、筆數、統計、首尾各10筆；成功後移出舊工具原文。日期仍為序號，未更新外部連結。",
+        "description": "一般選欄匯出；Excel分析／畫圖優先plan_excel_analysis與export_planned_excel，已規劃來源不得使用此舊入口。先檢視表頭確認選欄，再由 Excel COM 將 Value2、型別、顯示文字與來源列號存成 CSV。只回欄名、筆數、統計、首尾各10筆；成功後移出舊工具原文。日期仍為序號，未更新外部連結。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -2500,7 +2509,7 @@
       "type": "function",
       "function": {
         "name": "chart_dataset",
-        "description": "直接從本地 CSV 取完整選取範圍畫圖，不經模型重抄數字；只回圖號與處理摘要。異常值由用戶選擇，保留原行號；已更正欄位就用正確 CSV 欄名重畫。",
+        "description": "若CSV帶欄位規劃，X/Y必須完全符合mapping，不能把原D欄改稱B。直接從本地 CSV 取完整選取範圍畫圖，不經模型重抄數字；只回圖號與處理摘要。異常值由用戶選擇，保留原行號；已更正欄位就用正確 CSV 欄名重畫。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -2545,7 +2554,10 @@
               "enum": [
                 "line",
                 "bar",
-                "scatter"
+                "scatter",
+                "step",
+                "area",
+                "horizontal_bar"
               ]
             },
             "title": {
@@ -2637,6 +2649,237 @@
           "required": [
             "path",
             "focus"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "plan_excel_analysis",
+        "description": "Excel 分析／畫圖前先規劃欄位：由模型解釋別名，本機重讀表頭及5列樣本核對用途，保存plan_id。量測Y不可使用時間欄。每檔獨立規劃，最多30份；續接保留。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "proposal": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "已儲存 Excel 的專案相對路徑。"
+                },
+                "revision": {
+                  "type": "string",
+                  "description": "inspect_excel 的 excel: 版本。",
+                  "minLength": 1
+                },
+                "sheet": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "header_row": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1048576
+                },
+                "purpose": {
+                  "type": "string",
+                  "description": "本次使用者要求原文，保留數值名稱、時間範圍與 X/Y 意圖。",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                "reason": {
+                  "type": "string",
+                  "description": "簡述使用者別名與實際表頭、樣本如何對應；有歧義先 ask_user。",
+                  "minLength": 1,
+                  "maxLength": 1000
+                },
+                "x": {
+                  "type": "object",
+                  "properties": {
+                    "column": {
+                      "type": "string",
+                      "description": "原始 Excel 大寫欄字母，選 B/D 不重新編號。"
+                    },
+                    "header": {
+                      "type": "string",
+                      "description": "實際表頭，不能填使用者別名。",
+                      "minLength": 1,
+                      "maxLength": 100
+                    }
+                  },
+                  "required": [
+                    "column",
+                    "header"
+                  ],
+                  "additionalProperties": false
+                },
+                "y": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "column": {
+                        "type": "string",
+                        "description": "原始 Excel 大寫欄字母，選 B/D 不重新編號。"
+                      },
+                      "header": {
+                        "type": "string",
+                        "description": "實際表頭，不能填使用者別名。",
+                        "minLength": 1,
+                        "maxLength": 100
+                      }
+                    },
+                    "required": [
+                      "column",
+                      "header"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "maxItems": 8
+                },
+                "time": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "column": {
+                          "type": "string",
+                          "description": "原始 Excel 大寫欄字母，選 B/D 不重新編號。"
+                        },
+                        "header": {
+                          "type": "string",
+                          "description": "實際表頭，不能填使用者別名。",
+                          "minLength": 1,
+                          "maxLength": 100
+                        }
+                      },
+                      "required": [
+                        "column",
+                        "header"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "本地篩選使用的時間欄；可以等於X。沒有時間篩選填null。"
+                },
+                "time_mode": {
+                  "type": "string",
+                  "description": "HH:MM為時:分。time_of_day為一天中的時間；elapsed為經過時間；沒有篩選欄用none。",
+                  "enum": [
+                    "none",
+                    "time_of_day",
+                    "elapsed"
+                  ]
+                },
+                "y_kind": {
+                  "type": "string",
+                  "description": "量測值用measurement。只有使用者真的要求分析時間量才用time，不可用來繞過錯欄檢查。",
+                  "enum": [
+                    "measurement",
+                    "time"
+                  ]
+                }
+              },
+              "required": [
+                "path",
+                "revision",
+                "sheet",
+                "header_row",
+                "purpose",
+                "reason",
+                "x",
+                "y",
+                "time",
+                "time_mode",
+                "y_kind"
+              ],
+              "additionalProperties": false
+            },
+            "progress_note": {
+              "type": "string",
+              "description": "累積工作筆記，不含原始點陣。",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "proposal"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "export_planned_excel",
+        "description": "沿用已核對plan_id，只讀選定欄位；本地掃描時間後匯出CSV，模型只見摘要。每次最多掃描250000列／120秒、符合最多10000列／9欄；無抽樣。檢查scan_complete與next_source_row，部分掃描不可冒充全檔。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "plan_id": {
+              "type": "string",
+              "description": "plan_excel_analysis回傳識別碼。"
+            },
+            "start_row": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048576
+            },
+            "scan_rows": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 250000
+            },
+            "window": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "string",
+                      "description": "起點包含，HH:MM[:SS[.fff]]。"
+                    },
+                    "end": {
+                      "type": "string",
+                      "description": "終點不包含；當日模式可用24:00；終點小於起點代表跨午夜。"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "本地時間篩選；不篩選填null。"
+            },
+            "name": {
+              "type": "string",
+              "description": "輸出CSV檔名。",
+              "maxLength": 100
+            },
+            "progress_note": {
+              "type": "string",
+              "description": "累積工作筆記，不含原始點陣。",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "plan_id",
+            "start_row",
+            "scan_rows",
+            "window",
+            "name"
           ],
           "additionalProperties": false
         }

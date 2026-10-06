@@ -1,5 +1,7 @@
 //! 僅處理呼叫端指定的 Office 測試資料夾；實際經過 broker 與 AppContainer。
 mod office_authoring;
+#[path = "office_smoke/excel_plan.rs"]
+mod office_excel_plan;
 #[path = "office_smoke/excel_read.rs"]
 mod office_excel_read;
 use company_ai::{
@@ -16,6 +18,7 @@ fn run() -> AppResult<()> {
     }
     let cancel = AtomicBool::new(false);
     let mut worker = Worker::start(&exe, &cancel)?;
+    office_excel_plan::verify(&root, &mut worker, &cancel)?;
     // Word 實際輸出的繁體中文 PDF，驗證嵌入字型／ToUnicode，不只測 ASCII fixture。
     let mut pdf = Broker::new(
         Project {

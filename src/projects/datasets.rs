@@ -124,6 +124,7 @@ pub struct Row {
 pub struct Table {
     pub columns: Vec<String>,
     pub rows: Vec<Row>,
+    pub excel: Option<super::excel_plan::Metadata>,
     size: usize,
 }
 impl Table {
@@ -141,6 +142,7 @@ impl Table {
         Ok(Self {
             columns,
             rows: vec![],
+            excel: None,
             size: 0,
         })
     }
@@ -195,6 +197,24 @@ impl Table {
     /// Excel Value2 數值保留完整精度；日期仍為 Excel 序號，不猜測單位或時間軸。
     pub fn from_excel(page: &excel::Page, path: &str, revision: &str) -> AppResult<Self> {
         let mut table = Self::new(page.columns.clone())?;
+        table.excel = Some(super::excel_plan::Metadata {
+            sheet_name: page.sheet_name.clone(),
+            headers: page.headers.iter().map(|h| h.text.clone()).collect(),
+            formats: (0..page.columns.len())
+                .map(|i| {
+                    page.rows
+                        .iter()
+                        .filter_map(|r| r.cells.get(i))
+                        .find(|c| c.kind != "blank")
+                        .map(|c| c.number_format.clone())
+                        .unwrap_or_default()
+                })
+                .collect(),
+            date_1904: page.date_1904,
+            plan: None,
+            filter: None,
+            scanned_rows: page.rows.len(),
+        });
         for row in &page.rows {
             table.push(Row {
                 path: path.into(),
@@ -228,7 +248,7 @@ impl Table {
                 .map(|s| s.to_string())
                 .chain(self.columns.iter().cloned()),
         );
-        for row in &self.rows {
+        for (index, row) in self.rows.iter().enumerate() {
             record(
                 &mut out,
                 [
@@ -237,7 +257,13 @@ impl Table {
                     row.sheet.to_string(),
                     row.row.to_string(),
                     serde_json::to_string(&row.kinds).map_err(|e| e.to_string())?,
-                    serde_json::to_string(&row.texts).map_err(|e| e.to_string())?,
+                    // v2 的第一列攜帶欄位結構；其餘列與舊 CSV 保持顯示文字陣列。
+                    // 使用既有 JSON 追蹤欄，不插入假資料列或重新編號 A/B/D。
+                    if index == 0 && self.excel.is_some() {
+                        json!({"version":2,"texts":row.texts,"excel":self.excel}).to_string()
+                    } else {
+                        serde_json::to_string(&row.texts).map_err(|e| e.to_string())?
+                    },
                 ]
                 .into_iter()
                 .chain(row.values.iter().cloned()),
@@ -265,7 +291,7 @@ impl Table {
             }
             json!({"column":name,"numeric":numeric,"blank":blank,"non_numeric":self.rows.len()-numeric-blank,"min":min,"max":max})
         }).collect();
-        json!({"dataset":reference,"statistics":statistics,
+        json!({"dataset":reference,"statistics":statistics,"excel_schema":self.excel,
             "head":self.rows.iter().enumerate().take(10).map(preview).collect::<Vec<_>>(),
             "tail":self.rows.iter().enumerate().skip(self.rows.len().saturating_sub(10)).map(preview).collect::<Vec<_>>(),
             "scope":"僅已選取的欄位與範圍；首尾預覽不代表資料分布。完整數值只在本地 CSV，畫圖請呼叫 chart_dataset，不要抄寫點陣或重新逐頁讀取。CSV 前六欄為來源追蹤及原始型別／顯示文字；LOG sheet=0、row=原行號。"})
@@ -277,6 +303,9 @@ impl Table {
         start: usize,
         count: usize,
     ) -> AppResult<excel::Page> {
+        if let Some(plan) = self.excel.as_ref().and_then(|m| m.plan.as_ref()) {
+            plan.check_axes(x, ys)?;
+        }
         if start == 0 || !(1..=charts::MAX_POINTS).contains(&count) || ys.is_empty() || ys.len() > 8
         {
             return Err(
@@ -310,13 +339,24 @@ impl Table {
             text: s.into(),
             kind: if s.is_empty() { "blank" } else { "text" }.into(),
             formula: None,
+            number_format: String::new(),
         };
         Ok(excel::Page {
             sheet: 0,
             sheet_name: "CSV".into(),
             columns: names.clone(),
             header_row: 1,
-            headers: names.iter().map(|s| cell(s)).collect(),
+            headers: indices
+                .iter()
+                .map(|&i| {
+                    cell(
+                        self.excel
+                            .as_ref()
+                            .and_then(|m| m.headers.get(i))
+                            .unwrap_or(&self.columns[i]),
+                    )
+                })
+                .collect(),
             start_row: start,
             rows: self.rows[start - 1..end]
                 .iter()
@@ -329,6 +369,12 @@ impl Table {
                             let mut result = cell(&r.values[c]);
                             result.kind = r.kinds[c].clone();
                             result.text = r.texts[c].clone();
+                            result.number_format = self
+                                .excel
+                                .as_ref()
+                                .and_then(|m| m.formats.get(c))
+                                .cloned()
+                                .unwrap_or_default();
                             if result.kind == "number" {
                                 result.value = charts::quality::numeric_text(&r.values[c])
                                     .map_or(Value::Null, |v| json!(v));
@@ -345,7 +391,7 @@ impl Table {
                 first_column: x.into(),
                 last_column: ys.last().cloned().unwrap_or_default(),
             },
-            date_1904: false,
+            date_1904: self.excel.as_ref().is_some_and(|m| m.date_1904),
         })
     }
     pub fn annotate(&self, chart: &mut charts::Chart) {
@@ -428,9 +474,44 @@ fn parse(text: &str) -> AppResult<Table> {
         return Err("CSV 缺少來源欄位。".into());
     }
     let mut table = Table::new(rows[0][6..].to_vec())?;
-    for row in rows.into_iter().skip(1) {
+    for (index, row) in rows.into_iter().skip(1).enumerate() {
         if row.len() != table.columns.len() + 6 {
             return Err("CSV 欄數不一致。".into());
+        }
+        let display: Value = serde_json::from_str(&row[5]).map_err(|_| "CSV 顯示欄無效。")?;
+        let texts = if display.is_object() {
+            if index != 0 || display["version"] != 2 {
+                return Err("CSV 欄位結構版本或位置無效。".into());
+            }
+            let metadata: super::excel_plan::Metadata =
+                serde_json::from_value(display["excel"].clone())
+                    .map_err(|_| "CSV 欄位結構無效。")?;
+            if metadata.headers.len() != table.columns.len()
+                || metadata.formats.len() != table.columns.len()
+            {
+                return Err("CSV 欄位結構長度不符。".into());
+            }
+            if let Some(plan) = &metadata.plan {
+                plan.validate()?;
+                if plan.columns != table.columns
+                    || plan.headers != metadata.headers
+                    || plan.date_1904 != metadata.date_1904
+                {
+                    return Err("CSV 欄位與鎖定規劃不符。".into());
+                }
+            }
+            table.excel = Some(metadata);
+            serde_json::from_value(display["texts"].clone()).map_err(|_| "CSV 顯示文字無效。")?
+        } else {
+            serde_json::from_value(display).map_err(|_| "CSV 顯示欄無效。")?
+        };
+        if let Some(plan) = table.excel.as_ref().and_then(|m| m.plan.as_ref()) {
+            if row[0] != plan.proposal.path
+                || row[1] != plan.proposal.revision
+                || row[2] != plan.proposal.sheet.to_string()
+            {
+                return Err("CSV 來源與欄位規劃不一致。".into());
+            }
         }
         table.push(Row {
             path: row[0].clone(),
@@ -439,7 +520,7 @@ fn parse(text: &str) -> AppResult<Table> {
             row: row[3].parse().map_err(|_| "來源行號無效。")?,
             values: row[6..].to_vec(),
             kinds: serde_json::from_str(&row[4]).map_err(|_| "CSV 型別欄無效。")?,
-            texts: serde_json::from_str(&row[5]).map_err(|_| "CSV 顯示欄無效。")?,
+            texts,
         })?;
     }
     Ok(table)
@@ -573,6 +654,31 @@ mod tests {
             assert_eq!(a.row, b.row);
         }
         assert!(parse(&text[..text.len() - 2]).is_err());
+    }
+    #[test]
+    fn excel_csv_retains_plan_headers_formats_and_correct_y() {
+        let (proposal, page) = super::super::excel_plan::tests::fixture();
+        let plan = super::super::excel_plan::Plan::create(proposal, &page).unwrap();
+        let mut table = Table::from_excel(&page, "a.xlsx", "excel:r").unwrap();
+        table.excel.as_mut().unwrap().plan = Some(plan);
+        let restored = parse(&table.csv().unwrap()).unwrap();
+        assert!(restored.page("B", &["B".into()], 1, 1).is_err());
+        let page = restored.page("B", &["D".into()], 1, 1).unwrap();
+        assert_eq!(page.headers[1].text, "圖樣Mean值");
+        assert_eq!(page.rows[0].cells[0].number_format, "hh:mm:ss");
+        let chart = charts::from_page(
+            &page,
+            "line",
+            "透光值",
+            "紀錄時間",
+            "圖樣Mean值",
+            "data.csv",
+            "r",
+        )
+        .unwrap();
+        assert_eq!(chart.series[0].values, vec![Some(168.4)]);
+        assert_eq!(chart.x, vec!["12:00:00"]);
+        assert!(parse(&table.csv().unwrap().replace("excel:r", "excel:changed")).is_err());
     }
     #[test]
     fn preview_is_bounded_and_chart_uses_the_middle_rows_and_original_location() {

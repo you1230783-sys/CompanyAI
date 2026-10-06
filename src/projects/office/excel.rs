@@ -2,6 +2,7 @@
 //! 仍透過公司核准的 Excel COM 開啟文件；不自行解析可能加密的 XLSX 容器。
 use super::*;
 use serde_json::{json, Value};
+pub mod planned;
 
 pub const MAX_CELLS: usize = 2000;
 pub fn default_sheet() -> usize {
@@ -103,6 +104,9 @@ pub struct Cell {
     pub kind: String,
     /// 只供核對；數值為 Excel 在本次開啟時提供的 Value2，不執行模型提供的公式。
     pub formula: Option<String>,
+    /// Excel 原始數字格式；舊快照缺少時保持未知，不從小數大小猜時間。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub number_format: String,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Row {
@@ -170,6 +174,7 @@ fn cell(sheet: &IDispatch, column: &str, row: usize) -> AppResult<Cell> {
     )?)?;
     let value = get(&target, "Value2")?;
     let text = string(&get(&target, "Text")?)?;
+    let number_format = string(&get(&target, "NumberFormat")?)?;
     let formula = if bool::try_from(&get(&target, "HasFormula")?)
         .map_err(|_| "Excel 公式標記無效。")?
     {
@@ -202,6 +207,7 @@ fn cell(sheet: &IDispatch, column: &str, row: usize) -> AppResult<Cell> {
         text,
         kind: kind.into(),
         formula,
+        number_format,
     })
 }
 fn session(path: &Path) -> AppResult<Session> {

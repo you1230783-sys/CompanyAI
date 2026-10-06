@@ -1,6 +1,6 @@
 {
-  "recorded_at": "2026-10-06T15:25:53.8090235+08:00",
-  "version": "0.8.39.0",
+  "recorded_at": "2026-10-06T19:59:09.3177984+08:00",
+  "version": "0.8.40.0",
   "result": "PASS",
   "msvc": "14.29.30133",
   "compiler_report": [
@@ -15,7 +15,15 @@
     "image cache and unknown request resume without repost",
     "out-of-project and oversize images rejected without image POST"
   ],
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-2b9b1dac639b4abe96dc78aa1199461b",
+  "excel_chart_checks": [
+    "locked source/header/time/X/Y plans, CSV schema and role enforcement",
+    "local half-open clock/elapsed filters with explicit scan limits",
+    "three actual Excel files with different column orders x five windows, fifteen exact charts",
+    "native chart style DPAPI persistence, original data and reset",
+    "six chart kinds, user axis ranges, reference lines and colors",
+    "native customized PNG callback and verified manual _AI_Output write"
+  ],
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-0e9b371966734835850236a050991a7d",
   "checks": [
     "weekly wizard prepare/confirm/cancel and conversation binding",
     "online inbox COM fixture",
@@ -49,7 +57,7 @@
     "Outlook folder picker, DPAPI policy and ancestor enforcement, native forged/stale selection rejection",
     "local mail coverage with 1000-message limit, no raw-body tool output, independent 50-message AI limit, branches and gaps"
   ],
-  "exe_sha256": "b61dbf62df40bdeec05ab9d3121abb1fb47fdc007409adddd408317cbd34bc13",
+  "exe_sha256": "434db9da29c1766177b6f5fd397f7394566f7e800262df8dadb8520399204ca6",
   "installer_built": false,
   "real_vnc_tested": false,
   "real_office_tested": true,

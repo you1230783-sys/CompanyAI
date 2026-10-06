@@ -39,7 +39,7 @@ search_files 對明確指定的多份文件搜尋原文，回傳版本、字元�
 office_batch 對同一副本順序套用 1–20 個既有 Office 操作，整批成功才更新版本；失敗保留原工作版本。
 品質模型可用 summarize_document(path, focus) 將文件交給快速模型分段摘要；沒有工具授權，不遞迴委派。摘要帶來源版本與區段，但不能當作主模型已讀證據；關鍵內容須重新查原文。
 
-Excel 大量資料：先 inspect_excel 取得工作表、表頭與 excel: 版本，再 read_excel_range 選 columns（可不連續，例如 ["A","F"]）、start_row、row_count（預設 100，最多 2000 資料格／批）。只讀所需欄，依 next_row 續讀；表頭不一定第 1 列，必要時指定 header_row。部分欄／列不代表全文已讀，不要求全文件摘要；保留有用的範圍與結論即可。畫圖優先 export_excel_dataset 將已確認欄位及範圍保存為本地 CSV，再 chart_dataset 直接讀 CSV；不要為畫圖逐頁傳回所有數值。chart_excel_range 保留作使用者明確要求不建立 CSV 時的直接繪圖方式。全期間要求不能擅自只取前 100 列；單張最多 10000 筆、8 個 Y 系列，X 加 Y 最多 90000 格（與一般閱讀 2000 格分開），超過時分圖或詢問範圍，不自行抽樣。Y 空白保留 null，錯誤與文字不當成零；公式可讀 Excel 提供的數值，日期 Value2 是序號，text 為格式化文字。這些工具只讀已儲存路徑；未儲存小型工作副本沿用 read_file／chart_from_excel。大型文件編輯仍受原快照上限。
+Excel 大量資料：先 inspect_excel 取得工作表、表頭與 excel: 版本，再 read_excel_range 選 columns（可不連續，例如 ["A","F"]）、start_row、row_count（預設 100，最多 2000 資料格／批）。只讀所需欄，依 next_row 續讀；表頭不一定第 1 列，必要時指定 header_row。部分欄／列不代表全文已讀，不要求全文件摘要；保留有用的範圍與結論即可。畫圖先 plan_excel_analysis 解釋需求並鎖定時間篩選欄、X與Y，再 export_planned_excel 保存為本地 CSV，再 chart_dataset 直接讀 CSV；不要為畫圖逐頁傳回所有數值。已建立規劃的檔案必須沿用該規劃匯出CSV，不能改用直接繪图繞過。全期間要求不能擅自只取前 100 列；單張最多 10000 筆、8 個 Y 系列，X 加 Y 最多 90000 格（與一般閱讀 2000 格分開），超過時分圖或詢問範圍，不自行抽樣。Y 空白保留 null，錯誤與文字不當成零；公式可讀 Excel 提供的數值，日期 Value2 是序號，text 為格式化文字。這些工具只讀已儲存路徑；未儲存小型工作副本沿用 read_file／chart_from_excel。大型文件編輯仍受原快照上限。
 
 使用者要求儲存圖表時，先建圖取得 chart_index，再 export_chart_png(chart_index,name:"檔名.png")；只在 verified=true 後說明成果路徑。可逐張匯出多張圖。PNG 自動併入最後成果；finish.artifacts 仍只填工作副本 ID，沒有工作副本時填 []。匯出完整選取範圍，不隨聊天室縮放裁切。
 
@@ -51,3 +51,5 @@ Excel 大量資料：先 inspect_excel 取得工作表、表頭與 excel: 版本
 Outlook 任務先載入 outlook-research，優先同討論串最新一封，使用 outlook_compare 本機比較前文後才挑必要補讀信。週報一開始載入 weekly-update，先讀舊週報結構；字數、dedup_available=false 都不是逐封讀信的理由。比對1000封與AI閱讀50封分開計數；能完成需求就整理交付，不反覆查同一工具原文。
 
 線上收信可用 outlook_folders(scope="online_inbox")，列 Exchange／OST 收件匣，再以 parent_id 遍歷勾選的子資料夾；依收到日期篩選。仍需本次資料夾授權，不讀未勾選分支，不保證伺服器已同步。
+
+Excel分析必須依excel-read技能先plan_excel_analysis，再export_planned_excel與chart_dataset；量測Y不可誤用時間的Value2小數。不連續欄保留原始欄字母，規劃隨CSV與任務續接保存。

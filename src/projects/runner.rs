@@ -406,6 +406,12 @@ fn run_for(
                 }
             };
             let datasets = broker.dataset_index();
+            let plans = broker.excel_plan_index();
+            if plans.as_array().is_some_and(|v| !v.is_empty()) {
+                messages.push(super::agent::Message::user(&format!(
+                    "已鎖定的 Excel 欄位規劃（匯出與作圖必須沿用）：{plans}"
+                )));
+            }
             if datasets.as_array().is_some_and(|v| !v.is_empty()) {
                 messages.push(super::agent::Message::user(&format!(
                     "已保存的本地 CSV 資料集（只送索引，不重送原始資料）：{datasets}"
@@ -829,7 +835,8 @@ fn run_for(
                                 );
                             }
                             super::Tool::ExportLogDataset { .. }
-                            | super::Tool::ExportExcelDataset { .. } => {
+                            | super::Tool::ExportExcelDataset { .. }
+                            | super::Tool::ExportPlannedExcel { .. } => {
                                 progress_state.compact_now();
                                 report(
                                     &mut activity,
@@ -1121,6 +1128,7 @@ fn replay_safe(tool: &super::Tool) -> bool {
             | ReadNote { .. }
             | ReadTaskResult { .. }
             | InspectExcel { .. }
+            | PlanExcelAnalysis { .. }
             | ReadExcelRange { .. }
             | OutlookFolders { .. }
             | OutlookHeaders { .. }

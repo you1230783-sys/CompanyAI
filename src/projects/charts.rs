@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 pub mod png;
 pub mod quality;
+pub mod style;
+pub const KINDS: &[&str] = &["line", "bar", "scatter", "step", "area", "horizontal_bar"];
 
 pub const MAX_POINTS: usize = 10_000;
 pub const MAX_SERIES: usize = 8;
@@ -49,13 +51,16 @@ pub struct Chart {
 }
 impl Chart {
     pub fn validate(&self) -> AppResult<()> {
-        if !["line", "bar", "scatter"].contains(&self.kind.as_str())
+        if !KINDS.contains(&self.kind.as_str())
             || self.x.is_empty()
             || self.x.len() > MAX_POINTS
             || self.series.is_empty()
             || self.series.len() > MAX_SERIES
         {
-            return Err("圖表限 line/bar/scatter，1–10000 筆與 1–8 個系列。".into());
+            return Err(
+                "圖表限 line/bar/scatter/step/area/horizontal_bar，1–10000 筆與 1–8 個系列。"
+                    .into(),
+            );
         }
         for label in [
             &self.title,
@@ -177,6 +182,7 @@ pub fn prepare_excel(
             text,
             kind: kind.into(),
             formula: None,
+            number_format: String::new(),
         }
     };
     let page = Page {

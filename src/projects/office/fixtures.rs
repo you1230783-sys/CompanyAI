@@ -73,6 +73,62 @@ pub fn create(folder: &Path) -> AppResult<()> {
         }
     }
     create_large_excel(folder)?;
+    create_time_excel(folder)?;
+    Ok(())
+}
+/// 三份欄序不同的全天量測表；用固定公式產生每分鐘資料，驗證每檔各自綁定欄位。
+fn create_time_excel(folder: &Path) -> AppResult<()> {
+    for (index, time, mean) in [(1, "B", "D"), (2, "D", "B"), (3, "B", "D")] {
+        let session = Session::start(Path::new("time.xlsx"), true)?;
+        let doc = session.document()?;
+        let sheet = item(&child(doc, "Worksheets")?, 1)?;
+        for (address, property, value) in [
+            ("A1".to_owned(), "Value2", "Index".into()),
+            (format!("{time}1"), "Value2", "紀錄時間".into()),
+            ("C1".to_owned(), "Value2", "辨識名稱index".into()),
+            (format!("{mean}1"), "Value2", "圖樣Mean值".into()),
+            ("A2:A1441".to_owned(), "Formula", "=ROW()-2".into()),
+            (
+                format!("{time}2:{time}1441"),
+                "Formula",
+                "=(ROW()-2)/1440".into(),
+            ),
+            (
+                format!("{time}2:{time}1441"),
+                "NumberFormat",
+                "hh:mm:ss".into(),
+            ),
+            (
+                format!("{mean}2:{mean}1441"),
+                "Formula",
+                "=168.4+(ROW()-2)/100".into(),
+            ),
+            (format!("{mean}2:{mean}1441"), "NumberFormat", "0.00".into()),
+            ("C2:C1441".to_owned(), "Value2", "未選欄的私有識別字".into()),
+            ("A:D".to_owned(), "ColumnWidth", 24f64.into()),
+        ] {
+            let range = obj(invoke(
+                &sheet,
+                "Range",
+                vec![address.as_str().into()],
+                false,
+            )?)?;
+            set(&range, property, value)?;
+        }
+        invoke(
+            doc,
+            "SaveAs",
+            vec![
+                folder
+                    .join(format!("time{index}.xlsx"))
+                    .to_string_lossy()
+                    .as_ref()
+                    .into(),
+                51i32.into(),
+            ],
+            false,
+        )?;
+    }
     Ok(())
 }
 

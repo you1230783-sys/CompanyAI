@@ -123,6 +123,7 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
     let has = |id: &str| ids.iter().any(|i| i == id);
     match tool {
         "analyze_image" => has("image-read"),
+        "plan_excel_analysis" | "export_planned_excel" => has("excel-read"),
         "outlook_compare" => has("outlook-coverage"),
         "list_files" | "read_file" | "load_skill" | "ask_user" | "finish" | "read_work_log"
         | "read_task_result" | "compact_context" => true,

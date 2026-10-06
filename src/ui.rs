@@ -772,6 +772,15 @@ impl App {
                         };
                         let (reply, response) = mpsc::channel();
                         self.view.export_chart_png(&chart, reply)?;
+                        let custom:crate::projects::charts::style::Style=serde_json::from_value(json!({
+                            "title":"使用者自訂圖表／上下限與顏色","x_label":"時間（秒）","y_label":"量測值","kind":"area","legend":"bottom_right",
+                            "x_min":2000,"x_max":6000,"y_min":-15,"y_max":15,
+                            "series":[{"name":"自訂量測名稱","color":"#008800"}],
+                            "lines":[{"axis":"y","value":8,"name":"上限","color":"#d62728"},{"axis":"y","value":-8,"name":"下限","color":"#d62728"},{"axis":"x","value":5000,"name":"事件","color":"#5470c6"}]
+                        })).map_err(|e|e.to_string())?;
+                        let (custom_reply, custom_response) = mpsc::channel();
+                        self.view
+                            .export_custom_chart_png(&chart, Some(&custom), custom_reply)?;
                         let tx = self.tx.clone();
                         let destination = self.root.join("chart-smoke.png");
                         thread::spawn(move || {
@@ -780,7 +789,24 @@ impl App {
                                     .recv_timeout(Duration::from_secs(20))
                                     .map_err(|_| "PNG 自檢逾時。")??;
                                 let png = crate::projects::charts::png::decode_url(&url)?;
-                                std::fs::write(destination, png).map_err(|e| e.to_string())
+                                std::fs::write(&destination, png).map_err(|e| e.to_string())?;
+                                let custom_url = custom_response
+                                    .recv_timeout(Duration::from_secs(20))
+                                    .map_err(|_| "自訂PNG自檢逾時。")??;
+                                let custom_png =
+                                    crate::projects::charts::png::decode_url(&custom_url)?;
+                                let folder = destination.parent().ok_or("缺少測試資料夾。")?;
+                                std::fs::write(folder.join("chart-custom-smoke.png"), &custom_png)
+                                    .map_err(|e| e.to_string())?;
+                                let project = crate::projects::Project {
+                                    id: "chart-smoke".into(),
+                                    name: "圖表自檢".into(),
+                                    root: folder.into(),
+                                    imports: Default::default(),
+                                };
+                                let path =
+                                    crate::projects::files::save_user_chart(&project, &custom_png)?;
+                                std::fs::write(folder.join("chart-manual-save.json"),serde_json::to_vec_pretty(&json!({"result":"PASS","path":path,"bytes":custom_png.len(),"version":env!("CARGO_PKG_VERSION")})).map_err(|e|e.to_string())?).map_err(|e|e.to_string())
                             })();
                             let _ = tx.send(Event::SmokePng(result));
                         });

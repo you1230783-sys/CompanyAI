@@ -514,6 +514,39 @@ impl App {
                 "native Outlook quick action: dates, identity, skill and one-time start"
             });
         }
+        let (chat, run) = self.composer_fixture()?;
+        self.projects.running = None;
+        let chart:projects::charts::Chart=serde_json::from_value(json!({"kind":"line","title":"原圖","x_label":"時間","y_label":"量測","x":["12:00","12:01"],"series":[{"name":"原值","values":[168.4,169.1]}],"source":"測試.xlsx"})).map_err(|e|e.to_string())?;
+        self.messages[0].project_charts = vec![chart];
+        self.archive.conversations[0].messages = self.messages.clone();
+        let style:projects::charts::style::Style=serde_json::from_value(json!({"title":"自訂圖","x_label":"時間","y_label":"透光值","kind":"step","legend":"right","x_min":null,"x_max":null,"y_min":140,"y_max":180,"series":[{"name":"量測","color":"#008800"}],"lines":[{"axis":"y","value":175,"name":"上限","color":"#ff0000"}]})).map_err(|e|e.to_string())?;
+        let command = |id: &str, style| ProjectCommand::ChartCustomize {
+            target: chart_edit::Target {
+                conversation: chat.clone(),
+                message_index: 0,
+                request_id: id.into(),
+                chart_index: 0,
+            },
+            style,
+        };
+        verify(
+            self.project_command(command("wrong", Some(style.clone())))
+                .is_err(),
+            "過期圖表設定拒絕",
+        )?;
+        self.project_command(command(&run, Some(style)))?;
+        let restored = history::load(&self.root)?;
+        verify(
+            restored.conversations[0].messages[0].project_chart_styles[&0].y_min == Some(140.0)
+                && self.messages[0].project_charts[0].series[0].values[0] == Some(168.4),
+            "圖表設定加密保存且原值不變",
+        )?;
+        self.project_command(command(&run, None))?;
+        verify(
+            self.messages[0].project_chart_styles.is_empty(),
+            "恢復原樣移除顯示設定",
+        )?;
+        cases.push("native chart customization: original values, stale target rejection, DPAPI persistence and reset");
         Ok(cases)
     }
 
