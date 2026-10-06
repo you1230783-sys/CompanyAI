@@ -994,6 +994,36 @@ window.runSelfTest = async (structuredFixture) => {
     try {
       send = command => retryCommands.push(command);
       fixture.active_id = "project-chat";
+      fixture.projects.running = false;
+      LMUI.receive(fixture);
+      check(!$("weekly-start").hidden && document.querySelector('[data-action="translate"]').hidden, "project only shows weekly quick action");
+      $("weekly-start").click();
+      check($("weekly-info-dialog").open, "weekly introduction opens before creating folders");
+      $("weekly-info-ok").click();
+      const weeklyRequest = retryCommands.at(-1).command;
+      check(weeklyRequest.action === "weekly_prepare", "weekly confirmation prepares folder without starting model");
+      WeeklyUI.receive({type:"weekly_ready", conversation:fixture.active_id, request_id:weeklyRequest.request_id,
+        path:"F:\\下載\\週報 <img src=x>", start:"2026-10-05", end:"2026-10-06"});
+      await frame();
+      check($("weekly-input-dialog").open && !$("weekly-folder").querySelector("img"), "weekly folder path is inert text");
+      $("weekly-notes").value = "請改做 W40";
+      const weeklyCount = retryCommands.length;
+      $("weekly-send").click();
+      check($("weekly-confirm-dialog").open && retryCommands.length === weeklyCount, "send still waits for reference confirmation");
+      $("weekly-confirm-no").click();
+      await frame();
+      check($("weekly-input-dialog").open && $("weekly-notes").value === "請改做 W40", "No keeps second dialog and notes");
+      $("weekly-send").click();
+      $("weekly-confirm-yes").click();
+      const weeklySent = retryCommands.at(-1).command;
+      check(weeklySent.action === "weekly_submit" && weeklySent.confirmed && weeklySent.notes === "請改做 W40", "Yes submits original notes and confirmation");
+      const afterWeekly = retryCommands.length;
+      $("weekly-confirm-yes").click();
+      check(retryCommands.length === afterWeekly, "weekly double-click cannot submit twice");
+      WeeklyUI.receive({type:"weekly_submit_ack", conversation:fixture.active_id, request_id:weeklyRequest.request_id, ok:true});
+      await frame();
+      check(!$("weekly-input-dialog").open && !$("weekly-confirm-dialog").open, "weekly accepted submission closes wizard");
+
       fixture.messages = [{role:"user",content:"請修訂",request_id:"request-one"}];
       fixture.retry = {user_index:0,message_count:1,request_id:"request-one",enabled:false};
       fixture.projects.running = true; fixture.projects.running_id = "run-one";

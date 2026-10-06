@@ -631,6 +631,11 @@ fn run_for(
             }
             // 已知終態才可發起修復；多 JSON、空白完成均不執行候選工具。
             let Some(parsed) = parsed else {
+                if progress_state.needs_recovery() {
+                    // 只處理已收到終態的無效回覆；未知提交／寫入仍走原有續接機制。
+                    broker.archive_results()?;
+                    progress_state.recover_context();
+                }
                 let label = match progress_state.repair(&reason, &reply) {
                     Ok(label) => label,
                     Err(error) => return pause(&error, &broker, &progress_state, None),

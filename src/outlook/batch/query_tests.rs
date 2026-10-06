@@ -142,6 +142,7 @@ fn folder(
         fixed("StoreID", store),
         fixed("EntryID", id),
         fixed("FolderPath", format!("{store}/{id}").as_str()),
+        fixed("Name", id),
         fixed("Folders", collection(children)),
         fixed("Items", collection(mails)),
         fixed("DefaultItemType", 0i32),
@@ -485,4 +486,43 @@ fn newest_fifty_are_merged_across_stores_and_physical_copies_remain_distinct() {
     .unwrap();
     assert_eq!(result.mails.len(), 2);
     assert!(!result.truncated);
+}
+
+#[test]
+fn project_online_inbox_uses_inbox_then_lists_children_without_reading_mail() {
+    let child = folder("exchange", "rules", vec![], vec![], 1);
+    let inbox = folder("exchange", "inbox", vec![child], vec![], 1);
+    let sent = folder("exchange", "sent", vec![], vec![], 1);
+    let selected = inbox.clone();
+    let store = dispatch(vec![
+        fixed("ExchangeStoreType", 0i32),
+        (
+            "GetDefaultFolder",
+            Box::new(move |args| match i32::try_from(&args[0])? {
+                6 => Ok(VARIANT::from(selected.clone())),
+                5 => Ok(VARIANT::from(sent.clone())),
+                _ => Err(Error::from_hresult(E_NOTIMPL)),
+            }),
+        ),
+    ]);
+    let app = dispatch(vec![fixed(
+        "GetNamespace",
+        dispatch(vec![
+            fixed("Stores", collection(vec![store])),
+            fixed("GetFolderFromID", inbox),
+        ]),
+    )]);
+    let cancel = AtomicBool::new(false);
+    let (folders, _) =
+        crate::outlook::project::folders_from_app(&app, "online_inbox", None, &cancel).unwrap();
+    assert_eq!(folders.len(), 1);
+    assert_eq!(folders[0].name, "inbox");
+    assert_eq!(folders[0].scope, "online_inbox");
+    let (children, _) =
+        crate::outlook::project::folders_from_app(&app, "online_inbox", Some(&folders[0]), &cancel)
+            .unwrap();
+    assert_eq!(children[0].name, "rules");
+    let (sent, _) =
+        crate::outlook::project::folders_from_app(&app, "online_sent", None, &cancel).unwrap();
+    assert_eq!(sent[0].name, "sent");
 }

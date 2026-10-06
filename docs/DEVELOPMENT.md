@@ -31,7 +31,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build.ps1 -Emp
 
 依賴由 `Cargo.lock`、`vendor` 與 `.cargo/config.toml` 固定，使用空 Cargo 快取及 `--frozen` 驗證。環境腳本優先使用專案內的 `toolchain`，否則使用共用 `.tools`，並設定本專案的 target 目錄。
 
-`toolchain/` 與 `vendor/` 不直接提交 Git。**現存離線 ZIP 是歷史交付包，不代表目前 0.8.37 原始碼。** 全新環境需先準備指定工具鏈與符合 Cargo.lock 的 vendor；不要將舊 ZIP 整包覆蓋到新版原始碼。完整離線包操作見 [離線交付與 Git](OFFLINE_AND_GIT.md)。
+`toolchain/` 與 `vendor/` 不直接提交 Git。**現存離線 ZIP 是歷史交付包，不代表目前 0.8.38 原始碼。** 全新環境需先準備指定工具鏈與符合 Cargo.lock 的 vendor；不要將舊 ZIP 整包覆蓋到新版原始碼。完整離線包操作見 [離線交付與 Git](OFFLINE_AND_GIT.md)。
 
 | Build 選項 | 用途 |
 | --- | --- |
@@ -138,3 +138,13 @@ EXE／ZIP 由 Git LFS 管理。更新簽署私鑰位於 `.private/`，不提交�
 ## 0.8.37 Outlook 授權與比對
 
 `src/outlook/privacy.rs`管理本機資料夾選擇／DPAPI／祖先鏈檢查；`src/projects/mail/comparison.rs`管理不向AI回傳原文的前文比對；UI由原生run/conversation/request配對接受勾選代號。技能目錄與tools.json同步加入outlook-coverage／outlook_compare，網站通用契約不變。資料夾選擇不是追溯清除聊天或引用文字；限制與驗收見[本版紀錄](VALIDATION_0_8_37.md)。
+
+## 0.8.38 週報及網路專案
+
+`src/projects/setup.rs` 負責 Known Folder、唯一目錄、本機日期／ISO 週次及週報提示；`ui/weekly.js` 管理說明、輸入、確認視窗；`src/ui/projects/weekly.rs` 核對帳號／專案／對話／準備代號後才啟動。使用 `SHGetKnownFolderPath(KF_FLAG_DEFAULT)` 取目前重新導向位置，不拼接使用者 C 槽路徑。網路 IO 沿用 Windows 連線與權限，不能保證斷線時立即回應。
+
+`src/projects/files.rs` 接受磁碟及 UNC 絕對子目錄，保留固定目錄 handle、重解析點、硬連結、`.lmai` 與成果發布檢查。網路伺服器若不支援所需查詢則拒絕操作，不降級略過安全檢查。`examples/network_smoke.rs` 經正式 broker／Office 驗證讀取、成果、DPAPI 筆記與路徑逃逸拒絕。
+
+使用既有 loopback SMB 分享下的專用測試子目錄，例如 `scripts/Build.ps1 -EmptyCargoCache -TestOffice -NetworkTestRoot '\\localhost\Y$\Rust\Project\CompanyAI\.build'`。腳本不建立分享；只暫時使用空閒磁碟代號，最後核對並移除自己的映射。`offline/network-verification.json` 分別記錄本機分享通過與公司分享尚未驗證。
+
+無效模型回覆的恢復在 runner 先 `archive_results`，再由 Progress 精簡舊 assistant 歷史及工具結果，保留一組近期結果、原始 user 指示及真實狀態。兩次普通＋兩次恢復，每段累計 30；有進展只重設連續計數，不清除累計。HTTP continuation 測試核對恢復後副本不重複編輯。詳見 [驗證](VALIDATION_0_8_38.md)。

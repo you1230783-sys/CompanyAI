@@ -3,10 +3,35 @@ use super::*;
 use crate::projects::{self, Store};
 mod composer;
 mod composer_smoke;
+mod weekly;
 
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(super) enum ProjectCommand {
+    CreateDefault {
+        name: String,
+        location: String,
+    },
+    WeeklyPrepare {
+        conversation: String,
+        request_id: String,
+    },
+    WeeklySubmit {
+        conversation: String,
+        request_id: String,
+        start: String,
+        end: String,
+        notes: String,
+        confirmed: bool,
+    },
+    WeeklyCancel {
+        conversation: String,
+        request_id: String,
+    },
+    WeeklyOpen {
+        conversation: String,
+        request_id: String,
+    },
     Create {
         name: String,
     },
@@ -147,6 +172,7 @@ pub(super) struct Running {
 }
 #[derive(Default)]
 pub(super) struct ProjectRuntime {
+    weekly: Option<weekly::PendingWeekly>,
     pub store: Store,
     error: Option<String>,
     running: Option<Running>,
@@ -319,6 +345,9 @@ impl App {
             "running":self.projects.running.is_some(),"running_id":self.projects.running.as_ref().map(|r|&r.id),"activity":self.projects.running.as_ref().map(|r|&r.activity),"charts":self.projects.running.as_ref().map(|r|&r.charts),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
     }
     pub(super) fn project_command(&mut self, command: ProjectCommand) -> AppResult<()> {
+        if self.weekly_command(&command)? {
+            return Ok(());
+        }
         match &command {
             ProjectCommand::Compose {
                 conversation,
@@ -632,6 +661,21 @@ impl App {
                     self.new_project_chat(&id)?;
                 }
             }
+            ProjectCommand::CreateDefault { name, location } => {
+                if !self.logged_in()
+                    || self.versions.blocked()
+                    || name.trim().is_empty()
+                    || name.trim().chars().count() > 60
+                {
+                    return Err("請先登入並輸入 1–60 字的專案名稱。".into());
+                }
+                let root = projects::setup::create_default(&location)?;
+                let mut store = self.projects.store.clone();
+                let id = store.add(&name, root)?;
+                store.save(&self.root)?;
+                self.projects.store = store;
+                self.new_project_chat(&id)?;
+            }
             ProjectCommand::NewChat { id } => self.new_project_chat(&id)?,
             ProjectCommand::Rename { id, name } => {
                 let name = name.trim();
@@ -716,6 +760,10 @@ impl App {
                 unreachable!("handled above")
             }
             ProjectCommand::Stop
+            | ProjectCommand::WeeklyPrepare { .. }
+            | ProjectCommand::WeeklySubmit { .. }
+            | ProjectCommand::WeeklyCancel { .. }
+            | ProjectCommand::WeeklyOpen { .. }
             | ProjectCommand::Compose { .. }
             | ProjectCommand::CancelQueued { .. }
             | ProjectCommand::SendQueued { .. }

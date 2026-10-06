@@ -1442,3 +1442,13 @@ body.collapsed .project-section { overflow: visible; }
 .outlook-folder-row input { width: auto; flex: 0 0 auto; }
 .outlook-folder-row details { margin-left: 22px; }
 .outlook-folder-row summary { cursor: pointer; }
+
+/* 週報說明與準備：長文可捲動，重要告知同時以文字與紅色表示。 */
+.weekly-dialog { width: min(760px, 90vw); max-height: 90vh; overflow: auto; }
+.weekly-dialog li { margin-bottom: 12px; line-height: 1.7; }
+.weekly-warning { color: #cf3030; font-weight: 700; }
+.weekly-dates { display: flex; gap: 16px; flex-wrap: wrap; }
+#weekly-folder { display: block; overflow-wrap: anywhere; text-align: left; user-select: text; }
+#weekly-notes { width: 100%; box-sizing: border-box; resize: vertical; }
+
+:root[data-theme="dark"] .weekly-warning { color: #ff9292; }

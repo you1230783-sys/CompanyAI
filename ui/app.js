@@ -794,6 +794,7 @@ function receive(next) {
   }
   renderHistory();
   window.ProjectUI?.render();
+  window.WeeklyUI?.render();
   renderModels();
   renderMessages();
   renderNotifications();
@@ -1133,6 +1134,7 @@ if (bridge) {
     else {
       receiveHotkeyMessage(event.data);
       window.ProjectUI?.receive(event.data);
+      window.WeeklyUI?.receive(event.data);
       window.ProjectComposer?.receive(event.data);
       window.WorkUI?.receive(event.data);
       window.VncUI?.receive(event.data);

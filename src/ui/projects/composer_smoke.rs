@@ -385,6 +385,63 @@ impl App {
         )?;
         self.projects.running = None;
         cases.push("native Outlook folder selection rejects stale identity and unknown or hidden-parent ids");
+        // 週報準備只建資料夾；取消、缺少確認與過期對話不可啟動模型。
+        let (chat, _) = self.composer_fixture()?;
+        self.projects.running = None;
+        let request = crate::jobs::new_id()?;
+        self.project_command(ProjectCommand::WeeklyPrepare {
+            conversation: chat.clone(),
+            request_id: request.clone(),
+        })?;
+        let project = self
+            .projects
+            .store
+            .project_for(&chat)
+            .ok_or("缺少週報專案")?
+            .clone();
+        let count = || {
+            std::fs::read_dir(&project.root)
+                .map(|v| v.count())
+                .unwrap_or(0)
+        };
+        let created = count();
+        self.project_command(ProjectCommand::WeeklyPrepare {
+            conversation: chat.clone(),
+            request_id: request.clone(),
+        })?;
+        verify(count() == created, "重複準備不重建資料夾")?;
+        let submit = |conversation: String, confirmed| ProjectCommand::WeeklySubmit {
+            conversation,
+            request_id: request.clone(),
+            start: "2026-10-05".into(),
+            end: "2026-10-06".into(),
+            notes: "請改做 W40，保留使用者要求".into(),
+            confirmed,
+        };
+        verify(
+            self.project_command(submit(chat.clone(), false)).is_err(),
+            "週報缺少最後確認不可啟動",
+        )?;
+        verify(
+            self.project_command(submit("other-chat".into(), true))
+                .is_err(),
+            "週報跨對話不可送出",
+        )?;
+        verify(self.projects.running.is_none(), "准备資料夾未啟動 worker")?;
+        self.project_command(submit(chat.clone(), true))?;
+        verify(
+            self.messages
+                .last()
+                .is_some_and(|m| m.content.contains("W40") && m.content.contains("ISO 週別")),
+            "原生週報訊息帶日期週別與補充",
+        )?;
+        verify(
+            self.project_command(submit(chat, true)).is_err(),
+            "已送出週報不可重播",
+        )?;
+        self.await_composer_worker()?;
+        verify(count() >= created, "啟動取消均保留素材資料夾")?;
+        cases.push("native weekly folder preparation, confirmation, conversation binding, dated prompt and one-time start");
         Ok(cases)
     }
 

@@ -190,8 +190,8 @@ impl Session {
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
         self.require_consent()?;
-        if !matches!(scope, "local_inbox" | "online_sent") {
-            return Err("Outlook 範圍只能是 local_inbox 或 online_sent。".into());
+        if !matches!(scope, "local_inbox" | "online_inbox" | "online_sent") {
+            return Err("Outlook 範圍只能是 local_inbox、online_inbox 或 online_sent。".into());
         }
         let parent = parent_id
             .map(|id| {
@@ -235,7 +235,7 @@ impl Session {
         let next = offset + public.len();
         Ok(
             json!({"folders":public,"next_offset":next,"has_more":next<total,"total":total,"notices":notices,
-            "scope_note":"僅列名稱、不讀郵件。子資料夾需明確指定 parent_id；不自動展開或讀取全部信件。線上寄件備份使用 Outlook 信箱及其同步快取，不保證即時同步。"}),
+            "scope_note":"僅列名稱、不讀郵件。子資料夾需明確指定 parent_id；不自動展開或讀取全部信件。線上收件匣與寄件備份使用 Outlook 信箱及其同步快取，不保證即時同步。"}),
         )
     }
     pub fn headers(

@@ -1,6 +1,6 @@
 {
-  "recorded_at": "2026-10-06T10:08:02.6218537+08:00",
-  "version": "0.8.37.0",
+  "recorded_at": "2026-10-06T12:50:53.4636443+08:00",
+  "version": "0.8.38.0",
   "result": "PASS",
   "msvc": "14.29.30133",
   "compiler_report": [
@@ -8,8 +8,11 @@
     "Verified _MSC_FULL_VER=192930159 x64"
   ],
   "empty_cargo_cache": true,
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-5a3ef4bb9b5a41ed8837e6d8260711c5",
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-c85c1bbb48bb4ff39c6ed71733237f9e",
   "checks": [
+    "weekly wizard prepare/confirm/cancel and conversation binding",
+    "online inbox COM fixture",
+    "two ordinary repairs plus two compact-context recovery attempts",
     "v142 x64 compiler probe",
     "fmt",
     "Clippy",
@@ -39,9 +42,10 @@
     "Outlook folder picker, DPAPI policy and ancestor enforcement, native forged/stale selection rejection",
     "local mail coverage with 1000-message limit, no raw-body tool output, independent 50-message AI limit, branches and gaps"
   ],
-  "exe_sha256": "4091a43d755f2367c872f7813abe31e139a4f0f1025191965e4c084287a55495",
+  "exe_sha256": "47374eec0ae24288b7794e7707b313a034fd6310a8674c5afedbd011e4055aee",
   "installer_built": false,
   "real_vnc_tested": false,
   "real_office_tested": true,
+  "real_loopback_smb_tested": true,
   "offline_zip_built": false
 }

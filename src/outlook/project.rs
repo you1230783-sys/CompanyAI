@@ -231,91 +231,9 @@ impl Source for Reader {
     ) -> AppResult<(Vec<Folder>, Vec<String>)> {
         batch::check_cancel(cancel)?;
         let (_apartment, app) = batch::connect()?;
-        let ns = namespace(&app)?;
-        let started = Instant::now();
-        let mut result = Vec::new();
-        let mut notices = Vec::new();
-        if let Some(parent) = parent {
-            let current = folder(&ns, parent)?;
-            let children = object(&get(&current, "Folders", &mut [])?)?;
-            let total = count(&children)?;
-            if total > 10_000 {
-                return Err("單層 Outlook 資料夾超過 10000 個，請整理後再讀取。".into());
-            }
-            for index in 1..=total {
-                check(cancel, started)?;
-                let child = item(&children, index)?;
-                if parent.excluded.contains(&text(&child, "EntryID", 4096)?) {
-                    continue;
-                }
-                if privacy::folder_allowed(&privacy::Policy::current()?, &child)? {
-                    result.push(snapshot_folder(&child, scope, &parent.excluded, true)?);
-                }
-            }
-        } else {
-            let stores = object(&get(&ns, "Stores", &mut [])?)?;
-            let total = count(&stores)?;
-            if total > 100 {
-                return Err("已載入 Outlook 資料檔超過 100 個，請先縮小使用中的範圍。".into());
-            }
-            for index in 1..=total {
-                check(cancel, started)?;
-                let store = item(&stores, index)?;
-                let kind = i32::try_from(&get(&store, "ExchangeStoreType", &mut [])?)
-                    .map_err(|_| "無法確認 Outlook 信箱類型。")?;
-                if scope == "local_inbox" {
-                    // FilePath 僅判斷已載入 Store 的 PST 類型；不掃描或開啟磁碟上的其他檔案。
-                    if kind != 3 {
-                        continue;
-                    }
-                    let path = text(&store, "FilePath", 32768)?;
-                    if Path::new(&path)
-                        .extension()
-                        .and_then(|s| s.to_str())
-                        .is_none_or(|s| !s.eq_ignore_ascii_case("pst"))
-                    {
-                        continue;
-                    }
-                    let root = object(&get(&store, "GetRootFolder", &mut [])?)?;
-                    let mut excluded = Vec::new();
-                    for kind in [3i32, 4, 5, 16, 23, 20] {
-                        if let Ok(value) =
-                            get(&store, "GetDefaultFolder", &mut [VARIANT::from(kind)])
-                        {
-                            if let Ok(value) = object(&value) {
-                                excluded.push(text(&value, "EntryID", 4096)?);
-                            }
-                        }
-                    }
-                    // 規則可能把郵件放在 PST 根目錄下的平行資料夾，先列資料檔再讓 AI 選擇。
-                    if privacy::folder_allowed(&privacy::Policy::current()?, &root)? {
-                        result.push(snapshot_folder(&root, scope, &excluded, false)?);
-                    }
-                } else if matches!(kind, 0 | 1 | 4)
-                    || (kind == 3
-                        && Path::new(&text(&store, "FilePath", 32768)?)
-                            .extension()
-                            .and_then(|e| e.to_str())
-                            .is_some_and(|e| e.eq_ignore_ascii_case("ost")))
-                {
-                    match get(&store, "GetDefaultFolder", &mut [VARIANT::from(5i32)])
-                        .and_then(|v| object(&v))
-                    {
-                        Ok(sent) => {
-                            if privacy::folder_allowed(&privacy::Policy::current()?, &sent)? {
-                                result.push(snapshot_folder(&sent, scope, &[], true)?);
-                            }
-                        }
-                        Err(_) => notices.push("部分資料檔沒有可讀取的寄件備份。".into()),
-                    }
-                }
-            }
-            if result.is_empty() {
-                notices.push(if scope=="local_inbox" {"沒有找到已載入的本地 PST；請在 Classic Outlook 開啟正確的資料檔，不會自動改讀線上收件匣。"}else{"沒有找到 Exchange／OST 信箱的寄件備份；不會改讀本地寄件資料夾。"}.into());
-            }
-        }
-        Ok((result, notices))
+        folders_from_app(&app, scope, parent, cancel)
     }
+
     fn headers(
         &mut self,
         reference: &Folder,
@@ -422,6 +340,103 @@ impl Source for Reader {
         batch::check_cancel(cancel)?;
         Ok(body)
     }
+}
+
+/// 列夾核心只依已連線 Outlook 物件工作；測試可用 IDispatch fixture 驗證。
+pub(crate) fn folders_from_app(
+    app: &IDispatch,
+    scope: &str,
+    parent: Option<&Folder>,
+    cancel: &AtomicBool,
+) -> AppResult<(Vec<Folder>, Vec<String>)> {
+    let ns = namespace(app)?;
+    let started = Instant::now();
+    let mut result = Vec::new();
+    let mut notices = Vec::new();
+    if let Some(parent) = parent {
+        let current = folder(&ns, parent)?;
+        let children = object(&get(&current, "Folders", &mut [])?)?;
+        let total = count(&children)?;
+        if total > 10_000 {
+            return Err("單層 Outlook 資料夾超過 10000 個，請整理後再讀取。".into());
+        }
+        for index in 1..=total {
+            check(cancel, started)?;
+            let child = item(&children, index)?;
+            if parent.excluded.contains(&text(&child, "EntryID", 4096)?) {
+                continue;
+            }
+            if privacy::folder_allowed(&privacy::Policy::current()?, &child)? {
+                result.push(snapshot_folder(&child, scope, &parent.excluded, true)?);
+            }
+        }
+    } else {
+        let stores = object(&get(&ns, "Stores", &mut [])?)?;
+        let total = count(&stores)?;
+        if total > 100 {
+            return Err("已載入 Outlook 資料檔超過 100 個，請先縮小使用中的範圍。".into());
+        }
+        for index in 1..=total {
+            check(cancel, started)?;
+            let store = item(&stores, index)?;
+            let kind = i32::try_from(&get(&store, "ExchangeStoreType", &mut [])?)
+                .map_err(|_| "無法確認 Outlook 信箱類型。")?;
+            if scope == "local_inbox" {
+                // FilePath 僅判斷已載入 Store 的 PST 類型；不掃描或開啟磁碟上的其他檔案。
+                if kind != 3 {
+                    continue;
+                }
+                let path = text(&store, "FilePath", 32768)?;
+                if Path::new(&path)
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .is_none_or(|s| !s.eq_ignore_ascii_case("pst"))
+                {
+                    continue;
+                }
+                let root = object(&get(&store, "GetRootFolder", &mut [])?)?;
+                let mut excluded = Vec::new();
+                for kind in [3i32, 4, 5, 16, 23, 20] {
+                    if let Ok(value) = get(&store, "GetDefaultFolder", &mut [VARIANT::from(kind)]) {
+                        if let Ok(value) = object(&value) {
+                            excluded.push(text(&value, "EntryID", 4096)?);
+                        }
+                    }
+                }
+                // 規則可能把郵件放在 PST 根目錄下的平行資料夾，先列資料檔再讓 AI 選擇。
+                if privacy::folder_allowed(&privacy::Policy::current()?, &root)? {
+                    result.push(snapshot_folder(&root, scope, &excluded, false)?);
+                }
+            } else if matches!(kind, 0 | 1 | 4)
+                || (kind == 3
+                    && Path::new(&text(&store, "FilePath", 32768)?)
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .is_some_and(|e| e.eq_ignore_ascii_case("ost")))
+            {
+                // olFolderInbox=6、olFolderSentMail=5；收件與寄件日期規則仍分開。
+                let folder_kind = if scope == "online_inbox" { 6i32 } else { 5i32 };
+                match get(
+                    &store,
+                    "GetDefaultFolder",
+                    &mut [VARIANT::from(folder_kind)],
+                )
+                .and_then(|v| object(&v))
+                {
+                    Ok(sent) => {
+                        if privacy::folder_allowed(&privacy::Policy::current()?, &sent)? {
+                            result.push(snapshot_folder(&sent, scope, &[], true)?);
+                        }
+                    }
+                    Err(_) => notices.push("部分資料檔沒有可讀取的指定預設郵件資料夾。".into()),
+                }
+            }
+        }
+        if result.is_empty() {
+            notices.push(if scope=="local_inbox" {"沒有找到已載入的本地 PST；請在 Classic Outlook 開啟正確的資料檔，不會自動改讀線上收件匣。"}else if scope=="online_inbox" {"沒有找到 Exchange／OST 信箱的收件匣。"}else{"沒有找到 Exchange／OST 信箱的寄件備份；不會改讀本地寄件資料夾。"}.into());
+        }
+    }
+    Ok((result, notices))
 }
 
 #[cfg(test)]

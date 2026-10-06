@@ -24,19 +24,23 @@ use windows_sys::Win32::Storage::FileSystem::*;
 /// 回傳的 handle 保持到操作結束，拒絕目錄本身的寫入／刪除共用，
 /// 避免檢查後被重新命名、替換或改成 Junction；仍可在目錄內建立成果。
 pub(super) fn pin(path: &Path) -> AppResult<Vec<File>> {
+    let path = super::setup::normal_path(path)?;
     let mut current = PathBuf::new();
     let mut guards = Vec::new();
     for part in path.components() {
         match part {
-            Component::Prefix(prefix) if matches!(prefix.kind(), std::path::Prefix::Disk(_)) => {
+            Component::Prefix(prefix)
+                if matches!(
+                    prefix.kind(),
+                    std::path::Prefix::Disk(_) | std::path::Prefix::UNC(_, _)
+                ) =>
+            {
                 current.push(part.as_os_str())
             }
             Component::RootDir => {
                 current.push(part.as_os_str());
-                // DRIVE_REMOTE=4；磁碟代號映射到網路分享亦拒絕，不只檢查 UNC 字串。
-                if unsafe { GetDriveTypeW(crate::wide(&current.to_string_lossy()).as_ptr()) } == 4 {
-                    return Err("第一版不允許網路映射磁碟。".into());
-                }
+                // 網路磁碟與 UNC 使用同一組目錄 handle／重新解析點檢查；
+                // 網路失效或不支援必要檢查時直接報錯，不降級成未驗證讀寫。
             }
             Component::Normal(_) => {
                 current.push(part.as_os_str());
@@ -57,11 +61,7 @@ pub(super) fn pin(path: &Path) -> AppResult<Vec<File>> {
                 }
                 guards.push(file);
             }
-            _ => {
-                return Err(
-                    "只支援本機磁碟的完整資料夾路徑，不接受 UNC、裝置路徑或上層跳轉。".into(),
-                )
-            }
+            _ => return Err("只支援磁碟或 UNC 資料夾，不接受裝置路徑或上層跳轉。".into()),
         }
     }
     Ok(guards)
@@ -102,7 +102,7 @@ pub fn validate_root(root: &Path) -> AppResult<()> {
             .count()
             == 0
     {
-        return Err("請選擇本機的專案資料夾，不可授權整個磁碟。".into());
+        return Err("請選擇專案子資料夾，不可授權整個磁碟或網路分享根目錄。".into());
     }
     let _guards = pin(root)?;
     if let Some(directory) = _guards.last() {

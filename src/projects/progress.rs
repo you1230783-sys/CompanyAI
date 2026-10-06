@@ -104,6 +104,8 @@ pub(super) struct Progress {
     #[serde(default)]
     lean_context: bool,
     #[serde(default)]
+    recovery_context: bool,
+    #[serde(default)]
     instruction_review_required: bool,
     #[serde(default)]
     superseded: Vec<String>,
@@ -134,6 +136,7 @@ impl Progress {
             last_read: None,
             compact: false,
             lean_context: false,
+            recovery_context: false,
             instruction_review_required: false,
             superseded: vec![],
             next_step: String::new(),
@@ -369,17 +372,28 @@ impl Progress {
         self.repair = None;
     }
 
-    /// 同一段無進展最多修復兩次，全任務六次；第二次才要求精簡上下文續接。
+    /// 一般修復兩次後，先由 runner 封存原文，再以精簡上下文追加兩次修復。
+    /// 累計三十次避免長任務因零星格式錯誤過早停止；有效進展只重設連續計數。
+    pub fn needs_recovery(&self) -> bool {
+        self.consecutive_repairs == 2 && self.total_repairs < 30
+    }
+
+    /// 呼叫前必須 archive_results 成功；只縮短送給模型的投影，去重及權限不变。
+    pub fn recover_context(&mut self) {
+        self.compact_now();
+        self.recovery_context = true;
+    }
+
     pub fn repair(&mut self, reason: &str, raw: &str) -> AppResult<&'static str> {
-        if self.consecutive_repairs >= 2 || self.total_repairs >= 6 {
+        if self.consecutive_repairs >= 4 || self.total_repairs >= 30 {
             return Err(
-                "模型回覆重試兩次仍無有效進展，或已達本次六次修復上限；已保留進度。".into(),
+                "模型回覆經兩次一般修復及兩次精簡恢復仍無有效進展，或已達本段累計 30 次修復上限；已保留進度。".into(),
             );
         }
         self.consecutive_repairs += 1;
         self.total_repairs += 1;
         self.no_progress += 1;
-        let compact = self.consecutive_repairs == 2;
+        let compact = self.consecutive_repairs >= 2;
         self.compact |= compact;
         let excerpt: String = if compact {
             String::new()
@@ -392,7 +406,11 @@ impl Progress {
         if self.agent.is_some() {
             self.repair = Some(format!("上一則工具要求尚未執行或未通過交付檢查：{reason}。依原始需求與真實工具結果繼續，透過 API 呼叫下一個工具，不在正文拼接 JSON。已可交付時呼叫 finish 並提供實際正文；不要重做成功的修改。"));
         }
-        Ok(if compact && self.note.is_some() {
+        Ok(if self.consecutive_repairs == 3 {
+            "已暫時移出較早上下文，依目標、目前步驟與真實狀態恢復（1/2）"
+        } else if self.consecutive_repairs == 4 {
+            "正在以精簡上下文進行最後一次恢復（2/2）"
+        } else if compact && self.note.is_some() {
             "正在依筆記與進度接續任務（2/2）"
         } else if compact {
             "正在依已保存進度接續任務（2/2）"
@@ -424,6 +442,11 @@ impl Progress {
             0
         };
         let mut messages = self.base.clone();
+        if self.recovery_context {
+            // 使用者原文、系統限制與最新補充仍保留；移除較早助理答案的送出投影。
+            // 原文保存在歷史／checkpoint，必要時可依來源查回。
+            messages.retain(|message| message.role != "assistant");
+        }
         // 較早助理答案可能很大；只在需要時縮減送出投影，原文仍留在歷史與 checkpoint。
         // 使用者原話及最新補充完全不裁切，避免把任務條件換成模型摘要。
         let mut base_bytes: usize = messages.iter().map(|m| m.wire().to_string().len()).sum();
@@ -688,12 +711,21 @@ mod tests {
         for evidence in ["evidence4", "evidence5", "尚未摘要的原文"] {
             assert!(messages.iter().any(|m| m.content == evidence));
         }
-        assert!(state.repair("again", "").is_err());
+        assert!(state.needs_recovery());
+        state.recover_context();
+        assert!(state.repair("again", "").is_ok());
+        let messages = state.messages(json!([])).unwrap();
+        assert!(!messages.iter().any(|m| m.content == "evidence4"));
+        assert!(messages.iter().any(|m| m.content == "尚未摘要的原文"));
+        assert!(state.repair("last", "").is_ok());
+        assert!(state.repair("stop", "").is_err());
     }
     #[test]
     fn repeated_reads_do_not_earn_unlimited_repairs_or_notes() {
         let mut state = Progress::new(vec![Message::user("read")]);
-        for i in 0..6 {
+        for i in 0..30 {
+            let mut result = read(i * 10, "v1");
+            result["result"]["total"] = json!(1000);
             state.repair("empty", "done").unwrap();
             assert!(state.observe(
                 &format!("r{i}"),
@@ -701,10 +733,10 @@ mod tests {
                     path: "a.txt".into(),
                     offset: i * 10
                 },
-                &read(i * 10, "v1")
+                &result
             ));
         }
-        assert!(state.repair("seventh", "done").is_err());
+        assert!(state.repair("thirty-first", "done").is_err());
         for i in 0..8 {
             assert!(!state.observe(
                 &format!("repeat{i}"),
@@ -716,7 +748,7 @@ mod tests {
             ));
         }
         assert!(state.stalled());
-        assert_eq!(state.readings["a.txt"].read_count, 6);
+        assert_eq!(state.readings["a.txt"].read_count, 30);
     }
 
     #[test]
@@ -844,14 +876,14 @@ mod tests {
     fn missing_tool_uses_existing_bounded_repair_without_recording_an_operation() {
         let mut state = Progress::new(vec![Message::user("保存文件摘要")]);
         let raw = r#"{"action":"tool","operation_id":"note_001","request":{"summary":"摘要"}}"#;
-        for attempt in 0..3 {
+        for attempt in 0..5 {
             let super::super::reply::ParseOutcome::Repair(reason) =
                 super::super::reply::parse(raw).unwrap()
             else {
                 panic!("缺少工具名稱不得產生可執行操作");
             };
             let repaired = state.repair(reason, raw);
-            if attempt < 2 {
+            if attempt < 4 {
                 assert!(repaired.is_ok());
                 let messages = state.messages(json!([])).unwrap();
                 assert!(messages

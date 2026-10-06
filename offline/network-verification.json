@@ -1,0 +1,16 @@
+{
+  "version": "0.8.38.0",
+  "result": "PASS",
+  "fixture": "\\\\localhost\\Y$\\Rust\\Project\\CompanyAI\\.build\\network-7db028ed159140cd95acff9d0d53f5f0",
+  "checks": [
+    "existing localhost SMB UNC",
+    "temporary mapped drive",
+    "unique project directories",
+    "TXT read and publish",
+    "DPAPI note reload",
+    "Word and Excel create/save/reopen",
+    "path escape rejection",
+    "original unchanged"
+  ],
+  "company_share_tested": false
+}

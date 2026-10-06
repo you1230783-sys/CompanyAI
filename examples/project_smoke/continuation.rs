@@ -28,6 +28,7 @@ enum Case {
     LongReadClean,
     TransientSubmission,
     Replay,
+    CleanRecovery,
     EmptyForever,
     WrongIdentity,
     Cancelled,
@@ -118,7 +119,7 @@ fn answer(case: Case, round: usize, body: &Value) -> Option<String> {
                 next
             }
         }
-        Case::Replay => {
+        Case::Replay | Case::CleanRecovery => {
             let copies = state["copies"].as_array().unwrap();
             let copy = copies.first().cloned().unwrap_or(json!({}));
             let id = &copy["copy_id"];
@@ -126,7 +127,29 @@ fn answer(case: Case, round: usize, body: &Value) -> Option<String> {
                 "edit_once",
                 json!({"tool":"edit_text","copy_id":id,"revision":text::revision("原始文字"),"start":0,"expected":"","replacement":"新增"}),
             );
-            match round {
+            if matches!(case, Case::CleanRecovery) && round == 5 {
+                return None;
+            }
+            if matches!(case, Case::CleanRecovery) && round == 6 {
+                assert_eq!(state["total_repairs"], 3);
+                let pairs = body["messages"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|m| {
+                        m["content"]
+                            .as_str()
+                            .is_some_and(|s| s.starts_with("工具結果"))
+                    })
+                    .count();
+                assert_eq!(pairs, 1, "精簡恢復只帶最近結果，其餘已封存");
+            }
+            let replay_round = if matches!(case, Case::CleanRecovery) && round > 5 {
+                round - 1
+            } else {
+                round
+            };
+            match replay_round {
                 0 => read("read", 0),
                 1 => tool(
                     "copy",
@@ -146,7 +169,14 @@ fn answer(case: Case, round: usize, body: &Value) -> Option<String> {
                     return None;
                 }
                 5 => {
-                    assert_eq!(state["total_repairs"], 2);
+                    assert_eq!(
+                        state["total_repairs"],
+                        if matches!(case, Case::CleanRecovery) {
+                            3
+                        } else {
+                            2
+                        }
+                    );
                     assert_eq!(copy["revision"], text::revision("新增原始文字"));
                     assert!(copy["paths"].as_array().unwrap().is_empty());
                     edit // 相同 operation_id、相同舊 revision，必須回傳原結果，不能再次插入。
@@ -187,6 +217,7 @@ pub fn verify(root: &Path) -> AppResult<()> {
         Case::LongReadClean,
         Case::TransientSubmission,
         Case::Replay,
+        Case::CleanRecovery,
         Case::EmptyForever,
         Case::WrongIdentity,
         Case::Cancelled,
@@ -320,10 +351,17 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
             assert!(result?.contains("23 段"));
             assert_eq!(rounds, 24);
         }
-        Case::Replay => {
+        Case::Replay | Case::CleanRecovery => {
             let result = result?;
             assert!(result.contains("修改.txt"));
-            assert_eq!(rounds, 9);
+            assert_eq!(
+                rounds,
+                if matches!(case, Case::CleanRecovery) {
+                    10
+                } else {
+                    9
+                }
+            );
             let output = std::fs::read_dir(workspace.join("_AI_Output"))
                 .map_err(|e| e.to_string())?
                 .next()
@@ -340,9 +378,9 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
             assert_eq!(decoded.trim_start_matches('\u{feff}'), "新增原始文字");
         }
         Case::EmptyForever => {
-            assert!(result?.contains("重試兩次"));
+            assert!(result?.contains("兩次精簡恢復"));
             assert!(runner::paused_available(&root.join("app-data"), &run_id));
-            assert_eq!(rounds, 3);
+            assert_eq!(rounds, 5);
         }
         Case::WrongIdentity => {
             assert!(result.unwrap_err().contains("識別碼"));

@@ -20,3 +20,5 @@ read_file 按 next_offset 續讀，未讀全文不宣稱全文已讀。PDF/MSG �
 用戶要求 Excel／LOG 作圖時優先 load_skill(dataset-charts)，先確認欄位再本地匯出 CSV；只保留資料索引、筆數、統計與首尾預覽，用 chart_dataset 直接畫圖，不抄寫整批數字。更正欄位、切換方向或資料已保存時可直接 compact_context，提供累積工作筆記、失效結論與下一步；此工具是實際整理動作，可獨立呼叫。一般 progress_note 仍附正常工具，不額外為寫筆記空跑一輪。需要方法時 load_skill(context-management)。不要把完整原文帶回筆記或最終答案。
 
 Outlook 任務先載入 outlook-research，優先同討論串最新一封，使用 outlook_compare 本機比較前文後才挑必要補讀信。週報一開始載入 weekly-update，先讀舊週報結構；字數、dedup_available=false 都不是逐封讀信的理由。比對1000封與AI閱讀50封分開計數；能完成需求就整理交付，不反覆查同一工具原文。
+
+線上收信可用 outlook_folders(scope="online_inbox")，列 Exchange／OST 收件匣，再以 parent_id 遍歷勾選的子資料夾；依收到日期篩選。仍需本次資料夾授權，不讀未勾選分支，不保證伺服器已同步。

@@ -305,9 +305,9 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
     }
     assert!(activity.iter().any(|step| step == "建立副本：完成"));
     if mode == 2 {
-        assert!(result?.contains("重試兩次"));
+        assert!(result?.contains("兩次精簡恢復"));
         assert!(runner::paused_available(&root.join("app-data"), &run_id));
-        assert_eq!(rounds, 5);
+        assert_eq!(rounds, 7);
         assert!(!activity.iter().any(|step| step == "編輯文字：完成"));
         assert!(!workspace.join("_AI_Output").exists());
     } else {

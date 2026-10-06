@@ -18,6 +18,7 @@ pub mod reply;
 pub mod runner;
 pub mod sandbox;
 mod server_pdf;
+pub mod setup;
 mod skills;
 pub mod steering;
 pub mod text;
@@ -73,6 +74,7 @@ impl Store {
         self.projects.iter().find(|p| &p.id == id)
     }
     pub fn add(&mut self, name: &str, root: PathBuf) -> AppResult<String> {
+        let root = setup::normal_path(&root)?;
         let name = name.trim();
         if name.is_empty() || name.chars().count() > 60 || self.projects.len() >= 50 {
             return Err("專案名稱需為 1–60 字，最多保存 50 個專案。".into());

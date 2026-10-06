@@ -2114,7 +2114,7 @@
       "type": "function",
       "function": {
         "name": "outlook_folders",
-        "description": "取得本次使用者同意後，列出本地 PST 收件資料夾或線上信箱寄件備份；只列一層名稱，不讀郵件。",
+        "description": "取得本次使用者同意後，列出本地 PST 收件資料夾、Exchange／OST 線上收件匣或寄件備份；只列一層名稱，不讀郵件。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -2122,6 +2122,7 @@
               "type": "string",
               "enum": [
                 "local_inbox",
+                "online_inbox",
                 "online_sent"
               ]
             },

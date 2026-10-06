@@ -107,6 +107,7 @@
               </details>
               <div class="quick-actions">
               <button id="project-stop" hidden>停止專案任務</button>
+              <button id="weekly-start" hidden>生成週報</button>
               <button data-action="translate">
                 <span data-icon="languages"></span>翻譯</button
               ><button data-action="summarize">
@@ -552,8 +553,41 @@
     </dialog>
     <dialog id="project-dialog" aria-labelledby="project-dialog-title">
       <h2 id="project-dialog-title">新增專案</h2>
+      <p>AI 將依據這個資料夾內的檔案，協助完成您的要求。目前支援 Word、Excel、PowerPoint、TXT、MD、文字型 PDF、Outlook MSG，以及 LOG 類紀錄檔。</p>
+      <p>執行任務時，所需的檔案內容會送至目前使用的 AI 服務分析。請確認資料夾內的資料適合提供 AI 使用。</p>
       <label>專案名稱<input id="project-name" maxlength="60" autocomplete="off" placeholder="輸入專案名稱" /></label>
+      <button id="project-default-folder">創建預設資料夾</button>
       <div class="dialog-actions"><button id="project-cancel">取消</button><button id="project-create" class="primary-button">選擇資料夾並建立</button></div>
+    </dialog>
+    <dialog id="project-default-dialog" aria-labelledby="project-default-title">
+      <h2 id="project-default-title">選擇預設資料夾位置</h2>
+      <p>依 Windows 設定的位置建立 LM_AI專案資料夾_YYYYMMDD；支援網路磁碟與 UNC。同名資料夾會加上序號。</p>
+      <div class="dialog-actions"><button id="project-default-cancel">取消</button><button id="project-default-downloads">下載</button><button id="project-default-desktop">桌面</button></div>
+    </dialog>
+    <dialog id="weekly-info-dialog" class="weekly-dialog" aria-labelledby="weekly-info-title">
+      <h2 id="weekly-info-title">生成週報使用說明</h2>
+      <ol>
+        <li><strong class="weekly-warning">此功能會讀取您的 Outlook 信件</strong>，包括收件匣、子資料夾與寄件備份（已寄出的郵件），整理重點後放入週報。讀取前會再次讓您選擇資料夾，可在此時<strong class="weekly-warning">取消勾選</strong>不重要或具有隱私的資料夾；<strong class="weekly-warning">被取消勾選的資料夾內容將不會送出</strong>。此設定不撤回先前已送出的資料，也不移除允許信件中已有的引用文字。</li>
+        <li>程式會在專案內建立「週報生成使用資料_YYYYMMDD_HHMMSS」。<strong class="weekly-warning">請在此資料夾中放入您認為重要、要放入週報的參考資料</strong>，例如 Office、文字檔或 PDF。<strong class="weekly-warning">目前不支援圖片，也不支援掃描型文獻或 PDF 的辨識。</strong></li>
+        <li>按確定後建立資料夾並開啟補充視窗，可說明資料用途，例如「PDF 是論文，請重點整理後放入週報」或「Excel 是工作日誌，請搭配信件整理本週工作」。補充內容可以留白。</li>
+        <li>依資料量與 AI 處理速度，生成過程可能超過 2 小時，請耐心等候。最後送出並確認參考資料後才會開始。</li>
+      </ol>
+      <div class="dialog-actions"><button id="weekly-info-cancel">取消</button><button id="weekly-info-ok" class="primary-button">確定</button></div>
+    </dialog>
+    <dialog id="weekly-input-dialog" class="weekly-dialog" aria-labelledby="weekly-input-title">
+      <h2 id="weekly-input-title">準備週報參考資料</h2>
+      <p>請先將上週週報與其他參考資料放入下方資料夾，再送出要求。</p>
+      <button id="weekly-folder" class="text-button" title="開啟素材資料夾"></button>
+      <div class="weekly-dates"><label>開始日期<input id="weekly-from" type="date" /></label><label>結束日期<input id="weekly-to" type="date" /></label></div>
+      <p>預設本週一至今天。補充中若明確指定上週、W40 或其他日期，將優先依該要求處理。</p>
+      <label>要提醒 AI 的內容（選填）<textarea id="weekly-notes" maxlength="12000" rows="7" placeholder="例如：PDF 是論文，請重點整理後放入週報。&#10;Excel 是工作日誌，請搭配信件整理本週工作。"></textarea></label>
+      <div class="dialog-actions"><button id="weekly-input-cancel">取消</button><button id="weekly-send" class="primary-button">送出週報生成要求</button></div>
+    </dialog>
+    <dialog id="weekly-confirm-dialog" aria-labelledby="weekly-confirm-title">
+      <h2 id="weekly-confirm-title" class="weekly-warning">請確認是否已在資料夾中放入參考資料？</h2>
+      <p>建議至少要放上週週報，以免 AI 沒有格式可以參考。</p>
+      <p>例如：上週週報（參考格式）、各類您所需要的資料……等等。</p>
+      <div class="dialog-actions"><button id="weekly-confirm-no">否，返回準備</button><button id="weekly-confirm-yes" class="primary-button">是，開始生成</button></div>
     </dialog>
     <dialog id="project-settings-dialog" aria-labelledby="project-settings-title">
       <div class="dialog-heading"><h2 id="project-settings-title">專案設定</h2><button id="project-settings-close">關閉</button></div>
@@ -609,6 +643,7 @@
     <script src="vnc.js"></script>
     <script src="vnc-sync.js"></script>
     <script src="projects.js"></script>
+    <script src="weekly.js"></script>
     <script src="project-composer.js"></script>
     <script src="dialogs.js"></script>
     <script src="auth-gate.js"></script>

@@ -101,7 +101,7 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
                     assert_eq!(copy["copy_id"], copy_id, "續接不得建立另一份副本");
                 }
                 let finish_at = if matches!(case, Case::Malformed) {
-                    6
+                    8
                 } else {
                     3
                 };
@@ -121,7 +121,8 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
                         json!({"action":"tool","operation_id":"save","request":{"tool":"save_copy","copy_id":copy_id,"revision":copy["revision"]}})
                     }
                 };
-                let malformed = matches!(case, Case::Malformed) && (2..=4).contains(&posts);
+                // 初始錯誤加四次修復仍失敗，才進入持久暫停；手動續接另起新段。
+                let malformed = matches!(case, Case::Malformed) && (2..=6).contains(&posts);
                 let content = if malformed {
                     "done".into()
                 } else {
@@ -237,7 +238,7 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
     assert_eq!(
         posts,
         if matches!(case, Case::Malformed) {
-            7
+            9
         } else {
             4
         }
