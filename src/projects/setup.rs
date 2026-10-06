@@ -141,9 +141,38 @@ pub fn weekly_prompt(
         {}", today.iso_week().year(), today.iso_week().week(), notes.trim()))
 }
 
+/// Outlook 助理與週報共用郵件工具；這個入口只改變任務目標。
+pub fn outlook_prompt(today: NaiveDate, start: &str, end: &str, notes: &str) -> AppResult<String> {
+    let from = NaiveDate::parse_from_str(start, "%Y-%m-%d").map_err(|_| "開始日期不正確。")?;
+    let to = NaiveDate::parse_from_str(end, "%Y-%m-%d").map_err(|_| "結束日期不正確。")?;
+    if from > to || (to - from).num_days() > 366 || notes.chars().count() > 1000 {
+        return Err("請確認日期順序、範圍不超過一年，補充最多1000字。".into());
+    }
+    Ok(format!("請擔任 Outlook 助理，查看使用者勾選的信件，整理需要我處理、回覆或追蹤的事項。\n目前本機日期：{today}，ISO週別：{}-W{:02}；畫面選定日期（含首尾）：{from}至{to}。補充若明確指定上週、W40或其他日期，依明確要求換算。\n先載入 outlook-research，再經原有資料夾勾選授權；涵蓋本地PST、線上收件匣及子資料夾、寄件備份，只挑相關範圍。優先同串最新信，必要時用本機前文比對補讀；最多1000封本機比對、50封AI內文，不讀滿額度。\n輸出待辦表：需要處理的事項、對方要求、期限（僅有明確證據才填日期）、已知狀態與建議下一步；附主旨、日期、寄件者、mail_id。區分明確要求與推測，不把未讀當未完成，也不因有回覆就認定完成；無法確認則列待確認。僅標題不能當作讀過內文。不寄信、不修改信件、不自動建立或刪除文件；使用者後續可要求加入週報。\n使用者補充：\n{}", today.iso_week().year(), today.iso_week().week(), notes.trim()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn outlook_prompt_preserves_dates_and_mail_boundaries() {
+        let today = NaiveDate::from_ymd_opt(2027, 1, 1).unwrap();
+        let prompt = outlook_prompt(today, "2026-12-28", "2027-01-01", "請改做 W40").unwrap();
+        for expected in [
+            "2026-W53",
+            "W40",
+            "outlook-research",
+            "1000",
+            "50",
+            "不寄信",
+            "只挑相關範圍",
+        ] {
+            assert!(prompt.contains(expected));
+        }
+        assert!(outlook_prompt(today, "2027-01-02", "2027-01-01", "").is_err());
+        assert!(outlook_prompt(today, "2026-01-01", "2027-01-03", "").is_err());
+        assert!(outlook_prompt(today, "2027-01-01", "2027-01-01", &"字".repeat(1001)).is_err());
+    }
     #[test]
     fn paths_and_week_defaults_are_explicit() {
         assert_eq!(

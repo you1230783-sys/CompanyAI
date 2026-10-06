@@ -722,6 +722,23 @@ fn run_for(
                     let result =
                         if let Some(result) = broker.cached_result(&operation_id, &request)? {
                             result
+                        } else if let super::Tool::AnalyzeImage { path, focus } = &request {
+                            match super::vision::analyze(
+                                &run,
+                                &mut broker,
+                                &operation_id,
+                                progress_state.agent.as_mut(),
+                                &id,
+                                path,
+                                focus,
+                                deadline,
+                                |text| report(&mut activity, &mut progress, text),
+                            )? {
+                                super::delegation::Outcome::Complete(result) => result,
+                                super::delegation::Outcome::Pending(reason) => {
+                                    return pause(&reason, &broker, &progress_state, Some(&task))
+                                }
+                            }
                         } else if let super::Tool::SummarizeDocument { path, focus } = &request {
                             match super::delegation::summarize(
                                 &run,
@@ -1091,6 +1108,7 @@ fn replay_safe(tool: &super::Tool) -> bool {
     matches!(
         tool,
         ListFiles { .. }
+            | AnalyzeImage { .. }
             | ReadFile { .. }
             | FindText { .. }
             | SearchFiles { .. }

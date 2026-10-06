@@ -3,6 +3,46 @@ use super::*;
 fn caps() -> Capabilities {
     serde_json::from_str(include_str!("test_capabilities.json")).unwrap()
 }
+
+#[test]
+fn image_payload_is_multimodal_and_keeps_request_limit() {
+    let root = std::env::current_dir().unwrap().join("examples/fixtures");
+    let project = crate::projects::Project {
+        id: "fixture".into(),
+        name: "fixture".into(),
+        root,
+        imports: Default::default(),
+    };
+    let image = crate::projects::vision::input::load(&project, "vision.png").unwrap();
+    let mut body = build_request(
+        &caps(),
+        "c",
+        "r",
+        json!({}),
+        &[Message::user("描述圖片")],
+        false,
+    )
+    .unwrap();
+    attach_image(&caps(), &mut body, &image).unwrap();
+    assert_eq!(body["messages"][0]["content"][0]["text"], "描述圖片");
+    assert!(body["messages"][0]["content"][1]["image_url"]["url"]
+        .as_str()
+        .unwrap()
+        .starts_with("data:image/png;base64,iVBOR"));
+    assert_eq!(body["tools"], json!([]));
+    let mut small = caps();
+    small.limits.request_bytes = 100;
+    let mut body = json!({"messages":[{"role":"user","content":"圖片"}]});
+    assert!(attach_image(&small, &mut body, &image).is_err());
+    for bad in [
+        "../outside.png",
+        "C:\\outside.png",
+        ".lmai/private.png",
+        "vision.svg",
+    ] {
+        assert!(crate::projects::vision::input::load(&project, bad).is_err());
+    }
+}
 fn request() -> Value {
     build_request(&caps(),"conversation_demo","req1",
         json!({"project_id":"p","run_id":"r","turn_index":1,"parent_request_id":null,"context_policy":"client_snapshot"}),
@@ -316,7 +356,7 @@ fn history_pairs_and_request_scoped_ids_survive_repeated_calls() {
 #[test]
 fn catalog_is_portable_and_nullable_fields_restore_original_defaults() {
     let tools = schema::definitions(true).unwrap();
-    assert_eq!(tools.len(), 44);
+    assert_eq!(tools.len(), 45);
     let encoded = serde_json::to_string(&tools).unwrap();
     for key in [
         "\"oneOf\":",

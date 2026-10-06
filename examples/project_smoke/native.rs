@@ -41,7 +41,7 @@ pub fn verify(root: &Path) -> AppResult<()> {
     Ok(())
 }
 
-fn capability(model: &str, strict: bool) -> Value {
+pub(super) fn capability(model: &str, strict: bool) -> Value {
     let mut caps: Value = serde_json::from_str(include_str!(
         "../../src/projects/agent/test_capabilities.json"
     ))
@@ -69,7 +69,7 @@ fn fill_optional(args: &mut Value, schema: &Value) {
     }
 }
 
-fn call(body: &Value, name: &str, mut args: Value) -> Value {
+pub(super) fn call(body: &Value, name: &str, mut args: Value) -> Value {
     let tool = body["tools"]
         .as_array()
         .unwrap()
@@ -80,7 +80,7 @@ fn call(body: &Value, name: &str, mut args: Value) -> Value {
     json!({"role":"assistant","content":"**處理中**","tool_calls":[{"id":"call_001","type":"function",
         "function":{"name":name,"arguments":args.to_string()}}]})
 }
-fn last_result(body: &Value) -> Value {
+pub(super) fn last_result(body: &Value) -> Value {
     body["messages"]
         .as_array()
         .unwrap()

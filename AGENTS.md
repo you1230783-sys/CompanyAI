@@ -1,5 +1,14 @@
 # 專案級開發指引
 
+## 0.8.39：Outlook 專案入口與圖片試驗（最新使用者指示）
+
+- 使用者授權本版 Outlook 整合＋圖片嘗試、進版編譯 EXE 並部署既有 Git main；沿用 v142、空 Cargo 快取及 Build.ps1 全流程，不改 icon.png／NSIS／ZIP，不開放受控 PS。
+- 專案 Outlook 按鈕共用原有 runner、技能、勾選權限及 1000／50 封額度；獨立預覽／MSG 入口先保留，不把入口整合宣稱為所有 UI 已合併。
+- 專案 JPG／JPEG／PNG 圖片試驗：analyze_image(path,focus)，image-read 按需載入，工具目錄共 45 項。單張 1 MiB、8192×8192／1600 萬像素、每次任務最多 20 次不同要求。只允許專案相對路徑及既有檔案保護。
+- 使用者已實測模型伺服器的 image_url；公司 API 負責轉發及身分驗證。本版明確允許圖片試驗，即使舊 capabilities 只公告 text；仍遵守授權、模型與整份請求大小上限。若轉發端拒絕，不另接模型直連端點、不略過 TLS 驗證。此條僅涵蓋無工具圖片子請求，取代舊文字專用限制。
+- 真正 user.content 陣列包含 text／image_url data URL。使用目前模型、既有 agent/turns 與 parent_request_id，tools=[]；主歷史只保留文字及 SHA256。DPAPI 保存待查子請求，未知提交只查原 ID；完成移除圖片快照，相同來源與要求快取。
+- 不讀 Outlook 圖片附件／內嵌圖，不解碼掃描 PDF。這些留待後續整合。公司代理／實際模型辨識品質待使用者驗收。詳見 docs/VALIDATION_0_8_39.md。
+
 ## 0.8.38：週報精靈、網路專案及回覆恢復（最新使用者指示）
 
 - 使用者已確認實作、編譯 EXE 並推送既有 Git main；沿用 EXE 發行，不重建 NSIS／ZIP，不改 icon.png，受控 PowerShell 延後。

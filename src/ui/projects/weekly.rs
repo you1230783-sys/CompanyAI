@@ -13,7 +13,7 @@ pub(super) struct PendingWeekly {
 
 impl App {
     /// 檢查當前帳號與對話；不能將另一個專案開啟的舊精靈送到新對話。
-    fn weekly_project(&self, conversation: &str) -> AppResult<projects::Project> {
+    pub(super) fn weekly_project(&self, conversation: &str) -> AppResult<projects::Project> {
         if self.active_id.as_deref() != Some(conversation)
             || !self.can_send()
             || self.projects.running.is_some()

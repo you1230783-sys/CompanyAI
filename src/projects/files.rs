@@ -1702,6 +1702,7 @@ impl Broker {
                 }
                 self.add_chart(chart)
             }
+            Tool::AnalyzeImage { .. } => Err("圖片辨識需由專案任務協調器執行。".into()),
             Tool::SummarizeDocument { .. } => Err("摘要委派需由專案任務協調器執行。".into()),
             Tool::ReadWorkLog {
                 operation_id,
@@ -1825,6 +1826,7 @@ impl Broker {
                     if metadata.is_dir()
                         || extension(&entry.path()).is_ok()
                         || super::logs::supported(&entry.path())
+                        || super::vision::input::supported(&entry.path())
                     {
                         entries.push(json!({"name":entry.file_name().to_string_lossy(),"directory":metadata.is_dir()}));
                     }

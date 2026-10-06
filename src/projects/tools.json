@@ -1264,7 +1264,8 @@
                 "outlook-research",
                 "dataset-charts",
                 "context-management",
-                "outlook-coverage"
+                "outlook-coverage",
+                "image-read"
               ]
             },
             "progress_note": {
@@ -2607,6 +2608,35 @@
           "required": [
             "mail_ids",
             "offset"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "analyze_image",
+        "description": "辨識專案內單張 JPG／PNG（試驗）；由目前模型讀圖後回傳文字與來源。每圖最多1MiB，不讀Outlook附件或網址。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "已列出的專案相對圖片路徑。"
+            },
+            "focus": {
+              "type": "string",
+              "description": "1–1000字，指定要描述、擷取或核對的內容。"
+            },
+            "progress_note": {
+              "type": "string",
+              "description": "可選的工作進度摘要。"
+            }
+          },
+          "required": [
+            "path",
+            "focus"
           ],
           "additionalProperties": false
         }

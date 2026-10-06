@@ -3,11 +3,33 @@ use super::*;
 use crate::projects::{self, Store};
 mod composer;
 mod composer_smoke;
+mod quick;
 mod weekly;
 
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(super) enum ProjectCommand {
+    QuickPrepare {
+        conversation: String,
+        request_id: String,
+        kind: quick::Kind,
+    },
+    QuickSubmit {
+        conversation: String,
+        request_id: String,
+        start: String,
+        end: String,
+        notes: String,
+        path: String,
+    },
+    QuickCancel {
+        conversation: String,
+        request_id: String,
+    },
+    QuickChooseImage {
+        conversation: String,
+        request_id: String,
+    },
     CreateDefault {
         name: String,
         location: String,
@@ -173,6 +195,7 @@ pub(super) struct Running {
 #[derive(Default)]
 pub(super) struct ProjectRuntime {
     weekly: Option<weekly::PendingWeekly>,
+    quick: Option<quick::Pending>,
     pub store: Store,
     error: Option<String>,
     running: Option<Running>,
@@ -206,7 +229,11 @@ impl Drop for ProjectRuntime {
 }
 
 /// 共用原生選擇器；選文件時從專案根目錄開始，回傳後仍驗證授權邊界。
-fn choose_path(owner: HWND, project_root: Option<&std::path::Path>) -> AppResult<Option<PathBuf>> {
+fn choose_path(
+    owner: HWND,
+    project_root: Option<&std::path::Path>,
+    image: bool,
+) -> AppResult<Option<PathBuf>> {
     use windows::{
         core::{w, HSTRING},
         Win32::{
@@ -229,8 +256,16 @@ fn choose_path(owner: HWND, project_root: Option<&std::path::Path>) -> AppResult
                 .map_err(|e| e.to_string())?;
             dialog
                 .SetFileTypes(&[COMDLG_FILTERSPEC {
-                    pszName: w!("文字匯入來源（TXT、MD、PDF、MSG）"),
-                    pszSpec: w!("*.txt;*.md;*.pdf;*.msg"),
+                    pszName: if image {
+                        w!("圖片試驗（JPG、JPEG、PNG）")
+                    } else {
+                        w!("文字匯入來源（TXT、MD、PDF、MSG）")
+                    },
+                    pszSpec: if image {
+                        w!("*.jpg;*.jpeg;*.png")
+                    } else {
+                        w!("*.txt;*.md;*.pdf;*.msg")
+                    },
                 }])
                 .map_err(|e| e.to_string())?;
             let folder: IShellItem =
@@ -345,7 +380,7 @@ impl App {
             "running":self.projects.running.is_some(),"running_id":self.projects.running.as_ref().map(|r|&r.id),"activity":self.projects.running.as_ref().map(|r|&r.activity),"charts":self.projects.running.as_ref().map(|r|&r.charts),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
     }
     pub(super) fn project_command(&mut self, command: ProjectCommand) -> AppResult<()> {
-        if self.weekly_command(&command)? {
+        if self.weekly_command(&command)? || self.quick_command(&command)? {
             return Ok(());
         }
         match &command {
@@ -653,7 +688,7 @@ impl App {
                 self.begin_project_segment(self.messages.clone(), Some(run_id))?;
             }
             ProjectCommand::Create { name } => {
-                if let Some(root) = choose_path(self.window, None)? {
+                if let Some(root) = choose_path(self.window, None, false)? {
                     let mut store = self.projects.store.clone();
                     let id = store.add(&name, root)?;
                     store.save(&self.root)?;
@@ -703,7 +738,7 @@ impl App {
                     .cloned()
                     .ok_or("找不到專案。")?;
                 projects::files::validate_root(&project.root)?;
-                if let Some(path) = choose_path(self.window, Some(&project.root))? {
+                if let Some(path) = choose_path(self.window, Some(&project.root), false)? {
                     // 選擇器可以瀏覽其他目錄，但只有專案內檔案可被接受。
                     let relative = path
                         .strip_prefix(&project.root)
@@ -762,6 +797,10 @@ impl App {
             ProjectCommand::Stop
             | ProjectCommand::WeeklyPrepare { .. }
             | ProjectCommand::WeeklySubmit { .. }
+            | ProjectCommand::QuickPrepare { .. }
+            | ProjectCommand::QuickSubmit { .. }
+            | ProjectCommand::QuickCancel { .. }
+            | ProjectCommand::QuickChooseImage { .. }
             | ProjectCommand::WeeklyCancel { .. }
             | ProjectCommand::WeeklyOpen { .. }
             | ProjectCommand::Compose { .. }

@@ -1,5 +1,7 @@
 # 技術文件索引
 
+[0.8.39 Outlook 專案入口與圖片試驗驗證](VALIDATION_0_8_39.md)
+
 目前 EXE 發行驗證：[0.8.38 週報精靈、網路專案與回覆恢復](VALIDATION_0_8_38.md)。歷史驗證文件保留其當時版本的限制。
 
 [專案首頁](../README.md) · [使用指南](USER_GUIDE.md) · [版本更新](../CHANGELOG.md) · [開發說明](DEVELOPMENT.md)

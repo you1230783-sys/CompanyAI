@@ -426,6 +426,7 @@ mod tests {
                 json!({"path":"a.xlsx","revision":"r","sheet":1,"range":"A1:B2","kind":"bar","title":"T","x_label":"x","y_label":"y"}),
             ),
             ("summarize_document", json!({"path":"a.txt","focus":"重點"})),
+            ("analyze_image", json!({"path":"a.png","focus":"描述圖片"})),
             ("list_files", json!({"path":""})),
             ("read_file", json!({"path":"a.txt"})),
             ("find_text", json!({"path":"a.txt","text":"文字"})),

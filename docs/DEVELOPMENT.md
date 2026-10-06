@@ -1,5 +1,13 @@
 # 開發與維護說明
 
+## 0.8.39 維護位置
+
+- 專案快速入口：`ui/project-quick.js`、`src/ui/projects/quick.rs`；原生層核對對話、專案、帳號、模型及歷史，準備視窗不啟動任務。
+- 圖片輸入：`src/projects/vision/input.rs`，既有路徑保護、有限讀取、PNG CRC／JPEG 容器尺寸、Base64 與 SHA256；不新增影像解碼套件。
+- 協調與恢復：`src/projects/vision.rs`，獨立模型請求、20 次額度、DPAPI 待查／快取；`agent.rs::attach_image` 只轉換圖片子請求，不更動一般 Message 型別。
+- 測試：`examples/project_smoke/vision.rs` 的五種真實本機 HTTP 案例；可用 project_smoke 的 `--vision-only` 快速驗證。正式 Build.ps1 仍包含全部測試、原生 UI、Office 及網路專案回歸；詳見 [驗證紀錄](VALIDATION_0_8_39.md)。
+
+
 [專案首頁](../README.md) · [使用指南](USER_GUIDE.md) · [版本更新](../CHANGELOG.md) · [技術文件索引](README.md)
 
 本文件說明目前專案的環境、編譯與維護方式。開始修改前請閱讀 [AGENTS.md](../AGENTS.md)。
@@ -31,7 +39,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build.ps1 -Emp
 
 依賴由 `Cargo.lock`、`vendor` 與 `.cargo/config.toml` 固定，使用空 Cargo 快取及 `--frozen` 驗證。環境腳本優先使用專案內的 `toolchain`，否則使用共用 `.tools`，並設定本專案的 target 目錄。
 
-`toolchain/` 與 `vendor/` 不直接提交 Git。**現存離線 ZIP 是歷史交付包，不代表目前 0.8.38 原始碼。** 全新環境需先準備指定工具鏈與符合 Cargo.lock 的 vendor；不要將舊 ZIP 整包覆蓋到新版原始碼。完整離線包操作見 [離線交付與 Git](OFFLINE_AND_GIT.md)。
+`toolchain/` 與 `vendor/` 不直接提交 Git。**現存離線 ZIP 是歷史交付包，不代表目前 0.8.39 原始碼。** 全新環境需先準備指定工具鏈與符合 Cargo.lock 的 vendor；不要將舊 ZIP 整包覆蓋到新版原始碼。完整離線包操作見 [離線交付與 Git](OFFLINE_AND_GIT.md)。
 
 | Build 選項 | 用途 |
 | --- | --- |

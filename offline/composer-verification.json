@@ -10,11 +10,13 @@
     "reloaded encrypted history disables automatic start after restart",
     "history write failure leaves old worker and queue unchanged",
     "native Outlook folder selection rejects stale identity and unknown or hidden-parent ids",
-    "native weekly folder preparation, confirmation, conversation binding, dated prompt and one-time start"
+    "native weekly folder preparation, confirmation, conversation binding, dated prompt and one-time start",
+    "native Outlook quick action: dates, identity, skill and one-time start",
+    "native image quick action: source boundary, identity, skill and one-time start"
   ],
   "company_service_tested": false,
   "next_worker": "real runner, cancelled and awaited",
   "prior_worker_completion": "controlled event",
   "result": "PASS",
-  "version": "0.8.38"
+  "version": "0.8.39"
 }

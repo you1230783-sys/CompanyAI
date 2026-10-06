@@ -3,6 +3,11 @@ use crate::AppResult;
 use serde_json::{json, Value};
 const SKILLS: &[(&str, &str, &str)] = &[
     (
+        "image-read",
+        "專案 JPG／PNG 圖片辨識試驗",
+        include_str!("skills/image-read.md"),
+    ),
+    (
         "outlook-coverage",
         "本機比對郵件前文與建議閱讀",
         include_str!("skills/outlook-coverage.md"),
@@ -117,6 +122,7 @@ pub fn activate(ids: &mut Vec<String>, id: &str) -> AppResult<()> {
 pub fn enabled(tool: &str, ids: &[String]) -> bool {
     let has = |id: &str| ids.iter().any(|i| i == id);
     match tool {
+        "analyze_image" => has("image-read"),
         "outlook_compare" => has("outlook-coverage"),
         "list_files" | "read_file" | "load_skill" | "ask_user" | "finish" | "read_work_log"
         | "read_task_result" | "compact_context" => true,

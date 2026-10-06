@@ -996,7 +996,7 @@ window.runSelfTest = async (structuredFixture) => {
       fixture.active_id = "project-chat";
       fixture.projects.running = false;
       LMUI.receive(fixture);
-      check(!$("weekly-start").hidden && document.querySelector('[data-action="translate"]').hidden, "project only shows weekly quick action");
+      check(!$("weekly-start").hidden && !$("project-outlook-start").hidden && !$("project-image-start").hidden && document.querySelector('[data-action="translate"]').hidden, "project shows weekly, Outlook and image quick actions");
       $("weekly-start").click();
       check($("weekly-info-dialog").open, "weekly introduction opens before creating folders");
       $("weekly-info-ok").click();
@@ -1023,6 +1023,32 @@ window.runSelfTest = async (structuredFixture) => {
       WeeklyUI.receive({type:"weekly_submit_ack", conversation:fixture.active_id, request_id:weeklyRequest.request_id, ok:true});
       await frame();
       check(!$("weekly-input-dialog").open && !$("weekly-confirm-dialog").open, "weekly accepted submission closes wizard");
+      check($("project-outlook-start").title.includes("處理"), "Outlook hover explains purpose");
+      for (const kind of ["outlook", "image"]) {
+        $(kind === "outlook" ? "project-outlook-start" : "project-image-start").click();
+        const quick = retryCommands.at(-1).command;
+        check(quick.action === "quick_prepare" && quick.kind === kind, "quick action only prepares native-bound dialog");
+        const ready = {type:"project_quick_ready", conversation:fixture.active_id, request_id:quick.request_id, kind, start:"2026-10-05", end:"2026-10-06"};
+        ProjectQuickUI.receive({...ready, request_id:"stale"});
+        check(!$("project-quick-dialog").open, "stale quick response ignored");
+        ProjectQuickUI.receive(ready); await frame();
+        check($("project-quick-dialog").open && $("project-quick-from").value === "2026-10-05", "quick dialog uses native dates");
+        $("project-quick-notes").value = "保留我的要求";
+        if (kind === "image") {
+          ProjectQuickUI.receive({type:"project_quick_image", conversation:fixture.active_id, request_id:quick.request_id, path:"圖片 <img src=x>.png"});
+          check(!$("project-quick-dialog").querySelector("img") && $("project-quick-path").value.includes("<img"), "image path remains inert text");
+        }
+        $("project-quick-send").click();
+        const sent = retryCommands.at(-1).command;
+        check(sent.action === "quick_submit" && sent.notes === "保留我的要求", "quick submit retains notes");
+        const count = retryCommands.length;
+        $("project-quick-send").click();
+        check(retryCommands.length === count, "quick double submit blocked");
+        ProjectQuickUI.receive({type:"project_quick_ack", conversation:fixture.active_id, request_id:quick.request_id, ok:false});
+        check(!$("project-quick-send").disabled && $("project-quick-notes").value === "保留我的要求", "failed submission keeps editable notes");
+        ProjectQuickUI.receive({type:"project_quick_ack", conversation:fixture.active_id, request_id:quick.request_id, ok:true}); await frame();
+        check(!$("project-quick-dialog").open, "accepted quick submission closes dialog");
+      }
 
       fixture.messages = [{role:"user",content:"請修訂",request_id:"request-one"}];
       fixture.retry = {user_index:0,message_count:1,request_id:"request-one",enabled:false};

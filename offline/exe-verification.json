@@ -1,6 +1,6 @@
 {
-  "recorded_at": "2026-10-06T12:50:53.4636443+08:00",
-  "version": "0.8.38.0",
+  "recorded_at": "2026-10-06T15:25:53.8090235+08:00",
+  "version": "0.8.39.0",
   "result": "PASS",
   "msvc": "14.29.30133",
   "compiler_report": [
@@ -8,7 +8,14 @@
     "Verified _MSC_FULL_VER=192930159 x64"
   ],
   "empty_cargo_cache": true,
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-c85c1bbb48bb4ff39c6ed71733237f9e",
+  "image_trial_checks": [
+    "native Outlook/image quick actions and identity binding",
+    "JPEG/PNG exact bytes in text+image_url JSON through existing agent API",
+    "same-model tool-free child, text-only parent result and source hash",
+    "image cache and unknown request resume without repost",
+    "out-of-project and oversize images rejected without image POST"
+  ],
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-2b9b1dac639b4abe96dc78aa1199461b",
   "checks": [
     "weekly wizard prepare/confirm/cancel and conversation binding",
     "online inbox COM fixture",
@@ -42,7 +49,7 @@
     "Outlook folder picker, DPAPI policy and ancestor enforcement, native forged/stale selection rejection",
     "local mail coverage with 1000-message limit, no raw-body tool output, independent 50-message AI limit, branches and gaps"
   ],
-  "exe_sha256": "47374eec0ae24288b7794e7707b313a034fd6310a8674c5afedbd011e4055aee",
+  "exe_sha256": "b61dbf62df40bdeec05ab9d3121abb1fb47fdc007409adddd408317cbd34bc13",
   "installer_built": false,
   "real_vnc_tested": false,
   "real_office_tested": true,

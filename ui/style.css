@@ -1449,6 +1449,6 @@ body.collapsed .project-section { overflow: visible; }
 .weekly-warning { color: #cf3030; font-weight: 700; }
 .weekly-dates { display: flex; gap: 16px; flex-wrap: wrap; }
 #weekly-folder { display: block; overflow-wrap: anywhere; text-align: left; user-select: text; }
-#weekly-notes { width: 100%; box-sizing: border-box; resize: vertical; }
+#weekly-notes, #project-quick-notes { width: 100%; box-sizing: border-box; resize: vertical; }
 
 :root[data-theme="dark"] .weekly-warning { color: #ff9292; }

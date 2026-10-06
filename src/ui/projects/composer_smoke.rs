@@ -442,6 +442,78 @@ impl App {
         self.await_composer_worker()?;
         verify(count() >= created, "啟動取消均保留素材資料夾")?;
         cases.push("native weekly folder preparation, confirmation, conversation binding, dated prompt and one-time start");
+        // 快速入口仍由原生層綁定身分；準備或無效來源都不能啟動 runner。
+        for kind in [quick::Kind::Outlook, quick::Kind::Image] {
+            let (chat, _) = self.composer_fixture()?;
+            self.projects.running = None;
+            let request = crate::jobs::new_id()?;
+            self.project_command(ProjectCommand::QuickPrepare {
+                conversation: chat.clone(),
+                request_id: request.clone(),
+                kind,
+            })?;
+            let submit = |conversation: &str, path: &str| ProjectCommand::QuickSubmit {
+                conversation: conversation.into(),
+                request_id: request.clone(),
+                start: "2026-10-05".into(),
+                end: "2026-10-06".into(),
+                notes: "保留測試要求".into(),
+                path: path.into(),
+            };
+            verify(self.projects.running.is_none(), "準備快速入口不啟動任務")?;
+            verify(
+                self.project_command(submit("other-chat", "vision.png"))
+                    .is_err(),
+                "快速入口拒絕跨對話送出",
+            )?;
+            let previous_model = self.config.model.clone();
+            self.config.model = "changed-model".into();
+            verify(
+                self.project_command(submit(&chat, "vision.png")).is_err(),
+                "更換模型後舊入口失效",
+            )?;
+            self.config.model = previous_model;
+            if kind == quick::Kind::Image {
+                verify(
+                    self.project_command(submit(&chat, "../outside.png"))
+                        .is_err(),
+                    "圖片不能離開專案",
+                )?;
+                verify(self.projects.running.is_none(), "無效圖片不啟動任務")?;
+                let project = self
+                    .projects
+                    .store
+                    .project_for(&chat)
+                    .ok_or("缺少圖片專案")?;
+                std::fs::write(
+                    project.root.join("vision.png"),
+                    include_bytes!("../../../examples/fixtures/vision.png"),
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            self.project_command(submit(&chat, "vision.png"))?;
+            let expected = if kind == quick::Kind::Image {
+                "image-read"
+            } else {
+                "outlook-research"
+            };
+            verify(
+                self.messages.last().is_some_and(|m| {
+                    m.content.contains(expected) && m.content.contains("保留測試要求")
+                }),
+                "快速入口產生正確技能及原文要求",
+            )?;
+            verify(
+                self.project_command(submit(&chat, "vision.png")).is_err(),
+                "已啟動的快速要求不可重播",
+            )?;
+            self.await_composer_worker()?;
+            cases.push(if kind == quick::Kind::Image {
+                "native image quick action: source boundary, identity, skill and one-time start"
+            } else {
+                "native Outlook quick action: dates, identity, skill and one-time start"
+            });
+        }
         Ok(cases)
     }
 

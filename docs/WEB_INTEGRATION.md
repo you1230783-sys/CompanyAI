@@ -1,3 +1,15 @@
+> **0.8.39：圖片試驗需要轉發多模態 content。** 專案 Outlook 快速入口沿用既有郵件工具。新增 `analyze_image(path,focus)`（工具目錄 45 項，載入 `image-read` 才公告）；圖片工具由桌面發出獨立的無工具子請求，仍走 `/lm_server/api/desktop/agent/turns`、目前 model、Bearer 與 `desktop-agent-v1`。主請求仍是文字／原生工具訊息，不改一般附件上傳流程。
+
+圖片子請求 `tools=[]`、`tool_choice=none`、`skills=false`，`context.parent_request_id` 指向父請求。最後一則 user 訊息形狀如下（不可把陣列轉成字串、刪除 image_url 或自行補回其他歷史）：
+
+```json
+{"role":"user","content":[{"type":"text","text":"辨識要求與來源資訊"},{"type":"image_url","image_url":{"url":"data:image/png;base64,..."}}]}
+```
+
+這是使用者要求的明確圖片試驗，允許對舊版只公告 text 的能力回覆嘗試上述子請求；網站若仍強制 `content:string`，須放行／原樣轉發這種無工具圖片訊息後才能使用。模型伺服器已由使用者獨立測過，**不代表公司代理入口已驗收**。本版不修改網站伺服器，也不新增路由或資料表。
+
+JPG／PNG 原圖單張最多 1 MiB，整份序列化請求不得超過網站 `limits.request_bytes` 及本機 2 MiB。既有文字訊息限制用於文字部分；伺服器需另計 image_url／多模態成本，不能把 Base64 當純文字 token。圖片辨識以文字回答，結果仍須原任務／owner／context 身分對應。未知提交僅 GET 查回，明確拒絕應回 `task_accepted:false`；不自動換 ID 重送。轉發及模型若不支援，回報失敗，桌面不繞過公司 API。詳見 [驗證與限制](VALIDATION_0_8_39.md)。
+
 > **0.8.35：LOG 定位、主輸入框與進度筆記。** LOG 技能以近似時間定位事件；專案主輸入框可選下一輪提示、停止後新任務、完成後新任務。新增的是桌面原生命令與本機加密排程，不新增網站 API、資料表或工具參數。停止後的新任務使用新 run／request ID；原任務仍照原取消與未知請求契約處理。既有 `arguments.progress_note` 作執行中摘要，結束後收進工具紀錄，不改最終 message。詳見 [本版驗證](VALIDATION_0_8_35.md)。
 
 > **0.8.38：** 桌面週報精靈只組合一般專案要求，不新增網站路由／資料表。`outlook_folders` 的 scope 加入 `online_inbox`（Exchange／OST 收件匣及子資料夾），仍有 `local_inbox`、`online_sent`，工具總數維持 44。無效回覆按兩次一般修復＋兩次精簡恢復處理，每段累計 30；未知提交／owner／client_request_id 去重契約不變。詳見 [本版驗證](VALIDATION_0_8_38.md)。

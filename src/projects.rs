@@ -23,6 +23,7 @@ mod skills;
 pub mod steering;
 pub mod text;
 mod tool_calls;
+pub(crate) mod vision;
 
 use crate::{jobs, storage, AppResult};
 use serde::{Deserialize, Serialize};
@@ -244,6 +245,11 @@ pub enum Tool {
         x_label: String,
         y_label: String,
     },
+    /// 圖片由同模型的獨立無工具請求辨識，原任務只取得文字。
+    AnalyzeImage {
+        path: String,
+        focus: String,
+    },
     SummarizeDocument {
         path: String,
         focus: String,
@@ -375,6 +381,7 @@ impl Tool {
             Self::OfficeBatch { .. } => "批次編輯 Office",
             Self::CreateChart { .. } | Self::ChartFromExcel { .. } => "建立圖表",
             Self::ExportChartPng { .. } => "儲存圖表 PNG",
+            Self::AnalyzeImage { .. } => "辨識專案圖片（試驗）",
             Self::SummarizeDocument { .. } => "快速模型摘要",
             Self::ListFiles { .. } => "讀取檔案清單",
             Self::ReadFile { .. } => "閱讀檔案",

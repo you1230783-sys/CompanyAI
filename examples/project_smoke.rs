@@ -19,6 +19,8 @@ mod roundtrip;
 mod server_pdf;
 #[path = "project_smoke/skills.rs"]
 mod skills;
+#[path = "project_smoke/vision.rs"]
+mod vision;
 
 use company_ai::{
     projects::{files::Broker, sandbox::Worker, text, Project, Tool},
@@ -32,6 +34,9 @@ fn run() -> AppResult<()> {
     let root =
         PathBuf::from(args.get(2).ok_or("需要測試根目錄。")?).join(company_ai::jobs::new_id()?);
     std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+    if args.get(3).is_some_and(|value| value == "--vision-only") {
+        return vision::verify(&root);
+    }
     // 開發時可先檢查模型／工具協調器；正式 Build.ps1 仍執行全部驗證。
     if args.get(3).is_some_and(|value| value == "--native-only") {
         return native::verify(&root);
@@ -152,6 +157,7 @@ fn run() -> AppResult<()> {
     drop(worker);
     logs::verify(&exe, &root)?;
     native::verify(&root)?;
+    vision::verify(&root)?;
     skills::verify(&exe, &root)?;
     roundtrip::verify(&root)?;
     continuation::verify(&root)?;
