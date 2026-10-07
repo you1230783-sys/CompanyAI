@@ -1,5 +1,13 @@
 # 版本更新紀錄
 
+## 0.8.42
+
+- 新增 python-analysis 技能及 run_python 工具，內附 CPython 3.13.12、pandas 2.2.3、NumPy 2.2.6、openpyxl 3.1.5，支援多檔分析、分組統計與 XLSX 生成。
+- Python 獨立安裝於 EXE 旁，每次分析使用 AppContainer／Job，無網路能力、不能另開程序；原生層提供資料快照並保存驗證後的成果。
+- 公司 Excel 原檔繼續由 Excel COM 讀取、匯出追蹤 CSV，再交給 pandas；生成 XLSX 由 openpyxl 處理。無需使用者安裝 Python，不開放 PowerShell。
+- 恢復完整 NSIS 安裝、更新、回復與解除安裝流程；兩份更新清單均指向完整 Setup，避免只更新 EXE 遺漏 Python。
+- 詳見 [本版驗證與限制](docs/VALIDATION_0_8_42.md)。
+
 ## 0.8.41
 
 - 圖片與原生快速摘要使用父請求的遠端對話，修正parent_request_id關聯造成的422。
@@ -33,7 +41,7 @@
 
 [回到專案首頁](README.md) · [目前使用方式](docs/USER_GUIDE.md) · [開發說明](docs/DEVELOPMENT.md)
 
-目前 EXE 版本為 **0.8.39**。以下按版本由新到舊記錄當時的變更；舊版限制、測試狀態與操作方式可能已由新版取代，目前用法請以使用指南為準。各版本的詳細契約與驗證紀錄仍保留於 docs。
+目前 EXE／NSIS 版本為 **0.8.42**。以下按版本由新到舊記錄當時的變更；舊版限制、測試狀態與操作方式可能已由新版取代，目前用法請以使用指南為準。各版本的詳細契約與驗證紀錄仍保留於 docs。
 
 ## 0.8.37
 

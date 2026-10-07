@@ -1,5 +1,5 @@
-//! 無網路能力的 AppContainer 文字執行器。只繼承 IPC 管線，不繼承文件或登入控制代碼。
-//! 檔案 broker 留在主程序；worker 只接受固定文字修改，沒有 Shell 或任意程式入口。
+//! 無網路能力的 AppContainer 執行器。只繼承 IPC 管線，不繼承文件或登入控制代碼。
+//! 文字／PDF 使用固定原生操作；Python 分析使用獨立且已驗證的離線環境。
 use crate::{wide, AppResult};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -85,7 +85,10 @@ pub struct Worker {
     job: Handle,
     input: File,
     output: File,
+    diagnostics: File,
     _profile: Profile,
+    timeout: Duration,
+    max_reply: usize,
 }
 impl Drop for Worker {
     fn drop(&mut self) {
@@ -119,6 +122,40 @@ fn pipe() -> AppResult<(File, File)> {
 
 impl Worker {
     pub fn start(exe: &std::path::Path, cancel: &AtomicBool) -> AppResult<Self> {
+        Self::launch(
+            exe,
+            "--project-worker",
+            128 * 1024 * 1024,
+            Duration::from_secs(15),
+            800_000,
+            cancel,
+        )
+    }
+
+    /// Python 仍採相同的 OS 隔離；只增加分析需要的記憶體／管線上限。
+    pub(super) fn start_python(exe: &std::path::Path, cancel: &AtomicBool) -> AppResult<Self> {
+        let script = exe
+            .parent()
+            .ok_or("缺少 Python 目錄。")?
+            .join("lm_worker.py");
+        Self::launch(
+            exe,
+            &format!("-I -B -u \"{}\"", script.display()),
+            1024 * 1024 * 1024,
+            Duration::from_secs(120),
+            32 * 1024 * 1024,
+            cancel,
+        )
+    }
+
+    fn launch(
+        exe: &std::path::Path,
+        arguments: &str,
+        memory: usize,
+        timeout: Duration,
+        max_reply: usize,
+        cancel: &AtomicBool,
+    ) -> AppResult<Self> {
         let name = wide(&format!("CompanyAI.Text.{}", crate::jobs::new_id()?));
         let mut sid = ptr::null_mut();
         let hr = unsafe {
@@ -137,9 +174,11 @@ impl Worker {
         let profile = Profile { name, sid };
         let (child_input, input) = pipe()?;
         let (output, child_output) = pipe()?;
+        let (diagnostics, child_diagnostics) = pipe()?;
         unsafe {
             SetHandleInformation(input.as_raw_handle(), HANDLE_FLAG_INHERIT, 0);
             SetHandleInformation(output.as_raw_handle(), HANDLE_FLAG_INHERIT, 0);
+            SetHandleInformation(diagnostics.as_raw_handle(), HANDLE_FLAG_INHERIT, 0);
         }
         let mut size = 0;
         unsafe {
@@ -160,7 +199,11 @@ impl Worker {
             CapabilityCount: 0,
             Reserved: 0,
         };
-        let handles = [child_input.as_raw_handle(), child_output.as_raw_handle()];
+        let handles = [
+            child_input.as_raw_handle(),
+            child_output.as_raw_handle(),
+            child_diagnostics.as_raw_handle(),
+        ];
         for (attribute, value, bytes) in [
             (
                 PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES as usize,
@@ -195,7 +238,7 @@ impl Worker {
                 wShowWindow: 0,
                 hStdInput: child_input.as_raw_handle(),
                 hStdOutput: child_output.as_raw_handle(),
-                hStdError: child_output.as_raw_handle(),
+                hStdError: child_diagnostics.as_raw_handle(),
                 ..Default::default()
             },
             lpAttributeList: attributes.pointer(),
@@ -229,7 +272,7 @@ impl Worker {
             .encode_utf16()
             .collect();
         let executable = wide(&exe.to_string_lossy());
-        let mut command = wide(&format!("\"{}\" --project-worker", exe.display()));
+        let mut command = wide(&format!("\"{}\" {arguments}", exe.display()));
         let mut process = PROCESS_INFORMATION::default();
         let job = Handle(unsafe { CreateJobObjectW(ptr::null(), ptr::null()) });
         if job.0.is_null() {
@@ -240,7 +283,7 @@ impl Worker {
             | JOB_OBJECT_LIMIT_ACTIVE_PROCESS
             | JOB_OBJECT_LIMIT_PROCESS_MEMORY;
         limits.BasicLimitInformation.ActiveProcessLimit = 1;
-        limits.ProcessMemoryLimit = 128 * 1024 * 1024;
+        limits.ProcessMemoryLimit = memory;
         if unsafe {
             SetInformationJobObject(
                 job.0,
@@ -286,18 +329,85 @@ impl Worker {
             job,
             input,
             output,
+            diagnostics,
             _profile: profile,
+            timeout,
+            max_reply,
         };
         if unsafe { ResumeThread(thread.0) } == u32::MAX {
             return Err(error("無法啟動文字執行器"));
         }
         drop(child_input);
         drop(child_output);
-        let handshake = worker.receive(cancel)?;
+        drop(child_diagnostics);
+        let handshake = worker
+            .receive(cancel)
+            .map_err(|message| worker.with_diagnostics(message))?;
         if handshake != b"appcontainer-ready" {
             return Err("子程序隔離驗證失敗。".into());
         }
         Ok(worker)
+    }
+
+    /// 寫入也放在可取消的工作執行緒，避免子程序未讀管道時把主程序卡住。
+    pub(super) fn analyze(
+        &mut self,
+        request: &serde_json::Value,
+        cancel: &AtomicBool,
+    ) -> AppResult<serde_json::Value> {
+        let data = serde_json::to_vec(request).map_err(|e| e.to_string())?;
+        if data.len() > 64 * 1024 * 1024 {
+            return Err("Python 輸入超過 64 MiB。".into());
+        }
+        let mut input = self.input.try_clone().map_err(|e| e.to_string())?;
+        let (send, receive) = std::sync::mpsc::channel();
+        let writer = std::thread::spawn(move || {
+            let _ = send.send(write_frame(&mut input, &data));
+        });
+        let deadline = Instant::now() + self.timeout;
+        let written = loop {
+            match receive.recv_timeout(Duration::from_millis(20)) {
+                Ok(result) => break result,
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    break Err("Python 輸入管道中斷。".into())
+                }
+                Err(_) => {}
+            }
+            if cancel.load(Ordering::Relaxed) || Instant::now() >= deadline {
+                unsafe {
+                    TerminateJobObject(self.job.0, 1);
+                }
+                break Err("Python 輸入已取消或逾時。".into());
+            }
+        };
+        let _ = writer.join();
+        written?;
+        let response = self
+            .receive(cancel)
+            .map_err(|message| self.with_diagnostics(message))?;
+        serde_json::from_slice(&response).map_err(|_| "Python 未回傳合法結果。".into())
+    }
+
+    /// 啟動錯誤與 IPC 分開，最多讀取少量診斷，避免 traceback 被當成訊息長度。
+    fn with_diagnostics(&mut self, message: String) -> String {
+        let mut available = 0;
+        unsafe {
+            PeekNamedPipe(
+                self.diagnostics.as_raw_handle(),
+                ptr::null_mut(),
+                0,
+                ptr::null_mut(),
+                &mut available,
+                ptr::null_mut(),
+            );
+        }
+        let mut bytes = vec![0; (available as usize).min(8000)];
+        if !bytes.is_empty() {
+            if let Ok(count) = self.diagnostics.read(&mut bytes) {
+                return format!("{message}\n{}", String::from_utf8_lossy(&bytes[..count]));
+            }
+        }
+        message
     }
 
     pub fn edit(&mut self, edit: &Edit, cancel: &AtomicBool) -> AppResult<String> {
@@ -354,7 +464,7 @@ impl Worker {
     }
 
     fn receive(&mut self, cancel: &AtomicBool) -> AppResult<Vec<u8>> {
-        let deadline = Instant::now() + Duration::from_secs(15);
+        let deadline = Instant::now() + self.timeout;
         let mut received = Vec::new();
         loop {
             if cancel.load(Ordering::Relaxed) || Instant::now() >= deadline {
@@ -389,7 +499,7 @@ impl Worker {
                     let length = u32::from_le_bytes(
                         received[..4].try_into().map_err(|_| "管線資料不完整。")?,
                     ) as usize;
-                    if length > 800_000 || received.len() > length + 4 {
+                    if length > self.max_reply || received.len() > length + 4 {
                         return Err("子程序回覆超出限制。".into());
                     }
                     if received.len() == length + 4 {

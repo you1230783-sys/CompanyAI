@@ -1,5 +1,14 @@
 # 專案級開發指引
 
+## 0.8.42：獨立 Python 與完整 NSIS（最新使用者指示）
+
+- 使用者明確授權加入離線 Python 分析、製作完整 NSIS 並部署既有 Git main；取代先前不製作 NSIS 的限制。不改 icon.png、不開放 PowerShell、不移除 Outlook 助理。
+- 本版固定 CPython 3.13.12 x64、pandas 2.2.3、NumPy 2.2.6、openpyxl 3.1.5 及鎖定的必要依賴。安裝在 EXE 旁 python 子目錄，不嵌入 EXE、不使用系統 Python／pip／網路下載。
+- Python 在單次 AppContainer／Job 執行，原檔由 Rust 唯讀建立快照；公司原始 Excel 仍以既有 COM 匯出資料集交給 pandas，不引入 pywin32。生成 XLSX 可用 openpyxl。
+- 原生程式與 C++ 測試必須 v142 x64；上游預編譯 Python／wheel 的來源與編譯器需另據實記錄，不冒稱由 v142 編譯。
+- 完整驗證用 Build.ps1 -EmptyCargoCache -TestOffice -NetworkTestRoot -IncludeInstaller。交付 EXE、NSIS、兩個指向 NSIS 的簽署更新清單、Python 離線依賴包及驗證文件。歷史 CompanyAI-offline.zip 不重製、不冒稱新版。
+- 修改 python_worker.py 後以 Prepare-Python.ps1 -Destination <新目錄> -RefreshManifest 重建，核對 assets/python-runtime-manifest.json 與 python-runtime-sha256.txt，再編譯。Python 原始碼必須 LF，避免不同 Git checkout 改變固定雜湊。
+
 ## 0.8.41：圖片關聯、單張試驗與紀錄捲動（最新指示）
 
 - 修正圖片及原生快速摘要子請求：直接使用已核對父請求中的遠端 conversation_id，同 owner／project／run／conversation；client_snapshot 不允許網站自行補回歷史。

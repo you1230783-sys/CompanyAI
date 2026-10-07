@@ -484,6 +484,10 @@ mod tests {
                 "export_excel_dataset",
                 json!({"path":"a.xlsx","revision":"r","sheet":1,"columns":["A","F"],"header_row":1,"start_row":2,"row_count":100,"name":"data.csv"}),
             ),
+            (
+                "run_python",
+                json!({"purpose":"分析", "code":"result = {}", "inputs":[]}),
+            ),
             ("inspect_dataset", json!({"path":"_AI_Output/data.csv"})),
             (
                 "plan_excel_analysis",

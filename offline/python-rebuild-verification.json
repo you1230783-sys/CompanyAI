@@ -1,0 +1,22 @@
+{
+  "result": "PASS",
+  "version": "0.8.42",
+  "recorded_at": "2026-10-07T08:26:14.6713935+08:00",
+  "offline_archive_sha256": "ff3e97b14eeb8e05bf992d6c5d2b098558cc51308c2c6b713164cd39f6173e4c",
+  "runtime_manifest_sha256": "ba14595d7e9e75268da361f4bc09a75f07388cfac14d985c137e787e344f811c",
+  "runtime_files": 3973,
+  "runtime_bytes": 106753992,
+  "rebuilt_from_pinned_offline_inputs": true,
+  "per_file_hashes_verified": true,
+  "import_checks": [
+    "CPython 3.13.12",
+    "pandas 2.2.3",
+    "NumPy 2.2.6",
+    "openpyxl 3.1.5"
+  ],
+  "rebuilds": {
+    "powershell_7": "ba14595d7e9e75268da361f4bc09a75f07388cfac14d985c137e787e344f811c",
+    "powershell_5_1": "ba14595d7e9e75268da361f4bc09a75f07388cfac14d985c137e787e344f811c"
+  },
+  "binary_origin": "Official CPython and upstream win_amd64 wheels; not locally compiled with v142"
+}

@@ -35,7 +35,7 @@ function Start-Hidden([string]$File, [string]$Arguments, [string]$BrowserFolder 
 }
 function Run-Checked([string]$File, [string]$Arguments, [int]$Expected = 0, [string]$BrowserFolder = '') {
     $process = Start-Hidden $File $Arguments $BrowserFolder
-    if (-not $process.WaitForExit(60000)) { $process.Kill(); throw "Timeout: $File" }
+    if (-not $process.WaitForExit(240000)) { $process.Kill(); throw "Timeout: $File" }
     if ($process.ExitCode -ne $Expected) {
         $detail = $process.StandardError.ReadToEnd()
         $code = $process.ExitCode
@@ -72,7 +72,7 @@ foreach ($generation in @('one','two')) {
     $payload = Join-Path $work "$generation.exe"
     & $compiler /nologo /W4 /WX /MT /EHsc /utf-8 "/DTEST_GENERATION=$generation" "/Fo$work\$generation.obj" "/Fe$payload" $source
     if ($LASTEXITCODE -ne 0) { throw 'v142 test payload build failed.' }
-    & $nsis /V2 /DAPP_VERSION=98.0.0 /DTEST_PACKAGE /DPRODUCT_DIR=LM_AI_Installer_Test "/DAPP_SOURCE=$payload" "/DSETUP_OUTPUT=$work\$generation-setup.exe" (Join-Path $root 'installer\LM_AI.nsi')
+    & $nsis /V2 /DAPP_VERSION=98.0.0 /DTEST_PACKAGE /DTEST_PAYLOAD /DPRODUCT_DIR=LM_AI_Installer_Test "/DAPP_SOURCE=$payload" "/DSETUP_OUTPUT=$work\$generation-setup.exe" (Join-Path $root 'installer\LM_AI.nsi')
     if ($LASTEXITCODE -ne 0) { throw 'Test installer build failed.' }
 }
 $app = Join-Path $installRoot 'LM_AI.exe'
@@ -126,12 +126,23 @@ foreach ($name in $preservedSettings.Keys) {
     if ([IO.File]::ReadAllText((Join-Path $installRoot $name)) -cne $preservedSettings[$name]) { throw "Update changed VNC configuration: $name" }
 }
 # 模擬防毒／其他程序占用主程式：安裝不得刪掉原版。
+$runtimeWorker = Join-Path $installRoot 'python\lm_worker.py'
+# 合成標記讓舊／新 runtime 確實不同；測試 payload 不會執行這份 Python。
+[IO.File]::AppendAllText($runtimeWorker, "`n# installer rollback fixture`n")
+$runtimeBefore = (Get-FileHash -LiteralPath $runtimeWorker).Hash
 $locked = [IO.File]::Open($app, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
 try { Run-Checked (Join-Path $work 'one-setup.exe') '/S' 1 } finally { $locked.Dispose() }
 if ((Get-FileHash $app).Hash -ne (Get-FileHash (Join-Path $work 'two.exe')).Hash) { throw 'Failed installation changed the working app.' }
+if ((Get-FileHash $runtimeWorker).Hash -ne $runtimeBefore) { throw 'Locked app rollback did not restore the old Python runtime.' }
+# 新 runtime 初始化失敗同樣必須回復兩者；此包刻意不加 TEST_PAYLOAD。
+& $nsis /V2 /DAPP_VERSION=98.0.0 /DTEST_PACKAGE /DPRODUCT_DIR=LM_AI_Installer_Test "/DAPP_SOURCE=$work\one.exe" "/DSETUP_OUTPUT=$work\runtime-failure-setup.exe" (Join-Path $root 'installer\LM_AI.nsi')
+if ($LASTEXITCODE -ne 0) { throw 'Runtime failure test installer build failed.' }
+Run-Checked (Join-Path $work 'runtime-failure-setup.exe') '/S' 1
+if ((Get-FileHash $runtimeWorker).Hash -ne $runtimeBefore -or (Get-FileHash $app).Hash -ne (Get-FileHash (Join-Path $work 'two.exe')).Hash) { throw 'Python initialization failure changed the old app/runtime.' }
 Run-Checked $uninstaller '/S'
-$deadline = [DateTime]::UtcNow.AddSeconds(15)
-while ((Test-Path $uninstaller) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
+$deadline = [DateTime]::UtcNow.AddSeconds(60)
+# NSIS 會先刪除原解除安裝 EXE，再清理 Python；登錄項目才是最後移除的標記。
+while (((Test-Path $uninstaller) -or (Test-Path $key)) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
 foreach ($path in @($app,$uninstaller,$key) + $shortcuts) { if (Test-Path -LiteralPath $path) { throw "Uninstall did not remove $path" } }
 if ([IO.File]::ReadAllText($keep) -ne 'keep me') { throw 'Uninstaller deleted user data.' }
 foreach ($name in $preservedSettings.Keys) {
@@ -148,10 +159,11 @@ if ($LASTEXITCODE -ne 0) { throw 'Real payload test installer build failed.' }
 Run-Checked (Join-Path $work 'real-setup.exe') '/S'
 if ((Get-FileHash $app).Hash -ne (Get-FileHash (Join-Path $root 'dist\LM_AI.exe')).Hash) { throw 'Installed Rust app differs from release.' }
 Run-Checked $app '--self-check'
+Run-Checked $app '--python-self-check'
 Run-Checked $uninstaller '/S'
-$deadline = [DateTime]::UtcNow.AddSeconds(15)
-while ((Test-Path $installRoot) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
-if (Test-Path $installRoot) { throw 'Real payload test uninstall incomplete.' }
+$deadline = [DateTime]::UtcNow.AddSeconds(60)
+while (((Test-Path $installRoot) -or (Test-Path $key)) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
+if ((Test-Path $installRoot) -or (Test-Path $key)) { throw 'Real payload test uninstall incomplete.' }
 # 最後安裝真正交付的 Setup，不以測試包取代此驗證。
 $releaseSetup = Join-Path $root 'dist\LM_AI_Setup.exe'
 $releaseApp = Join-Path $releaseRoot 'LM_AI.exe'
@@ -183,9 +195,10 @@ try {
 } finally { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcutReader) | Out-Null }
 Assert-RuntimeUnavailable $releaseApp $missingBrowserFolder
 Run-Checked $releaseApp '--self-check'
+Run-Checked $releaseApp '--python-self-check'
 Run-Checked $releaseUninstaller '/S'
-$deadline = [DateTime]::UtcNow.AddSeconds(15)
-while ((Test-Path $releaseUninstaller) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
+$deadline = [DateTime]::UtcNow.AddSeconds(60)
+while (((Test-Path $releaseUninstaller) -or (Test-Path $releaseKey)) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
 foreach ($path in @($releaseApp,$releaseUninstaller,$releaseKey) + $releaseShortcuts) {
     if (Test-Path -LiteralPath $path) { throw "Release uninstall did not remove $path" }
 }
@@ -204,6 +217,10 @@ Remove-Item -LiteralPath $releaseKeep
     setup_sha256 = (Get-FileHash $releaseSetup -Algorithm SHA256).Hash.ToLowerInvariant()
     vnc_configuration_preserved = $true
     webview2_bundled = $false
+    python_bundled = $true
+    python_folder = 'python'
+    python_install_self_check = $true
+    python_failure_rollback = $true
     runtime_check_stage = 'application startup only; no installer prerequisite check'
     runtime_unavailable_simulation = 'child-only WEBVIEW2_BROWSER_EXECUTABLE_FOLDER points to a nonexistent folder; Setup succeeds, installed app exits with existing guidance'
     checks = @('NSIS install into missing product directory','existing directory preserves user files','fixed path ignores /D','shortcuts and registration','EXE/setup/uninstaller company name','PID handoff wait','update replacement','automatic restart','locked-file failure preserves old app','NSIS uninstall preserves unknown files','actual release Setup installation and WebView2 self-check','actual release uninstall')

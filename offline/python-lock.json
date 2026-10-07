@@ -1,0 +1,56 @@
+{
+  "python_version": "3.13.12",
+  "python_archive": "python-3.13.12-embeddable-amd64.zip",
+  "python_source": "https://www.python.org/ftp/python/3.13.12/python-3.13.12-embeddable-amd64.zip",
+  "package_source": "https://pypi.org/",
+  "binary_origin": "Official CPython and upstream win_amd64 wheels; not locally compiled with v142",
+  "packages": {
+    "tzdata": "2025.2",
+    "python-dateutil": "2.9.0.post0",
+    "numpy": "2.2.6",
+    "pandas": "2.2.3",
+    "et-xmlfile": "2.0.0",
+    "openpyxl": "3.1.5",
+    "six": "1.17.0",
+    "pytz": "2025.2"
+  },
+  "archive_sha256": "ff3e97b14eeb8e05bf992d6c5d2b098558cc51308c2c6b713164cd39f6173e4c",
+  "files": [
+    {
+      "name": "et_xmlfile-2.0.0-py3-none-any.whl",
+      "sha256": "7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa"
+    },
+    {
+      "name": "numpy-2.2.6-cp313-cp313-win_amd64.whl",
+      "sha256": "b0544343a702fa80c95ad5d3d608ea3599dd54d4632df855e4c8d24eb6ecfa1c"
+    },
+    {
+      "name": "openpyxl-3.1.5-py2.py3-none-any.whl",
+      "sha256": "5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2"
+    },
+    {
+      "name": "pandas-2.2.3-cp313-cp313-win_amd64.whl",
+      "sha256": "61c5ad4043f791b61dd4752191d9f07f0ae412515d59ba8f005832a532f8736d"
+    },
+    {
+      "name": "python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+      "sha256": "a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427"
+    },
+    {
+      "name": "python-3.13.12-embeddable-amd64.zip",
+      "sha256": "f0b5a8e2662f51cfedefaf7cc0b8c22f05b776efa4a392042946422662e3a23c"
+    },
+    {
+      "name": "pytz-2025.2-py2.py3-none-any.whl",
+      "sha256": "5ddf76296dd8c44c26eb8f4b6f35488f3ccbf6fbbd7adee0b7262d43f0ec2f00"
+    },
+    {
+      "name": "six-1.17.0-py2.py3-none-any.whl",
+      "sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274"
+    },
+    {
+      "name": "tzdata-2025.2-py2.py3-none-any.whl",
+      "sha256": "1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8"
+    }
+  ]
+}

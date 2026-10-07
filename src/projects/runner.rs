@@ -406,6 +406,12 @@ fn run_for(
                 }
             };
             let datasets = broker.dataset_index();
+            let python_artifacts = broker.python_artifact_index();
+            if python_artifacts.as_array().is_some_and(|v| !v.is_empty()) {
+                messages.push(super::agent::Message::user(&format!(
+                    "已保存的 Python XLSX 成果（自動加入交付，不必重建）：{python_artifacts}"
+                )));
+            }
             let plans = broker.excel_plan_index();
             if plans.as_array().is_some_and(|v| !v.is_empty()) {
                 messages.push(super::agent::Message::user(&format!(

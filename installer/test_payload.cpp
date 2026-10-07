@@ -11,6 +11,8 @@
 #define STRINGIFY_INNER(value) #value
 #define STRINGIFY(value) STRINGIFY_INNER(value)
 int wmain(int argc, wchar_t** argv) {
+    // 專門模擬新 Python 初始化失敗；必須在取得主程式鎖之前回報。
+    if (argc == 2 && std::wcscmp(argv[1], L"--prepare-python-runtime") == 0) return 42;
     HANDLE lock = CreateMutexW(nullptr, FALSE, L"Local\\LARGAN.LM_AI_Installer_Test.Desktop");
     if (!lock || GetLastError() == ERROR_ALREADY_EXISTS) return 2;
     if (argc == 2 && std::wcscmp(argv[1], L"--hold") == 0) {

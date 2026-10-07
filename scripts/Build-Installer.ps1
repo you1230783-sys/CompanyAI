@@ -11,6 +11,31 @@ if (-not (Test-Path (Join-Path $tools 'nsis-3.12\makensis.exe'))) {
     Expand-Archive -LiteralPath $zip -DestinationPath $tools -Force
 }
 $compiler = Join-Path $tools 'nsis-3.12\makensis.exe'
+& (Join-Path $PSScriptRoot 'Stage-Python.ps1') -ExecutableDirectory (Join-Path $root 'dist')
+# 刪除清單由本版 runtime 產生，只移除已知檔案；未知使用者檔案永不遞迴刪除。
+$pythonRoot = Join-Path $root 'dist\python'
+$entries = Get-ChildItem -LiteralPath $pythonRoot -Recurse
+$lines = New-Object 'System.Collections.Generic.List[string]'
+$lines.Add('!macro PythonCheckTree root')
+$lines.Add('  !insertmacro CheckInstallDirectory "${root}"')
+foreach ($entry in $entries | Where-Object { $_.PSIsContainer } | Sort-Object FullName) {
+    $relative = $entry.FullName.Substring($pythonRoot.Length + 1)
+    $lines.Add('  !insertmacro CheckInstallDirectory "${root}\' + $relative + '"')
+}
+$lines.Add('!macroend')
+$lines.Add('!macro PythonRemove root')
+$lines.Add('  !insertmacro PythonCheckTree "${root}"')
+foreach ($entry in $entries | Where-Object { -not $_.PSIsContainer }) {
+    $relative = $entry.FullName.Substring($pythonRoot.Length + 1)
+    $lines.Add('  Delete "${root}\' + $relative + '"')
+}
+foreach ($entry in $entries | Where-Object { $_.PSIsContainer } | Sort-Object { $_.FullName.Length } -Descending) {
+    $relative = $entry.FullName.Substring($pythonRoot.Length + 1)
+    $lines.Add('  RMDir "${root}\' + $relative + '"')
+}
+$lines.Add('  RMDir "${root}"')
+$lines.Add('!macroend')
+[IO.File]::WriteAllLines((Join-Path $root '.build\python-files.nsh'), $lines, (New-Object Text.UTF8Encoding($false)))
 $version = [regex]::Match((Get-Content (Join-Path $root 'Cargo.toml') -Raw), '(?m)^version = "([^"]+)"').Groups[1].Value
 # 精簡 Setup 不再讀取或嵌入 WebView2；獨立 Runtime 由公司另行提供。
 & $compiler /V2 "/DAPP_VERSION=$version" (Join-Path $root 'installer\LM_AI.nsi')

@@ -44,6 +44,11 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     & cargo build --workspace --release --frozen
     if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
     $exe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\release\company-ai.exe'
+    & (Join-Path $PSScriptRoot 'Stage-Python.ps1') -ExecutableDirectory (Split-Path $exe -Parent)
+    foreach ($argument in @('--prepare-python-runtime','--python-self-check')) {
+        $pythonCheck = Start-Process -FilePath $exe -ArgumentList $argument -PassThru -Wait -WindowStyle Hidden
+        if ($pythonCheck.ExitCode -ne 0) { throw "Python runtime check failed: $argument" }
+    }
     $composerReport = Join-Path ([IO.Path]::GetTempPath()) 'CompanyAI-ui-smoke\composer-verification.json'
     if (Test-Path -LiteralPath $composerReport) { Remove-Item -LiteralPath $composerReport }
     # GUI 程式以隱藏的自我檢查模式驗證控制項，避免編譯腳本停在主視窗。
@@ -73,6 +78,23 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     $projectProbe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\project_smoke.exe'
     & $projectProbe $exe (Join-Path $projectRoot '.build\project-smoke')
     if ($LASTEXITCODE -ne 0) { throw 'Real AppContainer/project file integration failed.' }
+    & cargo build --example python_smoke --release --frozen
+    if ($LASTEXITCODE -ne 0) { throw 'Python integration harness build failed.' }
+    $pythonProbe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\release\examples\python_smoke.exe'
+    & (Join-Path $PSScriptRoot 'Stage-Python.ps1') -ExecutableDirectory (Split-Path $pythonProbe -Parent)
+    $pythonTestRoot = Join-Path $projectRoot ('.build\python-smoke-' + [guid]::NewGuid().ToString('N'))
+    $pythonArguments = @($exe, $pythonTestRoot)
+    if ($TestOffice) { $pythonArguments += '--office' }
+    # 合成標記確認任意父程序環境不會流入模型程式；不使用真正憑證。
+    $oldPythonMarker = $env:LM_PYTHON_SMOKE_SECRET
+    try {
+        $env:LM_PYTHON_SMOKE_SECRET = 'synthetic-test-only'
+        & $pythonProbe @pythonArguments
+        if ($LASTEXITCODE -ne 0) { throw 'Python analysis/isolation integration failed.' }
+    } finally { $env:LM_PYTHON_SMOKE_SECRET = $oldPythonMarker }
+    if (-not $ValidateOnly) {
+        Copy-Item -LiteralPath (Join-Path $pythonTestRoot 'python-verification.json') -Destination (Join-Path $projectRoot 'offline\python-verification.json') -Force
+    }
     if ($TestOffice) {
         & cargo build --example office_smoke --frozen
         if ($LASTEXITCODE -ne 0) { throw 'Office harness build failed.' }
@@ -171,17 +193,12 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     # 0.8.1 起僅交付 LM_AI.exe；移除已停用的相容檔名，不再產生第二份主程式。
     $legacyExe = Join-Path $dist 'CompanyAI.exe'
     if (Test-Path -LiteralPath $legacyExe) { Remove-Item -LiteralPath $legacyExe }
-    if (Test-Path (Join-Path $projectRoot '.private\update-key.dpapi')) {
-        & (Join-Path $PSScriptRoot 'Update-Signing.ps1') -Kind exe
-    } else {
-        $oldManifest = Join-Path $dist 'update-manifest-exe.json'
-        if (Test-Path -LiteralPath $oldManifest) { Remove-Item -LiteralPath $oldManifest }
-        Write-Host 'No private update key: executable rebuilt without a publishable EXE manifest.'
-    }
-    # 安裝包為明確選用；EXE 發行不重建 NSIS，也不產生离線 ZIP。
+    # 本版 Python 需要完整 NSIS；不發布可能漏掉 runtime 的獨立 EXE 更新清單。
+    # 本版已授權完整 NSIS 發行；未選用安裝包的建置不更新任何簽署清單。
     if ($IncludeInstaller) {
         & (Join-Path $PSScriptRoot 'Build-Installer.ps1')
         & (Join-Path $PSScriptRoot 'Test-Installer.ps1')
+        Copy-Item -LiteralPath (Join-Path $dist 'update-manifest.json') -Destination (Join-Path $dist 'update-manifest-exe.json') -Force
     }
     [ordered]@{
         recorded_at = (Get-Date -Format o)

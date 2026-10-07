@@ -1,3 +1,5 @@
+> **0.8.42：** 新增 `run_python(purpose,code,inputs)` 及 `python-analysis` 技能，工具目錄共48項、仍按需公告。Python 在桌面本機隔離執行，網站只按當次工具 Schema 轉發程式與精簡結果，不執行 Python、不接收全部輸入檔案。既有 `skills:false`、agent/turns 與 client_snapshot 不變。兩個更新清單端點都需提供本版已簽署的 `kind:nsis` 清單及完整 Setup，不再以 EXE 更新包交付本版。
+
 > **0.8.41：父子請求必須同一遠端對話。** 圖片與原生快速摘要直接沿用父請求的 conversation_id，同owner/project/run；client_request_id仍各自唯一。圖片最大5,000,000 bytes，Base64後整份JSON最多10,000,000 bytes且不超過capabilities.limits.request_bytes；網站需同步公告實際可接受上限。每次任務只試1張，fast不送圖片。辨識結果只含文字重點與來源；後續主請求沒有image_url或Base64。既有client_snapshot規則不變，網站不能因conversation相同自行拼接歷史。明確拒絕請回task_accepted=false，桌面會清除待查圖片；結果不明仍只查原ID。
 
 > **0.8.40：** 新增 `plan_excel_analysis(proposal)`、`export_planned_excel(plan_id,start_row,scan_rows,window,name)`，工具目錄47項，依技能按需公告；JSON Schema見 `src/projects/tools.json`。圖表kind增加 `step`、`area`、`horizontal_bar`。網站依當次工具定義驗證參數，不固定舊名稱／圖型清單。使用者圖表編輯及PNG保存都是桌面本機操作，不新增網站端點、不傳顯示設定給模型。圖片子請求仍採下方0.8.39格式。

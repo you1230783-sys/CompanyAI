@@ -1,5 +1,15 @@
 # LM_AI 使用指南
 
+## 0.8.42 Python 分析與安裝
+
+請下載本版 `LM_AI_Setup.exe`，關閉系統托盤中的 LM_AI 後以一般權限安裝。程式固定在 `C:\largan\LM_AI`，Python 在其 `python` 子資料夾；不需另外安裝 Python 或套件。請保留整個目錄，單獨移動 EXE 會使 Python 分析無法使用。
+
+在專案對話中可以要求：「用 Python 合併這幾份 CSV，保留批號前導零，依機台計算數量、平均、最大與最小，產生統計 CSV 及 Excel 報告。」AI 可按需載入 Python 技能；工具紀錄會顯示「Python 本機資料分析」。成果仍在專案 `_AI_Output`，完成後可點擊定位。
+
+公司原始 Excel 先透過已安裝的 Excel 讀取，轉成資料集後交給 pandas。程式生成的 XLSX 可直接用 openpyxl 處理。一般 UTF-8 CSV／LOG 可直接分析。Python 本身不連網；模型仍透過公司 AI 服務提出分析程式並閱讀精簡結論。
+
+每次最多8份來源、單檔32MiB、每次計算120秒／1GiB記憶體；需要更多資料時，AI 應明確分批，不能把抽樣冒充完整計算。若提示 Python 缺少、版本不同或檔案損毀，請重新執行同版完整安裝包。公司保護、實際模型表現與防毒相容性仍需公司實測。
+
 ## 0.8.39 新增的專案快速操作
 
 **Outlook 助理**：在專案對話按此按鈕，日期預設本週一至今天，可改日期並補充需要關注的事項。送出後會由同一套專案郵件技能整理待辦、回覆與追蹤內容；讀取前仍會要求同意並勾選資料夾。未勾選資料夾不送出；優先最新信，必要時本機比對再補讀，最多 1000 封本機比對／50 封 AI 內文。舊 Outlook 預覽與 MSG 功能仍保留。
@@ -19,7 +29,7 @@
 
 執行環境為 Windows 11 x64，需要 WebView2 Runtime；日常使用不需安裝 Rust、Node 或 Python。Office 文件功能需要對應的桌面 Word／Excel／PowerPoint，Outlook 功能需要 Classic Outlook，VNC 功能需要 UltraVNC Viewer。
 
-1. 從 [專案首頁](../README.md) 下載 EXE，或使用 IT 提供的版本。
+1. 從 [專案首頁](../README.md) 下載本版完整 NSIS 安裝包，或使用 IT 提供的版本。
 2. 執行 `LM_AI.exe`。若提示缺少 WebView2，安裝公司提供的 x64 Runtime 後再開啟；詳見 [離線安裝說明](../dist/WEBVIEW2-OFFLINE.md)。
 3. 按「登入」，在瀏覽器核對程式顯示的短碼並允許授權。
 4. 回到 LM_AI，選擇後端提供的「快速／品質」等模型。

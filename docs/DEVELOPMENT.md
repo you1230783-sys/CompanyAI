@@ -1,5 +1,9 @@
 # 開發與維護說明
 
+## 0.8.42 Python 環境
+
+Python 輸入包、固定依賴、AppContainer 資料橋接及離線重建見 [PYTHON_RUNTIME.md](PYTHON_RUNTIME.md)。本版必須完整 NSIS 發行：`Build.ps1 -EmptyCargoCache -TestOffice -NetworkTestRoot <測試SMB根目錄> -IncludeInstaller`。不再以獨立 EXE 更新清單發布本版。
+
 ## 0.8.39 維護位置
 
 - 專案快速入口：`ui/project-quick.js`、`src/ui/projects/quick.rs`；原生層核對對話、專案、帳號、模型及歷史，準備視窗不啟動任務。

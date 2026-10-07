@@ -31,8 +31,13 @@ OutFile "${SETUP_OUTPUT}"
 InstallDir "${INSTALL_PATH}"
 ; 保持與一般權限 Outlook 相同的使用者環境；目錄權限由公司 IT 配置。
 RequestExecutionLevel user
+!ifdef TEST_PACKAGE
+; 合成案例只驗证安裝交易，使用快速壓縮；後段仍實裝真正的 LZMA 發行包。
+SetCompressor zlib
+!else
 SetCompressor /SOLID lzma
 SetCompressorDictSize 32
+!endif
 ShowInstDetails show
 ShowUninstDetails show
 VIProductVersion "${APP_VERSION}.0"
@@ -44,7 +49,7 @@ VIAddVersionKey /LANG=1028 "LegalCopyright" "Copyright © 2026 ${PUBLISHER} All 
 !define MUI_ICON "..\assets\app.ico"
 !define MUI_UNICON "..\assets\app.ico"
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipUpdatePage
-!define MUI_WELCOMEPAGE_TEXT "固定安裝至 ${INSTALL_PATH}\，並為目前使用者建立捷徑。聊天、登入及偏好資料將保留。$\r$\n$\r$\n請以一般權限安裝及執行；若無目錄寫入權限，請聯絡 IT 配置。本安裝程式只安裝 LM_AI，不檢查或安裝 WebView2。完成後請使用捷徑開啟 LM_AI；若缺少 WebView2，請使用公司另外提供的 x64 安裝程式。"
+!define MUI_WELCOMEPAGE_TEXT "固定安裝至 ${INSTALL_PATH}\，並為目前使用者建立捷徑。聊天、登入及偏好資料將保留。$\r$\n$\r$\n請以一般權限安裝及執行；若無目錄寫入權限，請聯絡 IT 配置。本安裝程式包含 LM_AI 與獨立 Python 分析環境，不檢查或安裝 WebView2。完成後請使用捷徑開啟 LM_AI；若缺少 WebView2，請使用公司另外提供的 x64 安裝程式。"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipUpdatePage
@@ -57,6 +62,8 @@ Var UpdatePid
 Var Restart
 Var InstanceLock
 Var HadPrevious
+Var HadPython
+Var PythonSwapped
 
 ; 同時檢查父目錄與產品目錄，避免固定路徑被 junction/symlink 導向別處。
 ; 安裝及解除安裝都先檢查，再進行檔案操作。
@@ -71,6 +78,7 @@ Var HadPrevious
         ${EndIf}
     ${EndIf}
 !macroend
+!include "..\.build\python-files.nsh"
 
 Function SkipUpdatePage
     StrCmp $UpdatePid "" +2
@@ -136,12 +144,46 @@ Section "安裝 LM_AI"
     CopyFiles /SILENT "$PLUGINSDIR\LM_AI.exe" "$INSTDIR\LM_AI.pending.exe"
     WriteUninstaller "$INSTDIR\Uninstall.pending.exe"
     IfErrors failed
+    ; 獨立 runtime 先完整解壓，再切換。尚未成功前保留舊程式與舊 Python。
+    StrCpy $HadPython "no"
+    StrCpy $PythonSwapped "no"
+    !insertmacro PythonRemove "$INSTDIR\python.pending"
+    !insertmacro PythonRemove "$INSTDIR\python.previous"
+    IfFileExists "$INSTDIR\python.pending\*.*" failed
+    IfFileExists "$INSTDIR\python.previous\*.*" failed
+    !insertmacro PythonCheckTree "$INSTDIR\python"
+    ClearErrors
+    SetOutPath "$INSTDIR\python.pending"
+    File /r "..\dist\python\*.*"
+    IfErrors failed
+    SetOutPath "$INSTDIR"
+    IfFileExists "$INSTDIR\python\*.*" 0 replace_python
+    Rename "$INSTDIR\python" "$INSTDIR\python.previous"
+    IfErrors failed
+    StrCpy $HadPython "yes"
+    replace_python:
+    Rename "$INSTDIR\python.pending" "$INSTDIR\python"
+    IfErrors rollback_python
+    StrCpy $PythonSwapped "yes"
+    ; 原生 helper 核對整套檔案及設定 runtime 唯讀權限；不使用 CMD／PS／pip。
+!ifndef TEST_PAYLOAD
+    ClearErrors
+    ExecWait '"$INSTDIR\LM_AI.pending.exe" --prepare-python-runtime' $0
+    IfErrors rollback_python
+    StrCmp $0 0 +2
+    Goto rollback_python
+    ClearErrors
+    ExecWait '"$INSTDIR\LM_AI.pending.exe" --python-self-check' $0
+    IfErrors rollback_python
+    StrCmp $0 0 +2
+    Goto rollback_python
+!endif
     StrCpy $HadPrevious "no"
     IfFileExists "$INSTDIR\LM_AI.exe" 0 replace_app
     Delete "$INSTDIR\LM_AI.previous.exe"
     ClearErrors
     Rename "$INSTDIR\LM_AI.exe" "$INSTDIR\LM_AI.previous.exe"
-    IfErrors failed
+    IfErrors rollback_python
     StrCpy $HadPrevious "yes"
     replace_app:
     ClearErrors
@@ -158,6 +200,7 @@ Section "安裝 LM_AI"
     IfErrors rollback
     Delete "$INSTDIR\Uninstall.previous.exe"
     Delete "$INSTDIR\LM_AI.previous.exe"
+    !insertmacro PythonRemove "$INSTDIR\python.previous"
     ; 清除舊的腳本式解除安裝入口，所有捷徑與登錄改為 NSIS 原生解除安裝。
     Delete "$INSTDIR\LM_AI_Uninstall.exe"
     ; 捷徑及重新啟動共用 $OUTDIR 作為工作目錄，不能指向稍後會刪除的解壓暫存。
@@ -177,9 +220,16 @@ Section "安裝 LM_AI"
     Delete "$INSTDIR\LM_AI.exe"
     StrCmp $HadPrevious "yes" 0 +2
     Rename "$INSTDIR\LM_AI.previous.exe" "$INSTDIR\LM_AI.exe"
-    IfFileExists "$INSTDIR\Uninstall.previous.exe" 0 failed
+    IfFileExists "$INSTDIR\Uninstall.previous.exe" 0 rollback_python
     Rename "$INSTDIR\Uninstall.previous.exe" "$INSTDIR\Uninstall.exe"
+    rollback_python:
+    StrCmp $PythonSwapped "yes" 0 restore_python
+    !insertmacro PythonRemove "$INSTDIR\python"
+    restore_python:
+    StrCmp $HadPython "yes" 0 failed
+    Rename "$INSTDIR\python.previous" "$INSTDIR\python"
     failed:
+    !insertmacro PythonRemove "$INSTDIR\python.pending"
     Delete "$INSTDIR\LM_AI.pending.exe"
     Delete "$INSTDIR\Uninstall.pending.exe"
     MessageBox MB_ICONSTOP "安裝未完成。舊版檔案已保留；請檢查磁碟空間及防毒紀錄。若無法寫入 ${INSTALL_PATH}\，請聯絡 IT 配置該目錄權限，再以一般權限重試。" /SD IDOK
@@ -218,6 +268,7 @@ Function un.onInit
 FunctionEnd
 
 Section "Uninstall"
+    !insertmacro PythonCheckTree "$INSTDIR\python"
     ClearErrors
     Delete "$INSTDIR\LM_AI.exe"
     IfErrors 0 +3
@@ -227,6 +278,7 @@ Section "Uninstall"
     Delete "$INSTDIR\LM_AI.pending.exe"
     Delete "$INSTDIR\LM_AI_Uninstall.exe"
     Delete "$INSTDIR\Uninstall.exe"
+    !insertmacro PythonRemove "$INSTDIR\python"
     RMDir "$INSTDIR"
     Delete "$SMPROGRAMS\${PRODUCT_DIR}.lnk"
     Delete "$DESKTOP\${PRODUCT_DIR}.lnk"

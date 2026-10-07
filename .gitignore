@@ -1,4 +1,6 @@
 /target/
+/dist/python/
+__pycache__/
 /.tools/
 /offline/downloads/
 /toolchain/

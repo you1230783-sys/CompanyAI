@@ -1,0 +1,26 @@
+{
+  "actual_excel_com": true,
+  "checks": [
+    "CSV leading zeros and literal NA",
+    "LOG event duration",
+    "groupby count/mean/sum",
+    "tracked CSV and generated XLSX round trip",
+    "literal XLSX formula text",
+    "idempotent results",
+    "source/output path and revision rejection",
+    "OS file/network/child-process isolation",
+    "environment allowlist",
+    "active cancellation",
+    "120 second timeout",
+    "unlisted and modified runtime files rejected",
+    "original unchanged",
+    "modified output rejected at finish"
+  ],
+  "duration_seconds": 173.4507298,
+  "numpy": "2.2.6",
+  "openpyxl": "3.1.5",
+  "pandas": "2.2.3",
+  "python": "3.13.12",
+  "result": "PASS",
+  "version": "0.8.42"
+}

@@ -15,6 +15,7 @@ mod model;
 pub mod office;
 mod pdf;
 mod progress;
+pub mod python;
 pub mod reply;
 pub mod runner;
 pub mod sandbox;
@@ -97,6 +98,12 @@ impl Store {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "tool", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Tool {
+    /// 模型只提交程式及明確來源；原生 broker 保留路徑、輸出及程序權限。
+    RunPython {
+        purpose: String,
+        code: String,
+        inputs: Vec<python::Input>,
+    },
     OutlookFolders {
         scope: String,
         parent_id: Option<String>,
@@ -374,6 +381,7 @@ impl Tool {
     /// 使用者可讀的操作名稱，避免將 JSON 或文件全文當進度訊息。
     pub fn label(&self) -> &'static str {
         match self {
+            Self::RunPython { .. } => "Python 本機資料分析",
             Self::OutlookFolders { .. } => "列出授權的 Outlook 資料夾",
             Self::OutlookHeaders { .. } => "讀取選定資料夾的郵件標題",
             Self::OutlookCompare { .. } => "本機比對郵件前文並建議閱讀",

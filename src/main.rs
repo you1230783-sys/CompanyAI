@@ -23,6 +23,20 @@ fn main() {
         }
         return;
     }
+    if arguments.as_slice() == ["--prepare-python-runtime"]
+        || arguments.as_slice() == ["--python-self-check"]
+    {
+        let result = if arguments[0] == "--prepare-python-runtime" {
+            company_ai::projects::python::prepare_runtime()
+        } else {
+            company_ai::projects::python::self_check()
+        };
+        if let Err(error) = result {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     let smoke = arguments.iter().any(|argument| argument == "--self-check");
     let result: AppResult<()> = (|| {
         if arguments

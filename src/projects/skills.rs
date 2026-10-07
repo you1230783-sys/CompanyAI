@@ -3,6 +3,11 @@ use crate::AppResult;
 use serde_json::{json, Value};
 const SKILLS: &[(&str, &str, &str)] = &[
     (
+        "python-analysis",
+        "Python分析CSV／LOG、COM資料及XLSX成果",
+        include_str!("skills/python-analysis.md"),
+    ),
+    (
         "image-read",
         "專案 JPG／PNG 圖片辨識試驗",
         include_str!("skills/image-read.md"),
@@ -115,6 +120,7 @@ pub fn context_for(ids: &[String], model: &str) -> AppResult<String> {
 pub fn activate(ids: &mut Vec<String>, id: &str) -> AppResult<()> {
     load(id)?;
     let dependencies: &[&str] = match id {
+        "python-analysis" => &["excel-read", "dataset-charts"],
         "outlook-research" => &["outlook-coverage"],
         "outlook-coverage" => &["outlook-research"],
         "paper-evidence" => &["research", "notes"],
@@ -135,6 +141,7 @@ pub fn activate(ids: &mut Vec<String>, id: &str) -> AppResult<()> {
 pub fn enabled(tool: &str, ids: &[String]) -> bool {
     let has = |id: &str| ids.iter().any(|i| i == id);
     match tool {
+        "run_python" => has("python-analysis"),
         "analyze_image" => has("image-read"),
         "plan_excel_analysis" | "export_planned_excel" => has("excel-read"),
         "outlook_compare" => has("outlook-coverage"),

@@ -1268,7 +1268,8 @@
                 "dataset-charts",
                 "context-management",
                 "outlook-coverage",
-                "image-read"
+                "image-read",
+                "python-analysis"
               ]
             },
             "progress_note": {
@@ -2880,6 +2881,69 @@
             "scan_rows",
             "window",
             "name"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "run_python",
+        "description": "本機隔離 Python 分析，內附 pandas/NumPy/openpyxl。來源最多8份；CSV/dataset/UTF-8文字，以及_AI_Output生成XLSX。原始Excel先COM匯出。資料不整批送模型；emit_table/emit_excel成果自動保存。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "purpose": {
+              "type": "string",
+              "maxLength": 1000
+            },
+            "code": {
+              "type": "string",
+              "maxLength": 32000
+            },
+            "inputs": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "dataset",
+                      "csv",
+                      "text",
+                      "xlsx"
+                    ]
+                  },
+                  "revision": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "path",
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "purpose",
+            "code",
+            "inputs"
           ],
           "additionalProperties": false
         }

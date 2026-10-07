@@ -1,5 +1,6 @@
 //! 固定檔案 broker：只接受專案相對路徑；逐層鎖住目錄、拒絕重新解析點與硬連結。
 //! 工作副本先留在記憶體，發布只用 create_new；原始文件從未取得可寫 handle。
+mod python;
 use super::{
     office,
     sandbox::{Edit, Worker},
@@ -674,6 +675,8 @@ pub(super) struct SavedBroker {
     chart_exports: Vec<ChartExport>,
     #[serde(default)]
     datasets: Vec<super::datasets::Reference>,
+    #[serde(default)]
+    python_artifacts: Vec<super::python::Artifact>,
 }
 pub struct Broker {
     excel_plans: BTreeMap<String, super::excel_plan::Plan>,
@@ -695,6 +698,7 @@ pub struct Broker {
     charts: Vec<super::charts::Chart>,
     chart_exports: Vec<ChartExport>,
     datasets: Vec<super::datasets::Reference>,
+    python_artifacts: Vec<super::python::Artifact>,
     png_renderer: Option<super::charts::png::Renderer>,
     chart_chooser: Option<super::charts::quality::Chooser>,
     chart_deadline: std::time::Instant,
@@ -720,6 +724,7 @@ impl Broker {
             charts: vec![],
             chart_exports: vec![],
             datasets: vec![],
+            python_artifacts: vec![],
             png_renderer: None,
             chart_chooser: None,
             chart_deadline: std::time::Instant::now(),
@@ -729,7 +734,7 @@ impl Broker {
         // 經序列化建立不含程序資源的快照；授權與執行中的 COM 物件不保存。
         serde_json::from_value(
             json!({"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
-            "results":self.results,"archived_results":self.archived_results,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets}),
+            "results":self.results,"archived_results":self.archived_results,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts}),
         )
         .map_err(|e| e.to_string())
     }
@@ -789,6 +794,10 @@ impl Broker {
         for dataset in &state.datasets {
             super::datasets::load(&self.project, &dataset.path, &dataset.revision, cancel)?;
         }
+        for artifact in &state.python_artifacts {
+            self.verify_python_artifact(artifact)?;
+        }
+        self.python_artifacts = state.python_artifacts;
         self.datasets = state.datasets;
         self.chart_exports = state.chart_exports;
         self.loaded_skills.clear();
@@ -845,6 +854,10 @@ impl Broker {
     /// 可重用資料集只附路徑與結構，不在續接快照重送所有資料列。
     pub(super) fn dataset_index(&self) -> Value {
         json!(self.datasets)
+    }
+    /// 生成的 XLSX 不是工作副本；精簡／續接仍需提供其確定的路徑。
+    pub(super) fn python_artifact_index(&self) -> Value {
+        json!(self.python_artifacts)
     }
     /// 精簡上下文後仍提供確定的欄位角色，不附原始資料。
     pub(super) fn excel_plan_index(&self) -> Value {
@@ -1754,6 +1767,11 @@ impl Broker {
                 result["date_1904"] = json!(page.date_1904);
                 Ok(result)
             }
+            Tool::RunPython {
+                purpose,
+                code,
+                inputs,
+            } => self.run_python(purpose, code, inputs, cancel),
             Tool::InspectDataset { path, revision } => {
                 let (table, actual_revision) =
                     super::datasets::inspect(&self.project, path, revision.as_deref(), cancel)?;
@@ -2393,6 +2411,10 @@ impl Broker {
         for dataset in &self.datasets {
             super::datasets::load(&self.project, &dataset.path, &dataset.revision, cancel)?;
             paths.push(dataset.path.clone());
+        }
+        for artifact in &self.python_artifacts {
+            self.verify_python_artifact(artifact)?;
+            paths.push(artifact.path.clone());
         }
         // PNG 已由匯出工具發布，不是文字工作副本；自動併入交付清單並重新核對。
         for export in &self.chart_exports {
