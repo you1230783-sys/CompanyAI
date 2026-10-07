@@ -1,6 +1,6 @@
 {
-  "recorded_at": "2026-10-07T10:20:01.5738867+08:00",
-  "version": "0.8.43.0",
+  "recorded_at": "2026-10-07T11:58:29.2139411+08:00",
+  "version": "0.8.44.0",
   "result": "PASS",
   "msvc": "14.29.30133",
   "compiler_report": [
@@ -38,7 +38,7 @@
     "six chart kinds, user axis ranges, reference lines and colors",
     "native customized PNG callback and verified manual _AI_Output write"
   ],
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-00735d5b76434d99a4cfa5d6ee3793ef",
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-ui44-7115e216148143278c730e2705ad5343",
   "checks": [
     "weekly wizard prepare/confirm/cancel and conversation binding",
     "online inbox COM fixture",
@@ -72,10 +72,18 @@
     "Outlook folder picker, DPAPI policy and ancestor enforcement, native forged/stale selection rejection",
     "local mail coverage with 1000-message limit, no raw-body tool output, independent 50-message AI limit, branches and gaps"
   ],
-  "exe_sha256": "85f72ec176d0146c4f009821aa3cf3fac37263adcd94bfcd35734b793b1f83a9",
+  "exe_sha256": "7e33dc71716bf4b34ff632d4303a3339b1a7cc14637493f6d8a2c4c1a8cb3491",
   "installer_built": true,
   "real_vnc_tested": false,
   "real_office_tested": true,
   "real_loopback_smb_tested": true,
-  "offline_zip_built": false
+  "offline_zip_built": false,
+  "full_regression_exe_sha256": "098eb89057cc8529f496630e78febd28afa8cfa67fc18c49a57ed88998fe24e1",
+  "final_ui_checks": [
+    "Final change limited to secondary-button CSS specificity, zero-range fallback and stronger DOM assertion",
+    "Fresh empty Cargo cache, actual v142 x64 compiler, fmt, Clippy, 257 workspace tests and frozen release",
+    "Node axis/tooltip/reference regression; real light/dark dialog and responsive chart browser review",
+    "Final EXE Python self-check, WebView2 self-check and all-dialog button contrast",
+    "Final NSIS rebuilt, signed manifest validated, full Test-Installer including exact release Setup"
+  ]
 }

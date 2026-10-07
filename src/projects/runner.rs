@@ -290,7 +290,6 @@ fn run_for(
         run.messages.insert(0, skill);
         let deadline = Instant::now() + budget;
         broker.set_chart_chooser(chart_chooser, deadline);
-        let mut failures = 0;
         let mut progress_state = resumed.unwrap_or_else(|| {
             super::progress::Progress::new(
                 run.messages.clone().into_iter().map(Into::into).collect(),
@@ -556,6 +555,7 @@ fn run_for(
                 return pause(TIME_LIMIT_REASON, &broker, &progress_state, Some(&task));
             }
             let mut native_call = None;
+            let mut repair_tool_is_python = None;
             let (reply, parsed, reason) = match outcome {
                 super::model::Reply::Rejected(error) => return Err(error),
                 super::model::Reply::Native => {
@@ -583,6 +583,11 @@ fn run_for(
                             call_id,
                         } => {
                             if let (Some(message), Some(call_id)) = (message, call_id) {
+                                // parse 已確認這是本輪提供的單一工具；參數錯誤歸入該工具的失敗預算。
+                                repair_tool_is_python = message
+                                    .tool_calls
+                                    .first()
+                                    .map(|call| call["function"]["name"] == "run_python");
                                 progress_state.push_native(
                                     message,
                                     &call_id,
@@ -648,6 +653,26 @@ fn run_for(
             }
             // 已知終態才可發起修復；多 JSON、空白完成均不執行候選工具。
             let Some(parsed) = parsed else {
+                if let Some(python) = repair_tool_is_python {
+                    progress_state.tool_outcome(python, true);
+                    progress_state.tool_repair(&reason);
+                    record["progress"] = progress_state.snapshot(broker.progress_snapshot());
+                    checkpoint(&journal, &record)?;
+                    if let Some(limit) = progress_state.failure_limit() {
+                        return pause(
+                            &format!("{limit}：{reason}"),
+                            &broker,
+                            &progress_state,
+                            None,
+                        );
+                    }
+                    report(
+                        &mut activity,
+                        &mut progress,
+                        format!("工具參數未通過，正在依錯誤修正：{reason}"),
+                    );
+                    continue;
+                }
                 if progress_state.needs_recovery() {
                     // 只處理已收到終態的無效回覆；未知提交／寫入仍走原有續接機制。
                     broker.archive_results()?;
@@ -883,16 +908,16 @@ fn run_for(
                     )?;
                     trim_journal(&mut record);
                     checkpoint(&journal, &record)?;
-                    failures = if result["ok"] == false {
-                        failures + 1
-                    } else {
-                        0
-                    };
-                    if failures >= 3 {
-                        return Err(format!(
-                            "連續三次操作失敗，已停止：{}",
-                            result["error"].as_str().unwrap_or("請檢查文件存取方式。")
-                        ));
+                    if let Some(limit) = progress_state.failure_limit() {
+                        return pause(
+                            &format!(
+                                "{limit}：{}",
+                                result["error"].as_str().unwrap_or("請檢查文件存取方式。")
+                            ),
+                            &broker,
+                            &progress_state,
+                            None,
+                        );
                     }
                 }
                 Decision::Finish { message, artifacts } => {
@@ -920,10 +945,7 @@ fn run_for(
                             if let Some(inbox) = &run.instructions {
                                 inbox.close(false)?;
                             }
-                            failures += 1;
-                            if failures >= 3 {
-                                return Err(error);
-                            }
+                            progress_state.tool_outcome(false, true);
                             if let Some((message, call_id)) = native_call {
                                 progress_state.push_native(
                                     message,
@@ -931,9 +953,20 @@ fn run_for(
                                     &json!({"ok":false,"error":error,"executed":false}),
                                 );
                             }
-                            let label = progress_state
-                                .repair(&format!("交付檢查未通過：{error}"), &reply)?;
-                            report(&mut activity, &mut progress, label.into());
+                            progress_state.tool_repair(&format!("交付檢查未通過：{error}"));
+                            if let Some(limit) = progress_state.failure_limit() {
+                                return pause(
+                                    &format!("{limit}：{error}"),
+                                    &broker,
+                                    &progress_state,
+                                    None,
+                                );
+                            }
+                            report(
+                                &mut activity,
+                                &mut progress,
+                                format!("交付檢查未通過，正在修正：{error}"),
+                            );
                             record["progress"] =
                                 progress_state.snapshot(broker.progress_snapshot());
                         }

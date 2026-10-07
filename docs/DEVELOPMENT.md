@@ -1,3 +1,5 @@
+> **0.8.44 維護位置：** ui/chart-editor.js 管理頁籤、範例與跨頁驗證；chart-transform.js 的 bounds／niceBounds 計算自動範圍，charts.js 處理安全跳脫的 X／Y 提示及空白參考線。src/projects/progress.rs 保存獨立失敗預算，runner.rs 區分已辨識工具參數錯誤與一般格式修復；原生案例22–24驗證5／10次停止及第10次恢復成功。詳見 [驗證紀錄](VALIDATION_0_8_44.md)。
+
 # 開發與維護說明
 
 ## 0.8.43 維護位置
@@ -50,7 +52,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build.ps1 -Emp
 
 依賴由 `Cargo.lock`、`vendor` 與 `.cargo/config.toml` 固定，使用空 Cargo 快取及 `--frozen` 驗證。環境腳本優先使用專案內的 `toolchain`，否則使用共用 `.tools`，並設定本專案的 target 目錄。
 
-`toolchain/` 與 `vendor/` 不直接提交 Git。**現存離線 ZIP 是歷史交付包，不代表目前 0.8.43 原始碼。** 全新環境需先準備指定工具鏈與符合 Cargo.lock 的 vendor；不要將舊 ZIP 整包覆蓋到新版原始碼。完整離線包操作見 [離線交付與 Git](OFFLINE_AND_GIT.md)。
+`toolchain/` 與 `vendor/` 不直接提交 Git。**現存離線 ZIP 是歷史交付包，不代表目前 0.8.44 原始碼。** 全新環境需先準備指定工具鏈與符合 Cargo.lock 的 vendor；不要將舊 ZIP 整包覆蓋到新版原始碼。完整離線包操作見 [離線交付與 Git](OFFLINE_AND_GIT.md)。
 
 | Build 選項 | 用途 |
 | --- | --- |

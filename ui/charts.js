@@ -6,6 +6,18 @@ window.ChartUI = (() => {
   const command=value=>send({type:"project",command:value});
   // 版本仍在原生資料保存，只在顯示／PNG拿掉完整版本碼。
   function sourceLabel(source) {return String(source || "").split("|").filter(s=>!/^\s*(?:excel:)?[a-f0-9]{64}\s*$/i.test(s)).map(s=>s.trim()).join(" | ");}
+  // formatter 由程式固定提供；資料中的名稱／標籤須跳脫，不能被當成 HTML。
+  const escapeTooltip = value => String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  function tooltipFormatter(data, view, xCategory, yCategory) {
+    return parameters => (Array.isArray(parameters) ? parameters : [parameters]).map(point => {
+      const values = point.value || [];
+      const coordinate = (axis, isCategory) => {
+        const value = values[axis];
+        return value == null ? "—" : isCategory ? (data.x[value] ?? "—") : value;
+      };
+      return `${escapeTooltip(point.seriesName || "")}<br>X（${escapeTooltip(view.x_label)}）：${escapeTooltip(coordinate(0, xCategory))}<br>Y（${escapeTooltip(view.y_label)}）：${escapeTooltip(coordinate(1, yCategory))}`;
+    }).join("<br><br>");
+  }
   const observer = new ResizeObserver(entries => {
     for (const {target} of entries) charts.get(target)?.resize();
   });
@@ -28,7 +40,7 @@ window.ChartUI = (() => {
     const ya=axis(ChartTransform.axisLabel(view.y_label,transform.y),yCategory?"category":"value",yCategory?data.x:null,view.y_min,view.y_max,transform.y);
     return {animation:false, backgroundColor: exporting ? "#fff" : "transparent",
       aria:{enabled:true}, legend,
-      tooltip:{trigger:scatter ? "item" : "axis", renderMode:"richText"},
+      tooltip:{trigger:scatter ? "item" : "axis", renderMode:"html",confine:true,formatter:tooltipFormatter(data,view,xCategory,yCategory)},
       grid:{left:exporting ? 110 : 75,right:view.legend==="right"?(exporting?240:170):40,top:view.legend==="top"?105:80,bottom:exporting ? 200 : 145,containLabel:true},
       title:{text:view.title,left:"center",top:16,textStyle:{fontSize:exporting?22:18,width:exporting?1450:550,overflow:"break"}},
       graphic:exporting ? [{type:"text",left:60,bottom:20,style:{text:`來源：${sourceLabel(data.source)}\n${[data.data_note,transformNote].filter(Boolean).join("\n")}`,fontSize:12,fill:"#444",width:1480,overflow:"break"}}] : [],
@@ -41,7 +53,7 @@ window.ChartUI = (() => {
         return {name:view.series[index].name,type:["area","step"].includes(view.kind)?"line":horizontal?"bar":view.kind,
           ...(view.kind==="step"?{step:"end"}:{}),...(view.kind==="area"?{areaStyle:{opacity:0.2}}:{}),
           itemStyle:{color:view.series[index].color},lineStyle:{color:view.series[index].color},
-          markLine:index===0?{symbol:["none","none"],silent:true,data:view.lines.map(l=>({name:l.name,[l.axis==="x"?"xAxis":"yAxis"]:l.value,lineStyle:{color:l.color,type:"dashed"},label:{formatter:l.name || String(l.value),color:l.color}}))}:undefined,
+          markLine:index===0?{symbol:["none","none"],silent:true,data:view.lines.map(l=>({name:l.name,[l.axis==="x"?"xAxis":"yAxis"]:l.value,lineStyle:{color:l.color,type:"dashed"},label:{show:!!l.name.trim(),formatter:()=>l.name,color:l.color}}))}:undefined,
           connectNulls:false,progressive:0,showSymbol:data.x.length <= 300,encode:{x:0,y:1},data:values};
       })};
   }

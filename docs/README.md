@@ -1,6 +1,6 @@
 # 技術文件索引
 
-目前 EXE／NSIS 發行驗證：[0.8.43 圖表座標、Python LOG 與安裝沿用](VALIDATION_0_8_43.md)。歷史驗證文件保留其當時版本的限制。
+目前 EXE／NSIS 發行驗證：[0.8.44 圖表編輯與工具重試](VALIDATION_0_8_44.md)。歷史驗證文件保留其當時版本的限制。
 
 [專案首頁](../README.md) · [使用指南](USER_GUIDE.md) · [版本更新](../CHANGELOG.md) · [開發說明](DEVELOPMENT.md)
 
@@ -8,6 +8,7 @@
 
 ## 目前版本
 
+- [0.8.44 圖表編輯與工具重試](VALIDATION_0_8_44.md)：對話框按鈕底色、三頁編輯器與範例、數值軸自動取整、空白參考線、X／Y 提示及獨立5／10次失敗上限。
 - [0.8.43 圖表座標、Python LOG 與安裝沿用](VALIDATION_0_8_43.md)：X／Y平移及重新編號、五點示意、Big5 LOG、欄位錯誤診斷與專案圖片一般支援。
 - [Python 執行環境](PYTHON_RUNTIME.md)：固定套件、資料橋接、編碼、NSIS沿用與離線重建。
 

@@ -76,6 +76,8 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     & cargo build --example project_smoke --frozen
     if ($LASTEXITCODE -ne 0) { throw 'Project integration harness build failed.' }
     $projectProbe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\project_smoke.exe'
+    # 原生重試案例直接執行 Python broker，測試程式旁也須有同一份鎖定 runtime。
+    & (Join-Path $PSScriptRoot 'Stage-Python.ps1') -ExecutableDirectory (Split-Path $projectProbe -Parent)
     & $projectProbe $exe (Join-Path $projectRoot '.build\project-smoke')
     if ($LASTEXITCODE -ne 0) { throw 'Real AppContainer/project file integration failed.' }
     & cargo build --example python_smoke --release --frozen

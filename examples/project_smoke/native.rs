@@ -32,10 +32,12 @@ pub fn verify(root: &Path) -> AppResult<()> {
     } else {
         0
     };
-    if first > 21 {
-        return Err("原生測試案例需介於 0–21。".into());
+    if first > 24 {
+        return Err("原生測試案例需介於 0–24。".into());
     }
-    for case in first..=21 {
+    // Python 從呼叫端 EXE 旁啟動；先依正式規則授予 AppContainer 唯讀權限。
+    company_ai::projects::python::prepare_runtime()?;
+    for case in first..=24 {
         verify_case(root, case)?;
     }
     Ok(())
@@ -214,7 +216,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     } else {
                         "quality"
                     },
-                    case != 1,
+                    !matches!(case, 1 | 22),
                 );
                 if case == 4 {
                     cap["native_tool_calls"] = json!(false);
@@ -287,6 +289,44 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                         assert_eq!(parent["context"][key], body["context"][key]);
                     }
                     json!({"role":"assistant","content":"原文為原始文字，無其他數據。"})
+                } else if matches!(case, 22..=24) {
+                    // 22 混合 Python 參數／執行失敗，確實到第 10 次；23 其他工具第 5 次。
+                    // 24 Python 第 10 次修正成功可交付，不能被 8 次無進展提前攔截。
+                    if case == 23 {
+                        assert!(posts <= 5, "其他工具應在第 5 次失敗暫停");
+                        call(&body, "read_file", json!({"path":"missing.txt","offset":0}))
+                    } else if posts == 1 {
+                        call(&body, "load_skill", json!({"id":"python-analysis"}))
+                    } else if case == 24 && posts == 12 {
+                        assert_eq!(
+                            previous["ok"], true,
+                            "第 10 次 Python 應修正成功：{previous}"
+                        );
+                        call(
+                            &body,
+                            "finish",
+                            json!({"message":"Python 修正後完成","artifacts":[]}),
+                        )
+                    } else {
+                        assert!(posts <= 11, "Python 應在第 10 次失敗暫停");
+                        if posts > 2 {
+                            assert_eq!(previous["ok"], false);
+                        }
+                        let code = if case == 24 && posts == 11 {
+                            "result = {'summary': 'done'}"
+                        } else {
+                            "raise ValueError('budget fixture')"
+                        };
+                        let mut value = call(
+                            &body,
+                            "run_python",
+                            json!({"purpose":"驗證失敗計數","code":code,"inputs":[]}),
+                        );
+                        if case == 22 && posts % 2 == 0 {
+                            value["tool_calls"][0]["function"]["arguments"] = json!("{}");
+                        }
+                        value
+                    }
                 } else if case == 21 {
                     let state_text = messages
                         .iter()
@@ -943,6 +983,17 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
             assert!(transformed_seen, "轉換後的圖表必須透過 UI 事件送出");
             assert!(activity.iter().any(|s| s.contains("CSV 已保存")));
             assert!(activity.iter().any(|s| s.contains("已保存交接筆記")));
+        }
+        22 | 23 => {
+            let answer = result?;
+            let limit = if case == 22 { "10 次" } else { "5 次" };
+            assert!(answer.contains(limit), "{answer}");
+            assert_eq!(posts, if case == 22 { 11 } else { 5 });
+            assert!(runner::paused_available(&root.join("native-app"), &id));
+        }
+        24 => {
+            assert!(result?.contains("Python 修正後完成"));
+            assert_eq!(posts, 12);
         }
         _ => unreachable!(),
     }

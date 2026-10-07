@@ -150,6 +150,31 @@ window.runSelfTest = async (structuredFixture) => {
     transformEditor.querySelector("form").requestSubmit();
     check(indexedStyle?.transform.y.start===10 && indexedStyle.transform.drop_empty,"editor applies both axes with shared missing-row policy");
     check(JSON.stringify(ChartUI.option(indexChart,false,indexedStyle).series[0].data)==="[[1,10],[2,9],[3,8]]","Y numbering uses retained shared row order");
+    let tabbedStyle=null;ChartEditor.open(indexChart,null,value=>{tabbedStyle=value;});
+    const tabbed=document.querySelector(".chart-edit-dialog"),tabs=tabbed.querySelectorAll('[role="tab"]'),pages=tabbed.querySelectorAll('[role="tabpanel"]');
+    check(tabs.length===3 && !pages[0].hidden && pages[1].hidden && pages[2].hidden,"chart editor has three accessible tabs");
+    tabbed.querySelector('[data-auto-axis="y"]').click();
+    check(tabbed.querySelector('[data-bound="y_min"]').value==="0" && tabbed.querySelector('[data-bound="y_max"]').value==="20","auto range uses all retained values including zero");
+    tabs[1].click();tabs[1].dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowRight",bubbles:true}));
+    check(!pages[2].hidden && tabs[2].getAttribute("aria-selected")==="true","tabs support keyboard navigation");
+    check(tabbed.querySelectorAll("details.chart-editor-help").length===3 && pages[1].textContent.includes("(3,0)"),"editor help includes concrete missing-value and numbering example");
+    const themeBefore=document.documentElement.dataset.theme;
+    for(const theme of ["light","dark"]) {
+      document.documentElement.dataset.theme=theme;
+      check([...document.querySelectorAll("dialog button")].every(button=>{
+        const background=getComputedStyle(button).backgroundColor;
+        return background!=="rgba(0, 0, 0, 0)" && background!==getComputedStyle(button.closest("dialog")).backgroundColor;
+      }),`all dialog buttons including secondary buttons differ from the panel in ${theme} theme`);
+    }
+    if(themeBefore===undefined) delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=themeBefore;
+    tabbed.querySelector("form").requestSubmit();
+    check(tabbedStyle?.y_max===20 && !document.querySelector(".chart-edit-dialog"),"switching tabs preserves bounds and applies all pages");
+    custom.lines[0].name="";
+    const blankReference=ChartUI.option(largeChart,true,custom).series[0].markLine.data[0];
+    check(blankReference.label.show===false && blankReference.label.formatter()==="","blank reference labels never fall back to numbers");
+    check(ChartUI.exportPng(largeChart,custom).startsWith("data:image/png;base64,"),"unlabelled reference line exports with actual ECharts");
+    const hoverText=indexed.tooltip.formatter({seriesName:"<script>",value:[3,-10]});
+    check(hoverText.includes("X（Index）：3") && hoverText.includes("Y（Mean）：-10") && !hoverText.includes("<script>"),"hover shows transformed X and Y with inert labels");
     const pngHeader = atob(png.slice("data:image/png;base64,".length, "data:image/png;base64,".length + 32));
     check(png.startsWith("data:image/png;base64,") && pngHeader.slice(1,4)==="PNG", "PNG export returns PNG bytes");
     ChartUI.render(chartHost,[largeChart]); await frame();

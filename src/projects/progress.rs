@@ -115,6 +115,11 @@ pub(super) struct Progress {
     consecutive_repairs: usize,
     total_repairs: usize,
     no_progress: usize,
+    /// Python 與其他工具各自累計；穿插另一類操作不會清除本類的失敗。
+    #[serde(default)]
+    python_failures: usize,
+    #[serde(default)]
+    other_failures: usize,
 }
 impl Progress {
     pub fn new(base: Vec<Message>) -> Self {
@@ -144,6 +149,8 @@ impl Progress {
             consecutive_repairs: 0,
             total_repairs: 0,
             no_progress: 0,
+            python_failures: 0,
+            other_failures: 0,
         }
     }
     pub fn task_references(&mut self, ids: Vec<Option<String>>) {
@@ -166,6 +173,8 @@ impl Progress {
         self.total_repairs = 0;
         self.consecutive_repairs = 0;
         self.no_progress = 0;
+        self.python_failures = 0;
+        self.other_failures = 0;
         self.repair = None;
         self.compact_batch();
     }
@@ -278,7 +287,34 @@ impl Progress {
             "working_note":{"requirements":"以本次保留的使用者原文及補充為準，不由筆記改寫授權", "model_summary":self.note.as_ref().map(|n| &n.text),"superseded_conclusions":self.superseded,"planned_next_step":self.next_step,"instruction_review_required":self.instruction_review_required,"summary_warning":"模型摘要可能尚未涵蓋最近步驟；instruction_review_required=true 時必須先依最新補充重新核對欄位與結論，不沿用被否定的圖表。完成狀態依 operations、copies 及工具原文核對","checkpoint_count":self.checkpoints,"next_step":"依原始要求、最近結果及摘要待辦繼續；缺少細節時先 read_work_log，不重做已成功修改"},
             "note":self.note.as_ref().map(|n| &n.text),"note_covers_tools":self.note.as_ref().map(|n| n.covered),
             "total_repairs":self.total_repairs,"consecutive_repairs":self.consecutive_repairs,
-            "no_progress":self.no_progress})
+            "no_progress":self.no_progress,
+            "tool_failures":{"python":self.python_failures,"python_limit":10,"other":self.other_failures,"other_limit":5}})
+    }
+
+    /// 已辨識工具的執行／參數錯誤共用同一預算；成功只重設同類計數。
+    /// 一般文字格式、未知提交及身分驗證仍走原來的獨立保護。
+    pub fn tool_outcome(&mut self, python: bool, failed: bool) {
+        let count = if python {
+            &mut self.python_failures
+        } else {
+            &mut self.other_failures
+        };
+        *count = if failed { count.saturating_add(1) } else { 0 };
+    }
+
+    pub fn failure_limit(&self) -> Option<&'static str> {
+        if self.python_failures >= 10 {
+            Some("Python 連續 10 次操作失敗，已停止並保留進度")
+        } else if self.other_failures >= 5 {
+            Some("非 Python 工具連續 5 次操作失敗，已停止並保留進度")
+        } else {
+            None
+        }
+    }
+
+    /// 工具名稱已由原生協定確認才可使用。提供修正指引，但不另扣一般格式修復預算。
+    pub fn tool_repair(&mut self, reason: &str) {
+        self.repair = Some(format!("上一則工具要求未通過檢查：{reason}。請依錯誤修正參數或程式後，透過 API 呼叫工具；不要重做已成功的修改。Python 與其他工具的失敗分別計數，請查看 tool_failures 剩餘次數。"));
     }
 
     /// 只計算真正新增的閱讀區間或工具結果；重播與重讀不會重設恢復上限。
@@ -289,6 +325,10 @@ impl Progress {
             self.no_progress += 1;
             return false;
         }
+        self.tool_outcome(
+            matches!(tool, Tool::RunPython { .. }),
+            result["ok"] == false,
+        );
         *self.tool_usage.entry(tool.label().into()).or_default() += 1;
         let mut metadata = result.clone();
         if let Some(object) = metadata.get_mut("result").and_then(Value::as_object_mut) {
@@ -350,7 +390,9 @@ impl Progress {
         if new {
             self.no_progress = 0;
             self.consecutive_repairs = 0;
-        } else {
+        } else if result["ok"] != false {
+            // 已知失敗由各類工具的 5／10 次上限管理，不在第 8 次被無進展保護提前攔截。
+            // 相同操作 ID 的重播仍由上方計數，失敗也不會清除既有的無進展累積。
             self.no_progress += 1;
         }
         new
@@ -524,6 +566,70 @@ impl Progress {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn failure_budgets_are_independent_persisted_and_reset_only_on_resume_or_own_success() {
+        let mut state = Progress::new(vec![]);
+        for _ in 0..4 {
+            state.tool_outcome(false, true);
+        }
+        for _ in 0..9 {
+            state.tool_outcome(true, true);
+        }
+        state.tool_repair("missing input");
+        assert!(state.failure_limit().is_none());
+        assert!(!state.stalled());
+        assert_eq!(state.total_repairs, 0);
+        state.compact_batch();
+        let mut saved: Progress =
+            serde_json::from_value(serde_json::to_value(&state).unwrap()).unwrap();
+        saved.tool_outcome(true, false);
+        assert_eq!(saved.other_failures, 4);
+        assert_eq!(saved.python_failures, 0);
+        saved.tool_outcome(false, true);
+        assert!(saved.failure_limit().unwrap().contains("5 次"));
+        saved.resume_segment();
+        for _ in 0..10 {
+            saved.tool_outcome(true, true);
+        }
+        saved.tool_outcome(false, false);
+        assert!(saved.failure_limit().unwrap().contains("10 次"));
+        saved.resume_segment();
+        assert!(saved.failure_limit().is_none());
+        let mut old = serde_json::to_value(&saved).unwrap();
+        old.as_object_mut().unwrap().remove("python_failures");
+        old.as_object_mut().unwrap().remove("other_failures");
+        assert!(serde_json::from_value::<Progress>(old)
+            .unwrap()
+            .failure_limit()
+            .is_none());
+    }
+    #[test]
+    fn python_execution_failures_reach_ten_without_false_progress_or_early_stall() {
+        let mut state = Progress::new(vec![]);
+        let tool: Tool = serde_json::from_value(json!({"tool":"run_python","code":"raise ValueError('test')","inputs":[],"purpose":"test"})).unwrap();
+        state.no_progress = 3;
+        for attempt in 1..=10 {
+            assert!(!state.observe(
+                &format!("python-{attempt}"),
+                &tool,
+                &json!({"ok":false,"error":"test"})
+            ));
+            assert_eq!(state.python_failures, attempt);
+            assert_eq!(state.no_progress, 3);
+            assert!(!state.stalled());
+            assert_eq!(state.failure_limit().is_some(), attempt == 10);
+        }
+        state.observe("python-10", &tool, &json!({"ok":false}));
+        assert_eq!(state.python_failures, 10, "重播不算另一次執行");
+        assert_eq!(state.no_progress, 4, "重播仍受無進展保護");
+        state.observe(
+            "python-success",
+            &tool,
+            &json!({"ok":true,"result":{"summary":"done"}}),
+        );
+        assert_eq!(state.python_failures, 0);
+        assert_eq!(state.no_progress, 0);
+    }
     #[test]
     fn explicit_handoff_survives_checkpoint_without_raw_history_or_counter_reset() {
         let mut state = Progress::new(vec![Message::user("原始要求：保持來源唯讀")]);

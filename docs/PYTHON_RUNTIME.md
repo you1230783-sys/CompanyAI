@@ -1,5 +1,7 @@
 # Python 執行環境與離線重建
 
+0.8.44 不變更 Python 套件或環境指紋；相同環境仍可原地沿用。任務內 `run_python` 的連續失敗獨立計算，上限10次，其餘工具共同上限5次；同類成功才歸零。已辨識原生工具的非嚴格參數錯誤也納入，已知失敗不另外增加8次無進展計數。停止保留 checkpoint，使用者按「繼續」後重設；未知提交、嚴格 Schema／權限／身分拒絕不放寬。見 [0.8.44 驗證](VALIDATION_0_8_44.md)。
+
 0.8.42 將 Python 放在 EXE 旁的 `python/`，不嵌入 Rust EXE、不查詢 PATH／登錄／使用者 site-packages。NSIS 安裝與修復會驗證 runtime 清單、設定該目錄的 AppContainer 唯讀執行權，再以真正隔離程序驗證 pandas 和 XLSX 生成；成功後才完成 EXE 替換。
 
 ## 0.8.43：相同環境直接沿用

@@ -1,3 +1,5 @@
+> **0.8.44：圖表編輯與工具重試。** 頁籤、說明、自動範圍、空白參考線與雙座標提示均為桌面呈現，不新增網站 API 或工具。桌面 Progress 快照增加 tool_failures（python／python_limit=10／other／other_limit=5）；已辨識原生工具的非嚴格參數錯誤、執行失敗及交付檢查歸入對應預算。工具失敗不再重複增加8次無進展計數，自動整理保留計數；使用者續接重設。未知提交與嚴格 Schema／身分拒絕不變。詳見 [驗證紀錄](VALIDATION_0_8_44.md)。
+
 > **0.8.43：Python 沿用、專案圖片與圖表座標。** 安裝最佳化只在桌面 NSIS 內，不改更新端點或清單格式。專案圖片沿用 `analyze_image(path,focus)`、無工具圖片子請求與同一父對話；每次請求一張，任務內最多20次不同辨識要求。`list_files` 對圖片增加 `kind:image`、`bytes`、`read_tool`、`skill`；`read_file` 對圖片只回中繼資料與導引，`content_read:false`，不自動送圖。單張5,000,000 bytes與整份請求上限不變。新增 `transform_chart(chart_index,transform)`，工具共49項，按charts技能及已有圖表公告；X／Y皆可original／offset／index，drop_empty為全系列皆缺值才刪列。參數以本次tools Schema為準，不需新增網站白名單或專用執行。三張異常值示意及編輯器座標轉換均在桌面本機。一般聊天及 Outlook 附件流程不變，不新增網站 API／資料表。`run_python.inputs` 新增可選 encoding（auto／big5／utf8），模型仍按本次 Schema 提供參數；LOG 解碼在桌面進行。工具參數錯誤維持 executed:false，加入最多6項欄位路徑診斷，不自動補猜或執行。詳見 [本版驗證](VALIDATION_0_8_43.md)。
 
 > **0.8.42：** 新增 `run_python(purpose,code,inputs)` 及 `python-analysis` 技能，工具目錄共48項、仍按需公告。Python 在桌面本機隔離執行，網站只按當次工具 Schema 轉發程式與精簡結果，不執行 Python、不接收全部輸入檔案。既有 `skills:false`、agent/turns 與 client_snapshot 不變。兩個更新清單端點都需提供本版已簽署的 `kind:nsis` 清單及完整 Setup，不再以 EXE 更新包交付本版。

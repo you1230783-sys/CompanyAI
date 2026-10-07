@@ -1486,3 +1486,36 @@ body.collapsed .project-section { overflow: visible; }
 .chart-edit-dialog fieldset { margin:14px 0; border:1px solid #aaa; border-radius:8px; }
 .chart-line-row { display:grid; grid-template-columns:1fr 1fr 1fr 70px auto; gap:8px; align-items:end; margin:10px 0; }
 .chart-saved-notice { position:fixed; z-index:999; bottom:20px; left:20px; right:20px; padding:16px; background:var(--panel,#fff); border:1px solid #999; border-radius:10px; display:flex; gap:12px; align-items:center; }
+
+/* 所有對話框的操作都有可辨識的實心底色；保留主要動作、停用及鍵盤焦點。 */
+/* [class] 提高既有 secondary-button 等樣式的覆寫優先序，避免仍與面板同色。 */
+dialog button, dialog button[class] { background:var(--hover); border:1px solid var(--muted); border-radius:7px; padding:8px 12px; min-height:34px; color:var(--ink); }
+dialog button:hover:not(:disabled) { background:var(--soft); border-color:var(--accent); }
+dialog button:is(.primary,.primary-button) { background:var(--strong-accent); color:var(--on-accent); border-color:var(--strong-accent); }
+dialog button:is(.primary,.primary-button):hover:not(:disabled) { filter:brightness(1.12); background:var(--strong-accent); }
+dialog button.icon-button { padding:6px; }
+
+/* 頁籤與套用列固定可見，只有當頁內容捲動；避免長設定表把操作推到視窗外。 */
+.chart-edit-dialog { overflow:hidden; box-sizing:border-box; }
+.chart-edit-dialog form { display:flex; flex-direction:column; max-height:calc(88vh - 54px); min-height:0; }
+.chart-edit-dialog h2 { margin:0 0 8px; }
+.chart-editor-hint { margin:0 0 14px; color:var(--muted); font-size:.9rem; }
+.chart-editor-tabs { display:flex; flex-wrap:wrap; gap:8px; padding-bottom:12px; border-bottom:1px solid var(--line); }
+.chart-editor-tabs button[aria-selected="true"] { background:var(--strong-accent); border-color:var(--strong-accent); color:var(--on-accent); }
+.chart-editor-tabs button[aria-selected="true"]:hover { background:var(--strong-accent); }
+.chart-editor-body { overflow-y:auto; min-height:0; padding:12px 8px 0 0; scrollbar-gutter:stable; }
+.chart-editor-body [hidden] { display:none; }
+.chart-editor-help { border:1px solid var(--line); background:var(--surface); border-radius:8px; padding:10px 12px; margin-bottom:14px; }
+.chart-editor-help summary { cursor:pointer; color:var(--accent); font-weight:600; }
+.chart-editor-help p { font-size:.9rem; line-height:1.65; margin:10px 0 0; }
+.chart-axis-range { display:grid; grid-template-columns:1fr 1fr auto; align-items:end; gap:12px; }
+.chart-edit-dialog .dialog-actions { flex-shrink:0; border-top:1px solid var(--line); padding-top:12px; margin-top:8px; }
+.chart-edit-dialog form > .error { margin:8px 0; flex-shrink:0; }
+.chart-edit-dialog fieldset { border-color:var(--line); min-width:0; }
+@media (max-width:600px) {
+  .chart-edit-dialog { padding:16px; }
+  .chart-edit-dialog form { max-height:calc(88vh - 34px); }
+  .chart-line-row { grid-template-columns:1fr 1fr; }
+  .chart-axis-range { grid-template-columns:1fr 1fr; }
+  .chart-axis-range button { grid-column:1 / -1; }
+}

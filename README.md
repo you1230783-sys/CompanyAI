@@ -1,3 +1,5 @@
+> **0.8.44：圖表編輯與重試改善。** 對話框按鈕加底色，編輯器分三頁並提供說明；X／Y 可自動向外取整，空白參考線不顯示數字，游標同時顯示 X、Y。Python／其他工具失敗上限分別為10／5次。詳見 [驗證紀錄](docs/VALIDATION_0_8_44.md)。
+
 > **0.8.43：圖表座標與 Python LOG 改善。** X／Y 可平移、重新編號，並移除全系列無值位置；異常值選擇有三張示意。Python LOG 先試 Big5 再試 UTF-8，參數錯誤指出欄位位置。相同 Python 環境更新時直接沿用，專案圖片由 AI 按需閱讀。詳見 [驗證與限制](docs/VALIDATION_0_8_43.md)。
 
 > **0.8.42：離線 Python 分析與完整安裝包。** 新增 pandas／NumPy／openpyxl，支援 CSV／LOG 統計及 XLSX 成果；公司原始 Excel 仍經 Excel COM 讀取。請使用本版 NSIS 安裝。詳見 [驗證與限制](docs/VALIDATION_0_8_42.md)。
@@ -10,7 +12,7 @@
 
 CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供日常問答、文件整理、專案副本修訂與 Classic Outlook 郵件分析。
 
-**目前 EXE／NSIS：0.8.43** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
+**目前 EXE／NSIS：0.8.44** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
 
 ## 下載與開始使用
 
@@ -20,7 +22,7 @@ CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供�
 
 執行需要 WebView2 Runtime，不需安裝 Rust、Node 或 Python。若啟動時提示缺少 WebView2，請依 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md) 處理。正式功能需要公司服務連線與桌面帳號權限。
 
-本版 EXE 與 NSIS 都是 **0.8.43**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；新增的 `python-inputs.zip` 僅供開發者離線重建 Python 環境。
+本版 EXE 與 NSIS 都是 **0.8.44**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；新增的 `python-inputs.zip` 僅供開發者離線重建 Python 環境。
 
 ## 可以做什麼
 
