@@ -324,7 +324,7 @@ impl Plan {
     pub fn check_axes(&self, x: &str, ys: &[String]) -> AppResult<()> {
         let expected: Vec<_> = self.proposal.y.iter().map(|f| f.column.clone()).collect();
         if x != self.proposal.x.column || ys != expected {
-            return Err(format!("作圖欄位與已鎖定規劃不符：X={}／{}；Y={}。請使用這些欄位，不可因省略中間欄而重新編號；若使用者更正目標，重新規劃及匯出。",self.proposal.x.column,self.proposal.x.header,expected.join(",")));
+            return Err(format!("作圖来源欄位與已鎖定規劃不符：X={}／{}；Y={}。請使用這些原始欄字母，不得把A／D改稱A／B。若要求座標從1開始或平移，先沿用來源欄位建立圖表，再呼叫transform_chart，不需更換CSV欄位。只有更正來源欄位時才重新規劃及匯出。",self.proposal.x.column,self.proposal.x.header,expected.join(",")));
         }
         Ok(())
     }

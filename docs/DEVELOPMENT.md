@@ -1,5 +1,12 @@
 # 開發與維護說明
 
+## 0.8.43 維護位置
+
+- 圖表轉換：`src/projects/charts/transform.rs` 與 `ui/chart-transform.js` 共用契約，先篩除全系列缺值列、再依共同序號轉換。`ui/chart-editor.js` 提供兩軸設定，`ui/charts.js` 共用畫面／PNG呈現。
+- 異常值示意：`ui/chart-review-examples.js`；固定假設五點，不使用真實來源數據。
+- Python編碼：`src/projects/python/encoding.rs`；只在原生快照階段處理，worker與runtime清單不變。Schema錯誤定位在 `src/projects/agent/schema.rs`，只診斷、不猜參數。
+- 安裝沿用：`installer/LM_AI.nsi`；`scripts/Test-Installer.ps1` 以唯讀檔案鎖、建立時間及三種損壞情境驗證。正式發行仍跑下方完整NSIS流程，詳見 [本版驗證](VALIDATION_0_8_43.md)。
+
 ## 0.8.42 Python 環境
 
 Python 輸入包、固定依賴、AppContainer 資料橋接及離線重建見 [PYTHON_RUNTIME.md](PYTHON_RUNTIME.md)。本版必須完整 NSIS 發行：`Build.ps1 -EmptyCargoCache -TestOffice -NetworkTestRoot <測試SMB根目錄> -IncludeInstaller`。不再以獨立 EXE 更新清單發布本版。
@@ -43,7 +50,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build.ps1 -Emp
 
 依賴由 `Cargo.lock`、`vendor` 與 `.cargo/config.toml` 固定，使用空 Cargo 快取及 `--frozen` 驗證。環境腳本優先使用專案內的 `toolchain`，否則使用共用 `.tools`，並設定本專案的 target 目錄。
 
-`toolchain/` 與 `vendor/` 不直接提交 Git。**現存離線 ZIP 是歷史交付包，不代表目前 0.8.39 原始碼。** 全新環境需先準備指定工具鏈與符合 Cargo.lock 的 vendor；不要將舊 ZIP 整包覆蓋到新版原始碼。完整離線包操作見 [離線交付與 Git](OFFLINE_AND_GIT.md)。
+`toolchain/` 與 `vendor/` 不直接提交 Git。**現存離線 ZIP 是歷史交付包，不代表目前 0.8.43 原始碼。** 全新環境需先準備指定工具鏈與符合 Cargo.lock 的 vendor；不要將舊 ZIP 整包覆蓋到新版原始碼。完整離線包操作見 [離線交付與 Git](OFFLINE_AND_GIT.md)。
 
 | Build 選項 | 用途 |
 | --- | --- |

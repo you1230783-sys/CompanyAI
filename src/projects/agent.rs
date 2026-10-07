@@ -218,7 +218,7 @@ impl State {
         self.next_turn = self.next_turn.checked_add(1).ok_or("代理序號溢位。")?;
         Ok(request)
     }
-    /// 圖片試驗仍走相同模型、授權及代理路由。舊網站可能只公告 text，
+    /// 圖片辨識仍走相同模型、授權及代理路由。舊網站可能只公告 text，
     /// 本次使用者要求允許明確嘗試 image_url；若網站拒絕，不轉往模型直連端點。
     /// 圖片原檔最多 5 MB，整份圖片請求遵守網站公告及本機 10 MB 上限。
     pub(super) fn image_request(
@@ -642,7 +642,7 @@ pub fn decode<T: serde::de::DeserializeOwned>(
 /// 模型能力直接決定公告內容，不只把不可用按鈕藏起來。
 pub fn system_prompt_for(model: &str) -> String {
     let image_guide = if super::vision::input::model_supported(model) {
-        "使用者要求辨識專案 JPG／PNG 時載入 image-read，以 analyze_image 取得圖片重點；read_file、檔名不能代替看圖。每次任務限1張、最大5 MB；圖片只送當次子請求，後續只保留文字重點。"
+        "專案 JPG／JPEG／PNG 與其他來源文件同樣可用。依任務目標、檔案清單及已有資料自行判斷是否需要看圖，不必等使用者明確要求，也不要為列出檔案而逐張辨識。需要時載入 image-read，以 analyze_image(path,focus) 取得重點；read_file、檔名不能代替看圖。每次呼叫一張、單張最大5 MB，每次任務最多20次不同辨識要求；圖片只送當次子請求，後續只保留文字重點。"
     } else {
         super::vision::input::UNSUPPORTED_MODEL
     };

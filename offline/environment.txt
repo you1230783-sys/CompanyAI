@@ -1,4 +1,4 @@
-﻿Recorded: 2026-10-07T08:25:38.2497198+08:00
+Recorded: 2026-10-07T10:11:27.4825735+08:00
 Host OS: Microsoft Windows NT 10.0.26200.0
 Visual Studio: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools
 MSVC: 14.29.30133
@@ -9,8 +9,8 @@ Windows SDK: 10.0.19041.0\
 Target: x86_64-pc-windows-msvc
 CRT: static
 Rust binaries: Y:\Rust\.tools\rustup\toolchains\1.98.1-x86_64-pc-windows-msvc\bin
-Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-cf5773f2be9e43458de0b789c9883946
-EXE SHA256: 22B98DA1847798F21F5E782687BD511AE997C53924B87D3079949B06C4ACDB09
+Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-00735d5b76434d99a4cfa5d6ee3793ef
+EXE SHA256: 85F72EC176D0146C4F009821AA3CF3FAC37263ADCD94BFCD35734B793B1F83A9
 
 rustc 1.98.1 (48a229cea 2026-09-01)
 binary: rustc
@@ -35,19 +35,19 @@ File Type: EXECUTABLE IMAGE
     kernel32.dll
     shell32.dll
     combase.dll
-    ole32.dll
     user32.dll
+    ole32.dll
     oleaut32.dll
     shlwapi.dll
     propsys.dll
     bcrypt.dll
     crypt32.dll
+    dwmapi.dll
     advapi32.dll
     userenv.dll
-    winhttp.dll
-    dwmapi.dll
-    gdi32.dll
     api-ms-win-core-synch-l1-2-0.dll
+    winhttp.dll
+    gdi32.dll
     ADVAPI32.dll
     KERNEL32.dll
     ntdll.dll
@@ -56,9 +56,9 @@ File Type: EXECUTABLE IMAGE
   Summary
 
         3000 .data
-       51000 .pdata
-      595000 .rdata
+       52000 .pdata
+      5A2000 .rdata
         8000 .reloc
        3D000 .rsrc
-      7D6000 .text
+      7ED000 .text
         1000 _RDATA

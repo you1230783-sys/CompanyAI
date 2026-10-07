@@ -5,6 +5,7 @@ use serde_json::Value;
 pub mod png;
 pub mod quality;
 pub mod style;
+pub mod transform;
 pub const KINDS: &[&str] = &["line", "bar", "scatter", "step", "area", "horizontal_bar"];
 
 pub const MAX_POINTS: usize = 10_000;
@@ -48,6 +49,9 @@ pub struct Chart {
     pub data_note: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub data_issues: Vec<DataIssue>,
+    /// AI 透過受控工具設定的呈現轉換；原始 X／Y 與來源仍完整保存。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<Box<transform::Transform>>,
 }
 impl Chart {
     pub fn validate(&self) -> AppResult<()> {
@@ -74,9 +78,7 @@ impl Chart {
             }
         }
         for x in &self.x {
-            if self.kind == "scatter" && x.as_f64().is_none()
-                || !(x.is_number() || x.as_str().is_some_and(|s| s.chars().count() <= 100))
-            {
+            if !(x.is_number() || x.as_str().is_some_and(|s| s.chars().count() <= 100)) {
                 return Err("橫軸只接受短文字或數字；散佈圖必須使用數字。".into());
             }
         }
@@ -100,6 +102,10 @@ impl Chart {
         if serde_json::to_vec(self).map_err(|e| e.to_string())?.len() > MAX_CHART_BYTES {
             return Err("圖表資料超過 8 MiB，請縮短標籤或分圖；未自動抽樣。".into());
         }
+        self.transform
+            .clone()
+            .unwrap_or_default()
+            .view(self, &self.kind)?;
         Ok(())
     }
 }
@@ -222,6 +228,7 @@ pub fn prepare_page(
     quality::prepare(
         page,
         Chart {
+            transform: None,
             kind: kind.into(),
             title: title.into(),
             x_label: x_label.into(),
@@ -279,6 +286,7 @@ mod tests {
     #[test]
     fn ten_thousand_points_are_preserved_without_sampling() {
         let mut chart = Chart {
+            transform: None,
             kind: "line".into(),
             title: "T".into(),
             x_label: "x".into(),

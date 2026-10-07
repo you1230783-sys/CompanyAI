@@ -65,6 +65,41 @@ result = {'total': int(df['值'].sum()), 'seconds': seconds, 'rows': len(df)}
     let first = call(&mut broker, &mut worker, "analyze", request.clone())?;
     assert_eq!(first["summary"], json!({"total":15,"seconds":5.0,"rows":3}));
     assert_eq!(first["versions"]["pandas"], "2.2.3");
+    // 真正經過原生快照與 Python 管道，驗證 Big5 不再被 UTF-8 前置檢查擋下。
+    let chinese = "08:00:00 拋料當顆辨識序號: 123\r\n";
+    let big5 = company_ai::projects::text::encode(
+        chinese,
+        company_ai::projects::text::Encoding::CodePage(950),
+    )?;
+    std::fs::write(root.join("big5.log"), &big5).map_err(|e| e.to_string())?;
+    std::fs::write(
+        root.join("utf8.log"),
+        "\u{feff}08:00:00 拋料當顆辨識序號: 123\r\n",
+    )
+    .map_err(|e| e.to_string())?;
+    std::fs::write(root.join("fallback.log"), "中").map_err(|e| e.to_string())?;
+    let encoded = call(
+        &mut broker,
+        &mut worker,
+        "log-encodings",
+        json!({"tool":"run_python", "purpose":"Big5及UTF-8 LOG快照驗收", "inputs":[
+        {"name":"legacy","path":"big5.log","kind":"text"},
+        {"name":"unicode","path":"utf8.log","kind":"text"},
+        {"name":"fallback","path":"fallback.log","kind":"text"}], "code":r#"
+assert texts['legacy'] == texts['unicode']
+assert '拋料當顆辨識序號: 123' in texts['legacy']
+assert texts['fallback'] == '中'
+assert metadata['legacy']['encoding'] == 'big5'
+assert metadata['unicode']['encoding'] == metadata['fallback']['encoding'] == 'utf8'
+assert not metadata['legacy']['encoding_ambiguous']
+result = {'encoding_bridge': True}
+"#}),
+    )?;
+    assert_eq!(encoded["summary"]["encoding_bridge"], true);
+    assert_eq!(
+        std::fs::read(root.join("big5.log")).map_err(|e| e.to_string())?,
+        big5
+    );
     let repeated = call(&mut broker, &mut worker, "analyze", request)?;
     assert_eq!(first, repeated, "相同 operation id 不得重複發布");
     let table_path = first["artifacts"][0]["dataset"]["path"]
@@ -230,7 +265,7 @@ result = {{'denied': denied}}
     assert!(broker.finish(&[]).is_err());
     let report = json!({"result":"PASS","version":env!("CARGO_PKG_VERSION"),"actual_excel_com":office,
         "python":"3.13.12","pandas":"2.2.3","numpy":"2.2.6","openpyxl":"3.1.5","duration_seconds":started.elapsed().as_secs_f64(),
-        "checks":["CSV leading zeros and literal NA","LOG event duration","groupby count/mean/sum","tracked CSV and generated XLSX round trip",
+        "checks":["CSV leading zeros and literal NA","LOG event duration","Big5 LOG plus UTF-8 BOM and fallback snapshots through real Python", "groupby count/mean/sum","tracked CSV and generated XLSX round trip",
             "literal XLSX formula text","idempotent results","source/output path and revision rejection","OS file/network/child-process isolation",
             "environment allowlist","active cancellation","120 second timeout","unlisted and modified runtime files rejected","original unchanged","modified output rejected at finish"]});
     std::fs::write(

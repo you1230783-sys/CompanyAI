@@ -57,7 +57,7 @@
       }
       $("project-image-start").title = state.config.model === "fast"
         ? "此模型不支援圖片傳入，請切換至支援圖片的模型。"
-        : "依需求辨識專案圖片；每次任務1張、最大5 MB，後續只保留文字重點。";
+        : "指定專案圖片閱讀；AI 亦可在一般任務中按需選圖。單張最大5 MB，後續只保留文字重點。";
       if (target && (!current() || (state.projects?.running && !pending))) clear();
     },
     receive(message) {
@@ -66,7 +66,7 @@
         if (message.kind !== target.kind) return;
         const outlook = target.kind === "outlook";
         pending = false; ready = true;
-        $("project-quick-title").textContent = outlook ? "Outlook 助理" : "圖片辨識（試驗）";
+        $("project-quick-title").textContent = outlook ? "Outlook 助理" : "圖片辨識";
         $("project-quick-outlook").hidden = !outlook;
         $("project-quick-image").hidden = outlook;
         $("project-quick-from").value = message.start;

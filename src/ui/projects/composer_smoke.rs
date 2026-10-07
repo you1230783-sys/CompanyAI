@@ -539,6 +539,14 @@ impl App {
         self.messages[0].project_charts = vec![chart];
         self.archive.conversations[0].messages = self.messages.clone();
         let style:projects::charts::style::Style=serde_json::from_value(json!({"title":"自訂圖","x_label":"時間","y_label":"透光值","kind":"step","legend":"right","x_min":null,"x_max":null,"y_min":140,"y_max":180,"series":[{"name":"量測","color":"#008800"}],"lines":[{"axis":"y","value":175,"name":"上限","color":"#ff0000"}]})).map_err(|e|e.to_string())?;
+        let mut style = style;
+        style.transform = Some(
+            serde_json::from_value(json!({
+                "x":{"mode":"index","offset":0,"start":1,"step":1},
+                "y":{"mode":"offset","offset":10,"start":1,"step":1},"drop_empty":true
+            }))
+            .map_err(|e| e.to_string())?,
+        );
         let command = |id: &str, style| ProjectCommand::ChartCustomize {
             target: chart_edit::Target {
                 conversation: chat.clone(),
@@ -557,6 +565,12 @@ impl App {
         let restored = history::load(&self.root)?;
         verify(
             restored.conversations[0].messages[0].project_chart_styles[&0].y_min == Some(140.0)
+                && restored.conversations[0].messages[0].project_chart_styles[&0]
+                    .transform
+                    .as_ref()
+                    .is_some_and(|t| {
+                        t.x.mode == projects::charts::transform::Mode::Index && t.y.offset == 10.0
+                    })
                 && self.messages[0].project_charts[0].series[0].values[0] == Some(168.4),
             "圖表設定加密保存且原值不變",
         )?;

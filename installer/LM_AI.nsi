@@ -144,7 +144,9 @@ Section "安裝 LM_AI"
     CopyFiles /SILENT "$PLUGINSDIR\LM_AI.exe" "$INSTDIR\LM_AI.pending.exe"
     WriteUninstaller "$INSTDIR\Uninstall.pending.exe"
     IfErrors failed
-    ; 獨立 runtime 先完整解壓，再切換。尚未成功前保留舊程式與舊 Python。
+    ; 先由新版 EXE 核對既有 runtime 的完整清單、SHA256 與實際分析能力。
+    ; 完全相同就沿用，不解壓／更名／重寫數千個套件檔；不只比較版本字串。
+    ; 不符合時仍完整解壓再切換，尚未成功前保留舊程式與舊 Python。
     StrCpy $HadPython "no"
     StrCpy $PythonSwapped "no"
     !insertmacro PythonRemove "$INSTDIR\python.pending"
@@ -152,6 +154,17 @@ Section "安裝 LM_AI"
     IfFileExists "$INSTDIR\python.pending\*.*" failed
     IfFileExists "$INSTDIR\python.previous\*.*" failed
     !insertmacro PythonCheckTree "$INSTDIR\python"
+!ifndef TEST_PAYLOAD
+    DetailPrint "正在檢查已安裝的 Python 分析環境…"
+    ClearErrors
+    ExecWait '"$INSTDIR\LM_AI.pending.exe" --python-self-check' $0
+    IfErrors install_python
+    StrCmp $0 0 0 install_python
+    DetailPrint "Python 環境完整且符合本版，直接沿用。"
+    Goto python_ready
+    install_python:
+!endif
+    DetailPrint "正在安裝本版 Python 分析環境…"
     ClearErrors
     SetOutPath "$INSTDIR\python.pending"
     File /r "..\dist\python\*.*"
@@ -177,7 +190,9 @@ Section "安裝 LM_AI"
     IfErrors rollback_python
     StrCmp $0 0 +2
     Goto rollback_python
+    python_ready:
 !endif
+    ; 沿用 runtime 時兩個 Python 回復旗標仍為 no；主程式替換失敗不動原環境。
     StrCpy $HadPrevious "no"
     IfFileExists "$INSTDIR\LM_AI.exe" 0 replace_app
     Delete "$INSTDIR\LM_AI.previous.exe"

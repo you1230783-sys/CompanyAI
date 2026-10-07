@@ -501,6 +501,12 @@ mod tests {
                 "chart_dataset",
                 json!({"path":"_AI_Output/data.csv","revision":"r","x_column":"A","y_columns":["F"],"start_row":1,"row_count":100,"kind":"scatter","title":"T","x_label":"x","y_label":"y"}),
             ),
+            (
+                "transform_chart",
+                json!({"chart_index":0,"transform":{
+                "x":{"mode":"index","offset":0,"start":1,"step":1},
+                "y":{"mode":"original","offset":0,"start":1,"step":1},"drop_empty":true}}),
+            ),
         ];
         let definitions: Value = serde_json::from_str(DEFINITIONS).unwrap();
         assert_eq!(

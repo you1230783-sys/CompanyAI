@@ -1,9 +1,11 @@
 ﻿# 在 C:\largan 的隔離目錄與正式位置驗證 NSIS 安裝、更新、重啟及解除安裝。
 # 僅開發機執行；不打包到安裝程式，不用於使用者更新。
 [CmdletBinding()]
-param()
+param([switch]$ValidateOnly, [string]$AppSource)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
+if (-not $AppSource) { $AppSource = Join-Path $root 'dist\LM_AI.exe' }
+$AppSource = (Resolve-Path -LiteralPath $AppSource).Path
 $work = Join-Path $root '.build\installer-test'
 New-Item -ItemType Directory -Path $work -Force | Out-Null
 $installRoot = [IO.Path]::GetFullPath('C:\largan\LM_AI_Installer_Test')
@@ -154,16 +156,70 @@ foreach ($name in $preservedSettings.Keys) {
 Remove-Item -LiteralPath $keep,$marker
 [IO.Directory]::Delete($installRoot, $false)
 # 同一 NSIS 來源再安裝真正的 Rust 主程式，驗證解壓後的位元組與 WebView2 介面。
-& $nsis /V2 /DAPP_VERSION=98.0.0 /DTEST_PACKAGE /DPRODUCT_DIR=LM_AI_Installer_Test "/DAPP_SOURCE=$root\dist\LM_AI.exe" "/DSETUP_OUTPUT=$work\real-setup.exe" (Join-Path $root 'installer\LM_AI.nsi')
+& $nsis /V2 /DAPP_VERSION=98.0.0 /DTEST_PACKAGE /DPRODUCT_DIR=LM_AI_Installer_Test "/DAPP_SOURCE=$AppSource" "/DSETUP_OUTPUT=$work\real-setup.exe" (Join-Path $root 'installer\LM_AI.nsi')
 if ($LASTEXITCODE -ne 0) { throw 'Real payload test installer build failed.' }
 Run-Checked (Join-Path $work 'real-setup.exe') '/S'
-if ((Get-FileHash $app).Hash -ne (Get-FileHash (Join-Path $root 'dist\LM_AI.exe')).Hash) { throw 'Installed Rust app differs from release.' }
+if ((Get-FileHash $app).Hash -ne (Get-FileHash $AppSource).Hash) { throw 'Installed Rust app differs from the selected build.' }
 Run-Checked $app '--self-check'
 Run-Checked $app '--python-self-check'
+# 完整環境必須原地沿用。保留所有檔案的建立時間，並鎖住一個檔案禁止寫入／刪除；
+# 若安裝器仍先搬移或覆蓋 Python，這次更新會失敗，不能只靠相同內容判定「沒有重裝」。
+$pythonRoot = Join-Path $installRoot 'python'
+$unchangedFiles = @{}
+foreach ($file in Get-ChildItem -LiteralPath $pythonRoot -File -Recurse) {
+    $unchangedFiles[$file.FullName] = $file.CreationTimeUtc.Ticks
+}
+$runtimeLock = [IO.File]::Open($runtimeWorker, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+try {
+    Run-Checked (Join-Path $work 'real-setup.exe') '/S'
+    # 主程式替換失敗也不可觸碰已沿用的環境。
+    $appLock = [IO.File]::Open($app, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try { Run-Checked (Join-Path $work 'real-setup.exe') '/S' 1 } finally { $appLock.Dispose() }
+} finally { $runtimeLock.Dispose() }
+foreach ($path in $unchangedFiles.Keys) {
+    if ((Get-Item -LiteralPath $path).CreationTimeUtc.Ticks -ne $unchangedFiles[$path]) {
+        throw "Unchanged Python file was replaced: $path"
+    }
+}
+# 缺檔、同大小內容損壞與環境指紋不同，都要走完整修復，不能只信版本字串或檔案存在。
+$repairCases = @('missing-file', 'same-size-corruption', 'different-manifest')
+foreach ($case in $repairCases) {
+    if ($case -eq 'missing-file') {
+        Remove-Item -LiteralPath $runtimeWorker
+    } elseif ($case -eq 'same-size-corruption') {
+        $bytes = [IO.File]::ReadAllBytes($runtimeWorker)
+        $bytes[0] = $bytes[0] -bxor 1
+        [IO.File]::WriteAllBytes($runtimeWorker, $bytes)
+    } else {
+        [IO.File]::AppendAllText((Join-Path $pythonRoot 'runtime-manifest.json'), "`n")
+    }
+    Run-Checked $app '--python-self-check' 1
+    Run-Checked (Join-Path $work 'real-setup.exe') '/S'
+    Run-Checked $app '--python-self-check'
+    foreach ($temporary in @('python.pending', 'python.previous')) {
+        if (Test-Path -LiteralPath (Join-Path $installRoot $temporary)) { throw "Python repair left $temporary" }
+    }
+}
 Run-Checked $uninstaller '/S'
 $deadline = [DateTime]::UtcNow.AddSeconds(60)
 while (((Test-Path $installRoot) -or (Test-Path $key)) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
 if ((Test-Path $installRoot) -or (Test-Path $key)) { throw 'Real payload test uninstall incomplete.' }
+# 僅驗證待發行原始碼時，不動正式位置、dist 成品、簽署清單或 offline 發行紀錄。
+if ($ValidateOnly) {
+    [ordered]@{
+        result = 'PASS'
+        recorded_at = (Get-Date -Format o)
+        toolset = $env:VCToolsVersion
+        app_sha256 = (Get-FileHash $AppSource -Algorithm SHA256).Hash.ToLowerInvariant()
+        python_reused_without_replacement = $true
+        python_repair_cases = $repairCases
+        python_failure_rollback = $true
+        reused_python_survives_app_rollback = $true
+        release_setup_tested = $false
+    } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $work 'source-verification.json') -Encoding UTF8
+    Write-Host 'NSIS source validation: PASS; release artifacts were not updated.'
+    return
+}
 # 最後安裝真正交付的 Setup，不以測試包取代此驗證。
 $releaseSetup = Join-Path $root 'dist\LM_AI_Setup.exe'
 $releaseApp = Join-Path $releaseRoot 'LM_AI.exe'
@@ -221,6 +277,9 @@ Remove-Item -LiteralPath $releaseKeep
     python_folder = 'python'
     python_install_self_check = $true
     python_failure_rollback = $true
+    python_reused_without_replacement = $true
+    python_repair_cases = $repairCases
+    reused_python_survives_app_rollback = $true
     runtime_check_stage = 'application startup only; no installer prerequisite check'
     runtime_unavailable_simulation = 'child-only WEBVIEW2_BROWSER_EXECUTABLE_FOLDER points to a nonexistent folder; Setup succeeds, installed app exits with existing guidance'
     checks = @('NSIS install into missing product directory','existing directory preserves user files','fixed path ignores /D','shortcuts and registration','EXE/setup/uninstaller company name','PID handoff wait','update replacement','automatic restart','locked-file failure preserves old app','NSIS uninstall preserves unknown files','actual release Setup installation and WebView2 self-check','actual release uninstall')

@@ -748,6 +748,7 @@ impl App {
                         // 以正式 WebView2 callback 路徑取得 PNG，再由 Rust 驗證及落盤。
                         // 不只檢查 JS 回傳前綴，確保下一次建置能驗收原生跨執行緒橋接。
                         let chart = crate::projects::charts::Chart {
+                            transform: None,
                             kind: "line".into(),
                             title: "10,000 筆量測趨勢／PNG 匯出測試".into(),
                             x_label: "時間 (秒)".into(),
@@ -778,6 +779,12 @@ impl App {
                             "series":[{"name":"自訂量測名稱","color":"#008800"}],
                             "lines":[{"axis":"y","value":8,"name":"上限","color":"#d62728"},{"axis":"y","value":-8,"name":"下限","color":"#d62728"},{"axis":"x","value":5000,"name":"事件","color":"#5470c6"}]
                         })).map_err(|e|e.to_string())?;
+                        let mut custom = custom;
+                        custom.transform = Some(serde_json::from_value(json!({
+                            "x":{"mode":"index","offset":0,"start":1,"step":1},
+                            "y":{"mode":"offset","offset":2,"start":1,"step":1},"drop_empty":true
+                        })).map_err(|e|e.to_string())?);
+                        custom.validate(&chart)?;
                         let (custom_reply, custom_response) = mpsc::channel();
                         self.view
                             .export_custom_chart_png(&chart, Some(&custom), custom_reply)?;

@@ -1,5 +1,7 @@
 # Excel 選欄與分析規劃
 
+「X／Y重新編號或平移」是圖表衍生座標，不是更换來源欄位。沿用原規劃與chart_dataset取得chart_index後，使用charts技能的transform_chart完成；不得以不存在的CSV欄位、create_chart或重新抄數列繞過核對。
+
 1. 分析或畫圖先 inspect_excel 核對每個檔案自己的工作表、表頭、excel: 版本與 used_range。需要樣本時 read_excel_range，只讀少量必要欄；最多2000資料格／批。不要把檔案A的欄字母直接套到檔案B。
 2. 由你理解使用者用詞，再呼叫 plan_excel_analysis：purpose 保留使用者需求原文；reason 簡述用詞和表頭／樣本的對應。分開指定 x、y、time（篩選欄）；每欄帶原始大寫欄字母與真實表頭。例：「透光值」可能是 D／圖樣Mean值；B／紀錄時間應供時間篩選或X，不能因 Value2 為數字就選為量測Y。別名不是固定字典；若多欄都合理，先 ask_user。
 3. y_kind=measurement 是量測值；只有使用者確實要求時間作Y才用time，不為通過檢查而改用途。time_mode=time_of_day 表示一天中的時間，elapsed 表示經過時間；HH:MM 永遠表示時:分。含日期的序號不能默默去日期；資料意義不清楚先詢問。

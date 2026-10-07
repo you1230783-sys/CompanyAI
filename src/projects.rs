@@ -249,11 +249,16 @@ pub enum Tool {
         operations: Vec<office::Action>,
     },
     CreateChart {
-        chart: charts::Chart,
+        // 圖表點陣較大，工具列舉只持有指標，避免其他小型工具也承擔整份結構大小。
+        chart: Box<charts::Chart>,
     },
     ExportChartPng {
         chart_index: usize,
         name: String,
+    },
+    TransformChart {
+        chart_index: usize,
+        transform: charts::transform::Transform,
     },
     ChartFromExcel {
         path: String,
@@ -402,7 +407,8 @@ impl Tool {
             Self::OfficeBatch { .. } => "批次編輯 Office",
             Self::CreateChart { .. } | Self::ChartFromExcel { .. } => "建立圖表",
             Self::ExportChartPng { .. } => "儲存圖表 PNG",
-            Self::AnalyzeImage { .. } => "辨識專案圖片（試驗）",
+            Self::TransformChart { .. } => "調整圖表座標與無值位置",
+            Self::AnalyzeImage { .. } => "辨識專案圖片",
             Self::PlanExcelAnalysis { .. } => "核對並鎖定 Excel 分析欄位",
             Self::ExportPlannedExcel { .. } => "依規劃篩選 Excel 並匯出 CSV",
             Self::SummarizeDocument { .. } => "快速模型摘要",

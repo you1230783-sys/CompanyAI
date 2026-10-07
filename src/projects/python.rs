@@ -12,6 +12,8 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
+mod encoding;
+
 pub const MAX_INPUT: usize = 32 * 1024 * 1024;
 pub const MAX_OUTPUT: usize = 8 * 1024 * 1024;
 
@@ -22,6 +24,8 @@ pub struct Input {
     pub path: String,
     pub kind: String,
     pub revision: Option<String>,
+    /// 文字來源的明確編碼；缺省沿用依副檔名決定的自動模式。
+    pub encoding: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -219,6 +223,11 @@ pub(super) fn snapshot(
     let mut output = Vec::new();
     let mut bytes_total = 0;
     for input in inputs {
+        if input.kind != "text" && input.encoding.as_deref().is_some_and(|s| s != "auto") {
+            return Err(
+                "encoding 只適用 kind=text；CSV／資料集維持 UTF-8，XLSX 交給原格式讀取。".into(),
+            );
+        }
         if input.name.is_empty() || input.name.len() > 80 || !names.insert(&input.name) {
             return Err("Python 來源名稱需短且不重複。".into());
         }
@@ -280,15 +289,14 @@ pub(super) fn snapshot(
             if generated_xlsx {
                 json!({"name":input.name,"path":input.path,"kind":"xlsx","revision":revision,"hex":hex(&bytes)})
             } else {
-                let text = std::str::from_utf8(&bytes)
-                    .map_err(|_| {
-                        "Python 文字來源不是有效 UTF-8；若為公司密文，請經原工具匯入正確文字。"
-                    })?
-                    .trim_start_matches('\u{feff}');
-                if text.contains('\0') {
-                    return Err("Python 文字來源含二進位內容。".into());
-                }
-                json!({"name":input.name,"path":input.path,"kind":input.kind,"revision":revision,"text":text})
+                let decoded = encoding::decode(
+                    &bytes,
+                    input.kind == "text" && matches!(ext.as_str(), "log" | "out" | "err"),
+                    input.encoding.as_deref(),
+                )
+                .map_err(|e| format!("Python 來源 {}：{e}", input.name))?;
+                json!({"name":input.name,"path":input.path,"kind":input.kind,"revision":revision,
+                    "text":decoded.text,"encoding":decoded.name,"encoding_ambiguous":decoded.ambiguous})
             }
         };
         bytes_total += serde_json::to_vec(&value).map_err(|e| e.to_string())?.len();

@@ -1,4 +1,4 @@
-//! 圖片試驗的唯讀輸入：只接受專案內 JPG／PNG，不下載網址、不改動來源。
+//! 專案圖片的唯讀輸入：只接受專案內 JPG／PNG，不下載網址、不改動來源。
 use crate::{
     projects::{files, Project},
     AppResult,
@@ -35,7 +35,7 @@ pub fn supported(path: &Path) -> bool {
 pub fn load(project: &Project, value: &str) -> AppResult<Image> {
     let relative = files::relative(value)?;
     if !supported(&relative) {
-        return Err("圖片試驗只支援專案內 JPG／JPEG／PNG。".into());
+        return Err("圖片辨識只支援專案內 JPG／JPEG／PNG。".into());
     }
     let path = project.root.join(&relative);
     let _guards = files::pin(path.parent().ok_or("缺少圖片資料夾。")?)?;

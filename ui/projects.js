@@ -125,6 +125,10 @@
     const info=document.createElement("p");
     info.textContent=`${pending.review.title} · ${(pending.review.source || "").split(" | ")[0]}\n已轉換 ${pending.review.converted} 格數字文字；${pending.review.blanks} 格空白保留缺值。僅影響圖表。`;
     reviewDialog.append(heading,info);
+    // 僅 Y 異常值有這三種選擇；X 無效必須排除整列，不能套用此示意。
+    if (pending.review.groups.some(group=>!group.x_axis)) {
+      reviewDialog.append(ChartReviewExamples.create());
+    }
     const selects=[];
     for (const group of pending.review.groups) {
       const label=document.createElement("label"), text=document.createElement("p"), select=document.createElement("select");

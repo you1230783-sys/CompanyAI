@@ -1,5 +1,22 @@
 # 專案級開發指引
 
+## 0.8.43：座標轉換、圖片支援與 Python 沿用（最新使用者指示）
+
+- 使用者已要求本批完成後進版並部署既有 Git main，取代下方待發行段落的暫不發布限制。納入三張異常值示意、X／Y平移及重新編號、全系列無值位置移除、Python安裝沿用及專案圖片一般支援。
+- AI 增加 transform_chart，沿用原 CSV／Excel 欄位核對後衍生座標；圖表編輯器也可直接調整。Python 技能增加主動選用時機，固定閱讀／作圖仍走專用工具，不強迫每次使用 Python。
+- Python LOG／OUT／ERR 無 BOM 先嚴格 Big5（CP950）、失敗再 UTF-8；BOM 優先，回報編碼／歧義並提供 encoding 明確覆寫。修正原生 UTF-8 前置阻擋；worker／套件指紋維持不變。工具參數拒絕加入欄位路徑診斷，不猜參數執行。使用者後續討論待辦系統，本版保留現有累積筆記，不另加待辦流程。
+- 正式驗證用 scripts/Build.ps1 -EmptyCargoCache -TestOffice -NetworkTestRoot '\\localhost\Y$\Rust\Project\CompanyAI\.build' -IncludeInstaller；v142 x64、空快取及--frozen不變。發布 EXE、完整 NSIS、兩份NSIS簽署清單、驗證文件及原始碼，不重製歷史離線ZIP、不改icon.png。
+
+## 待下次發行：Python 更新沿用與圖片附件（最新使用者指示）
+
+- 使用者目前仍在公司測試 LOG／Excel 繪圖；本輪先修改及驗證，不進版、不發布或推送，保留 0.8.42 的 dist、簽署清單與發行驗證紀錄。
+- NSIS 使用新版待安裝 EXE 的 Python 完整自檢，通過就原地沿用現有環境；不符時完整替換及失敗回復，不只比對版本字串、不逐檔混補套件。Python worker 暫仍納入同一環境指紋。
+- 使用者已澄清圖片支援指「專案內的圖片檔」；移除試驗定位，與其他專案資料一起使用，AI 按需求決定是否讀取。Outlook 助理及一般聊天不改動，不新增郵件附件讀取。
+- 圖片單次仍一張／5,000,000 bytes；每任務改為最多20次不同辨識要求，相同來源與焦點完成結果重用。只送當次子請求，後續保留文字重點，fast 不支援；保留既有待查請求與快取識別碼供續接。
+- 異常 Y 值選擇視窗加入三張固定五點折線示意，並列保留缺值／略過此點／設為0；標明假設資料、共用座標及原 X 位置，不改變既有選擇或原始數據。只有無效 X 的視窗不顯示這組 Y 值示意。
+- 使用者後續要求 X／Y 均支援平移、重新編號及移除無值位置；AI 與完成圖表編輯器共用受控轉換。保留 CSV／Excel 來源欄位核對，另以 transform_chart 衍生座標，不手抄原數列。先移除全系列無值列、再用共同列序號編號，0 保留；實體 X／Y 隨水平長條正確對應。原始點陣、明細、來源保留；PNG 依圖表轉換版本去重，舊 PNG 不覆寫。工具目錄增為49項。
+- 測試建置只留 target／.build；Rust／C++ 沿用 v142 x64，完整原始碼驗證使用 Build.ps1 -ValidateOnly -EmptyCargoCache，安裝回歸可用 Test-Installer.ps1 -ValidateOnly。待 LOG／Excel 測試問題收齊後再一起進版。
+
 ## 0.8.42：獨立 Python 與完整 NSIS（最新使用者指示）
 
 - 使用者明確授權加入離線 Python 分析、製作完整 NSIS 並部署既有 Git main；取代先前不製作 NSIS 的限制。不改 icon.png、不開放 PowerShell、不移除 Outlook 助理。

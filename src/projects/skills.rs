@@ -4,12 +4,12 @@ use serde_json::{json, Value};
 const SKILLS: &[(&str, &str, &str)] = &[
     (
         "python-analysis",
-        "Python分析CSV／LOG、COM資料及XLSX成果",
+        "多檔關聯、統計、LOG配對與XLSX，主動選用Python",
         include_str!("skills/python-analysis.md"),
     ),
     (
         "image-read",
-        "專案 JPG／PNG 圖片辨識試驗",
+        "按任務需要閱讀專案 JPG／JPEG／PNG 圖片",
         include_str!("skills/image-read.md"),
     ),
     (
@@ -153,9 +153,8 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
         "inspect_excel" | "read_excel_range" => has("excel-read"),
         "list_logs" | "read_log" | "search_logs" => has("log-analysis"),
         "outlook_folders" | "outlook_headers" | "outlook_read" => has("outlook-research"),
-        "create_chart" | "chart_from_excel" | "chart_excel_range" | "export_chart_png" => {
-            has("charts")
-        }
+        "create_chart" | "chart_from_excel" | "chart_excel_range" | "export_chart_png"
+        | "transform_chart" => has("charts"),
         "create_working_copy" | "save_copy" | "delete_copy" => {
             has("text-edit") || has("office-edit")
         }

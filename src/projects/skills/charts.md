@@ -5,6 +5,10 @@ description: 使用折線、長條、散佈圖呈現可核對資料。
 
 # 資料圖表
 
+使用者要求 X／Y 平移、重設 Index 或移除無值位置時，先依來源建立圖表，再呼叫 transform_chart(chart_index,transform)，不要重建假 CSV 欄位或手抄 create_chart。X／Y 指圖上的實體軸；horizontal_bar 的類別在 Y。兩軸都可選 original、offset（原值加 offset）、index（依保留列順序 start＋step×序號）；一般從1起算即 start:1、step:1。每次設定都以原始資料計算，重複呼叫不累加位移。原值模式其餘欄填 offset:0、start:1、step:1。
+
+drop_empty:true 只移除所有系列都缺值的整列，0 是有效值；先篩列，再共用保留列序號轉換兩軸，單一系列缺值仍保留缺值，不自行補點。重新編號量測軸會改變資料意義，只在使用者要求時使用，說明衍生座標。文字類別不能直接平移，但可明確重新編號。例：要求 X 從1開始且刪除無值，用 x:{mode:"index",offset:0,start:1,step:1}，y:{mode:"original",offset:0,start:1,step:1}，drop_empty:true。若只要求從1開始但保留間距，數值軸可用offset:1−原首值。轉換成功後才export_chart_png；舊PNG不覆寫，新圖會另存。
+
 create_chart 使用固定資料結構，種類僅 line/bar/scatter/step/area/horizontal_bar；已儲存 Excel 優先用 inspect_excel＋export_excel_dataset＋chart_dataset（未儲存的小型工作副本才用 chart_from_excel）。標明橫軸、縱軸單位與來源。缺失用 null，禁止當成零；散佈圖橫軸必須數字。不可提供 JavaScript、HTML、ECharts option 或函式。圖表只是呈現已取得的資料，不會自動證明因果；多系列應共用單位。完成後告知使用者圖表卡片與可展開資料表，不宣稱已匯入 Office。
 
 先讀表頭確定欄位及單位。只需 A／F 時，read_excel_range 的 columns 用 ["A","F"]，不要讀 A:F；試看 100 列只供了解資料，不能冒稱整段趨勢。export_excel_dataset 使用同一個 excel: 版本擷取完整選取資料，模型只見首尾預覽；之後 chart_dataset 用 CSV path／revision 作圖或更正欄位，不再重讀全部原始資料。chart_excel_range 僅作使用者明確要求不建立 CSV 的直接繪圖方式。保留原列號、空值與選取範圍；版本改變需重新查表頭。單張最多 10000 筆、8 個 Y 系列；直接 Excel 畫圖的 X 加 Y 合計最多 90000 格，一般 read_excel_range 仍限 2000 格；更多資料分圖或先詢問範圍，不默默抽樣。

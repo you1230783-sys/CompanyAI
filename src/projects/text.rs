@@ -17,10 +17,17 @@ pub fn revision(text: &str) -> String {
 }
 
 pub fn validate(text: &str) -> AppResult<()> {
-    if text.len() > MAX_TEXT
-        || text
-            .chars()
-            .any(|c| c == '\u{fffd}' || (c.is_control() && !matches!(c, '\n' | '\r' | '\t')))
+    if text.len() > MAX_TEXT {
+        return Err("文字過大，請分成較小文件。".into());
+    }
+    validate_content(text)
+}
+
+/// 只核對文字內容；大量 LOG 的呼叫端另設大小上限，不沿用文件的 200 KB 限制。
+pub(super) fn validate_content(text: &str) -> AppResult<()> {
+    if text
+        .chars()
+        .any(|c| c == '\u{fffd}' || (c.is_control() && !matches!(c, '\n' | '\r' | '\t')))
     {
         return Err("文字過大或包含無法辨識的內容。請先用公司核准的記事本開啟，確認解密及編碼後再匯入文字。".into());
     }
@@ -86,7 +93,7 @@ pub fn decode(bytes: &[u8]) -> AppResult<(String, Encoding)> {
     candidate.ok_or_else(|| "無法取得可信文字，可能仍為公司密文。請用記事本開啟後使用專案「匯入文字」，不會嘗試破壞或轉換原檔。".into())
 }
 
-fn decode_cp(bytes: &[u8], codepage: u32) -> AppResult<String> {
+pub(super) fn decode_cp(bytes: &[u8], codepage: u32) -> AppResult<String> {
     if bytes.is_empty() {
         return Ok(String::new());
     }
@@ -134,35 +141,37 @@ pub fn encode(text: &str, encoding: Encoding) -> AppResult<Vec<u8>> {
             }
             Ok(result)
         }
-        Encoding::CodePage(codepage) => {
-            if text.is_empty() {
-                return Ok(Vec::new());
-            }
-            let words: Vec<u16> = text.encode_utf16().collect();
-            let mut result = vec![0u8; words.len() * 4];
-            let mut substituted = 0;
-            let count = unsafe {
-                WideCharToMultiByte(
-                    codepage,
-                    WC_NO_BEST_FIT_CHARS,
-                    words.as_ptr(),
-                    words.len() as i32,
-                    result.as_mut_ptr(),
-                    result.len() as i32,
-                    std::ptr::null(),
-                    &mut substituted,
-                )
-            };
-            if count <= 0 || substituted != 0 {
-                return Err(
-                    "新文字無法以原始編碼完整保存，請確認是否改以 UTF-8 建立新 TXT；未以問號替換。"
-                        .into(),
-                );
-            }
-            result.truncate(count as usize);
-            Ok(result)
-        }
+        Encoding::CodePage(codepage) => encode_cp(text, codepage),
     }
+}
+
+/// 不以替代字元或最佳近似轉碼；呼叫端負責大小及文字內容驗證。
+pub(super) fn encode_cp(text: &str, codepage: u32) -> AppResult<Vec<u8>> {
+    if text.is_empty() {
+        return Ok(Vec::new());
+    }
+    let words: Vec<u16> = text.encode_utf16().collect();
+    let mut result = vec![0u8; words.len() * 4];
+    let mut substituted = 0;
+    let count = unsafe {
+        WideCharToMultiByte(
+            codepage,
+            WC_NO_BEST_FIT_CHARS,
+            words.as_ptr(),
+            words.len() as i32,
+            result.as_mut_ptr(),
+            result.len() as i32,
+            std::ptr::null(),
+            &mut substituted,
+        )
+    };
+    if count <= 0 || substituted != 0 {
+        return Err(
+            "新文字無法以原始編碼完整保存，請確認是否改以 UTF-8 建立新 TXT；未以問號替換。".into(),
+        );
+    }
+    result.truncate(count as usize);
+    Ok(result)
 }
 
 /// 以 Unicode 字元索引套用修改；版本和預期原文兩者都必須吻合。

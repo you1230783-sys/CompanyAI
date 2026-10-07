@@ -1421,11 +1421,33 @@ body.collapsed .project-section { overflow: visible; }
 .chart-card table { border-collapse: collapse; width: 100%; }
 .chart-card th, .chart-card td { padding: 6px 10px; border: 1px solid var(--line); }
 
-.chart-review-dialog { width:min(700px,90vw); max-height:85vh; overflow:auto; }
+.chart-review-dialog { width:min(940px,90vw); max-height:85vh; overflow:auto; }
 .chart-review-dialog label { display:block; margin:16px 0; }
 .chart-review-dialog p { white-space:pre-wrap; overflow-wrap:anywhere; }
 .chart-review-dialog select { width:100%; }
 .chart-review-dialog > div { display:flex; justify-content:flex-end; gap:12px; margin-top:20px; }
+/* 三張固定假資料折線共用座標；窄視窗改為直排，深色模式沿用產品色票。 */
+.chart-review-examples { margin:20px 0; padding:14px 0; border-block:1px solid var(--line); }
+.chart-review-examples h3 { margin:0 0 8px; font-size:1rem; }
+.chart-review-examples .chart-example-source, .chart-review-examples .chart-example-note { margin:8px 0; font-size:.9rem; }
+.chart-example-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+.chart-example { margin:0; min-width:0; }
+.chart-example h4 { margin:8px 0; font-size:1rem; text-align:center; }
+.chart-example svg { display:block; width:100%; max-width:310px; height:auto; margin:0 auto; stroke:none; }
+.chart-example svg text { font-size:14px; fill:var(--ink); }
+.chart-example .example-grid { stroke:var(--line); stroke-width:1; }
+.chart-example .example-missing { stroke:var(--muted); stroke-dasharray:4 4; stroke-width:1; }
+.chart-example .example-line { fill:none; stroke:var(--accent); stroke-width:2.5; }
+.chart-example .example-point { fill:var(--accent); }
+.chart-example figcaption { font-size:.9rem; line-height:1.5; }
+.chart-transform-axis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:8px 0 14px; }
+.chart-transform-axis label { min-width:0; }
+.chart-transform-axis input, .chart-transform-axis select { width:100%; box-sizing:border-box; }
+.chart-edit-dialog .chart-transform-empty { display:flex; flex-direction:row; align-items:center; gap:8px; }
+.chart-edit-dialog .chart-transform-empty input { width:auto; }
+.chart-transform-preview { min-height:1.5em; }
+@media (max-width:700px) { .chart-transform-axis { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:850px) { .chart-example-grid { grid-template-columns:1fr; } }
 /* 補充指示維持可讀的原文，不將使用者文字當成 HTML。 */
 .project-compose-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 0 10px; font-size: .85rem; }
 .project-compose-controls select { min-width: 0; max-width: 100%; padding: 6px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: var(--surface); }

@@ -2630,7 +2630,7 @@
       "type": "function",
       "function": {
         "name": "analyze_image",
-        "description": "依需求辨識專案 JPG／PNG（試驗）；每次任務限1張、最大5 MB（5,000,000 bytes），超過請使用者自行縮小。只回文字重點及來源，後續不附原圖。快速模型不支援；不讀Outlook附件或網址。",
+        "description": "按任務需要閱讀專案 JPG／JPEG／PNG，由 AI 自行決定是否使用。每次一張、每任務最多20次不同辨識要求，單張最大5 MB（5,000,000 bytes）；相同來源與焦點可重用。只回文字重點及來源，後續不附原圖。快速模型不支援；不讀Outlook附件或網址。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -2890,7 +2890,7 @@
       "type": "function",
       "function": {
         "name": "run_python",
-        "description": "本機隔離 Python 分析，內附 pandas/NumPy/openpyxl。來源最多8份；CSV/dataset/UTF-8文字，以及_AI_Output生成XLSX。原始Excel先COM匯出。資料不整批送模型；emit_table/emit_excel成果自動保存。",
+        "description": "本機隔離 Python 分析，內附 pandas/NumPy/openpyxl。來源最多8份；CSV/dataset/文字，以及_AI_Output生成XLSX。LOG無BOM先Big5再UTF-8，metadata提供編碼與歧義提示。原始Excel先COM匯出。texts/tables以inputs.name索引，不是path；每項必填name/path/kind。emit_table/emit_excel成果自動保存。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -2909,10 +2909,12 @@
                 "type": "object",
                 "properties": {
                   "name": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Python texts[name]／tables[name]的索引名稱，不是來源路徑。"
                   },
                   "path": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "專案相對路徑；不可當成texts的索引或用open直接讀取。"
                   },
                   "kind": {
                     "type": "string",
@@ -2925,6 +2927,11 @@
                   },
                   "revision": {
                     "type": "string"
+                  },
+                  "encoding": {
+                    "type": "string",
+                    "enum": ["auto", "big5", "utf8"],
+                    "description": "僅kind=text可指定；預設auto。LOG/OUT/ERR無BOM先Big5(CP950)再UTF-8，有UTF-8 BOM優先遵循；其他文字預設UTF-8。metadata[name].encoding_ambiguous=true時核對樣本，必要時指定utf8。其他kind省略或null。"
                   }
                 },
                 "required": [
@@ -2945,6 +2952,52 @@
             "code",
             "inputs"
           ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "transform_chart",
+        "description": "依使用者要求調整已建立圖表的實體 X／Y：保留原值、加上位移、重新編號。來源 CSV／Excel 欄位與原始數據不變；不需要也不可手抄全部座標。先 chart_dataset 取得 chart_index，再轉換，再匯出 PNG。每次完整取代轉換設定，以原始資料計算，不累加。drop_empty 只移除所有系列均為 null 的位置，0 保留；先移除再編號。水平長條的 Y 是類別、X 是量測值。重新編號量測軸會改變其意義，只在使用者要求時使用；缺值不生成數字。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "chart_index": { "type": "integer", "minimum": 0 },
+            "transform": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "object",
+                  "properties": {
+                    "mode": { "type": "string", "enum": ["original", "offset", "index"] },
+                    "offset": { "type": "number", "description": "offset模式加上的數值，可為負數；其他模式填0。" },
+                    "start": { "type": "number", "description": "index模式起點，通常為1；其他模式填1。" },
+                    "step": { "type": "number", "description": "index模式間距，通常為1，不可為0；其他模式填1。" }
+                  },
+                  "required": ["mode", "offset", "start", "step"],
+                  "additionalProperties": false
+                },
+                "y": {
+                  "type": "object",
+                  "properties": {
+                    "mode": { "type": "string", "enum": ["original", "offset", "index"] },
+                    "offset": { "type": "number", "description": "offset模式加上的數值，可為負數；其他模式填0。" },
+                    "start": { "type": "number", "description": "index模式起點，通常為1；其他模式填1。" },
+                    "step": { "type": "number", "description": "index模式間距，通常為1，不可為0；其他模式填1。" }
+                  },
+                  "required": ["mode", "offset", "start", "step"],
+                  "additionalProperties": false
+                },
+                "drop_empty": { "type": "boolean" }
+              },
+              "required": ["x", "y", "drop_empty"],
+              "additionalProperties": false
+            },
+            "progress_note": { "type": "string", "maxLength": 2000 }
+          },
+          "required": ["chart_index", "transform"],
           "additionalProperties": false
         }
       }

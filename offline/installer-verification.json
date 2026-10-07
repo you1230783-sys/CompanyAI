@@ -1,18 +1,25 @@
 {
   "result": "PASS",
-  "recorded_at": "2026-10-07T08:37:12.6967838+08:00",
-  "version": "0.8.42.0",
+  "recorded_at": "2026-10-07T10:20:01.5130703+08:00",
+  "version": "0.8.43.0",
   "toolset": "14.29.30133",
   "publisher": "Largan, Inc.",
   "install_path": "C:\\largan\\LM_AI",
   "parent_existed_before_test": true,
-  "setup_sha256": "dc5156b10e8ad380efaf4ed7c1da578ff83d28a2085fdd86226643b546f39706",
+  "setup_sha256": "d794dce58b816c056b395badefe80ed05addeab33ad3a0a62e50339e7dd84690",
   "vnc_configuration_preserved": true,
   "webview2_bundled": false,
   "python_bundled": true,
   "python_folder": "python",
   "python_install_self_check": true,
   "python_failure_rollback": true,
+  "python_reused_without_replacement": true,
+  "python_repair_cases": [
+    "missing-file",
+    "same-size-corruption",
+    "different-manifest"
+  ],
+  "reused_python_survives_app_rollback": true,
   "runtime_check_stage": "application startup only; no installer prerequisite check",
   "runtime_unavailable_simulation": "child-only WEBVIEW2_BROWSER_EXECUTABLE_FOLDER points to a nonexistent folder; Setup succeeds, installed app exits with existing guidance",
   "checks": [

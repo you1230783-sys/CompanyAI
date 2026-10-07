@@ -229,9 +229,97 @@ fn matches(value: &Value, schema: &Value) -> bool {
 pub(super) fn decode_arguments(encoded: &str, schema: &Value) -> AppResult<Value> {
     let args = decode_json(encoded)?;
     if !args.is_object() || !matches(&args, schema) {
-        return Err("工具參數缺少欄位、型別不符或包含未提供欄位；本輪工具未執行。".into());
+        let mut errors = Vec::new();
+        diagnose(&args, schema, "$", &mut errors);
+        if errors.is_empty() {
+            errors.push("$: 參數必須為符合工具規格的物件".into());
+        }
+        return Err(format!(
+            "工具參數不符：{}。最多列出6項；陣列索引從0開始。請補正指定欄位後重試，本輪工具未執行。",
+            errors.join("；")
+        ));
     }
     Ok(args)
+}
+
+/// 拒絕後才補充有限診斷，不改變 matches 的接受條件，也不補猜參數。
+/// 只回傳欄位位置及內建規格，避免重送整段程式或檔案內容。
+fn diagnose(value: &Value, schema: &Value, path: &str, errors: &mut Vec<String>) {
+    if errors.len() >= 6 || matches(value, schema) {
+        return;
+    }
+    if let Some(choices) = schema["anyOf"].as_array() {
+        if !choices.iter().any(|s| matches(value, s)) {
+            // nullable 包裝中，非 null 值只需檢查原分支；多個可用分支則不猜。
+            let candidates: Vec<_> = choices
+                .iter()
+                .filter(|s| {
+                    s.get("type")
+                        .is_none_or(|t| matches(value, &json!({"type": t})))
+                })
+                .collect();
+            if candidates.len() == 1 {
+                diagnose(value, candidates[0], path, errors);
+            } else {
+                errors.push(format!("{path}: 不符合允許的型別或任一參數格式"));
+            }
+            return;
+        }
+    }
+    if let Some(kind) = schema.get("type") {
+        if !matches(value, &json!({"type":kind})) {
+            errors.push(format!("{path}: 型別應為 {kind}"));
+            return;
+        }
+    }
+    if let Some(choices) = schema["enum"].as_array() {
+        if !choices.contains(value) {
+            errors.push(format!("{path}: 值應為 {}", json!(choices)));
+            return;
+        }
+    }
+    if let (Some(object), Some(properties)) = (value.as_object(), schema["properties"].as_object())
+    {
+        if let Some(required) = schema["required"].as_array() {
+            for name in required.iter().filter_map(Value::as_str) {
+                if !object.contains_key(name) && errors.len() < 6 {
+                    errors.push(format!("{}: 缺少必填欄位", field_path(path, name)));
+                }
+            }
+        }
+        for (name, item) in object {
+            if errors.len() >= 6 {
+                break;
+            }
+            let field = field_path(path, name);
+            match properties.get(name) {
+                Some(rule) => diagnose(item, rule, &field, errors),
+                None if schema["additionalProperties"] == false => {
+                    errors.push(format!("{field}: 未提供的欄位，請移除或修正欄名"));
+                }
+                _ => (),
+            }
+        }
+    }
+    if let (Some(items), Some(rule)) = (value.as_array(), schema.get("items")) {
+        for (index, item) in items.iter().enumerate() {
+            if errors.len() >= 6 {
+                break;
+            }
+            diagnose(item, rule, &format!("{path}[{index}]"), errors);
+        }
+    }
+}
+
+/// 未知欄名由模型提供，需限制長度及轉義控制字元；不輸出其值。
+fn field_path(parent: &str, name: &str) -> String {
+    let parent: String = parent.chars().take(200).collect();
+    let short: String = name.chars().take(64).collect();
+    if short.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        format!("{parent}.{short}")
+    } else {
+        format!("{parent}[{}]", json!(short))
+    }
 }
 
 pub(super) fn restore_optional(name: &str, mut args: Value) -> AppResult<Value> {
@@ -335,6 +423,56 @@ pub(super) fn decode_json(text: &str) -> AppResult<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn python_input_errors_locate_missing_kind_and_unknown_key_without_echoing_code() {
+        let source = catalog().unwrap();
+        let schema = &source["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["function"]["name"] == "run_python")
+            .unwrap()["function"]["parameters"];
+        let mut args = json!({"purpose":"LOG分析", "code":"private code is not echoed", "inputs":[
+            {"name":"day1","path":"LOG/day1.log","kind":"text"},
+            {"name":"day2","path":"LOG/day2.log","kind":"text"},
+            {"name":"day3","path":"LOG/day3.log","錯字欄名":"private value"}
+        ]});
+        let error = decode_arguments(&args.to_string(), schema).unwrap_err();
+        assert!(error.contains("$.inputs[2].kind: 缺少必填欄位"), "{error}");
+        assert!(error.contains("錯字欄名") && error.contains("未提供的欄位"));
+        assert!(!error.contains("private"));
+        args["inputs"][2]
+            .as_object_mut()
+            .unwrap()
+            .remove("錯字欄名");
+        args["inputs"][2]["kind"] = json!("text");
+        assert!(decode_arguments(&args.to_string(), schema).is_ok());
+        args["inputs"][2]["kind"] = json!("wrong");
+        assert!(decode_arguments(&args.to_string(), schema)
+            .unwrap_err()
+            .contains("值應為"));
+    }
+
+    #[test]
+    fn diagnostics_follow_nullable_arrays_and_limit_model_supplied_field_names() {
+        let schema = normalize(&json!({"type":"object","properties":{
+            "inputs":{"type":"array","items":{"type":"object","properties":{
+                "name":{"type":"string"}},"required":["name"]}}
+        }}))
+        .unwrap();
+        let args = json!({"inputs":[{"name":2},{"name":false}]});
+        let error = decode_arguments(&args.to_string(), &schema).unwrap_err();
+        assert!(error.contains("$.inputs[0].name: 型別應為"));
+        assert!(error.contains("$.inputs[1].name: 型別應為"));
+        let mut bad = Map::new();
+        for i in 0..100 {
+            bad.insert(format!("{i}\n{}", "x".repeat(10000)), json!("secret value"));
+        }
+        let error = decode_arguments(&Value::Object(bad).to_string(), &schema).unwrap_err();
+        assert!(error.len() < 3000);
+        assert!(!error.contains("secret value") && !error.contains('\n'));
+    }
 
     #[test]
     fn mixed_types_preserve_values_and_existing_constraints() {

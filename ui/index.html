@@ -109,7 +109,7 @@
               <button id="project-stop" hidden>停止專案任務</button>
               <button id="weekly-start" hidden>生成週報</button>
               <button id="project-outlook-start" hidden title="查看您選擇的 Outlook 信件，整理需要您處理、回覆或追蹤的事項。">Outlook 助理</button>
-              <button id="project-image-start" hidden title="選擇專案中的 JPG／PNG，試驗目前模型的圖片辨識。">圖片辨識（試驗）</button>
+              <button id="project-image-start" hidden title="指定一張專案圖片閱讀；一般任務中 AI 也會依需求自行選擇圖片。">圖片辨識</button>
               <button data-action="translate">
                 <span data-icon="languages"></span>翻譯</button
               ><button data-action="summarize">
@@ -555,7 +555,7 @@
     </dialog>
     <dialog id="project-dialog" aria-labelledby="project-dialog-title">
       <h2 id="project-dialog-title">新增專案</h2>
-      <p>AI 將依據這個資料夾內的檔案，協助完成您的要求。目前支援 Word、Excel、PowerPoint、TXT、MD、文字型 PDF、Outlook MSG，以及 LOG 類紀錄檔；另提供 JPG／PNG 圖片辨識試驗。</p>
+      <p>AI 將依據這個資料夾內的檔案，協助完成您的要求。目前支援 Word、Excel、PowerPoint、TXT、MD、文字型 PDF、Outlook MSG、LOG 類紀錄檔，以及 JPG／JPEG／PNG 圖片。AI 會依任務需要自行決定是否讀取圖片，不會自動送出全部圖片。</p>
       <p>執行任務時，所需的檔案內容會送至目前使用的 AI 服務分析。請確認資料夾內的資料適合提供 AI 使用。</p>
       <label>專案名稱<input id="project-name" maxlength="60" autocomplete="off" placeholder="輸入專案名稱" /></label>
       <button id="project-default-folder">創建預設資料夾</button>
@@ -575,8 +575,8 @@
         <p>預設本週一至今天，補充中明確指定的日期優先。不寄信、不修改信件。</p>
       </section>
       <section id="project-quick-image" hidden>
-        <p>先把圖片放入目前專案資料夾，再選擇 JPG／JPEG／PNG。每次任務限1張，最大5 MB（5,000,000 bytes），超過請自行縮小；程式不會自動壓縮。尺寸最多8192×8192、總計1600萬像素。</p>
-        <p class="weekly-warning">送出後圖片會交由目前 AI 服務分析。這是圖片傳送試驗，服務與模型必須支援圖片；文字與數字辨識結果請核對。</p>
+        <p>先把圖片放入目前專案資料夾，再選擇 JPG／JPEG／PNG。單張最大5 MB（5,000,000 bytes），超過請自行縮小；程式不會自動壓縮。尺寸最多8192×8192、總計1600萬像素。</p>
+        <p class="weekly-warning">送出後這張圖片會交由目前 AI 服務分析，文字與數字辨識結果請核對。一般專案任務也會由 AI 按需求選擇圖片，不必逐張從此入口送出；每個任務最多20次辨識要求。</p>
         <label>專案相對圖片路徑<input id="project-quick-path" maxlength="1000" placeholder="例如：素材/截圖.png" /></label>
         <button id="project-quick-choose">選擇圖片</button>
         <p>圖片僅送出當次辨識，下一輪只帶入文字重點及來源，不再附原圖。目前不直接擷取 Outlook 圖片附件，也不處理掃描 PDF。</p>
@@ -588,7 +588,7 @@
       <h2 id="weekly-info-title">生成週報使用說明</h2>
       <ol>
         <li><strong class="weekly-warning">此功能會讀取您的 Outlook 信件</strong>，包括收件匣、子資料夾與寄件備份（已寄出的郵件），整理重點後放入週報。讀取前會再次讓您選擇資料夾，可在此時<strong class="weekly-warning">取消勾選</strong>不重要或具有隱私的資料夾；<strong class="weekly-warning">被取消勾選的資料夾內容將不會送出</strong>。此設定不撤回先前已送出的資料，也不移除允許信件中已有的引用文字。</li>
-        <li>程式會在專案內建立「週報生成使用資料_YYYYMMDD_HHMMSS」。<strong class="weekly-warning">請在此資料夾中放入您認為重要、要放入週報的參考資料</strong>，例如 Office、文字檔或 PDF。<strong class="weekly-warning">一般文件閱讀不含圖片辨識；專案另有 JPG／PNG 圖片試驗，仍不支援掃描型文獻或 PDF。</strong></li>
+        <li>程式會在專案內建立「週報生成使用資料_YYYYMMDD_HHMMSS」。<strong class="weekly-warning">請在此資料夾中放入您認為重要、要放入週報的參考資料</strong>，例如 Office、文字檔、PDF 或 JPG／JPEG／PNG 圖片。AI 會依任務需要選擇圖片閱讀；快速模型不支援圖片。<strong class="weekly-warning">文件內嵌圖片與掃描型 PDF 仍不在圖片閱讀範圍。</strong></li>
         <li>按確定後建立資料夾並開啟補充視窗，可說明資料用途，例如「PDF 是論文，請重點整理後放入週報」或「Excel 是工作日誌，請搭配信件整理本週工作」。補充內容可以留白。</li>
         <li>依資料量與 AI 處理速度，生成過程可能超過 2 小時，請耐心等候。最後送出並確認參考資料後才會開始。</li>
       </ol>
@@ -655,6 +655,7 @@
     <script src="icons.js"></script>
     <script src="self-test.js"></script>
     <script src="vendor/echarts.min.js"></script>
+    <script src="chart-transform.js"></script>
     <script src="chart-editor.js"></script>
     <script src="charts.js"></script>
     <script src="app.js"></script>
@@ -663,6 +664,7 @@
     <script src="behavior.js"></script>
     <script src="vnc.js"></script>
     <script src="vnc-sync.js"></script>
+    <script src="chart-review-examples.js"></script>
     <script src="projects.js"></script>
     <script src="weekly.js"></script>
     <script src="project-quick.js"></script>

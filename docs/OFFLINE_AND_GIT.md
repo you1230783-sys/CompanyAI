@@ -1,6 +1,6 @@
 # 離線交付與 Git 工作流程
 
-> 目前 EXE 為 0.8.27、NSIS 為 0.8.15，現存離線 ZIP 與其清單仍為歷史版本。三者不可視為同版交付。最新操作見 [開發說明](DEVELOPMENT.md)，發行驗證見 [0.8.27 驗證](VALIDATION_0_8_27.md)。下文為完整離線包的製作與使用流程，需以實際 ZIP／清單版本核對。
+> 目前 EXE／NSIS 為 0.8.43，現存整套 Rust 離線 ZIP 與其清單仍為歷史版本，不能視為同版交付。Python 依賴包另以固定清單保存。最新操作見 [開發說明](DEVELOPMENT.md)，發行驗證見 [0.8.43 驗證](VALIDATION_0_8_43.md)。下文為完整離線包的製作與使用流程，需以實際 ZIP／清單版本核對。
 
 ## 專案包含的內容
 
@@ -18,8 +18,8 @@ CompanyAI/
   installer/               NSIS 安裝原始碼、固定工具 ZIP 與測試 payload
   docs/                    網站串接及離線操作文件
   dist/LM_AI.exe            唯一主程式檔名
-  dist/update-manifest-exe.json 獨立 EXE 簽章與下載契約
-  dist/LM_AI_Setup.exe      NSIS 精簡安裝／更新包（不含 WebView2）
+  dist/update-manifest-exe.json 相容端點；本版同樣指向完整 NSIS
+  dist/LM_AI_Setup.exe      NSIS 安裝／更新包（含獨立 Python，不含 WebView2）
   dist/update-manifest.json 發行包簽章與下載契約
   dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe  WebView2 離線安裝包
   offline/
@@ -39,7 +39,7 @@ ZIP 不包含更新私鑰 .private/、自身、Git 歷史、target、個人登�
 
 ## 拿到公司使用
 
-僅使用程式：複製 `dist\LM_AI.exe`，在 Windows 11 x64 開啟。若缺少 WebView2，先執行 dist 隨附的 x64 離線安裝包，詳見 `dist/WEBVIEW2-OFFLINE.md`。真實服務需要依 `docs/WEB_INTEGRATION.md` 與 `docs/NOTIFICATIONS_AND_OUTLOOK.md` 完成網頁端路由。
+僅使用程式：執行 `dist\LM_AI_Setup.exe`，在 Windows 11 x64 安裝並開啟。Python 位於 EXE 旁的子目錄，不單獨移動主程式。若缺少 WebView2，先執行 dist 隨附的 x64 離線安裝包，詳見 `dist/WEBVIEW2-OFFLINE.md`。真實服務需要依 `docs/WEB_INTEGRATION.md` 與 `docs/NOTIFICATIONS_AND_OUTLOOK.md` 完成網頁端路由。
 
 需要修改及離線編譯時：
 

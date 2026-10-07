@@ -1,4 +1,4 @@
-//! 專案 Outlook 與圖片試驗入口；共用現有 runner，不另建立郵件權限或聊天引擎。
+//! 專案 Outlook 與圖片快速入口；共用現有 runner，不另建立郵件權限或聊天引擎。
 use super::*;
 
 #[derive(Clone, Copy, PartialEq, serde::Serialize, Deserialize)]
@@ -84,7 +84,7 @@ impl App {
             Kind::Image => {
                 // 送出前先驗證來源；提示保留此版本，辨識結果會附實際讀取版本。
                 let image = projects::vision::input::load(&project, path)?;
-                format!("請使用 image-read 技能的 analyze_image，辨識專案相對圖片 {:?}。本次指定來源 SHA256：{}；若實際版本不同，先告知並確認。辨識要求：{}。這是圖片傳送試驗，請明確回報工具辨識結果及來源；工具失敗就告知，不以檔名猜圖中內容。完成後正常呼叫 finish 回覆，不必建立文件。", image.path,image.sha256,
+                format!("請使用 image-read 技能的 analyze_image，辨識專案相對圖片 {:?}。本次指定來源 SHA256：{}；若實際版本不同，先告知並確認。辨識要求：{}。請明確回報工具辨識結果及來源；工具失敗就告知，不以檔名猜圖中內容。完成後正常呼叫 finish 回覆，不必建立文件。", image.path,image.sha256,
                     if notes.trim().is_empty() { "請描述這張圖片裡看到的東西，不需要辨識文字" } else { notes.trim() })
             }
         };

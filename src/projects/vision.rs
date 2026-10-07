@@ -1,4 +1,4 @@
-//! 圖片辨識試驗：沿用目前模型與正式代理 API，以獨立、無工具的子請求看圖。
+//! 專案圖片辨識：沿用目前模型與正式代理 API，以獨立、無工具的子請求按需看圖。
 //! 主任務只取得辨識文字和來源；未知提交保留原 ID 查回，不重送圖片。
 pub(crate) mod input;
 use super::{agent, delegation::Outcome, files::Broker, model, runner::Run, text};
@@ -9,6 +9,9 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::time::Instant;
+
+/// 一次只送一張，允許任務按需逐張閱讀；相同來源與焦點的完成快取不扣新額度。
+const MAX_REQUESTS: usize = 20;
 
 #[derive(Default, Serialize, Deserialize)]
 struct State {
@@ -38,7 +41,7 @@ pub(super) fn analyze(
         return Ok(failed(input::UNSUPPORTED_MODEL));
     }
     let Some(agent) = agent else {
-        return Ok(failed("圖片試驗需要原生專案代理；請建立新任務。"));
+        return Ok(failed("圖片辨識需要原生專案代理；請建立新任務。"));
     };
     if focus.trim().is_empty() || focus.chars().count() > 1000 {
         return Ok(failed("圖片辨識要求需為 1–1000 字。"));
@@ -50,6 +53,7 @@ pub(super) fn analyze(
     };
     let caps = agent.caps.clone();
     caps.validate(&run.config.model, false)?;
+    // 保留既有識別碼，讓試驗版的待查請求與快取仍可按原 ID 續接。
     let identity = json!({"profile":"project-image-trial-v1","image":image.metadata(),"focus":focus,
         "model":run.config.model,"principal":caps.principal_id,"binding":run.config.binding()?});
     let key = text::revision(&format!(
@@ -87,9 +91,9 @@ pub(super) fn analyze(
             .delegation_read::<Vec<String>>(&budget_key)?
             .unwrap_or_default();
         if !attempts.contains(&key) {
-            if !attempts.is_empty() {
+            if attempts.len() >= MAX_REQUESTS {
                 return Ok(failed(
-                    "本版每次任務限辨識 1 張圖片；請沿用已取得的文字重點，其他圖片請另開任務。",
+                    "每次任務最多 20 次不同圖片辨識要求；請沿用已取得的文字重點，仍不足時再另開任務。",
                 ));
             }
             attempts.push(key.clone());
@@ -106,7 +110,7 @@ pub(super) fn analyze(
             conversation_id: run.conversation.clone(),
             request,
             mode: "background".into(),
-            title: "專案圖片辨識試驗".into(),
+            title: "專案圖片辨識".into(),
             created_at: crate::unix_now(),
             remote: None,
             applied: false,
@@ -126,7 +130,7 @@ pub(super) fn analyze(
         if lookup_only {
             "正在查回原圖片辨識結果"
         } else {
-            "正在以目前模型辨識單張圖片（試驗）"
+            "正在以目前模型辨識圖片"
         }
         .into(),
     );

@@ -17,22 +17,27 @@ window.ChartUI = (() => {
   // 畫面與 PNG 共用資料／座標規則；匯出另建畫布，避免跟隨聊天室縮放或隱藏狀態。
   function option(data, exporting = false, style = null) {
     const view=style || ChartEditor.defaults(data), horizontal=view.kind==="horizontal_bar", scatter=view.kind==="scatter";
+    const transform=ChartTransform.settings(data,style), transformNote=ChartTransform.summary(data,view.kind,transform);
+    data=ChartTransform.view(data,view.kind,transform);
+    const xCategory=ChartTransform.category(view.kind,"x",transform), yCategory=ChartTransform.category(view.kind,"y",transform);
     const legend={show:view.legend!=="hidden",type:"scroll",...(view.legend==="right"?{orient:"vertical",right:12,top:80,bottom:exporting?170:110}:view.legend==="top"?{top:55,left:"center"}:view.legend==="bottom_right"?{bottom:exporting?100:65,right:20}:{bottom:exporting?100:65,left:"center"})};
-    const axis=(name,type,values,min,max)=>({type,name,nameLocation:"middle",nameGap:40,...(values?{data:values}:{}),...(min!=null?{min}:{}),...(max!=null?{max}:{}),axisLabel:{hideOverlap:true}});
-    const xa=axis(view.x_label,horizontal||scatter?"value":"category",horizontal||scatter?null:data.x,view.x_min,view.x_max);
-    const ya=axis(view.y_label,horizontal?"category":"value",horizontal?data.x:null,view.y_min,view.y_max);
+    const axis=(name,type,values,min,max,setting)=>({type,name,nameLocation:"middle",nameGap:40,...(values?{data:values}:{}),
+      ...(type==="value" && setting.mode==="index"?{min:min??"dataMin",max:max??"dataMax",minInterval:Math.abs(setting.step)}:{...(min!=null?{min}:{}),...(max!=null?{max}:{})}),
+      ...(type==="value" && setting.mode!=="original"?{scale:true}:{}),axisLabel:{hideOverlap:true}});
+    const xa=axis(ChartTransform.axisLabel(view.x_label,transform.x),xCategory?"category":"value",xCategory?data.x:null,view.x_min,view.x_max,transform.x);
+    const ya=axis(ChartTransform.axisLabel(view.y_label,transform.y),yCategory?"category":"value",yCategory?data.x:null,view.y_min,view.y_max,transform.y);
     return {animation:false, backgroundColor: exporting ? "#fff" : "transparent",
       aria:{enabled:true}, legend,
       tooltip:{trigger:scatter ? "item" : "axis", renderMode:"richText"},
       grid:{left:exporting ? 110 : 75,right:view.legend==="right"?(exporting?240:170):40,top:view.legend==="top"?105:80,bottom:exporting ? 200 : 145,containLabel:true},
       title:{text:view.title,left:"center",top:16,textStyle:{fontSize:exporting?22:18,width:exporting?1450:550,overflow:"break"}},
-      graphic:exporting ? [{type:"text",left:60,bottom:20,style:{text:`來源：${sourceLabel(data.source)}\n${data.data_note || ""}`,fontSize:12,fill:"#444",width:1480,overflow:"break"}}] : [],
+      graphic:exporting ? [{type:"text",left:60,bottom:20,style:{text:`來源：${sourceLabel(data.source)}\n${[data.data_note,transformNote].filter(Boolean).join("\n")}`,fontSize:12,fill:"#444",width:1480,overflow:"break"}}] : [],
       dataZoom:exporting ? [] : [{type:"inside",filterMode:"none",...(horizontal?{yAxisIndex:0}:{xAxisIndex:0})},{type:"slider",bottom:10,filterMode:"none",...(horizontal?{yAxisIndex:0,orient:"vertical",right:0,top:80,bottom:145}:{xAxisIndex:0})}],
       xAxis:xa,yAxis:ya,
       series:data.series.map((s,index) => {
         const skip=new Set(s.skip_indices || []);
         // 明確 X 座標可略過單系列的異常點；真正空白仍保留 null，不能一起連線。
-        const values=s.values.flatMap((v,i)=>skip.has(i) ? [] : [horizontal?[v,i]:[scatter?data.x[i]:i,v]]);
+        const values=s.values.flatMap((v,i)=>skip.has(i) ? [] : [horizontal?[v,yCategory?i:data.x[i]]:[xCategory?i:data.x[i],v]]);
         return {name:view.series[index].name,type:["area","step"].includes(view.kind)?"line":horizontal?"bar":view.kind,
           ...(view.kind==="step"?{step:"end"}:{}),...(view.kind==="area"?{areaStyle:{opacity:0.2}}:{}),
           itemStyle:{color:view.series[index].color},lineStyle:{color:view.series[index].color},
@@ -121,7 +126,9 @@ window.ChartUI = (() => {
       const title = document.createElement("h3"); title.textContent = data.title;title.className="chart-accessible-title";
       const plot = document.createElement("div"); plot.className = "chart-plot";
       plot.setAttribute("role", "img"); plot.setAttribute("aria-label", `${data.title}：${data.x_label} / ${data.y_label}`);
-      const source = document.createElement("p"); source.className = "chart-source"; source.textContent = [sourceLabel(data.source),data.data_note].filter(Boolean).join("\n");
+      const source = document.createElement("p"); source.className = "chart-source";
+      const updateSource=()=>{source.textContent=[sourceLabel(data.source),data.data_note,ChartTransform.summary(data,style?.kind || data.kind,ChartTransform.settings(data,style))].filter(Boolean).join("\n");};
+      updateSource();
       const expand = document.createElement("button"); expand.className = "text-button"; expand.textContent = "放大圖表";
       expand.onclick = () => { const large = card.classList.toggle("chart-expanded"); expand.textContent = large ? "縮小圖表" : "放大圖表"; };
       const toolbar=document.createElement("div");toolbar.className="chart-toolbar";toolbar.append(expand);
@@ -129,7 +136,7 @@ window.ChartUI = (() => {
         const target={conversation:context.conversation,message_index:context.message_index,request_id:context.request_id,chart_index};
         const edit=document.createElement("button"),reset=document.createElement("button"),save=document.createElement("button");
         edit.textContent="編輯圖表";reset.textContent="恢復原樣";save.textContent="儲存此圖片";
-        const apply=value=>{style=value;charts.get(plot)?.setOption(option(data,false,style),{notMerge:true});command({action:"chart_customize",target,style});};
+        const apply=value=>{style=value;charts.get(plot)?.setOption(option(data,false,style),{notMerge:true});updateSource();command({action:"chart_customize",target,style});};
         edit.onclick=()=>ChartEditor.open(data,style,apply);plot.ondblclick=edit.onclick;reset.onclick=()=>apply(null);
         save.onclick=()=>{
           if(pendingSave){toast("圖片正在儲存，請稍候。");return;}
@@ -140,7 +147,7 @@ window.ChartUI = (() => {
         };
         toolbar.append(edit,reset,save);
       }
-      const details = document.createElement("details"), summary = document.createElement("summary"); summary.textContent = "查看資料表";
+      const details = document.createElement("details"), summary = document.createElement("summary"); summary.textContent = "查看原始資料表";
       const table = document.createElement("table");
       const addRow = (values, header) => { const row = table.insertRow(); for (const value of values) { const cell = document.createElement(header ? "th" : "td"); cell.textContent = value == null ? "—" : String(value); row.append(cell); } };
       addRow([data.x_label, ...data.series.map(s => s.name)], true);

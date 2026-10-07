@@ -124,7 +124,8 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         let log = (1..=100)
             .map(|i| {
                 format!(
-                    "10:03:00.000 sample x={i}; pressure={}; corrected={};\n",
+                    "10:03:00.000 sample x={}; pressure={}; corrected={};\n",
+                    i + 7000,
                     i * 2,
                     i * 3
                 )
@@ -386,6 +387,19 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                                 previous.to_string().contains("原始文字"),
                                 "整理後原文仍可按需查回"
                             );
+                            call(
+                                &body,
+                                "transform_chart",
+                                json!({"chart_index":1,"transform":{
+                                "x":{"mode":"index","offset":0,"start":1,"step":1},
+                                "y":{"mode":"offset","offset":-1,"start":1,"step":1},"drop_empty":true}}),
+                            )
+                        }
+                        10 => {
+                            assert_eq!(previous["ok"], true, "{previous}");
+                            assert_eq!(previous["result"]["first_x"], 1.0);
+                            assert_eq!(previous["result"]["last_x"], 100.0);
+                            assert_eq!(previous["result"]["source_preserved"], true);
                             call(
                                 &body,
                                 "finish",
@@ -773,6 +787,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         },
     };
     let mut activity = vec![];
+    let mut transformed_seen = false;
     let mut result = if case == 21 {
         runner::run_with_charts(
             make_run(false),
@@ -782,6 +797,13 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     assert_eq!(charts[0].series[0].values[49], Some(100.0));
                     assert_eq!(charts[1].series[0].values[49], Some(150.0));
                     assert_eq!(charts[1].x.len(), 100);
+                    assert_eq!(charts[1].x[0], 7001.0);
+                    if let Some(transform) = &charts[1].transform {
+                        let view = transform.view(&charts[1], "scatter").unwrap();
+                        assert_eq!(view.x[0], 1.0);
+                        assert_eq!(view.series[0].values[49], Some(149.0));
+                        transformed_seen = true;
+                    }
                 }
             },
         )
@@ -917,7 +939,8 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         }
         21 => {
             assert!(result?.contains("CSV 與更正整理完成"));
-            assert_eq!(posts, 9);
+            assert_eq!(posts, 10);
+            assert!(transformed_seen, "轉換後的圖表必須透過 UI 事件送出");
             assert!(activity.iter().any(|s| s.contains("CSV 已保存")));
             assert!(activity.iter().any(|s| s.contains("已保存交接筆記")));
         }

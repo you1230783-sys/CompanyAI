@@ -650,6 +650,9 @@ struct ChartExport {
     name: String,
     path: String,
     sha256: String,
+    /// 圖表轉換後，同名 PNG 不可誤用舊座標成果；舊紀錄仍可驗證，但不重用。
+    #[serde(default)]
+    chart_revision: String,
 }
 /// 只保存資料，不保存授權、Token、COM 物件或執行中的程序。
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -889,7 +892,7 @@ impl Broker {
                     return false;
                 }
                 match name {
-                    "export_chart_png" => !self.charts.is_empty(),
+                    "export_chart_png" | "transform_chart" => !self.charts.is_empty(),
                     "edit_text" => self.copies.values().any(|c| c.office.is_none()),
                     "edit_office" | "office_action" | "office_batch" => {
                         self.copies.values().any(|c| c.office.is_some())
@@ -1090,12 +1093,12 @@ impl Broker {
             .get(index)
             .ok_or("找不到本次任務的圖表編號，請先建立圖表。")?;
         chart.validate()?;
+        let chart_revision =
+            text::revision(&serde_json::to_string(chart).map_err(|e| e.to_string())?);
         // 同圖、同檔名的再次要求沿用已驗證成果；任務暫停後亦保留此記錄。
-        if let Some(export) = self
-            .chart_exports
-            .iter()
-            .find(|e| e.chart_index == index && e.name == name)
-        {
+        if let Some(export) = self.chart_exports.iter().find(|e| {
+            e.chart_index == index && e.name == name && e.chart_revision == chart_revision
+        }) {
             self.verify_chart_export(export)?;
             return Ok(
                 json!({"chart_index":index,"path":export.path,"verified":true,"reused":true}),
@@ -1144,6 +1147,7 @@ impl Broker {
         }
         use sha2::{Digest, Sha256};
         self.chart_exports.push(ChartExport {
+            chart_revision,
             chart_index: index,
             name: name.into(),
             path: path.clone(),
@@ -1871,14 +1875,49 @@ impl Broker {
                 }
                 if !chart.data_note.is_empty()
                     || !chart.data_issues.is_empty()
+                    || chart.transform.is_some()
                     || chart.series.iter().any(|s| !s.skip_indices.is_empty())
                 {
                     return Err("圖表的使用者處理紀錄只能由桌面預檢建立。".into());
                 }
-                self.add_chart(chart.clone())
+                self.add_chart((**chart).clone())
             }
             Tool::ExportChartPng { chart_index, name } => {
                 self.export_chart_png(*chart_index, name, cancel)
+            }
+            Tool::TransformChart {
+                chart_index,
+                transform,
+            } => {
+                // 在本機從既有圖表衍生座標，不讓模型重抄資料或繞過 CSV 來源核對。
+                let original = self
+                    .charts
+                    .get(*chart_index)
+                    .ok_or("找不到本次任務的圖表編號，請先建立圖表。")?;
+                let mut candidate = original.clone();
+                candidate.transform = Some(Box::new(transform.clone()));
+                candidate.validate()?;
+                let serialized_size = |value: &super::charts::Chart| {
+                    serde_json::to_vec(value)
+                        .map(|bytes| bytes.len())
+                        .map_err(|e| e.to_string())
+                };
+                let total = serde_json::to_vec(&self.charts)
+                    .map_err(|e| e.to_string())?
+                    .len()
+                    - serialized_size(original)?
+                    + serialized_size(&candidate)?;
+                if total > 16 * 1024 * 1024 {
+                    return Err("本次任務的圖表資料合計超過16 MiB，未套用轉換。".into());
+                }
+                let view = transform.view(&candidate, &candidate.kind)?;
+                let result = json!({"chart_index":chart_index,"transform":transform,
+                    "original_rows":candidate.x.len(),"retained_rows":view.source_indices.len(),
+                    "first_x":view.x.first(),"last_x":view.x.last(),
+                    "series_preview":view.series.iter().map(|s| json!({"name":s.name,"first":s.values.first(),"last":s.values.last()})).collect::<Vec<_>>(),
+                    "source_preserved":true,"previous_png_files_unchanged":true});
+                self.charts[*chart_index] = candidate;
+                Ok(result)
             }
             Tool::ChartFromExcel {
                 path,
@@ -2032,12 +2071,29 @@ impl Broker {
                         || super::logs::supported(&entry.path())
                         || super::vision::input::supported(&entry.path())
                     {
-                        entries.push(json!({"name":entry.file_name().to_string_lossy(),"directory":metadata.is_dir()}));
+                        let mut info = json!({"name":entry.file_name().to_string_lossy(),"directory":metadata.is_dir()});
+                        // 圖片與文件一起列出，但只公告類型及讀取工具；列目錄不會送圖。
+                        if !metadata.is_dir() && super::vision::input::supported(&entry.path()) {
+                            info["kind"] = json!("image");
+                            info["bytes"] = json!(metadata.len());
+                            info["read_tool"] = json!("analyze_image");
+                            info["skill"] = json!("image-read");
+                        }
+                        entries.push(info);
                     }
                 }
                 Ok(json!({"entries":entries,"truncated":truncated}))
             }
             Tool::ReadFile { path, offset } => {
+                if super::vision::input::supported(Path::new(path)) {
+                    // 與 LOG 的專用閱讀工具相同，回傳明確導引，不把二進位當文字。
+                    // 仍驗證專案邊界、檔案與格式；此處不發出任何圖片辨識請求。
+                    let image = super::vision::input::load(&self.project, path)?;
+                    return Ok(
+                        json!({"kind":"image","image":image.metadata(),"content_read":false,
+                        "guidance":"這是專案圖片，尚未辨識內容。依任務需要決定是否載入 image-read，再呼叫 analyze_image(path,focus)；不需要圖片資訊即可略過。快速模型不支援圖片。"}),
+                    );
+                }
                 if super::logs::supported(Path::new(path)) {
                     if *offset != 0 {
                         return Err(
@@ -2610,6 +2666,7 @@ mod tests {
         };
         let mut broker = Broker::new(project.clone(), "run".into()).unwrap();
         let chart = super::super::charts::Chart {
+            transform: None,
             kind: "line".into(),
             title: "圖".into(),
             x_label: "x".into(),
@@ -2636,10 +2693,20 @@ mod tests {
         assert_eq!(again["reused"], true);
         let second = broker.export_chart_png(1, "趨勢.png", &cancel).unwrap();
         assert!(second["path"].as_str().unwrap().ends_with("趨勢_2.png"));
+        let mut transform = super::super::charts::transform::Transform::default();
+        transform.x.mode = super::super::charts::transform::Mode::Index;
+        transform.x.start = 10.0;
+        broker.charts[0].transform = Some(Box::new(transform));
+        let changed = broker.export_chart_png(0, "趨勢.png", &cancel).unwrap();
+        assert_ne!(changed["path"], first["path"], "轉換後不得重用舊 PNG");
+        assert_eq!(
+            broker.export_chart_png(0, "趨勢.png", &cancel).unwrap()["reused"],
+            true
+        );
         let mut restored = Broker::new(project, "run".into()).unwrap();
         restored.restore(broker.saved().unwrap(), &cancel).unwrap();
         let paths = restored.finish(&[]).unwrap();
-        assert_eq!(paths.len(), 2);
+        assert_eq!(paths.len(), 3);
         fs::write(root.join(&paths[0]), b"changed").unwrap();
         assert!(restored.finish(&[]).is_err());
         for path in &paths {

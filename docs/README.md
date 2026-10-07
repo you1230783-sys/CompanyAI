@@ -1,8 +1,6 @@
 # 技術文件索引
 
-[0.8.39 Outlook 專案入口與圖片試驗驗證](VALIDATION_0_8_39.md)
-
-目前 EXE 發行驗證：[0.8.38 週報精靈、網路專案與回覆恢復](VALIDATION_0_8_38.md)。歷史驗證文件保留其當時版本的限制。
+目前 EXE／NSIS 發行驗證：[0.8.43 圖表座標、Python LOG 與安裝沿用](VALIDATION_0_8_43.md)。歷史驗證文件保留其當時版本的限制。
 
 [專案首頁](../README.md) · [使用指南](USER_GUIDE.md) · [版本更新](../CHANGELOG.md) · [開發說明](DEVELOPMENT.md)
 
@@ -10,6 +8,16 @@
 
 ## 目前版本
 
+- [0.8.43 圖表座標、Python LOG 與安裝沿用](VALIDATION_0_8_43.md)：X／Y平移及重新編號、五點示意、Big5 LOG、欄位錯誤診斷與專案圖片一般支援。
+- [Python 執行環境](PYTHON_RUNTIME.md)：固定套件、資料橋接、編碼、NSIS沿用與離線重建。
+
+### 近期版本紀錄
+
+- [0.8.42 離線 Python 與完整 NSIS](VALIDATION_0_8_42.md)。
+- [0.8.41 圖片關聯與閱讀位置](VALIDATION_0_8_41.md)。
+- [0.8.40 Excel 規劃與圖表編輯](VALIDATION_0_8_40.md)。
+- [0.8.39 Outlook 專案入口與圖片試驗](VALIDATION_0_8_39.md)。
+- [0.8.38 週報精靈、網路專案與回覆恢復](VALIDATION_0_8_38.md)。
 - [0.8.36 本地 CSV 與主動上下文整理](VALIDATION_0_8_36.md)：批次擷取、首尾預覽、本地畫圖、補充更正與加密交接。
 - [0.8.35 LOG 定位與主輸入框](VALIDATION_0_8_35.md)：近似時間、三種傳送模式與進度筆記。
 - [0.8.34 大型 LOG 與長任務](VALIDATION_0_8_34.md)：Outlook 同意、24 小時與 checkpoint。

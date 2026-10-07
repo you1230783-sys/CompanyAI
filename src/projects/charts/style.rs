@@ -1,4 +1,4 @@
-//! 僅供使用者調整呈現的設定；不混入模型 Chart 工具，也不更改原始點陣。
+//! 使用者呈現設定；有限座標轉換與 AI 共用規則，不更改原始點陣。
 use super::Chart;
 use crate::AppResult;
 use serde::{Deserialize, Serialize};
@@ -31,6 +31,8 @@ pub struct Style {
     pub y_max: Option<f64>,
     pub series: Vec<SeriesStyle>,
     pub lines: Vec<ReferenceLine>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<super::transform::Transform>,
 }
 fn color(value: &str) -> bool {
     value.len() == 7 && value.starts_with('#') && value[1..].bytes().all(|b| b.is_ascii_hexdigit())
@@ -43,9 +45,13 @@ impl Style {
         {
             return Err("圖表種類或圖例位置不支援。".into());
         }
-        if self.kind == "scatter" && chart.x.iter().any(|v| v.as_f64().is_none()) {
-            return Err("散佈圖需要原始數值X；不能把時間標籤當作數字。".into());
-        }
+        let transform = self
+            .transform
+            .as_ref()
+            .or(chart.transform.as_deref())
+            .cloned()
+            .unwrap_or_default();
+        let view = transform.view(chart, &self.kind)?;
         if [&self.title, &self.x_label, &self.y_label]
             .iter()
             .any(|s| s.chars().count() > 200)
@@ -55,12 +61,10 @@ impl Style {
         {
             return Err("標題最多200字，系列需相符，參考線最多10條。".into());
         }
-        let category = |axis: &str| {
-            self.kind != "scatter" && ((self.kind == "horizontal_bar") == (axis == "y"))
-        };
+        let category = |axis: &str| transform.category(&self.kind, axis);
         let position = |axis: &str, v: f64| -> bool {
             v.is_finite()
-                && (!category(axis) || (v.fract() == 0.0 && v >= 0.0 && v < chart.x.len() as f64))
+                && (!category(axis) || (v.fract() == 0.0 && v >= 0.0 && v < view.x.len() as f64))
         };
         for (axis, min, max) in [("x", self.x_min, self.x_max), ("y", self.y_min, self.y_max)] {
             if min.is_some_and(|v| !position(axis, v))

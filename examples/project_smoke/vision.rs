@@ -24,7 +24,7 @@ use std::{
 };
 
 pub fn verify(root: &Path) -> AppResult<()> {
-    for case in 0..9 {
+    for case in 0..12 {
         verify_case(root, case)?;
     }
     Ok(())
@@ -109,7 +109,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                 let message = if child {
                     children += 1;
                     assert!(
-                        case < 3 || matches!(case, 5 | 7 | 8),
+                        case < 3 || matches!(case, 5 | 7 | 8 | 9 | 10),
                         "無效來源與快速模型不得送圖"
                     );
                     if case == 7 {
@@ -174,6 +174,75 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                             "finish",
                             json!({"message":"圖片測試完成","artifacts":[]}),
                         )
+                    } else if case == 9 {
+                        // 正常任務可逐張／逐焦點辨識，額度仍有界；第21次不得送出。
+                        match parents {
+                            1 => {
+                                super::native::call(&body, "load_skill", json!({"id":"image-read"}))
+                            }
+                            2..=22 => super::native::call(
+                                &body,
+                                "analyze_image",
+                                json!({"path":name,"focus":format!("核對第{}個細節", parents-1)}),
+                            ),
+                            _ => {
+                                let result = super::native::last_result(&body);
+                                assert_eq!(result["ok"], false);
+                                assert!(result["error"].as_str().unwrap().contains("最多 20 次"));
+                                super::native::call(
+                                    &body,
+                                    "finish",
+                                    json!({"message":"圖片測試完成","artifacts":[]}),
+                                )
+                            }
+                        }
+                    } else if matches!(case, 10 | 11) {
+                        // 從普通檔案清單發現圖片；不必使用 UI 圖片入口。
+                        match parents {
+                            1 => super::native::call(&body, "list_files", json!({"path":""})),
+                            2 => {
+                                let result = super::native::last_result(&body);
+                                let image = result["result"]["entries"]
+                                    .as_array()
+                                    .unwrap()
+                                    .iter()
+                                    .find(|e| e["name"] == name)
+                                    .unwrap();
+                                assert_eq!(image["kind"], "image");
+                                assert_eq!(image["read_tool"], "analyze_image");
+                                assert_eq!(children, 0, "列清單不可自動送圖");
+                                if case == 11 {
+                                    super::native::call(
+                                        &body,
+                                        "finish",
+                                        json!({"message":"圖片測試完成：僅列檔案","artifacts":[]}),
+                                    )
+                                } else {
+                                    super::native::call(&body, "read_file", json!({"path":name}))
+                                }
+                            }
+                            3 => {
+                                let result = super::native::last_result(&body);
+                                assert_eq!(result["ok"], true);
+                                assert_eq!(result["result"]["kind"], "image");
+                                assert_eq!(result["result"]["content_read"], false);
+                                assert_eq!(children, 0, "read_file 導引不可冒充已辨識或自動送圖");
+                                super::native::call(&body, "load_skill", json!({"id":"image-read"}))
+                            }
+                            4 => super::native::call(
+                                &body,
+                                "analyze_image",
+                                json!({"path":name,"focus":"描述素材重點"}),
+                            ),
+                            _ => {
+                                assert_eq!(super::native::last_result(&body)["ok"], true);
+                                super::native::call(
+                                    &body,
+                                    "finish",
+                                    json!({"message":"圖片測試完成","artifacts":[]}),
+                                )
+                            }
+                        }
                     } else {
                         match parents {
                             1 => {
@@ -210,11 +279,8 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                             _ => {
                                 if case == 8 {
                                     let result = super::native::last_result(&body);
-                                    assert_eq!(result["ok"], false, "第二張圖片必須被原生額度阻擋");
-                                    assert!(result["error"]
-                                        .as_str()
-                                        .unwrap()
-                                        .contains("限辨識 1 張"));
+                                    assert_eq!(result["ok"], true, "一般任務可按需閱讀第二張圖片");
+                                    assert_eq!(result["result"]["image"]["path"], "second.png");
                                 }
                                 super::native::call(
                                     &body,
@@ -261,12 +327,16 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         resume,
         project: Project {
             id: id.clone(),
-            name: "圖片試驗".into(),
+            name: "圖片驗證".into(),
             root: workspace.clone(),
             imports: BTreeMap::new(),
         },
         conversation: format!("chat_{id}"),
-        messages: vec![Message::user("描述專案圖片")],
+        messages: vec![Message::user(if matches!(case, 10 | 11) {
+            "整理專案素材"
+        } else {
+            "描述專案圖片"
+        })],
         config: config.clone(),
         session: session.clone(),
         root: root.join("vision-app"),
@@ -289,12 +359,23 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
     assert!(result?.contains("圖片測試完成"));
     assert_eq!(
         children,
-        usize::from(case < 3 || matches!(case, 5 | 7 | 8)),
+        match case {
+            8 => 2,
+            9 => 20,
+            10 => 1,
+            _ => usize::from(case < 3 || matches!(case, 5 | 7)),
+        },
         "快取與續接不得重送圖片"
     );
     assert_eq!(
         parents,
-        if case < 3 || matches!(case, 5 | 8) {
+        if case == 9 {
+            23
+        } else if case == 10 {
+            5
+        } else if case == 11 {
+            2
+        } else if case < 3 || matches!(case, 5 | 8) {
             4
         } else if case == 6 {
             1
