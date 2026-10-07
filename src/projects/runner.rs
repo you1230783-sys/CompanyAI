@@ -109,7 +109,21 @@ pub(super) fn diagnostic_excerpt(text: &str, limit: usize) -> String {
 }
 
 pub fn run(run: Run, progress: impl FnMut(String)) -> AppResult<String> {
-    run_for(run, progress, SEGMENT_BUDGET, |_| {}, false, None, None)
+    run_for(
+        run,
+        progress,
+        SEGMENT_BUDGET,
+        (|_| {}, None),
+        false,
+        None,
+        None,
+    )
+}
+
+/// 本機整合測試專用：使用同一恢復流程但縮短等待，release 不提供此入口。
+#[cfg(debug_assertions)]
+pub fn with_retry_test_clock<T>(work: impl FnOnce() -> T) -> T {
+    super::model::retry::with_fast_clock(work)
 }
 
 /// 圖表為結構化 UI 事件，不混入模型文字或一般進度字串。
@@ -118,7 +132,15 @@ pub fn run_with_charts(
     progress: impl FnMut(String),
     charts: impl FnMut(Vec<super::charts::Chart>),
 ) -> AppResult<String> {
-    run_for(run, progress, SEGMENT_BUDGET, charts, false, None, None)
+    run_for(
+        run,
+        progress,
+        SEGMENT_BUDGET,
+        (charts, None),
+        false,
+        None,
+        None,
+    )
 }
 
 /// 正式桌面提供固定 PNG 繪製服務；非 UI 測試入口不虛構成功匯出。
@@ -126,6 +148,7 @@ pub fn run_with_chart_export(
     run: Run,
     progress: impl FnMut(String),
     charts: impl FnMut(Vec<super::charts::Chart>),
+    analysis: impl FnMut(super::analysis::State) + 'static,
     renderer: super::charts::png::Renderer,
     chooser: super::charts::quality::Chooser,
 ) -> AppResult<String> {
@@ -133,7 +156,7 @@ pub fn run_with_chart_export(
         run,
         progress,
         SEGMENT_BUDGET,
-        charts,
+        (charts, Some(Box::new(analysis))),
         false,
         Some(renderer),
         Some(chooser),
@@ -147,13 +170,21 @@ pub fn run_with_test_budget(
     progress: impl FnMut(String),
     budget: Duration,
 ) -> AppResult<String> {
-    run_for(run, progress, budget, |_| {}, false, None, None)
+    run_for(run, progress, budget, (|_| {}, None), false, None, None)
 }
 
 /// 舊文字協定的回歸測試入口；正式 EXE 不編入，不能用它降級新任務。
 #[cfg(debug_assertions)]
 pub fn run_legacy_test(run: Run, progress: impl FnMut(String)) -> AppResult<String> {
-    run_for(run, progress, SEGMENT_BUDGET, |_| {}, true, None, None)
+    run_for(
+        run,
+        progress,
+        SEGMENT_BUDGET,
+        (|_| {}, None),
+        true,
+        None,
+        None,
+    )
 }
 #[cfg(debug_assertions)]
 pub fn run_legacy_with_test_budget(
@@ -161,7 +192,7 @@ pub fn run_legacy_with_test_budget(
     progress: impl FnMut(String),
     budget: Duration,
 ) -> AppResult<String> {
-    run_for(run, progress, budget, |_| {}, true, None, None)
+    run_for(run, progress, budget, (|_| {}, None), true, None, None)
 }
 #[cfg(debug_assertions)]
 pub fn run_legacy_with_charts(
@@ -169,18 +200,33 @@ pub fn run_legacy_with_charts(
     progress: impl FnMut(String),
     charts: impl FnMut(Vec<super::charts::Chart>),
 ) -> AppResult<String> {
-    run_for(run, progress, SEGMENT_BUDGET, charts, true, None, None)
+    run_for(
+        run,
+        progress,
+        SEGMENT_BUDGET,
+        (charts, None),
+        true,
+        None,
+        None,
+    )
 }
+
+type AnalysisCallback = Box<dyn FnMut(super::analysis::State)>;
 
 fn run_for(
     mut run: Run,
     mut progress: impl FnMut(String),
     budget: Duration,
-    mut charts: impl FnMut(Vec<super::charts::Chart>),
+    hooks: (
+        impl FnMut(Vec<super::charts::Chart>),
+        Option<AnalysisCallback>,
+    ),
     legacy_test: bool,
     png_renderer: Option<super::charts::png::Renderer>,
     chart_chooser: Option<super::charts::quality::Chooser>,
 ) -> AppResult<String> {
+    let (mut charts, mut analysis) = hooks;
+    run.project.root = super::setup::resolve_project_path(&run.project.root)?;
     let mut activity = Vec::new();
     let journal = run
         .root
@@ -255,6 +301,9 @@ fn run_for(
             None
         };
         charts(broker.charts().to_vec());
+        if let Some(callback) = analysis.as_mut() {
+            callback(broker.analysis.clone());
+        }
         let remote = jobs::conversation(&run.config, &run.session, &run.conversation)?;
         let native = resumed
             .as_ref()
@@ -343,6 +392,10 @@ fn run_for(
                     if !entries.is_empty() {
                         broker.archive_results()?;
                         progress_state.add_instructions(entries);
+                        broker.analysis.review_required = true;
+                        if let Some(callback) = analysis.as_mut() {
+                            callback(broker.analysis.clone());
+                        }
                         progress_state.compact_for_instruction();
                         report(
                             &mut activity,
@@ -384,7 +437,12 @@ fn run_for(
                 );
             }
             if progress_state.stalled() {
-                return pause("連續八次未增加有效進度", &broker, &progress_state, None);
+                return pause(
+                    &progress_state.stall_reason(),
+                    &broker,
+                    &progress_state,
+                    None,
+                );
             }
             let mut messages = match progress_state.messages(broker.progress_snapshot()) {
                 Ok(messages) => messages,
@@ -404,6 +462,17 @@ fn run_for(
                     return pause(&error, &broker, &progress_state, pending_model.as_ref());
                 }
             };
+            if !broker.analysis.coverage.is_empty() || broker.analysis.report.is_some() {
+                // system 必須仍在第零則；概況放在原始要求前，保留最後的修復提示，
+                // 也不插入 assistant 工具呼叫與對應 tool 結果之間。
+                messages.insert(
+                    1,
+                    super::agent::Message::user(&format!(
+                        "本機分析概況（不取代原要求及原文）：{}",
+                        broker.analysis.summary()
+                    )),
+                );
+            }
             let datasets = broker.dataset_index();
             let python_artifacts = broker.python_artifact_index();
             if python_artifacts.as_array().is_some_and(|v| !v.is_empty()) {
@@ -425,7 +494,15 @@ fn run_for(
             if native {
                 messages[0].content = super::agent::system_prompt_for(&run.config.model);
             }
-            let instructions = broker.skill_context(&run.config.model)?;
+            let mut instructions = broker.skill_context(&run.config.model)?;
+            if !native {
+                // 舊協定把完整工具 Schema 放在第一則，已接近單則 64 KB 上限。
+                // 基本圖片方法沿用下方獨立 system 說明，不增加工具載入回合。
+                instructions.push_str(&format!(
+                    "\n{}",
+                    super::skills::image_context_for(&run.config.model)
+                ));
+            }
             if !instructions.is_empty() {
                 if native {
                     // 契約僅一則最前面的 system；按需技能併入同一則。
@@ -482,6 +559,7 @@ fn run_for(
                 title_generation: false,
                 tool_events: vec![],
                 partial: String::new(),
+                project_retry: Default::default(),
             });
             record["state"] = json!("waiting_model");
             record["activity"] = json!(activity);
@@ -515,17 +593,44 @@ fn run_for(
             );
             batch_replies += 1;
             turn += 1;
-            let received =
-                super::model::receive(&run, &mut task, deadline, lookup_only, agent_caps.as_ref())
-                    .and_then(|reply| match reply {
-                        super::model::Reply::Rejected(error) => Err(error),
-                        reply => Ok(reply),
-                    });
+            let received = super::model::receive(
+                &run,
+                &mut task,
+                deadline,
+                lookup_only,
+                agent_caps.as_ref(),
+                (
+                    |task: &Task| {
+                        save_pause(
+                            &run,
+                            &caps.principal_id,
+                            &request_text,
+                            &broker,
+                            &progress_state,
+                            Some(task),
+                            true,
+                        )
+                    },
+                    |message| report(&mut activity, &mut progress, message),
+                ),
+            )
+            .and_then(|reply| match reply {
+                super::model::Reply::Rejected(error) => Err(error),
+                reply => Ok(reply),
+            });
+            // 恢復可能只替換這輪失敗的推論 ID；後續工具與 parent 使用真正完成者。
+            let id = task.request_id.clone();
+            if let Some(agent) = progress_state.agent.as_mut() {
+                agent.advance_past(&task.request);
+            }
             record["last_remote_status"] = json!(task.remote);
             // 每輪保留可讀的回覆摘錄與伺服器識別，不依賴網站是否建立聊天紀錄。
             // 不另外複製整份 messages／tools；長回覆明確標示截斷。
             if let Some(entry) = record["requests"].as_array_mut().and_then(|a| a.last_mut()) {
                 entry["turn"] = json!(turn);
+                entry["id"] = json!(id);
+                entry["request"] = task.request.clone();
+                entry["recovery"] = json!(task.project_retry);
                 if let Some(status) = &task.remote {
                     entry["task_id"] = json!(status.task_id);
                     entry["state"] = json!(status.state);
@@ -633,6 +738,10 @@ fn run_for(
                 if !entries.is_empty() {
                     broker.archive_results()?;
                     progress_state.add_instructions(entries);
+                    broker.analysis.review_required = true;
+                    if let Some(callback) = analysis.as_mut() {
+                        callback(broker.analysis.clone());
+                    }
                     progress_state.compact_for_instruction();
                     let skipped = json!({"ok":false,"executed":false,"reason":"使用者在本輪期間補充指示；此候選操作未執行，請依新要求重新決定。"});
                     if let Some((message, call_id)) = native_call {
@@ -761,53 +870,48 @@ fn run_for(
                     }
                     record["pending_operation"]["state"] = json!("started");
                     checkpoint(&journal, &record)?;
-                    let result = if let Some(result) =
-                        broker.cached_result(&operation_id, &request)?
-                    {
-                        result
-                    } else if matches!(&request, super::Tool::LoadSkill { id } if id == "image-read")
-                        && !super::vision::input::model_supported(&run.config.model)
-                    {
-                        json!({"ok":false,"error":super::vision::input::UNSUPPORTED_MODEL})
-                    } else if let super::Tool::AnalyzeImage { path, focus } = &request {
-                        match super::vision::analyze(
-                            &run,
-                            &mut broker,
-                            &operation_id,
-                            progress_state.agent.as_mut(),
-                            &task,
-                            path,
-                            focus,
-                            deadline,
-                            |text| report(&mut activity, &mut progress, text),
-                        )? {
-                            super::delegation::Outcome::Complete(result) => result,
-                            super::delegation::Outcome::Pending(reason) => {
-                                return pause(&reason, &broker, &progress_state, Some(&task))
+                    let result =
+                        if let Some(result) = broker.cached_result(&operation_id, &request)? {
+                            result
+                        } else if let super::Tool::AnalyzeImage { path, focus } = &request {
+                            match super::vision::analyze(
+                                &run,
+                                &mut broker,
+                                &operation_id,
+                                progress_state.agent.as_mut(),
+                                &task,
+                                path,
+                                focus,
+                                deadline,
+                                |text| report(&mut activity, &mut progress, text),
+                            )? {
+                                super::delegation::Outcome::Complete(result) => result,
+                                super::delegation::Outcome::Pending(reason) => {
+                                    return pause(&reason, &broker, &progress_state, Some(&task))
+                                }
                             }
-                        }
-                    } else if let super::Tool::SummarizeDocument { path, focus } = &request {
-                        match super::delegation::summarize(
-                            &run,
-                            &mut broker,
-                            &mut worker,
-                            &caps.principal_id,
-                            &operation_id,
-                            progress_state.agent.as_mut(),
-                            &task,
-                            path,
-                            focus,
-                            deadline,
-                            |text| report(&mut activity, &mut progress, text),
-                        )? {
-                            super::delegation::Outcome::Complete(result) => result,
-                            super::delegation::Outcome::Pending(reason) => {
-                                return pause(&reason, &broker, &progress_state, Some(&task))
+                        } else if let super::Tool::SummarizeDocument { path, focus } = &request {
+                            match super::delegation::summarize(
+                                &run,
+                                &mut broker,
+                                &mut worker,
+                                &caps.principal_id,
+                                &operation_id,
+                                progress_state.agent.as_mut(),
+                                &task,
+                                path,
+                                focus,
+                                deadline,
+                                |text| report(&mut activity, &mut progress, text),
+                            )? {
+                                super::delegation::Outcome::Complete(result) => result,
+                                super::delegation::Outcome::Pending(reason) => {
+                                    return pause(&reason, &broker, &progress_state, Some(&task))
+                                }
                             }
-                        }
-                    } else {
-                        broker.execute(&operation_id, &request, &mut worker, &run.cancel)?
-                    };
+                        } else {
+                            broker.execute(&operation_id, &request, &mut worker, &run.cancel)?
+                        };
                     if result["result"]["waiting_for_user"] == true {
                         // 預檢及等待未修改文件，不記為成功／失敗；續接重讀同一已完成的模型請求。
                         record["pending_operation"] = Value::Null;
@@ -822,8 +926,12 @@ fn run_for(
                         );
                     }
                     broker.remember_result(&operation_id, &request, &result)?;
+                    record["analysis"] = json!(broker.analysis);
                     record["charts"] = json!(broker.charts());
                     charts(broker.charts().to_vec());
+                    if let Some(callback) = analysis.as_mut() {
+                        callback(broker.analysis.clone());
+                    }
                     report(
                         &mut activity,
                         &mut progress,
@@ -846,6 +954,9 @@ fn run_for(
                         .ok_or("任務記錄不正確。")?
                         .push(json!({"id":operation_id,"request_id":id,"turn":turn,"request":request,"result":result}));
                     progress_state.observe(&operation_id, &request, &result);
+                    if let Some(warning) = progress_state.progress_warning() {
+                        report(&mut activity, &mut progress, warning);
+                    }
                     if let Some((message, call_id)) = native_call {
                         progress_state.push_native(message, &call_id, &result);
                     } else {
@@ -1011,6 +1122,7 @@ fn run_for(
     } else {
         "stopped"
     });
+    record["analysis"] = json!(broker.analysis);
     record["charts"] = json!(broker.charts());
     record["outputs"] = json!(broker.published());
     record["result"] = json!(result);
@@ -1200,6 +1312,18 @@ fn trim_journal(record: &mut Value) {
             }
         }
     }
+}
+
+/// 只還原原生保存的分析快照；舊紀錄沒有欄位時維持空白。
+pub fn recover_analysis(root: &Path, id: &str) -> Option<super::analysis::State> {
+    jobs::validate_id(id).ok()?;
+    let path = root.join("project-runs").join(format!("{id}.dpapi"));
+    let bytes = std::fs::read(path).ok()?;
+    if bytes.len() > 64_000_000 {
+        return None;
+    }
+    let record: Value = serde_json::from_slice(&storage::protect(&bytes, false).ok()?).ok()?;
+    serde_json::from_value(record["analysis"].clone()).ok()
 }
 
 #[cfg(test)]

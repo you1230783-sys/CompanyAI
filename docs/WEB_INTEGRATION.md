@@ -1,3 +1,11 @@
+> **0.8.45 圖片閱讀：** 移除專案圖片快捷入口與 image-read 技能公告，analyze_image 納入基本工具，支援圖片的模型第一輪可直接使用；工具總數仍50項。舊圖片子請求格式、大小／額度、快取、身分與未知結果保護不變。
+
+> **0.8.45 恢復政策：** 專案主推論及子請求依10／30／60／180／300秒恢復。已核對身分的 failed、無result，且 error_code 為 AI_BACKEND_ERROR／UPSTREAM_UNAVAILABLE／UPSTREAM_TIMEOUT 時，桌面可另建這輪推論，即使舊網站標 retryable=false；明確的內層永久錯誤仍拒絕。保留messages／tools／parent，僅更換client_request_id並遞增turn_index。未知提交只GET原ID，不重播本機工具；五次耗盡保留checkpoint。詳見 [契約補充](DESKTOP_AGENT_V1_CONTRACT.md#0845-桌面有限恢復補充)。不新增網站API，一般聊天政策不變。
+
+> **實際進度：** 桌面續接資料增加 no_progress_reason 與 outlook_paging（已交付標題數、總數、下一游標及掃描完成狀態）；四次提醒、八次暫停。以新郵件／版本／內文區間辨識進展，不以操作ID或AI筆記判定。上游恢復的Task metadata僅存本機DPAPI，不加入HTTP頂層欄位。
+
+> **0.8.45：分析概況與方法記憶。** 新增 `record_analysis(report)`，工具目錄共50項，依已載入技能公告；`run_python.inputs` 可選 `log_range: {start_line,line_count}`。參數仍以當次工具 Schema 為準，網站不執行 Python 或證據核對。工具結果增加桌面 `operation_id`，供後續引用；它與原生 `tool_call_id` 不同，後者的訊息配對規則不變。完整分析面板隨桌面 DPAPI 歷史保存，模型只接收有界概況及既有工具結果；一般聊天不新增這份本機欄位。映射磁碟解析及錯誤通知修正皆在桌面，不新增網站 API 或資料表。
+
 > **0.8.44：圖表編輯與工具重試。** 頁籤、說明、自動範圍、空白參考線與雙座標提示均為桌面呈現，不新增網站 API 或工具。桌面 Progress 快照增加 tool_failures（python／python_limit=10／other／other_limit=5）；已辨識原生工具的非嚴格參數錯誤、執行失敗及交付檢查歸入對應預算。工具失敗不再重複增加8次無進展計數，自動整理保留計數；使用者續接重設。未知提交與嚴格 Schema／身分拒絕不變。詳見 [驗證紀錄](VALIDATION_0_8_44.md)。
 
 > **0.8.43：Python 沿用、專案圖片與圖表座標。** 安裝最佳化只在桌面 NSIS 內，不改更新端點或清單格式。專案圖片沿用 `analyze_image(path,focus)`、無工具圖片子請求與同一父對話；每次請求一張，任務內最多20次不同辨識要求。`list_files` 對圖片增加 `kind:image`、`bytes`、`read_tool`、`skill`；`read_file` 對圖片只回中繼資料與導引，`content_read:false`，不自動送圖。單張5,000,000 bytes與整份請求上限不變。新增 `transform_chart(chart_index,transform)`，工具共49項，按charts技能及已有圖表公告；X／Y皆可original／offset／index，drop_empty為全系列皆缺值才刪列。參數以本次tools Schema為準，不需新增網站白名單或專用執行。三張異常值示意及編輯器座標轉換均在桌面本機。一般聊天及 Outlook 附件流程不變，不新增網站 API／資料表。`run_python.inputs` 新增可選 encoding（auto／big5／utf8），模型仍按本次 Schema 提供參數；LOG 解碼在桌面進行。工具參數錯誤維持 executed:false，加入最多6項欄位路徑診斷，不自動補猜或執行。詳見 [本版驗證](VALIDATION_0_8_43.md)。

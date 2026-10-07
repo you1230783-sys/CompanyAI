@@ -177,9 +177,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     } else if case == 9 {
                         // 正常任務可逐張／逐焦點辨識，額度仍有界；第21次不得送出。
                         match parents {
-                            1 => {
-                                super::native::call(&body, "load_skill", json!({"id":"image-read"}))
-                            }
+                            1 => super::native::call(&body, "list_files", json!({"path":""})),
                             2..=22 => super::native::call(
                                 &body,
                                 "analyze_image",
@@ -227,13 +225,17 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                                 assert_eq!(result["result"]["kind"], "image");
                                 assert_eq!(result["result"]["content_read"], false);
                                 assert_eq!(children, 0, "read_file 導引不可冒充已辨識或自動送圖");
-                                super::native::call(&body, "load_skill", json!({"id":"image-read"}))
+                                assert!(body["tools"]
+                                    .as_array()
+                                    .unwrap()
+                                    .iter()
+                                    .any(|t| t["function"]["name"] == "analyze_image"));
+                                super::native::call(
+                                    &body,
+                                    "analyze_image",
+                                    json!({"path":name,"focus":"描述素材重點"}),
+                                )
                             }
-                            4 => super::native::call(
-                                &body,
-                                "analyze_image",
-                                json!({"path":name,"focus":"描述素材重點"}),
-                            ),
                             _ => {
                                 assert_eq!(super::native::last_result(&body)["ok"], true);
                                 super::native::call(
@@ -245,9 +247,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                         }
                     } else {
                         match parents {
-                            1 => {
-                                super::native::call(&body, "load_skill", json!({"id":"image-read"}))
-                            }
+                            1 => super::native::call(&body, "list_files", json!({"path":""})),
                             2 | 3 => {
                                 if parents == 3 {
                                     let result = super::native::last_result(&body);
@@ -372,7 +372,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         if case == 9 {
             23
         } else if case == 10 {
-            5
+            4
         } else if case == 11 {
             2
         } else if case < 3 || matches!(case, 5 | 8) {

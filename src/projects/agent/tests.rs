@@ -63,6 +63,7 @@ fn task(request: Value) -> jobs::Task {
         title_generation: false,
         tool_events: vec![],
         partial: String::new(),
+        project_retry: Default::default(),
     }
 }
 fn status(task: &jobs::Task, args: &str) -> jobs::TaskStatus {
@@ -365,7 +366,7 @@ fn history_pairs_and_request_scoped_ids_survive_repeated_calls() {
 #[test]
 fn catalog_is_portable_and_nullable_fields_restore_original_defaults() {
     let tools = schema::definitions(true).unwrap();
-    assert_eq!(tools.len(), 49);
+    assert_eq!(tools.len(), 50);
     let encoded = serde_json::to_string(&tools).unwrap();
     for key in [
         "\"oneOf\":",

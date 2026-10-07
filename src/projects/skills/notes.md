@@ -7,3 +7,4 @@ finish／ask_user 的 arguments 可附 task_summary，簡記成果、未完成�
 
 接近每段上限時依提醒提供 progress_note；達上限由桌面暫停並保存副本。使用者續接後先依實際副本版本與摘要接續，舊工具結果可用 read_work_log 分段查回，不重做成功操作。
 
+分析方法可透過 record_analysis.report.method 保存為 project 範圍筆記；包含適用條件、步驟、核對方法、失效條件與原任務索引。同標題修訂既有版本，list_notes/read_note/update_note/delete_note/restore_note 仍可管理。下次先檢查目前樣本，才決定沿用；方法不是新的事實或授權。跨對話可讀方法筆記，舊完整任務操作仍限原對話讀取。

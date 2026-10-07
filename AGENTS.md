@@ -1,5 +1,22 @@
 # 專案級開發指引
 
+## 0.8.45：本機預設專案、上游恢復與實際進度（最新指示）
+
+- 使用者已授權把本批與下方待發行分析功能一起進版、完整 NSIS 編譯驗證並部署既有 Git main，取代待發行段落的不發布安排。
+- 預設改為 Windows 目前使用者個人資料夾的 LM_AI_Projects/LM_AI專案資料夾_YYYYMMDD，同日加序號；移除桌面／下載選擇，保留自選資料夾及 UNC／映射磁碟。確認預設為本機固定磁碟，不拼帳號路徑。
+- 專案主推論及子請求新增10／30／60／180／300秒重試，耗盡保存並暫停，可手動繼續。結果未知只查原ID；僅已核對的 failed、result=null、限定暫時上游錯誤可另建一次推論。使用者回報的 AI_BACKEND_ERROR 納入有限重試，即使舊網站標 retryable=false；登入／權限／額度／格式／身分／結果未知錯誤不因此放行。這是新增的明確桌面政策，須同步更新契約；不重播本機工具。
+- 無進展依實際新資料／閱讀範圍，Outlook 保存查詢與下一頁；四次提醒，八次暫停。筆記、操作ID或游標隨機碼不能假造進度；網路重試與工具5／10次分開。
+- 使用者追加移除專案「圖片辨識」快捷按鈕、選圖視窗及獨立 image-read 技能；analyze_image 併入基本檔案閱讀，AI 按需直接使用。保留模型能力／大小／來源／快取／未知提交保護；Outlook 助理及一般聊天附件不擴大。舊 checkpoint 的 image-read 僅作空相容別名，不再公告。
+- 發行使用 Build.ps1 -EmptyCargoCache -TestOffice -NetworkTestRoot '\\localhost\Y$\Rust\Project\CompanyAI\.build' -IncludeInstaller，固定v142 x64、空Cargo快取、--frozen；不改icon.png，不重製歷史Rust離線ZIP。
+- 2026-10-07 本版完整發行驗證通過：MSVC14.29.30133／_MSC_FULL_VER=192930159 x64、263項單元測試、25個原生／9個恢復／12個圖片案例、Python／Office／SMB及正式NSIS安裝更新解除安裝。最終產物及雜湊見 docs/VALIDATION_0_8_45.md；公司F槽及真實模型效果仍待公司實測。
+
+## 已納入0.8.45：分析依據、方法記憶與映射磁碟
+
+- 使用者同意五項分析改善：原生範圍紀錄、可展開工具證據、工具結果筆數核對、project 範圍方法記憶、目標／待確認／失效結論。沿用既有工具、DPAPI 記憶與 checkpoint；不把 AI 宣稱當程式驗證。
+- 使用者回報 F 槽子資料夾出現「無法核對文件的實際位置」，UNC 可用；映射磁碟以目前工作階段 Windows API 解析 UNC，正規化 handle 路徑提供 NT 名稱備援，不放寬 .lmai／連結／路徑界線。相同錯誤每次重試均重新顯示。
+- 前置階段先修改與完整驗證，當時保留 0.8.44 dist／更新清單；後續依上方授權合併0.8.45發行。前置驗證使用 Build.ps1 -ValidateOnly -EmptyCargoCache -TestOffice -NetworkTestRoot '\\localhost\Y$\Rust\Project\CompanyAI\.build'，仍需 v142 x64、空快取與 --frozen。本機映射測試不得冒稱公司 F 槽已驗收。
+- 2026-10-07 前置完整驗證通過：MSVC 14.29.30133／_MSC_FULL_VER=192930159 x64、259 項單元測試、原生／舊版對話與續接、Python／Office／UNC／映射磁碟。新增案例實跑 Big5 分段、超過77 MiB LOG、證據與數量核對、方法去重及跨對話查回；WebView2 重複通知與分析介面也通過。紀錄在 docs/DEVELOPMENT.md 與 .build/analysis-validation-final.log；當時尚未進版，正式0.8.45另依上方流程重新驗證及打包。
+
 ## 0.8.44：圖表編輯與失敗預算（最新使用者指示）
 
 - 使用者授權完成七項修改後進版、完整 NSIS 並部署既有 Git main。所有對話框按鈕加底色；圖表編輯分基本設定／座標轉換／顏色與參考線三頁，加入就地說明。

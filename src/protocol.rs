@@ -41,6 +41,8 @@ pub struct Message {
     /// 專案工具歷程只供本機顯示，不加入模型對話內容。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub project_activity: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_analysis: Option<crate::projects::analysis::State>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub project_charts: Vec<crate::projects::charts::Chart>,
     /// 使用者的顯示設定只在本機加密歷史保存，不送模型、不改圖表原始值。
@@ -68,6 +70,7 @@ impl Message {
             response_payload: None,
             received_replies: Vec::new(),
             project_activity: Vec::new(),
+            project_analysis: None,
             project_charts: Vec::new(),
             project_chart_styles: Default::default(),
             project_paused: false,
@@ -85,6 +88,7 @@ impl Message {
             response_payload: None,
             received_replies: Vec::new(),
             project_activity: Vec::new(),
+            project_analysis: None,
             project_charts: Vec::new(),
             project_chart_styles: Default::default(),
             project_paused: false,

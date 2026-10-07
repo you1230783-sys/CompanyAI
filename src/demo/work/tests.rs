@@ -127,6 +127,7 @@ fn attachments_background_stream_recovery_cancel_and_ownership() {
             title_generation: false,
             tool_events: Vec::new(),
             partial: String::new(),
+            project_retry: Default::default(),
         }
     };
     let mut task = make_task("background");

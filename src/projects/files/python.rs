@@ -16,7 +16,7 @@ impl Broker {
         }
         let snapshot = python::snapshot(&self.project, inputs, cancel)?;
         let sources: Vec<Value> = snapshot.as_array().ok_or("Python 來源格式無效。")?.iter()
-            .map(|v|json!({"name":v["name"],"path":v["path"],"kind":v["kind"],"revision":v["revision"]})).collect();
+            .map(|v|json!({"name":v["name"],"path":v["path"],"kind":v["kind"],"revision":v["revision"],"scope":v["scope"],"start_line":v["start_line"],"line_count":v["line_count"],"next_line":v["next_line"],"eof":v["eof"]})).collect();
         let response = python::execute(code, snapshot, cancel)?;
         let outputs = response["outputs"]
             .as_array()

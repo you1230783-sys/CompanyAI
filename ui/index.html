@@ -89,6 +89,7 @@
             <div id="messages"></div>
             <div id="project-charts" class="project-charts" hidden></div>
             <div id="project-narration" hidden></div>
+            <div id="project-analysis" hidden></div>
                 <details id="project-activity" class="project-activity" aria-label="專案執行歷程" hidden></details>
             <div
               id="live-task"
@@ -109,7 +110,6 @@
               <button id="project-stop" hidden>停止專案任務</button>
               <button id="weekly-start" hidden>生成週報</button>
               <button id="project-outlook-start" hidden title="查看您選擇的 Outlook 信件，整理需要您處理、回覆或追蹤的事項。">Outlook 助理</button>
-              <button id="project-image-start" hidden title="指定一張專案圖片閱讀；一般任務中 AI 也會依需求自行選擇圖片。">圖片辨識</button>
               <button data-action="translate">
                 <span data-icon="languages"></span>翻譯</button
               ><button data-action="summarize">
@@ -558,13 +558,13 @@
       <p>AI 將依據這個資料夾內的檔案，協助完成您的要求。目前支援 Word、Excel、PowerPoint、TXT、MD、文字型 PDF、Outlook MSG、LOG 類紀錄檔，以及 JPG／JPEG／PNG 圖片。AI 會依任務需要自行決定是否讀取圖片，不會自動送出全部圖片。</p>
       <p>執行任務時，所需的檔案內容會送至目前使用的 AI 服務分析。請確認資料夾內的資料適合提供 AI 使用。</p>
       <label>專案名稱<input id="project-name" maxlength="60" autocomplete="off" placeholder="輸入專案名稱" /></label>
-      <button id="project-default-folder">創建預設資料夾</button>
+      <button id="project-default-folder">建立專案資料夾</button>
       <div class="dialog-actions"><button id="project-cancel">取消</button><button id="project-create" class="primary-button">選擇資料夾並建立</button></div>
     </dialog>
     <dialog id="project-default-dialog" aria-labelledby="project-default-title">
-      <h2 id="project-default-title">選擇預設資料夾位置</h2>
-      <p>依 Windows 設定的位置建立 LM_AI專案資料夾_YYYYMMDD；支援網路磁碟與 UNC。同名資料夾會加上序號。</p>
-      <div class="dialog-actions"><button id="project-default-cancel">取消</button><button id="project-default-downloads">下載</button><button id="project-default-desktop">桌面</button></div>
+      <h2 id="project-default-title">建立本機專案資料夾</h2>
+      <p>在目前使用者的個人資料夾內，建立 LM_AI_Projects／LM_AI專案資料夾_YYYYMMDD。同一天重複建立會加上序號，既有資料保留。</p>
+      <div class="dialog-actions"><button id="project-default-cancel">取消</button><button id="project-default-profile" class="primary-button">建立</button></div>
     </dialog>
     <dialog id="project-quick-dialog" class="weekly-dialog" aria-labelledby="project-quick-title">
       <h2 id="project-quick-title">專案快速操作</h2>
@@ -573,13 +573,6 @@
         <p class="weekly-warning">讀取前仍會讓您勾選資料夾；所選信件的必要內容會送至目前 AI 服務分析。</p>
         <div class="weekly-dates"><label>開始日期<input id="project-quick-from" type="date" /></label><label>結束日期<input id="project-quick-to" type="date" /></label></div>
         <p>預設本週一至今天，補充中明確指定的日期優先。不寄信、不修改信件。</p>
-      </section>
-      <section id="project-quick-image" hidden>
-        <p>先把圖片放入目前專案資料夾，再選擇 JPG／JPEG／PNG。單張最大5 MB（5,000,000 bytes），超過請自行縮小；程式不會自動壓縮。尺寸最多8192×8192、總計1600萬像素。</p>
-        <p class="weekly-warning">送出後這張圖片會交由目前 AI 服務分析，文字與數字辨識結果請核對。一般專案任務也會由 AI 按需求選擇圖片，不必逐張從此入口送出；每個任務最多20次辨識要求。</p>
-        <label>專案相對圖片路徑<input id="project-quick-path" maxlength="1000" placeholder="例如：素材/截圖.png" /></label>
-        <button id="project-quick-choose">選擇圖片</button>
-        <p>圖片僅送出當次辨識，下一輪只帶入文字重點及來源，不再附原圖。目前不直接擷取 Outlook 圖片附件，也不處理掃描 PDF。</p>
       </section>
       <label>要提醒 AI 的內容（選填）<textarea id="project-quick-notes" maxlength="1000" rows="5"></textarea></label>
       <div class="dialog-actions"><button id="project-quick-cancel">取消</button><button id="project-quick-send" class="primary-button">送出</button></div>
@@ -658,6 +651,7 @@
     <script src="chart-transform.js"></script>
     <script src="chart-editor.js"></script>
     <script src="charts.js"></script>
+    <script src="analysis.js"></script>
     <script src="app.js"></script>
     <script src="work.js"></script>
     <script src="mail.js"></script>

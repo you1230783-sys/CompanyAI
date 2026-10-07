@@ -470,6 +470,10 @@ mod tests {
                 json!({"path":"a.txt","revision":"r","note_revision":"1","summary":"摘要"}),
             ),
             ("read_work_log", json!({})),
+            (
+                "record_analysis",
+                json!({"report":{"goal":"核對","current_step":"整理","open_questions":[],"superseded":[],"findings":[],"checks":[],"method":null}}),
+            ),
             ("outlook_compare", json!({"mail_ids":["m1"],"offset":0})),
             ("read_task_result", json!({"task_id":"t"})),
             (

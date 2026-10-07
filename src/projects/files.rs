@@ -1,5 +1,6 @@
 //! 固定檔案 broker：只接受專案相對路徑；逐層鎖住目錄、拒絕重新解析點與硬連結。
 //! 工作副本先留在記憶體，發布只用 create_new；原始文件從未取得可寫 handle。
+mod analysis;
 mod python;
 use super::{
     office,
@@ -25,7 +26,7 @@ use windows_sys::Win32::Storage::FileSystem::*;
 /// 回傳的 handle 保持到操作結束，拒絕目錄本身的寫入／刪除共用，
 /// 避免檢查後被重新命名、替換或改成 Junction；仍可在目錄內建立成果。
 pub(super) fn pin(path: &Path) -> AppResult<Vec<File>> {
-    let path = super::setup::normal_path(path)?;
+    let path = super::setup::resolve_project_path(path)?;
     let mut current = PathBuf::new();
     let mut guards = Vec::new();
     for part in path.components() {
@@ -50,7 +51,7 @@ pub(super) fn pin(path: &Path) -> AppResult<Vec<File>> {
                     .share_mode(FILE_SHARE_READ)
                     .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
                     .open(&current)
-                    .map_err(|_| "無法開啟專案路徑；請確認資料夾存在且有權限。")?;
+                    .map_err(|error| format!("無法開啟專案路徑 {}：{error}。請確認網路連線、資料夾權限與程式登入工作階段。", current.display()))?;
                 if file
                     .metadata()
                     .map_err(|e| e.to_string())?
@@ -71,7 +72,7 @@ pub(super) fn pin(path: &Path) -> AppResult<Vec<File>> {
 /// 以 Windows 正規化後的 handle 路徑排除私有資料；8.3 別名亦不可繞過名稱檢查。
 pub(super) fn reject_internal(file: &File) -> AppResult<()> {
     let mut name = vec![0u16; 32768];
-    let count = unsafe {
+    let mut count = unsafe {
         GetFinalPathNameByHandleW(
             file.as_raw_handle(),
             name.as_mut_ptr(),
@@ -79,8 +80,23 @@ pub(super) fn reject_internal(file: &File) -> AppResult<()> {
             0,
         )
     } as usize;
+    if count == 0 {
+        // 部分網路重新導向器無法提供 DOS 磁碟名稱；NT 路徑仍要求正規化，
+        // 不退回 FILE_NAME_OPENED，以免短檔名別名繞過 .lmai 檢查。
+        count = unsafe {
+            GetFinalPathNameByHandleW(
+                file.as_raw_handle(),
+                name.as_mut_ptr(),
+                name.len() as u32,
+                VOLUME_NAME_NT,
+            )
+        } as usize;
+    }
     if count == 0 || count >= name.len() {
-        return Err("無法核對文件的實際位置。".into());
+        return Err(format!(
+            "無法核對文件的實際位置：{}。",
+            std::io::Error::last_os_error()
+        ));
     }
     if String::from_utf16_lossy(&name[..count])
         .split(['\\', '/'])
@@ -92,6 +108,8 @@ pub(super) fn reject_internal(file: &File) -> AppResult<()> {
 }
 
 pub fn validate_root(root: &Path) -> AppResult<()> {
+    let resolved = super::setup::resolve_project_path(root)?;
+    let root = resolved.as_path();
     if root.components().any(|c| {
         c.as_os_str()
             .to_string_lossy()
@@ -658,6 +676,8 @@ struct ChartExport {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(super) struct SavedBroker {
     #[serde(default)]
+    analysis: super::analysis::State,
+    #[serde(default)]
     excel_plans: BTreeMap<String, super::excel_plan::Plan>,
     #[serde(default)]
     outlook: super::mail::Saved,
@@ -682,6 +702,8 @@ pub(super) struct SavedBroker {
     python_artifacts: Vec<super::python::Artifact>,
 }
 pub struct Broker {
+    task_id: String,
+    pub(super) analysis: super::analysis::State,
     excel_plans: BTreeMap<String, super::excel_plan::Plan>,
     file_waiter: Option<super::interaction::FileWaiter>,
     outlook: super::mail::Session,
@@ -707,9 +729,12 @@ pub struct Broker {
     chart_deadline: std::time::Instant,
 }
 impl Broker {
-    pub fn new(project: Project, _task: String) -> AppResult<Self> {
+    pub fn new(mut project: Project, task: String) -> AppResult<Self> {
+        project.root = super::setup::resolve_project_path(&project.root)?;
         validate_root(&project.root)?;
         Ok(Self {
+            task_id: task,
+            analysis: Default::default(),
             excel_plans: BTreeMap::new(),
             file_waiter: None,
             outlook: super::mail::Session::default(),
@@ -736,12 +761,13 @@ impl Broker {
     pub(super) fn saved(&self) -> AppResult<SavedBroker> {
         // 經序列化建立不含程序資源的快照；授權與執行中的 COM 物件不保存。
         serde_json::from_value(
-            json!({"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
+            json!({"analysis":self.analysis,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
             "results":self.results,"archived_results":self.archived_results,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts}),
         )
         .map_err(|e| e.to_string())
     }
     pub(super) fn restore(&mut self, state: SavedBroker, cancel: &AtomicBool) -> AppResult<()> {
+        self.analysis = state.analysis;
         if state.excel_plans.len() > 30 {
             return Err("保存的 Excel 規劃超過上限。".into());
         }
@@ -1355,10 +1381,13 @@ impl Broker {
             break result;
         };
         let result = match outcome {
-            Ok(value) => json!({"ok":true,"result":value}),
-            Err(error) => json!({"ok":false,"error":error,"retry_same_operation":false}),
+            Ok(value) => json!({"ok":true,"operation_id":id,"result":value}),
+            Err(error) => {
+                json!({"ok":false,"operation_id":id,"error":error,"retry_same_operation":false})
+            }
         };
         if result["result"]["waiting_for_user"] != true {
+            self.analysis.observe(tool, &result);
             self.results.insert(id.into(), (request, result.clone()));
         }
         Ok(result)
@@ -1458,6 +1487,7 @@ impl Broker {
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
         match tool {
+            Tool::RecordAnalysis { report } => self.record_analysis(report),
             Tool::PlanExcelAnalysis { proposal } => {
                 let columns = proposal.columns()?;
                 let selection = office::excel::Selection {
@@ -2077,7 +2107,6 @@ impl Broker {
                             info["kind"] = json!("image");
                             info["bytes"] = json!(metadata.len());
                             info["read_tool"] = json!("analyze_image");
-                            info["skill"] = json!("image-read");
                         }
                         entries.push(info);
                     }
@@ -2091,7 +2120,7 @@ impl Broker {
                     let image = super::vision::input::load(&self.project, path)?;
                     return Ok(
                         json!({"kind":"image","image":image.metadata(),"content_read":false,
-                        "guidance":"這是專案圖片，尚未辨識內容。依任務需要決定是否載入 image-read，再呼叫 analyze_image(path,focus)；不需要圖片資訊即可略過。快速模型不支援圖片。"}),
+                        "guidance":"這是專案圖片，尚未辨識內容。依任務需要直接呼叫 analyze_image(path,focus)，不必載入技能；不需要圖片資訊即可略過。快速模型不支援圖片。"}),
                     );
                 }
                 if super::logs::supported(Path::new(path)) {
@@ -2123,7 +2152,7 @@ impl Broker {
                     Value::Null
                 };
                 Ok(
-                    json!({"text":text,"offset":offset,"next_offset":next,"total":total,"truncated":next<total,"revision":text::revision(&content),"document":document,"imported_snapshot":self.project.imports.contains_key(&path.replace('\\', "/"))}),
+                    json!({"path":path,"working_copy":self.copies.contains_key(path),"text":text,"offset":offset,"next_offset":next,"total":total,"truncated":next<total,"revision":text::revision(&content),"document":document,"imported_snapshot":self.project.imports.contains_key(&path.replace('\\', "/"))}),
                 )
             }
             Tool::FindText { path, text: needle } => {

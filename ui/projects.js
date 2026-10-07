@@ -279,6 +279,7 @@
     if (diagnosticsRequest && (!state.logged_in || diagnosticsRequest.conversation !== state.active_id)) $("project-diagnostics-dialog").close();
     ChartUI.render($("project-charts"), showActivity ? projects.charts : []);
     ChartUI.cleanup();
+    AnalysisUI.render($("project-analysis"),showActivity ? projects.analysis : null);
     const key = showActivity ? projects.running_id : "";
     const events = showActivity ? (projects.activity || [projects.status]) : [];
     const nextActivity = JSON.stringify([key, events]);

@@ -1,5 +1,13 @@
 # Python 執行環境與離線重建
 
+## 0.8.45：大檔分段與分析核對
+
+inputs[].log_range 可指定 {start_line:1,line_count:50000}，只適用 kind=text 的 LOG／OUT／ERR／JSONL。原始檔上限 1 GiB，每段最多 2 MiB 完整行；單次其他快照仍限 32 MiB、合計 60 MiB。原生程序核對整份原始 bytes 的版本，回傳 start_line／line_count／next_line／eof；續段必須帶 revision，不混用新舊檔。分段解碼沿用 BOM 優先、無 BOM 的 Big5／UTF-8 選擇，歧義明示，可覆寫 encoding。
+
+Python worker 及 runtime 指紋不變；metadata 自動帶入原始行號與下一段位置。跨段狀態需透過 emit_table 保存，不保留 Python 程序。程式統計取得區間的聯集，分開標示「資料已提供」與「分析結論」。
+
+record_analysis 可引用成功操作的原文／計算快照，並從 result 的 JSON Pointer 核對非負整數筆數。balance 驗證總數等於分項、zero 檢查是否有未配對／重複／反例；不把數量相符當成語意或因果驗證。可重用方法保存為 project 範圍的版本化筆記，新對話依相關性提示，使用前需核對目前樣本。
+
 0.8.44 不變更 Python 套件或環境指紋；相同環境仍可原地沿用。任務內 `run_python` 的連續失敗獨立計算，上限10次，其餘工具共同上限5次；同類成功才歸零。已辨識原生工具的非嚴格參數錯誤也納入，已知失敗不另外增加8次無進展計數。停止保留 checkpoint，使用者按「繼續」後重設；未知提交、嚴格 Schema／權限／身分拒絕不放寬。見 [0.8.44 驗證](VALIDATION_0_8_44.md)。
 
 0.8.42 將 Python 放在 EXE 旁的 `python/`，不嵌入 Rust EXE、不查詢 PATH／登錄／使用者 site-packages。NSIS 安裝與修復會驗證 runtime 清單、設定該目錄的 AppContainer 唯讀執行權，再以真正隔離程序驗證 pandas 和 XLSX 生成；成功後才完成 EXE 替換。

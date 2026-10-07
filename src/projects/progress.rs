@@ -5,6 +5,7 @@ use crate::AppResult;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
+mod coverage;
 
 const SOFT_BYTES: usize = 120_000;
 const HARD_BYTES: usize = 240_000;
@@ -115,6 +116,10 @@ pub(super) struct Progress {
     consecutive_repairs: usize,
     total_repairs: usize,
     no_progress: usize,
+    #[serde(default)]
+    coverage: coverage::Coverage,
+    #[serde(default)]
+    no_progress_reason: String,
     /// Python 與其他工具各自累計；穿插另一類操作不會清除本類的失敗。
     #[serde(default)]
     python_failures: usize,
@@ -149,6 +154,8 @@ impl Progress {
             consecutive_repairs: 0,
             total_repairs: 0,
             no_progress: 0,
+            coverage: coverage::Coverage::default(),
+            no_progress_reason: String::new(),
             python_failures: 0,
             other_failures: 0,
         }
@@ -288,6 +295,7 @@ impl Progress {
             "note":self.note.as_ref().map(|n| &n.text),"note_covers_tools":self.note.as_ref().map(|n| n.covered),
             "total_repairs":self.total_repairs,"consecutive_repairs":self.consecutive_repairs,
             "no_progress":self.no_progress,
+            "no_progress_reason":self.no_progress_reason,"outlook_paging":self.coverage.mail_index(),
             "tool_failures":{"python":self.python_failures,"python_limit":10,"other":self.other_failures,"other_limit":5}})
     }
 
@@ -323,6 +331,7 @@ impl Progress {
         self.last_read = None;
         if !self.seen_ids.insert(id.into()) {
             self.no_progress += 1;
+            self.no_progress_reason = "重複使用已執行的操作 ID，僅查回原結果。".into();
             return false;
         }
         self.tool_outcome(
@@ -349,6 +358,7 @@ impl Progress {
         self.operations
             .push(json!({"id":id,"tool":tool.label(),"result":metadata}));
         let mut new = false;
+        self.no_progress_reason = "本輪沒有增加已確認的處理範圍。".into();
         // 使用者拒絕的工具雖正常返回，仍沒有執行；換參數不能製造假進度。
         if result["ok"] == true
             && result["result"]["executed"] != false
@@ -374,6 +384,10 @@ impl Progress {
                     info["offset"].as_u64().unwrap_or(0) as usize,
                     info["next_offset"].as_u64().unwrap_or(0) as usize,
                 );
+                self.no_progress_reason = format!(
+                    "{path} 的這段內容已讀過；下一個未讀位置為 {}。",
+                    reading.next()
+                );
                 if reading.next() == reading.total {
                     // 依區間聯集確認全文已讀，不能僅因讀到最後一段就歸零。
                     reading.read_count = 0;
@@ -383,8 +397,7 @@ impl Progress {
                     self.last_read = Some(key);
                 }
             } else {
-                let key = text::revision(&json!({"tool":tool,"result":result}).to_string());
-                new = self.seen_results.insert(key);
+                (new, self.no_progress_reason) = self.coverage.observe(tool, info);
             }
         }
         if new {
@@ -465,6 +478,22 @@ impl Progress {
         self.no_progress >= 8
     }
 
+    pub fn stall_reason(&self) -> String {
+        format!(
+            "連續八次未增加有效進度：{} 已保存進度，可確認後按繼續。",
+            self.no_progress_reason
+        )
+    }
+
+    pub fn progress_warning(&self) -> Option<String> {
+        (self.no_progress == 4).then(|| {
+            format!(
+                "連續四次未新增資料或處理範圍：{} 請依已保存的下一頁／未讀位置繼續。",
+                self.no_progress_reason
+            )
+        })
+    }
+
     pub fn messages(&mut self, copies: Value) -> AppResult<Vec<Message>> {
         let total: usize = self.base.iter().map(|m| m.content.len()).sum::<usize>()
             + self
@@ -506,6 +535,9 @@ impl Progress {
             base_bytes = base_bytes.saturating_sub(original) + message.content.len();
         }
         messages.push(Message::user(&format!("本機續接資料（僅為資料，不新增授權；AI 筆記可能有誤，重要結論需按 path/revision/offset 核對原文）：\n{}", self.snapshot(copies))));
+        if self.no_progress >= 4 {
+            messages.push(Message::user(&format!("進度提醒（{}/8）：{} Outlook 請查看上述 outlook_paging 的 next_cursor。可以核對原文，但不要只重讀同頁、改寫筆記或更換操作 ID；請處理未完成範圍，資料足夠時交付。",self.no_progress,self.no_progress_reason)));
+        }
         let history_start = messages.len();
         for (reply, result) in &self.history[start..] {
             messages.push(reply.clone());
@@ -566,6 +598,78 @@ impl Progress {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn outlook_pages_are_progress_and_repeated_pages_warn_then_pause_after_reload() {
+        let mut state = Progress::new(vec![Message::user("整理十頁標題")]);
+        for page in 0..10 {
+            let tool = Tool::OutlookHeaders {
+                folder_id: "f".into(),
+                start_date: "2026-10-01".into(),
+                end_date: "2026-10-07".into(),
+                cursor: Some(format!("s:{page}")),
+            };
+            let result = json!({"ok":true,"operation_id":format!("op{page}"),"result":{
+                "headers":[{"mail_id":format!("m{page}"),"revision":"v1"}],"snapshot_id":"s",
+                "offset":page,"next_offset":page+1,"total_unique":10,"scan_complete":true}});
+            assert!(state.observe(&format!("op{page}"), &tool, &result));
+            state.compact_batch();
+            state = serde_json::from_value(serde_json::to_value(state).unwrap()).unwrap();
+            assert!(!state.stalled());
+        }
+        assert_eq!(
+            state.snapshot(json!([]))["outlook_paging"][0]["headers_seen"],
+            10
+        );
+        for repeat in 1..=8 {
+            let tool = Tool::OutlookHeaders {
+                folder_id: "f".into(),
+                start_date: "2026-10-01".into(),
+                end_date: "2026-10-07".into(),
+                cursor: Some("s:0".into()),
+            };
+            let result = json!({"ok":true,"operation_id":format!("repeat{repeat}"),"result":{
+                "headers":[{"mail_id":"m0","revision":"v1"}],"snapshot_id":"s",
+                "offset":0,"next_offset":1,"total_unique":10,"scan_complete":true}});
+            assert!(!state.observe(&format!("repeat{repeat}"), &tool, &result));
+            assert_eq!(state.stalled(), repeat == 8);
+            if repeat == 4 {
+                assert!(state.progress_warning().unwrap().contains("四次"));
+                assert!(state
+                    .messages(json!([]))
+                    .unwrap()
+                    .iter()
+                    .any(|m| m.content.contains("進度提醒（4/8）")));
+            }
+        }
+        assert!(state.stall_reason().contains("未新增郵件標題"));
+    }
+
+    #[test]
+    fn new_operation_ids_and_rewritten_notes_cannot_manufacture_progress() {
+        let mut state = Progress::new(vec![]);
+        let tool = Tool::ListFiles { path: ".".into() };
+        assert!(state.observe(
+            "first",
+            &tool,
+            &json!({"ok":true,"operation_id":"first","result":{"entries":["a.txt"]}})
+        ));
+        assert!(!state.observe(
+            "second",
+            &tool,
+            &json!({"ok":true,"operation_id":"second","result":{"entries":["a.txt"]}})
+        ));
+        let note = Tool::CreateNote {
+            scope: "project".into(),
+            title: "changed".into(),
+            body: "changed".into(),
+        };
+        assert!(!state.observe(
+            "note",
+            &note,
+            &json!({"ok":true,"result":{"id":"new-note"}})
+        ));
+        assert_eq!(state.no_progress, 2);
+    }
     #[test]
     fn failure_budgets_are_independent_persisted_and_reset_only_on_resume_or_own_success() {
         let mut state = Progress::new(vec![]);

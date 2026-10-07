@@ -12,7 +12,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-mod encoding;
+pub(super) mod encoding;
 
 pub const MAX_INPUT: usize = 32 * 1024 * 1024;
 pub const MAX_OUTPUT: usize = 8 * 1024 * 1024;
@@ -26,6 +26,15 @@ pub struct Input {
     pub revision: Option<String>,
     /// 文字來源的明確編碼；缺省沿用依副檔名決定的自動模式。
     pub encoding: Option<String>,
+    /// LOG 大檔以完整行分段；仍由原生層讀取，不開放 Python 任意路徑。
+    pub log_range: Option<LogRange>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LogRange {
+    pub start_line: usize,
+    pub line_count: usize,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -234,7 +243,22 @@ pub(super) fn snapshot(
         if cancel.load(Ordering::Relaxed) {
             return Err("Python 讀取已取消。".into());
         }
-        let value = if input.kind == "dataset" {
+        let value = if let Some(range) = &input.log_range {
+            if input.kind != "text" || !super::logs::supported(Path::new(&input.path)) {
+                return Err("log_range 只適用 kind=text 的 LOG／OUT／ERR／JSONL。".into());
+            }
+            let mut value = super::logs::python_chunk(
+                project,
+                &input.path,
+                input.revision.as_deref(),
+                range.start_line,
+                range.line_count,
+                input.encoding.as_deref(),
+                cancel,
+            )?;
+            value["name"] = json!(input.name);
+            value
+        } else if input.kind == "dataset" {
             let (table, revision) =
                 datasets::inspect(project, &input.path, input.revision.as_deref(), cancel)?;
             let rows = table

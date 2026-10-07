@@ -1,11 +1,10 @@
-//! 專案 Outlook 與圖片快速入口；共用現有 runner，不另建立郵件權限或聊天引擎。
+//! 專案 Outlook 快速入口；圖片直接沿用一般檔案閱讀，不提供獨立入口。
 use super::*;
 
 #[derive(Clone, Copy, PartialEq, serde::Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(in crate::ui) enum Kind {
     Outlook,
-    Image,
 }
 
 pub(super) struct Pending {
@@ -16,7 +15,6 @@ pub(super) struct Pending {
     model: String,
     root: PathBuf,
     messages: usize,
-    kind: Kind,
 }
 
 impl App {
@@ -46,9 +44,6 @@ impl App {
     fn prepare_quick(&mut self, conversation: &str, id: &str, kind: Kind) -> AppResult<()> {
         crate::jobs::validate_id(id)?;
         let project = self.weekly_project(conversation)?;
-        if kind == Kind::Image && !projects::vision::input::model_supported(&self.config.model) {
-            return Err(projects::vision::input::UNSUPPORTED_MODEL.into());
-        }
         self.projects.quick = Some(Pending {
             id: id.into(),
             conversation: conversation.into(),
@@ -57,7 +52,6 @@ impl App {
             model: self.config.model.clone(),
             root: project.root,
             messages: self.messages.len(),
-            kind,
         });
         let today = projects::setup::local_date()?;
         self.view.post(&json!({"type":"project_quick_ready","conversation":conversation,"request_id":id,
@@ -71,23 +65,13 @@ impl App {
         start: &str,
         end: &str,
         notes: &str,
-        path: &str,
     ) -> AppResult<()> {
-        let (pending, project) = self.quick_pending(conversation, id)?;
+        self.quick_pending(conversation, id)?;
         if notes.chars().count() > 1000 {
             return Err("補充內容最多 1000 字。".into());
         }
-        let prompt = match pending.kind {
-            Kind::Outlook => {
-                projects::setup::outlook_prompt(projects::setup::local_date()?, start, end, notes)?
-            }
-            Kind::Image => {
-                // 送出前先驗證來源；提示保留此版本，辨識結果會附實際讀取版本。
-                let image = projects::vision::input::load(&project, path)?;
-                format!("請使用 image-read 技能的 analyze_image，辨識專案相對圖片 {:?}。本次指定來源 SHA256：{}；若實際版本不同，先告知並確認。辨識要求：{}。請明確回報工具辨識結果及來源；工具失敗就告知，不以檔名猜圖中內容。完成後正常呼叫 finish 回覆，不必建立文件。", image.path,image.sha256,
-                    if notes.trim().is_empty() { "請描述這張圖片裡看到的東西，不需要辨識文字" } else { notes.trim() })
-            }
-        };
+        let prompt =
+            projects::setup::outlook_prompt(projects::setup::local_date()?, start, end, notes)?;
         let mut messages = self.messages.clone();
         messages.push(Message::user(&prompt));
         self.begin_project_chat(messages)?;
@@ -115,9 +99,8 @@ impl App {
                 start,
                 end,
                 notes,
-                path,
             } => {
-                let result = self.submit_quick(conversation, request_id, start, end, notes, path);
+                let result = self.submit_quick(conversation, request_id, start, end, notes);
                 self.view.post(&json!({"type":"project_quick_ack","conversation":conversation,"request_id":request_id,"ok":result.is_ok()}))?;
                 result?;
             }
@@ -132,24 +115,6 @@ impl App {
                     .is_some_and(|p| p.conversation == *conversation && p.id == *request_id)
                 {
                     self.projects.quick = None;
-                }
-            }
-            ProjectCommand::QuickChooseImage {
-                conversation,
-                request_id,
-            } => {
-                let (pending, project) = self.quick_pending(conversation, request_id)?;
-                if pending.kind != Kind::Image {
-                    return Err("此視窗不接受圖片選擇。".into());
-                }
-                if let Some(path) = choose_path(self.window, Some(&project.root), true)? {
-                    self.quick_pending(conversation, request_id)?;
-                    let relative = path
-                        .strip_prefix(&project.root)
-                        .map_err(|_| "請先把圖片放到目前專案資料夾，再選擇圖片。")?;
-                    let image =
-                        projects::vision::input::load(&project, &relative.to_string_lossy())?;
-                    self.view.post(&json!({"type":"project_quick_image","conversation":conversation,"request_id":request_id,"path":image.path}))?;
                 }
             }
             _ => return Ok(false),

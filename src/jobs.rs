@@ -121,6 +121,21 @@ impl TaskStatus {
         matches!(self.state.as_str(), "completed" | "failed" | "cancelled")
     }
 }
+/// 專案推論的恢復狀態，隨原有 DPAPI 任務保存；一般聊天維持空值。
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct ProjectRetry {
+    pub attempts: usize,
+    pub due_at_millis: u64,
+    pub replace_failed: bool,
+    pub exhausted: bool,
+    pub history: Vec<Value>,
+}
+impl ProjectRetry {
+    fn is_empty(&self) -> bool {
+        self.attempts == 0 && self.history.is_empty()
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Task {
     pub request_id: String,
@@ -141,6 +156,8 @@ pub struct Task {
     pub tool_events: Vec<ToolStatus>,
     #[serde(default)]
     pub partial: String,
+    #[serde(default, skip_serializing_if = "ProjectRetry::is_empty")]
+    pub project_retry: ProjectRetry,
 }
 impl Task {
     pub fn active(&self) -> bool {
@@ -869,6 +886,7 @@ mod tests {
             title_generation: false,
             tool_events: Vec::new(),
             partial: "已收到的部分".into(),
+            project_retry: Default::default(),
         };
         assert!(retain_partial(&mut archive, &task).unwrap());
         assert!(!retain_partial(&mut archive, &task).unwrap());
@@ -937,6 +955,7 @@ mod tests {
                 title_generation: false,
                 tool_events: Vec::new(),
                 partial: "串流中的正文".into(),
+                project_retry: Default::default(),
             };
             if mode == "stream" {
                 assert!(retain_partial(&mut archive, &task).unwrap());
@@ -1120,6 +1139,7 @@ mod tests {
             title_generation: false,
             tool_events: Vec::new(),
             partial: String::new(),
+            project_retry: Default::default(),
         };
         let mut wrong = status.clone();
         wrong.client_request_id = "another".into();
@@ -1170,6 +1190,7 @@ mod tests {
                 title_generation: false,
                 tool_events: Vec::new(),
                 partial: String::new(),
+                project_retry: Default::default(),
                 remote: Some(TaskStatus {
                     agent_envelope: Default::default(),
                     task_id: index.to_string(),

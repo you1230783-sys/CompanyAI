@@ -46,6 +46,7 @@ fn main() -> Result<(), String> {
         title_generation: false,
         tool_events: vec![],
         partial: String::new(),
+        project_retry: Default::default(),
     };
     jobs::submit(&config, &session, &task, |_| {})?;
     let reply = loop {

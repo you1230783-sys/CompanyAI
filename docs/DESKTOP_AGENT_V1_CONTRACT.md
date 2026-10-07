@@ -1,3 +1,13 @@
+## 0.8.45 桌面有限恢復補充
+
+此段取代下文「已接受失敗不另建推論」的全面限制，其他去重與身分規則不變。一般聊天不套用此政策。
+
+- 專案主推論、快速摘要及圖片子請求共用10／30／60／180／300秒排程，初次嘗試後最多五次恢復。排程、原ID及原因先DPAPI保存，再等待或送出；重啟保留次數。耗盡暫停，使用者明確續接才重新開放額度。
+- 僅 TaskStatus 身分完整核對、state=failed、result缺少或null，且 error.error_code 是 AI_BACKEND_ERROR、UPSTREAM_UNAVAILABLE、UPSTREAM_TIMEOUT，才可以新client_request_id另建這輪推論。舊網站的retryable=false不阻擋這個明確白名單；details的永久HTTP分類／其他明確錯誤碼仍否決。UPSTREAM_RESULT_UNKNOWN、額度、登入、權限、格式與身分不允許替換。
+- 原失敗task／result維持不可變。新請求保留messages、tools、conversation、project、run及parent_request_id，turn_index遞增；成功後續輪以真正完成的請求關聯。桌面不重播已成功的本機操作。
+- POST失聯或查詢404不能認定未受理，只查原request／task ID，最多五次延後查詢，耗盡仍保存原ID。原生GET明確401／403、額度或格式問題不自動等待重試，保留進度供原因排除後查回。POST明確未受理仍走既有拒絕流程，本版未加入通用POST重送。
+- 此政策在桌面執行，不要求網站重跑failed task，不新增端點或資料表。網站仍需如實保存上游錯誤、接受狀態及穩定結果，未知結果不可偽裝成可重試的AI_BACKEND_ERROR。
+
 # 桌面專案原生工具契約：desktop-agent-v1
 
 狀態：**契約已發布，桌面原始碼已接入；待網頁端聯合驗收**。日期：2026-10-01。

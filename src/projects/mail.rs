@@ -63,7 +63,7 @@ impl Header {
             .collect();
         json!({"mail_id":self.id,"thread_id":self.thread_id,"folder_id":self.folder_id,"subject":self.subject,
             "sender":self.sender,"recipients":recipients,"recipient_count":self.recipients.len(),"recipients_preview_truncated":self.recipients.len()>8 || self.recipients.iter().any(|s|s.chars().count()>500),"sent_at":self.sent_at,
-            "received_at":self.received_at,"dedup_available":self.duplicate_key.is_some()})
+            "received_at":self.received_at,"revision":super::text::revision(&self.modified),"dedup_available":self.duplicate_key.is_some()})
     }
 }
 #[derive(Default, Clone, Serialize, Deserialize)]
@@ -373,6 +373,7 @@ impl Session {
         let next = offset + headers.len();
         Ok(
             json!({"headers":headers,"total_unique":page.ids.len(),"duplicates_omitted":page.duplicates,"has_more":next<page.ids.len(),
+            "snapshot_id":page_id,"offset":offset,"next_offset":next,
             "next_cursor":(next<page.ids.len()).then(||format!("{page_id}:{next}")),"complete":page.complete&&next==page.ids.len(),"scan_complete":page.complete,"notices":page.notices,
             "dedup_rule":"本次任務內，相同寄出時間、寄件地址及完整收件地址集合只保留一份；主旨不參與。無法取得完整地址時保留並標示。"}),
         )

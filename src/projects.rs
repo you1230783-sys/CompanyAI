@@ -1,5 +1,6 @@
 //! 專案資料與固定工具契約。授權及副本所有權由桌面保存，不由模型文字決定。
 pub(crate) mod agent;
+pub mod analysis;
 pub mod charts;
 pub mod datasets;
 mod delegation;
@@ -77,7 +78,7 @@ impl Store {
         self.projects.iter().find(|p| &p.id == id)
     }
     pub fn add(&mut self, name: &str, root: PathBuf) -> AppResult<String> {
-        let root = setup::normal_path(&root)?;
+        let root = setup::resolve_project_path(&root)?;
         let name = name.trim();
         if name.is_empty() || name.chars().count() > 60 || self.projects.len() >= 50 {
             return Err("專案名稱需為 1–60 字，最多保存 50 個專案。".into());
@@ -98,6 +99,9 @@ impl Store {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "tool", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Tool {
+    RecordAnalysis {
+        report: Box<analysis::Report>,
+    },
     /// 模型只提交程式及明確來源；原生 broker 保留路徑、輸出及程序權限。
     RunPython {
         purpose: String,
@@ -386,6 +390,7 @@ impl Tool {
     /// 使用者可讀的操作名稱，避免將 JSON 或文件全文當進度訊息。
     pub fn label(&self) -> &'static str {
         match self {
+            Self::RecordAnalysis { .. } => "保存分析狀態、證據與核對結果",
             Self::RunPython { .. } => "Python 本機資料分析",
             Self::OutlookFolders { .. } => "列出授權的 Outlook 資料夾",
             Self::OutlookHeaders { .. } => "讀取選定資料夾的郵件標題",

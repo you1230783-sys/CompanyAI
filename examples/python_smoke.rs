@@ -5,6 +5,8 @@ use company_ai::{
     AppResult,
 };
 use serde_json::{json, Value};
+#[path = "python_smoke/analysis.rs"]
+mod analysis;
 use std::{
     collections::BTreeMap,
     path::PathBuf,
@@ -39,9 +41,11 @@ fn run() -> AppResult<()> {
         root: root.clone(),
         imports: BTreeMap::new(),
     };
-    let mut broker = Broker::new(project, "python-smoke".into())?;
+    let mut broker = Broker::new(project.clone(), "python-smoke".into())?;
+    broker.enable_memory("python-smoke-chat")?;
     let cancel = AtomicBool::new(false);
     let mut worker = Worker::start(&exe, &cancel)?;
+    analysis::run(&mut broker, &mut worker, &project)?;
     call(
         &mut broker,
         &mut worker,

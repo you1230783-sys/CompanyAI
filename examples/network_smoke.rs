@@ -19,6 +19,21 @@ fn run() -> AppResult<()> {
     let exe = PathBuf::from(std::env::args().nth(1).ok_or("缺少 EXE")?);
     let parent = PathBuf::from(std::env::args().nth(2).ok_or("缺少測試根目錄")?);
     let root = setup::create_unique(&parent, "網路專案測試")?;
+    // 以使用者實際選取的磁碟路徑重建入口，避免測試只有轉換後的 UNC。
+    let selected = parent.join(root.file_name().ok_or("缺少測試資料夾名稱")?);
+    company_ai::projects::files::validate_root(&selected)?;
+    let mut store = company_ai::projects::Store::default();
+    store.add("選擇映射子資料夾", selected.clone())?;
+    assert_eq!(
+        store.projects[0].root,
+        setup::resolve_project_path(&selected)?
+    );
+    if matches!(parent.components().next(),Some(std::path::Component::Prefix(p)) if matches!(p.kind(),std::path::Prefix::Disk(_)))
+    {
+        assert!(
+            matches!(store.projects[0].root.components().next(),Some(std::path::Component::Prefix(p)) if matches!(p.kind(),std::path::Prefix::UNC(..)))
+        );
+    }
     let other = setup::create_unique(&parent, "網路專案測試")?;
     assert_ne!(root, other, "重名不能覆寫或共用");
     let original = "網路上的原文😀";

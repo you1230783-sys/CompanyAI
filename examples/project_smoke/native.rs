@@ -256,8 +256,8 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                 if posts == 1 {
                     assert_eq!(
                         body["tools"].as_array().unwrap().len(),
-                        8,
-                        "首次只提供基本工具"
+                        9,
+                        "首次提供基本閱讀，含按需圖片辨識"
                     );
                     println!(
                         "Initial native tools: {} bytes, system: {} bytes",
@@ -889,6 +889,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     );
                 }
             },
+            |_| {},
             Box::new(|_, _| Err("未使用 PNG".into())),
             Box::new(|review, _, _| {
                 Ok(Some(

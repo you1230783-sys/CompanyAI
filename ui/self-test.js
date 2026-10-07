@@ -23,6 +23,31 @@ window.runSelfTest = async (structuredFixture) => {
     }
   }
   try {
+    check(!!$("project-default-profile") && !$("project-default-desktop") && !$("project-default-downloads"),"default project uses one local profile action");
+    check($("project-default-dialog").textContent.includes("LM_AI_Projects"),"default project location is explained");
+    {
+      const originalToast=toast, old=LMUI.getState(), notices=[];
+      try {
+        toast=text=>notices.push(text);
+        LMUI.receive({...old,status:"相同的資料夾錯誤",error:true,status_notice_id:1001});
+        LMUI.receive({...LMUI.getState(),status:"相同的資料夾錯誤",error:true,status_notice_id:1002});
+        check(notices.filter(text=>text==="相同的資料夾錯誤").length===2,"same error is shown on every new failure");
+      } finally {toast=originalToast;LMUI.receive(old);}
+      const panel=document.createElement("div");
+      const analysis={coverage:{file:{path:"LOG/a.log",scope:"LOG 原文",status:"partial",detail:"已讀取 2 行"}},
+        report:{goal:"核對事件",current_step:"反例檢查",open_questions:["有一個反例"],superseded:[],findings:[{claim:"<img src=x onerror=alert(1)>",status:"hypothesis",
+          evidence:[{operation_id:"read",kind:"source",path:"LOG/a.log",excerpt:[{line:7,text:"原文 <script>"}]}]}],
+          checks:[{label:"解析數量",kind:"balance",total:10,parts:[{value:8},{value:2}],passed:true},{label:"反例",kind:"zero",total:1,parts:[],passed:false}],
+          method_note:{title:"分析方法：事件配對"}},review_required:true};
+      AnalysisUI.render(panel,analysis);
+      check(!panel.querySelector("img,script") && panel.textContent.includes("<script>"),"analysis source and claims cannot inject HTML");
+      check(panel.textContent.includes("10 = 8 + 2") && panel.textContent.includes("預期 0，實際 1"),"analysis shows recorded counts and nonzero counterexamples");
+      check(panel.textContent.includes("等待重新核對") && panel.textContent.includes("專案記憶"),"analysis shows stale findings and saved method");
+      panel.querySelector("details[data-key]").open=true;
+      AnalysisUI.render(panel,{...analysis,review_required:false});
+      check(panel.querySelector("details[data-key]").open,"analysis updates keep evidence expanded");
+      AnalysisUI.render(panel,null);check(panel.hidden,"analysis clears when conversation changes");
+    }
     const sample =
       '# Markdown 測試\n\n| 名稱 | 數值 |\n| --- | --- |\n| 快速 | 42 |\n\n- [x] 已完成\n\n行內公式 $E=mc^2$\n\n$$\\int_0^1 x^2\\,dx=\\frac{1}{3}$$\n\n```rust\nfn main() { println!("hello"); }\n```\n\n註腳[^1]\n\n[^1]: 補充說明\n\n<script>alert(1)</script>\n\n![外部圖片](https://example.com/private.png)\n\n[危險連結](javascript:alert(1))';
     const parsed = document.createElement("div");
@@ -1057,7 +1082,7 @@ window.runSelfTest = async (structuredFixture) => {
       fixture.active_id = "project-chat";
       fixture.projects.running = false;
       LMUI.receive(fixture);
-      check(!$("weekly-start").hidden && !$("project-outlook-start").hidden && !$("project-image-start").hidden && document.querySelector('[data-action="translate"]').hidden, "project shows weekly, Outlook and image quick actions");
+      check(!$("weekly-start").hidden && !$("project-outlook-start").hidden && !$("project-image-start") && document.querySelector('[data-action="translate"]').hidden, "project keeps weekly/Outlook and has no image quick action");
       $("weekly-start").click();
       check($("weekly-info-dialog").open, "weekly introduction opens before creating folders");
       $("weekly-info-ok").click();
@@ -1085,13 +1110,10 @@ window.runSelfTest = async (structuredFixture) => {
       await frame();
       check(!$("weekly-input-dialog").open && !$("weekly-confirm-dialog").open, "weekly accepted submission closes wizard");
       check($("project-outlook-start").title.includes("處理"), "Outlook hover explains purpose");
-      const imageModel = fixture.config.model, beforeImageCommands = retryCommands.length;
-      fixture.config.model = "fast"; LMUI.receive(fixture);
-      $("project-image-start").click();
-      check(retryCommands.length === beforeImageCommands && $("project-image-start").title.includes("此模型不支援圖片傳入"), "fast image action explains unsupported model without preparing request");
-      fixture.config.model = "quality"; LMUI.receive(fixture);
-      for (const kind of ["outlook", "image"]) {
-        $(kind === "outlook" ? "project-outlook-start" : "project-image-start").click();
+      check(!$("project-quick-image") && !$("project-quick-path") && !$("project-quick-choose"), "image wizard controls removed");
+      {
+        const kind = "outlook";
+        $("project-outlook-start").click();
         const quick = retryCommands.at(-1).command;
         check(quick.action === "quick_prepare" && quick.kind === kind, "quick action only prepares native-bound dialog");
         const ready = {type:"project_quick_ready", conversation:fixture.active_id, request_id:quick.request_id, kind, start:"2026-10-05", end:"2026-10-06"};
@@ -1100,10 +1122,6 @@ window.runSelfTest = async (structuredFixture) => {
         ProjectQuickUI.receive(ready); await frame();
         check($("project-quick-dialog").open && $("project-quick-from").value === "2026-10-05", "quick dialog uses native dates");
         $("project-quick-notes").value = "保留我的要求";
-        if (kind === "image") {
-          ProjectQuickUI.receive({type:"project_quick_image", conversation:fixture.active_id, request_id:quick.request_id, path:"圖片 <img src=x>.png"});
-          check(!$("project-quick-dialog").querySelector("img") && $("project-quick-path").value.includes("<img"), "image path remains inert text");
-        }
         $("project-quick-send").click();
         const sent = retryCommands.at(-1).command;
         check(sent.action === "quick_submit" && sent.notes === "保留我的要求", "quick submit retains notes");
@@ -1115,7 +1133,6 @@ window.runSelfTest = async (structuredFixture) => {
         ProjectQuickUI.receive({type:"project_quick_ack", conversation:fixture.active_id, request_id:quick.request_id, ok:true}); await frame();
         check(!$("project-quick-dialog").open, "accepted quick submission closes dialog");
       }
-      fixture.config.model = imageModel; LMUI.receive(fixture);
 
       fixture.messages = [{role:"user",content:"請修訂",request_id:"request-one"}];
       fixture.retry = {user_index:0,message_count:1,request_id:"request-one",enabled:false};

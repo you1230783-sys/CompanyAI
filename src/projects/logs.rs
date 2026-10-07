@@ -14,7 +14,8 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-const MAX_FILE: u64 = 32 * 1024 * 1024;
+// 逐行讀取，不一次配置整份文件；每頁與 Python 分段另有較小輸出上限。
+const MAX_FILE: u64 = 1024 * 1024 * 1024;
 const MAX_LINE: usize = 128 * 1024;
 const PAGE_CHARS: usize = 12_000;
 const SEARCH_LINES: usize = 250_000;
@@ -139,6 +140,8 @@ pub(super) struct Cursor {
     line: usize,
     errors: Vec<Value>,
     unclassified: usize,
+    #[serde(default)]
+    scanned_lines: Vec<usize>,
 }
 
 fn check_cancel(cancel: &AtomicBool) -> AppResult<()> {
@@ -158,6 +161,8 @@ struct Source {
     utf16: Option<bool>,
     utf8_bom: bool,
     line: usize,
+    encodings: std::collections::BTreeSet<String>,
+    encoding_ambiguous: bool,
 }
 impl Source {
     fn open(
@@ -182,7 +187,7 @@ impl Source {
         files::reject_internal(&file)?;
         let bytes = file.metadata().map_err(|e| e.to_string())?.len();
         if bytes > MAX_FILE {
-            return Err("單個 LOG 上限為 32 MiB，請依日期或機台拆分。".into());
+            return Err("單個 LOG 上限為 1 GiB，請依日期或機台拆分。".into());
         }
         let mut hash = Sha256::new();
         let mut buffer = [0; 65536];
@@ -219,11 +224,21 @@ impl Source {
             utf16,
             utf8_bom: bom == 3,
             line: 0,
+            encodings: Default::default(),
+            encoding_ambiguous: false,
         })
     }
 
     /// UTF-16 以 code unit 找換行，避免把中文字的低位元組誤認為 LF。
     fn next(&mut self, cancel: &AtomicBool) -> AppResult<Option<String>> {
+        self.next_encoded(cancel, None)
+    }
+
+    fn next_encoded(
+        &mut self,
+        cancel: &AtomicBool,
+        encoding: Option<&str>,
+    ) -> AppResult<Option<String>> {
         check_cancel(cancel)?;
         let mut bytes = Vec::new();
         if let Some(little) = self.utf16 {
@@ -279,16 +294,83 @@ impl Source {
         }
         self.line += 1;
         let decoded = if self.utf8_bom {
+            self.encodings.insert("utf8-bom".into());
             // BOM 宣告 UTF-8 後不得逐行退回 ANSI，避免損壞資料看似成功。
             std::str::from_utf8(&bytes)
                 .map_err(|_| "UTF-8 BOM 與內容不一致。".to_owned())
                 .and_then(|s| text::validate(s).map(|()| s.to_owned()))
+        } else if self.utf16.is_some() {
+            self.encodings.insert("utf16-bom".into());
+            text::decode(&bytes).map(|(line, _)| line)
+        } else if let Some(mode) = encoding {
+            super::python::encoding::decode(&bytes, true, Some(mode)).map(|decoded| {
+                self.encodings.insert(decoded.name.into());
+                self.encoding_ambiguous |= decoded.ambiguous;
+                decoded.text
+            })
         } else {
             text::decode(&bytes).map(|(line, _)| line)
         };
         let line = decoded.map_err(|e| format!("第 {} 行無法可靠解碼：{e}", self.line))?;
         Ok(Some(line.trim_end_matches(['\r', '\n']).to_owned()))
     }
+}
+
+/// 只把完整行交給 Python；下一段必須帶來源版本，保留一基原始行號。
+pub(super) fn python_chunk(
+    project: &Project,
+    path: &str,
+    revision: Option<&str>,
+    start: usize,
+    count: usize,
+    encoding: Option<&str>,
+    cancel: &AtomicBool,
+) -> AppResult<Value> {
+    if start == 0 || !(1..=50_000).contains(&count) || (start > 1 && revision.is_none()) {
+        return Err("LOG 分段需從第 1 行開始，每段 1–50000 行；續段必須提供 revision。".into());
+    }
+    if encoding.is_some_and(|e| !matches!(e, "auto" | "big5" | "utf8")) {
+        return Err("encoding 必須為 auto、big5 或 utf8。".into());
+    }
+    let mut source = Source::open(project, path, revision, cancel)?;
+    if source.utf16.is_some() && encoding.is_some_and(|e| e != "auto") {
+        return Err("UTF-16 LOG 分段應依 BOM 自動解碼，不可覆寫為 Big5／UTF-8。".into());
+    }
+    let mut text = String::new();
+    let mut rows = 0usize;
+    let mut eof = false;
+    loop {
+        if rows == count {
+            // 用底層是否到尾端判斷，不為了探測下一段而解碼尚未要求的行。
+            eof = source
+                .reader
+                .fill_buf()
+                .map_err(|e| e.to_string())?
+                .is_empty();
+            break;
+        }
+        let Some(line) = source.next_encoded(cancel, Some(encoding.unwrap_or("auto")))? else {
+            eof = true;
+            break;
+        };
+        if source.line < start {
+            continue;
+        }
+        if text.len() + line.len() + 1 > 2 * 1024 * 1024 {
+            break;
+        }
+        text.push_str(&line);
+        text.push('\n');
+        rows += 1;
+    }
+    if rows == 0 && start > source.line + 1 {
+        return Err("起始行超過 LOG 尾端。".into());
+    }
+    Ok(
+        json!({"kind":"text","path":path,"revision":source.revision,"text":text,"start_line":start,"line_count":rows,
+        "next_line":start+rows,"eof":eof,"bytes":source.bytes,"encoding":source.encodings.into_iter().collect::<Vec<_>>().join(" / "),"encoding_ambiguous":source.encoding_ambiguous,
+        "scope":format!("LOG 分段：原始第 {start} 行起 {rows} 行；{}",if eof {"已到檔尾"} else {"尚有後續"})}),
+    )
 }
 
 /// 以一基行號、零基字元位置續讀；長行可跨頁，不能只回傳前段並假裝讀完。
@@ -588,8 +670,10 @@ pub(super) fn search(
             line: 1,
             errors: vec![],
             unclassified: 0,
+            scanned_lines: vec![0; query.paths.len()],
         }
     };
+    state.scanned_lines.resize(query.paths.len(), 0);
     for (index, path) in query.paths.iter().enumerate() {
         check_cancel(cancel)?;
         if previous.is_some() && state.revisions[index].is_none() {
@@ -681,6 +765,7 @@ pub(super) fn search(
                 }
                 if resume_at.is_none() {
                     scanned += 1;
+                    state.scanned_lines[state.file] += 1;
                     let in_time = filter.time_matches(current_stamp.as_ref());
                     if in_time.is_none() {
                         state.unclassified += 1;
@@ -723,6 +808,8 @@ pub(super) fn search(
     }
     let has_more = state.file < query.paths.len();
     let result = json!({"matches":matches,"scanned_lines_this_page":scanned,"has_more":has_more,
+        "coverage":query.paths.iter().enumerate().map(|(i,path)|json!({"path":path,"revision":state.revisions[i],"scanned_lines":state.scanned_lines[i],
+            "status":if state.errors.iter().any(|e|e["path"]==*path) {"failed"} else if i<state.file {"complete"} else if i==state.file && state.line>1 {"partial"} else {"pending"}})).collect::<Vec<_>>(),
         "scan_complete":!has_more,"complete":!has_more && state.errors.is_empty() && state.unclassified==0,
         "errors":state.errors,"unclassified_time_lines":state.unclassified,
         "time_basis":"LOG 原文時間；HH:MM 結束包含該分鐘，日期未指定時套用各日；跨午夜使用時間 OR 條件",

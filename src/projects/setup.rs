@@ -4,8 +4,50 @@ use crate::AppResult;
 use chrono::{Datelike, Duration, NaiveDate};
 use std::{
     fs,
+    os::windows::ffi::OsStringExt,
     path::{Component, Path, PathBuf, Prefix},
 };
+
+/// 映射磁碟以目前登入工作階段的 Windows 連線解析為 UNC。
+/// 保存實際分享路徑，避免 F: 重新映射後把另一個位置當成原專案；不建立連線或索取密碼。
+pub fn resolve_project_path(path: &Path) -> AppResult<PathBuf> {
+    use windows_sys::Win32::{
+        Foundation::{ERROR_MORE_DATA, ERROR_NOT_CONNECTED, NO_ERROR},
+        NetworkManagement::WNet::WNetGetConnectionW,
+    };
+    let path = normal_path(path)?;
+    let Some(Component::Prefix(prefix)) = path.components().next() else {
+        return Err("缺少磁碟或分享路徑。".into());
+    };
+    let Prefix::Disk(drive) = prefix.kind() else {
+        return Ok(path);
+    };
+    let device = [drive as u16, b':' as u16, 0];
+    let mut remote = vec![0u16; 512];
+    let mut count = remote.len() as u32;
+    let mut status =
+        unsafe { WNetGetConnectionW(device.as_ptr(), remote.as_mut_ptr(), &mut count) };
+    if status == ERROR_MORE_DATA && count <= 32768 {
+        remote.resize(count as usize, 0);
+        status = unsafe { WNetGetConnectionW(device.as_ptr(), remote.as_mut_ptr(), &mut count) };
+    }
+    if status == ERROR_NOT_CONNECTED {
+        // 本機磁碟沒有網路映射；後續仍以真實開檔結果確認存在及權限。
+        return Ok(path);
+    }
+    if status != NO_ERROR {
+        return Err(format!("無法解析 {}: 的網路映射（Windows 錯誤 {status}）。請在相同登入工作階段開啟該磁碟，或選擇對應 UNC 路徑。", drive as char));
+    }
+    let length = remote
+        .iter()
+        .position(|c| *c == 0)
+        .ok_or("網路映射路徑過長。")?;
+    let mut resolved = PathBuf::from(std::ffi::OsString::from_wide(&remote[..length]));
+    for part in path.components().skip(2) {
+        resolved.push(part.as_os_str());
+    }
+    normal_path(&resolved)
+}
 
 /// 只接受磁碟或 UNC 檔案路徑；Windows 回傳的延伸前綴轉回一般路徑。
 /// 不接受裝置命名空間或上層跳轉，UNC 的 server/share 不可省略。
@@ -57,7 +99,7 @@ pub fn monday(today: NaiveDate) -> NaiveDate {
 
 /// 以原子 create_dir 避免重名覆寫；父目錄不存在時不擅自改存其他位置。
 pub fn create_unique(parent: &Path, stem: &str) -> AppResult<PathBuf> {
-    let parent = normal_path(parent)?;
+    let parent = resolve_project_path(parent)?;
     let _guards = files::pin(&parent)?;
     if !parent.is_dir() || files::relative(stem)?.components().count() != 1 {
         return Err("無法確認要建立資料夾的位置或名稱。".into());
@@ -81,22 +123,47 @@ pub fn create_unique(parent: &Path, stem: &str) -> AppResult<PathBuf> {
     Err("同名資料夾過多，請改用其他位置。".into())
 }
 
-/// 使用目前（含公司重新導向）的 Known Folder，不拼接 C 槽或預設使用者路徑。
+/// 預設專案位於目前使用者的個人資料夾，不跟隨桌面／下載的網路重新導向。
+/// 保留 location 參數作原生命令驗證；舊 UI 傳入的位置不會被默默改存。
 pub fn create_default(location: &str) -> AppResult<PathBuf> {
     use windows::Win32::{
         System::Com::CoTaskMemFree,
-        UI::Shell::{FOLDERID_Desktop, FOLDERID_Downloads, SHGetKnownFolderPath, KF_FLAG_DEFAULT},
+        UI::Shell::{FOLDERID_Profile, SHGetKnownFolderPath, KF_FLAG_DEFAULT},
     };
-    let id = match location {
-        "downloads" => &FOLDERID_Downloads,
-        "desktop" => &FOLDERID_Desktop,
-        _ => return Err("位置只能選擇下載或桌面。".into()),
-    };
-    let value = unsafe { SHGetKnownFolderPath(id, KF_FLAG_DEFAULT, None) }
+    if location != "profile" {
+        return Err("預設專案位置已改為個人資料夾內的 LM_AI_Projects，請重新開啟建立視窗。".into());
+    }
+    let value = unsafe { SHGetKnownFolderPath(&FOLDERID_Profile, KF_FLAG_DEFAULT, None) }
         .map_err(|e| format!("無法取得 Windows 資料夾位置：{e}"))?;
     let path = unsafe { value.to_string() };
     unsafe { CoTaskMemFree(Some(value.0.cast())) };
-    let parent = PathBuf::from(path.map_err(|e| e.to_string())?);
+    let profile = PathBuf::from(path.map_err(|e| e.to_string())?);
+    create_in_profile(&profile)
+}
+
+/// 以實際 profile 路徑建立；獨立函式也供合成目錄驗證同日命名及既有資料保護。
+pub fn create_in_profile(profile: &Path) -> AppResult<PathBuf> {
+    use windows_sys::Win32::Storage::FileSystem::GetDriveTypeW;
+    let profile = resolve_project_path(profile)?;
+    let Some(Component::Prefix(prefix)) = profile.components().next() else {
+        return Err("無法確認個人資料夾位置。".into());
+    };
+    let Prefix::Disk(drive) = prefix.kind() else {
+        return Err("個人資料夾位於網路位置，請使用「選擇資料夾並建立」指定本機資料夾。".into());
+    };
+    let root = [drive as u16, b':' as u16, b'\\' as u16, 0];
+    // DRIVE_FIXED=3；磁碟字母本身不能證明它是本機磁碟。
+    if unsafe { GetDriveTypeW(root.as_ptr()) } != 3 {
+        return Err("預設專案需要本機固定磁碟，請另選本機資料夾。".into());
+    }
+    let _profile_guards = files::pin(&profile)?;
+    let parent = profile.join("LM_AI_Projects");
+    match fs::create_dir(&parent) {
+        Ok(()) => (),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => (),
+        Err(e) => return Err(format!("無法建立 LM_AI_Projects：{e}")),
+    }
+    // 現有同名檔案、連結或不安全路徑仍由共用驗證拒絕。
     create_unique(
         &parent,
         &format!("LM_AI專案資料夾_{}", local_date()?.format("%Y%m%d")),

@@ -26,15 +26,13 @@
     location.showModal();
   };
   $("project-default-cancel").onclick = () => location.close();
-  for (const place of ["downloads", "desktop"]) {
-    $(`project-default-${place}`).onclick = () => {
-      const name = $("project-name").value.trim();
-      location.close();
-      $("project-dialog").close();
-      showView("chat");
-      command({action:"create_default", name, location:place});
-    };
-  }
+  $("project-default-profile").onclick = () => {
+    const name = $("project-name").value.trim();
+    location.close();
+    $("project-dialog").close();
+    showView("chat");
+    command({action:"create_default", name, location:"profile"});
+  };
   $("weekly-start").onclick = () => {
     clear();
     target = {conversation:state.active_id, request_id:crypto.randomUUID()};

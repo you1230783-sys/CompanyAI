@@ -63,6 +63,16 @@ pub(super) fn build(memory: &Memory, messages: &[Message]) -> AppResult<Vec<Mess
     notes.sort_by_key(|n| {
         std::cmp::Reverse((score(query, &format!("{} {}", n.title, n.body)), n.updated))
     });
+    let methods: Vec<_> = notes
+        .iter()
+        .filter(|n| {
+            n.scope == "project"
+                && n.title.starts_with("分析方法：")
+                && score(query, &format!("{} {}", n.title, n.body)) > 0
+        })
+        .take(3)
+        .map(|n| json!({"id":n.id,"title":n.title,"body":n.body,"revision":n.revision.to_string()}))
+        .collect();
     let mut runs: Vec<_> = index
         .runs
         .iter()
@@ -106,11 +116,16 @@ pub(super) fn build(memory: &Memory, messages: &[Message]) -> AppResult<Vec<Mess
             document_notes.push(json!({"path":doc.path,"revision":doc.revision,"summary":doc.summary,"sections":parts.into_iter().take(4).map(|s|json!({"id":s.id,"title":s.title,"summary":s.summary})).collect::<Vec<_>>() }));
         }
     }
-    let mut data = json!({"notes":notes.into_iter().take(4).map(|n|json!({"id":n.id,"scope":n.scope,"title":n.title,"body":n.body,"revision":n.revision.to_string()})).collect::<Vec<_>>(),"recent_or_relevant_tasks":runs.into_iter().take(8).collect::<Vec<_>>(),"documents":document_notes});
+    let mut data = json!({"analysis_methods":methods,"notes":notes.into_iter().take(4).map(|n|json!({"id":n.id,"scope":n.scope,"title":n.title,"body":n.body,"revision":n.revision.to_string()})).collect::<Vec<_>>(),"recent_or_relevant_tasks":runs.into_iter().take(8).collect::<Vec<_>>(),"documents":document_notes});
     // 摘要也有明確預算；逐一移除較低排名資料，不截斷 JSON 或來源版本。
     while data.to_string().len() > 40_000 {
         let mut removed = false;
-        for field in ["documents", "notes", "recent_or_relevant_tasks"] {
+        for field in [
+            "documents",
+            "notes",
+            "recent_or_relevant_tasks",
+            "analysis_methods",
+        ] {
             if let Some(items) = data[field].as_array_mut() {
                 if items.pop().is_some() {
                     removed = true;

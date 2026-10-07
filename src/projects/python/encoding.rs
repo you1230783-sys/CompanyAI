@@ -1,7 +1,7 @@
 //! Python 文字快照的嚴格解碼。原始 bytes 的版本碼不因轉碼改變。
 use crate::{projects::text, AppResult};
 
-pub(super) struct Decoded {
+pub(crate) struct Decoded {
     pub text: String,
     pub name: &'static str,
     pub ambiguous: bool,
@@ -26,7 +26,7 @@ fn big5(bytes: &[u8]) -> AppResult<String> {
 /// UTF-8 BOM 為明確宣告，不可因內容損壞退回 Big5；其他文字預設仍為 UTF-8。
 /// 兩種編碼都有效但文字不同時，保留 Big5 優先並在 metadata 標記歧義；
 /// 模型需核對樣本，必要時以 encoding=utf8 重讀，不能忽略或替換無效字元。
-pub(super) fn decode(bytes: &[u8], log: bool, requested: Option<&str>) -> AppResult<Decoded> {
+pub(crate) fn decode(bytes: &[u8], log: bool, requested: Option<&str>) -> AppResult<Decoded> {
     let mode = requested.unwrap_or("auto");
     if !matches!(mode, "auto" | "big5" | "utf8") {
         return Err("encoding 必須為 auto、big5 或 utf8。".into());

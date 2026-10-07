@@ -258,6 +258,7 @@ impl App {
                     title_generation: false,
                     tool_events: Vec::new(),
                     partial: String::new(),
+                    project_retry: Default::default(),
                 };
                 self.work.store.tasks.push(triage.clone());
                 self.work_save()?;
@@ -591,6 +592,7 @@ impl App {
             title_generation: false,
             tool_events: Vec::new(),
             partial: String::new(),
+            project_retry: Default::default(),
         };
         history::save(&self.root, &archive)?;
         self.archive = archive;

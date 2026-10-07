@@ -563,6 +563,10 @@ function renderMessages() {
       content.append(details);
     }
     content.append(bubble);
+    if (message.project_analysis) {
+      const analysis = node("div");
+      AnalysisUI.render(analysis,message.project_analysis,true); content.append(analysis);
+    }
     if (message.project_charts?.length) {
       const charts = node("div", "project-charts"); content.append(charts);
       ChartUI.render(charts, message.project_charts, {conversation:state.active_id,message_index:index,request_id:message.request_id,styles:message.project_chart_styles || {}});
@@ -792,7 +796,7 @@ function receive(next) {
     ? "展開側欄"
     : "收合側欄";
   $("collapse").setAttribute("aria-label", $("collapse").title);
-  const statusNotice = JSON.stringify([state.status || "", !!state.error]);
+  const statusNotice = JSON.stringify([state.status_notice_id, state.status || "", !!state.error]);
   if (statusNotice !== lastStatusNotice) {
     lastStatusNotice = statusNotice;
     toast(state.status);

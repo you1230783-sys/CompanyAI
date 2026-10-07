@@ -598,6 +598,7 @@ impl App {
             title_generation: false,
             tool_events: Vec::new(),
             partial: String::new(),
+            project_retry: Default::default(),
         };
         self.messages = messages;
         self.save_history()?;
@@ -672,6 +673,7 @@ impl App {
             title_generation: true,
             tool_events: Vec::new(),
             partial: String::new(),
+            project_retry: Default::default(),
         };
         self.work.store.tasks.push(task.clone());
         self.work_save()?;

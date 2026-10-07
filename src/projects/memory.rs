@@ -114,6 +114,45 @@ fn accessible(note: &Note, conversation: &str) -> bool {
 }
 
 impl Memory {
+    /// 分析方法是 project 範圍的可修訂筆記；同標題沿用版本，不累積重複條目。
+    /// 保存來源任務以便查回程式與工具紀錄，不把模型的「已確認」升格成事實。
+    pub(super) fn save_analysis_method(
+        &self,
+        method: &super::analysis::Method,
+        checks: &[Value],
+        task: &str,
+    ) -> AppResult<Value> {
+        let title = format!("分析方法：{}", method.title);
+        let body = format!("【適用條件】{}\n【方法與步驟】{}\n【驗證方式】{}\n【限制／失效條件】{}\n【來源任務】{}（原對話可用 read_task_result／operations 查回程式與結果）\n【本次筆數核對】{} 項，{} 項未通過；無核對不代表通過。\n這是過往方法，不是新資料的結論或授權。下次先檢查格式、欄位、時間與少量樣本，再決定是否沿用。",
+            method.applicability, method.steps, method.validation, method.limitations, task, checks.len(), checks.iter().filter(|c|c["passed"]!=true).count());
+        check_text(&body, 2000)?;
+        let old = {
+            let index: Index = self
+                .vault
+                .transaction()?
+                .read("project", "index")?
+                .unwrap_or_default();
+            index
+                .notes
+                .into_iter()
+                .find(|n| n.scope == "project" && n.title == title && !n.deleted)
+        };
+        let result = if let Some(old) = old {
+            if old.body == body {
+                json!({"id":old.id,"revision":old.revision.to_string()})
+            } else {
+                self.change_note(
+                    &old.id,
+                    &old.revision.to_string(),
+                    Some((&title, &body)),
+                    false,
+                )?
+            }
+        } else {
+            self.create_note("project", &title, &body)?
+        };
+        Ok(json!({"id":result["id"],"revision":result["revision"],"title":title,"scope":"project"}))
+    }
     /// 完整工具結果以內容雜湊分開保存，checkpoint 只帶索引。
     /// 先寫成功才可釋放記憶體；讀回時再核對內容，缺檔不得當作未執行。
     pub(super) fn archive_operation(&self, value: &Value) -> AppResult<String> {

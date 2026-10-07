@@ -86,7 +86,8 @@ assert.ok(settings.disabled && !modal.open && !get("login-panel").hidden);
 // 不依賴版面引擎的座標測試：從 HTML 列舉所有對話框，確保沒有漏掉。
 const html = fs.readFileSync(path.join(root, "ui/index.html"), "utf8");
 const dialogIds = [...html.matchAll(/<dialog id="([^"]+)"/g)].map(match => match[1]);
-assert.equal(dialogIds.length, 5);
+assert.equal(dialogIds.length, 16);
+assert.ok(dialogIds.includes("project-default-dialog"), "local project creation is included");
 for (const id of dialogIds) { if (!elements.has(id)) add(id, "dialog"); }
 vm.runInContext(fs.readFileSync(path.join(root, "ui/vnc.js"), "utf8"), context);
 vm.runInContext(fs.readFileSync(path.join(root, "ui/dialogs.js"), "utf8"), context);
@@ -108,4 +109,4 @@ addedDialog.dispatch("pointerdown", outside); addedDialog.dispatch("click", outs
 assert.equal(addedDialog.open, false, "future dialogs also receive backdrop behavior");
 assert.ok(html.includes('id="login-entry" class="primary-button">登入</button>'));
 assert.ok(html.includes("尚未登入時無法使用其他功能"));
-console.log("PASS: login lock/lifecycle, dynamic controls, command filter, all 5 dialog backdrops and future dialogs");
+console.log(`PASS: login lock/lifecycle, dynamic controls, command filter, all ${dialogIds.length} dialog backdrops and future dialogs`);

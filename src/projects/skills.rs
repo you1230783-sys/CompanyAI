@@ -8,11 +8,6 @@ const SKILLS: &[(&str, &str, &str)] = &[
         include_str!("skills/python-analysis.md"),
     ),
     (
-        "image-read",
-        "按任務需要閱讀專案 JPG／JPEG／PNG 圖片",
-        include_str!("skills/image-read.md"),
-    ),
-    (
         "outlook-coverage",
         "本機比對郵件前文與建議閱讀",
         include_str!("skills/outlook-coverage.md"),
@@ -86,14 +81,17 @@ const SKILLS: &[(&str, &str, &str)] = &[
 pub fn catalog() -> Value {
     catalog_for("quality")
 }
-pub fn catalog_for(model: &str) -> Value {
+pub fn catalog_for(_model: &str) -> Value {
     json!(SKILLS
         .iter()
-        .filter(|(id, _, _)| *id != "image-read" || super::vision::input::model_supported(model))
         .map(|(id, description, _)| json!({"id":id,"description":description}))
         .collect::<Vec<_>>())
 }
 pub fn load(id: &str) -> AppResult<&'static str> {
+    // 僅相容舊 checkpoint 尚待完成的載入；新目錄不公告圖片技能，基本閱讀已內建。
+    if id == "image-read" {
+        return Ok("");
+    }
     SKILLS
         .iter()
         .find(|s| s.0 == id)
@@ -101,19 +99,38 @@ pub fn load(id: &str) -> AppResult<&'static str> {
         .ok_or("未知技能；請依技能目錄指定 id。".into())
 }
 pub fn context(ids: &[String]) -> AppResult<String> {
-    ids.iter()
+    let mut parts = ids
+        .iter()
         .map(|id| load(id))
-        .collect::<AppResult<Vec<_>>>()
-        .map(|v| v.join("\n\n"))
+        .collect::<AppResult<Vec<_>>>()?;
+    // 分析技能共用一份方法說明；簡單閱讀不攜帶整份證據與統計契約。
+    if ids.iter().any(|id| {
+        matches!(
+            id.as_str(),
+            "log-analysis" | "python-analysis" | "research" | "excel-read" | "notes"
+        )
+    }) {
+        parts.push(include_str!("skills/analysis-quality.md"));
+    }
+    Ok(parts.join("\n\n"))
 }
 
-pub fn context_for(ids: &[String], model: &str) -> AppResult<String> {
+pub fn context_for(ids: &[String], _model: &str) -> AppResult<String> {
     let available: Vec<_> = ids
         .iter()
-        .filter(|id| id.as_str() != "image-read" || super::vision::input::model_supported(model))
+        .filter(|id| id.as_str() != "image-read")
         .cloned()
         .collect();
     context(&available)
+}
+
+/// 圖片併入基本檔案閱讀，依模型能力提供方法，不需要多一輪載入技能。
+pub fn image_context_for(model: &str) -> &'static str {
+    if super::vision::input::model_supported(model) {
+        include_str!("image-guide.md")
+    } else {
+        super::vision::input::UNSUPPORTED_MODEL
+    }
 }
 
 /// 高階工作技能載入所需基本組；同一份說明在 system 只出現一次。
@@ -142,11 +159,18 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
     let has = |id: &str| ids.iter().any(|i| i == id);
     match tool {
         "run_python" => has("python-analysis"),
-        "analyze_image" => has("image-read"),
+        "analyze_image" => true,
         "plan_excel_analysis" | "export_planned_excel" => has("excel-read"),
         "outlook_compare" => has("outlook-coverage"),
         "list_files" | "read_file" | "load_skill" | "ask_user" | "finish" | "read_work_log"
         | "read_task_result" | "compact_context" => true,
+        "record_analysis" => {
+            has("log-analysis")
+                || has("python-analysis")
+                || has("research")
+                || has("notes")
+                || has("excel-read")
+        }
         "export_log_dataset" | "export_excel_dataset" | "inspect_dataset" | "chart_dataset" => {
             has("dataset-charts")
         }
@@ -200,6 +224,8 @@ mod tests {
     fn catalog_is_short_and_groups_load_once() {
         assert!(SKILLS.iter().all(|(_, d, _)| d.chars().count() <= 30));
         let mut ids = vec![];
+        assert!(enabled("analyze_image", &ids));
+        assert!(!catalog().to_string().contains("image-read"));
         assert!(!enabled("office_action", &ids));
         activate(&mut ids, "weekly-update").unwrap();
         assert!(enabled("office_action", &ids));

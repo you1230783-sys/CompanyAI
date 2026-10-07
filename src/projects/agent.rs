@@ -291,15 +291,6 @@ fn build_request(
     }
     if !super::vision::input::model_supported(&caps.model) {
         tools.retain(|tool| tool["function"]["name"] != "analyze_image");
-        for tool in &mut tools {
-            if tool["function"]["name"] == "load_skill" {
-                if let Some(ids) =
-                    tool["function"]["parameters"]["properties"]["id"]["enum"].as_array_mut()
-                {
-                    ids.retain(|id| id != "image-read");
-                }
-            }
-        }
     }
     if use_tools
         && (tools.len() > caps.limits.tools.min(128)
@@ -641,15 +632,10 @@ pub fn decode<T: serde::de::DeserializeOwned>(
 
 /// 模型能力直接決定公告內容，不只把不可用按鈕藏起來。
 pub fn system_prompt_for(model: &str) -> String {
-    let image_guide = if super::vision::input::model_supported(model) {
-        "專案 JPG／JPEG／PNG 與其他來源文件同樣可用。依任務目標、檔案清單及已有資料自行判斷是否需要看圖，不必等使用者明確要求，也不要為列出檔案而逐張辨識。需要時載入 image-read，以 analyze_image(path,focus) 取得重點；read_file、檔名不能代替看圖。每次呼叫一張、單張最大5 MB，每次任務最多20次不同辨識要求；圖片只送當次子請求，後續只保留文字重點。"
-    } else {
-        super::vision::input::UNSUPPORTED_MODEL
-    };
     format!(
         "{}\n{}\n技能目錄：{}",
         include_str!("agent/skill.md"),
-        image_guide,
+        super::skills::image_context_for(model),
         super::skills::catalog_for(model)
     )
 }
@@ -703,24 +689,45 @@ pub fn submit(
     }
 }
 
+/// 查詢失敗是否適合等待後重查；不表示可以重新提交推論。
+pub struct StatusError {
+    pub message: String,
+    pub retryable: bool,
+}
+
 pub fn status(
     config: &Config,
     session: &Session,
     task: &jobs::Task,
     caps: &Capabilities,
-) -> AppResult<jobs::TaskStatus> {
+) -> Result<jobs::TaskStatus, StatusError> {
+    let stop = |message| StatusError {
+        message,
+        retryable: false,
+    };
     if !session.valid_for(config) {
-        return Err("登入已到期，重新登入後可查回原請求。".into());
+        return Err(stop("登入已到期，重新登入後可查回原請求。".into()));
     }
     let path = match &task.remote {
         Some(s) => format!("{}/tasks/{}", jobs::PREFIX, s.task_id),
         None => format!("{}/tasks/by-request/{}", jobs::PREFIX, task.request_id),
     };
     let response = crate::transport::get(
-        &config.endpoint(&path)?,
+        &config.endpoint(&path).map_err(stop)?,
         Some(("Authorization", &format!("Bearer {}", session.access_token))),
-    )?;
-    bounded_decode(response, session, caps)
+    )
+    .map_err(|message| StatusError {
+        message,
+        retryable: true,
+    })?;
+    // 身分、額度及格式拒絕不靠延長等待修復；404 僅查原 ID，不代表能重送。
+    let error: Value = serde_json::from_str(&response.body).unwrap_or(Value::Null);
+    let retryable = matches!(response.status, 404 | 408 | 429 | 500..=599)
+        && !matches!(
+            error["error_code"].as_str(),
+            Some("QUOTA_EXCEEDED" | "UNAUTHORIZED" | "FORBIDDEN")
+        );
+    bounded_decode(response, session, caps).map_err(|message| StatusError { message, retryable })
 }
 
 pub fn check_result_limits(status: &jobs::TaskStatus, caps: &Capabilities) -> AppResult<()> {

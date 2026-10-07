@@ -179,19 +179,32 @@ pub fn summarize(
                 title_generation: false,
                 tool_events: vec![],
                 partial: String::new(),
+                project_retry: Default::default(),
             });
             super::events::register(&run.root, &id)?;
             // 必須先保存再送出；若此處退出，下次寧可只查詢而不冒險重送。
             broker.memory()?.delegation_write(&key, &state)?;
         }
-        let task = state.pending.as_mut().ok_or("委派缺少請求。")?;
+        let mut task = state.pending.take().ok_or("委派缺少請求。")?;
+        let retry_caps = state.agent_caps.clone();
         let reply = model::receive(
             &child,
-            task,
+            &mut task,
             deadline,
             lookup_only,
-            state.agent_caps.as_ref(),
+            retry_caps.as_ref(),
+            (
+                |task: &Task| {
+                    state.pending = Some(task.clone());
+                    broker.memory()?.delegation_write(&key, &state)
+                },
+                &mut progress,
+            ),
         );
+        if let Some(agent) = agent_state.as_deref_mut() {
+            agent.advance_past(&task.request);
+        }
+        state.pending = Some(task);
         broker.memory()?.delegation_write(&key, &state)?;
         let reply = match reply? {
             model::Reply::Native => {

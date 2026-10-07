@@ -1,6 +1,6 @@
 [package]
 name = "company-ai"
-version = "0.8.44"
+version = "0.8.45"
 edition = "2021"
 rust-version = "1.98"
 
@@ -30,6 +30,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_Graphics_Gdi",
     "Win32_Graphics_Dwm",
     "Win32_Networking_WinHttp",
+    "Win32_NetworkManagement_WNet",
     "Win32_Security_Cryptography",
     "Win32_System_LibraryLoader",
     "Win32_System_SystemInformation",

@@ -260,6 +260,7 @@ impl App {
             title_generation: false,
             tool_events: Vec::new(),
             partial: String::new(),
+            project_retry: Default::default(),
         };
         self.messages = messages;
         self.save_history()?;

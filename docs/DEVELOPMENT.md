@@ -1,6 +1,29 @@
+> **0.8.45 維護位置：** setup.rs 使用FOLDERID_Profile及固定磁碟檢查；model/retry.rs 定義延後排程及可替換的失敗，Task.project_retry沿用DPAPI保存。model.rs負責只查原ID／替換失敗推論，runner、delegation及vision提供checkpoint。progress/coverage.rs保存實際資料指紋與Outlook分頁區間。整合測試resilience.rs使用HTTP／DPAPI／副本操作，debug測試可縮短等待，release沒有加速入口。正式發行必須完整Build.ps1 -EmptyCargoCache -TestOffice -NetworkTestRoot <SMB測試路徑> -IncludeInstaller，結果見 [0.8.45](VALIDATION_0_8_45.md)。
+
+> **0.8.45 最終驗證：** 2026-10-07已用指定v142 x64、空Cargo快取與`--frozen`完成完整流程，263項測試及Python／Office／SMB／正式NSIS均通過。圖片方法改為 `src/projects/image-guide.md` 基本說明，不再提供快捷入口或獨立技能；舊版協定使用獨立指示訊息，保留單則64KB上限。正式產物雜湊與實測界線以本版驗證文件為準。
+
 > **0.8.44 維護位置：** ui/chart-editor.js 管理頁籤、範例與跨頁驗證；chart-transform.js 的 bounds／niceBounds 計算自動範圍，charts.js 處理安全跳脫的 X／Y 提示及空白參考線。src/projects/progress.rs 保存獨立失敗預算，runner.rs 區分已辨識工具參數錯誤與一般格式修復；原生案例22–24驗證5／10次停止及第10次恢復成功。詳見 [驗證紀錄](VALIDATION_0_8_44.md)。
 
 # 開發與維護說明
+
+## 0.8.45：分析可靠度與映射磁碟
+
+- src/projects/analysis.rs 保存實際範圍、區間聯集及有界模型索引；files/analysis.rs 只引用成功工具原文，數量由結果取回，語意判斷仍標示為 AI 判斷。runner／protocol／ui/analysis.js 讓概況隨執行、暫停及歷史保存；一般聊天不帶這份本機資料。
+- record_analysis 的 method 寫入現有 project 筆記；同標題修訂、原有筆記版本／復原沿用。memory/context.rs 按相關性帶入方法；完整舊任務仍限原對話，不擴大讀取授權。
+- LOG 1 GiB 原始檔採既有逐行讀取；Python log_range 每段上限 2 MiB 完整行，保留 revision、原始行號與 next_line/eof。Python worker／環境指紋不變。
+- setup::resolve_project_path 使用 Windows WNetGetConnectionW 把映射路徑轉成 UNC。handle 正規化查詢保留 DOS／NT 名稱備援，不降級成未正規化短檔名。錯誤通知以原生事件序號辨識，不只比對相同文字。
+- 驗證入口仍為 Build.ps1 -ValidateOnly -EmptyCargoCache -TestOffice -NetworkTestRoot；新案例在 examples/python_smoke/analysis.rs、examples/network_smoke.rs、ui/self-test.js。合成測試不代表公司 F 槽與真實模型分析品質已驗收。
+
+### 2026-10-07 分析功能前置驗證（發行前）
+
+完整執行 `scripts/Build.ps1 -ValidateOnly -EmptyCargoCache -TestOffice -NetworkTestRoot '\\localhost\Y$\Rust\Project\CompanyAI\.build'` 成功，日誌為 `.build/analysis-validation-final.log`。實際工具鏈為 Rust 1.98.1、MSVC 14.29.30133（x64 探針 `_MSC_FULL_VER=192930159`）、SDK 10.0.19041.0；使用新建的空 Cargo 快取、專案 vendor／Cargo.lock／.cargo/config.toml 及 `--frozen`。格式、Clippy、259 項單元測試、release 建置、WebView2、自我檢查及整合流程全部通過。
+
+- 實際 Python AppContainer 執行：Big5 分段、完整行與原始行號、來源改版拒絕、81,920,000 bytes 的合成 LOG；引用既有結果、加總／非零反例、方法筆記去重及同專案另一對話查回。原有 Excel COM → CSV → pandas、隔離、取消與120秒逾時回歸通過。
+- 原生代理25個案例、圖片12個案例、舊版工具協定、長任務／重啟續接及來源保護通過；概況位於 system 之後，保留最後的修復提示及工具呼叫配對。
+- 真實 Office 格式、三份 Excel × 五時段的15張圖表、PNG 嵌入／重開通過。本機 UNC 及暫時映射磁碟均驗證專案建立、映射轉 UNC 保存、TXT 讀寫、DPAPI 筆記、Word／Excel 成果與路徑逃逸拒絕；報告 `.build/network-verification.json` 的 `company_share_tested` 為 false。
+- WebView2 自檢涵蓋相同錯誤事件再次通知、分析資料安全呈現及展開狀態。另以 Edge 檢查明／暗1180px與窄版520px，無水平溢出，截圖已目視檢查；結果 `.build/analysis-ui-result.json`。
+
+此階段的測試執行檔位於 `target/x86_64-pc-windows-msvc/release/company-ai.exe`，SHA256 為 `40d7587849fe5a985abf1530ef24aec3805b2aaf27b1e3467ee24e22c26f2db8`。既有0.8.44發行 EXE／NSIS／簽署清單與 Python 環境保持原樣；當時尚未進版或部署，後續合併0.8.45，正式產物以該版驗證紀錄為準。公司 F 槽權限環境、加密檔案及實際模型採用新分析工具的效果仍待實測。
 
 ## 0.8.43 維護位置
 
@@ -52,7 +75,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build.ps1 -Emp
 
 依賴由 `Cargo.lock`、`vendor` 與 `.cargo/config.toml` 固定，使用空 Cargo 快取及 `--frozen` 驗證。環境腳本優先使用專案內的 `toolchain`，否則使用共用 `.tools`，並設定本專案的 target 目錄。
 
-`toolchain/` 與 `vendor/` 不直接提交 Git。**現存離線 ZIP 是歷史交付包，不代表目前 0.8.44 原始碼。** 全新環境需先準備指定工具鏈與符合 Cargo.lock 的 vendor；不要將舊 ZIP 整包覆蓋到新版原始碼。完整離線包操作見 [離線交付與 Git](OFFLINE_AND_GIT.md)。
+`toolchain/` 與 `vendor/` 不直接提交 Git。**現存離線 ZIP 是歷史交付包，不代表目前 0.8.45 原始碼。** 全新環境需先準備指定工具鏈與符合 Cargo.lock 的 vendor；不要將舊 ZIP 整包覆蓋到新版原始碼。完整離線包操作見 [離線交付與 Git](OFFLINE_AND_GIT.md)。
 
 | Build 選項 | 用途 |
 | --- | --- |

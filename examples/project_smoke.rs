@@ -13,6 +13,8 @@ mod native;
 mod pause;
 #[path = "project_smoke/pdf.rs"]
 mod pdf;
+#[path = "project_smoke/resilience.rs"]
+mod resilience;
 #[path = "project_smoke/roundtrip.rs"]
 mod roundtrip;
 #[path = "project_smoke/server_pdf.rs"]
@@ -34,6 +36,14 @@ fn run() -> AppResult<()> {
     let root =
         PathBuf::from(args.get(2).ok_or("需要測試根目錄。")?).join(company_ai::jobs::new_id()?);
     std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+    if args.get(3).is_some_and(|v| v == "--resilience-only") {
+        return resilience::verify(&root);
+    }
+    if args.get(3).is_some_and(|v| v == "--legacy-only") {
+        skills::verify(&exe, &root)?;
+        roundtrip::verify(&root)?;
+        return continuation::verify(&root);
+    }
     if args.get(3).is_some_and(|value| value == "--vision-only") {
         return vision::verify(&root);
     }
@@ -157,6 +167,7 @@ fn run() -> AppResult<()> {
     drop(worker);
     logs::verify(&exe, &root)?;
     native::verify(&root)?;
+    resilience::verify(&root)?;
     vision::verify(&root)?;
     skills::verify(&exe, &root)?;
     roundtrip::verify(&root)?;
@@ -175,7 +186,11 @@ fn main() {
         }
         return;
     }
-    if let Err(error) = run() {
+    #[cfg(debug_assertions)]
+    let outcome = company_ai::projects::runner::with_retry_test_clock(run);
+    #[cfg(not(debug_assertions))]
+    let outcome = run();
+    if let Err(error) = outcome {
         eprintln!("{error}");
         std::process::exit(1);
     }

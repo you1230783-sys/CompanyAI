@@ -196,6 +196,8 @@ struct App {
     focus_draft: bool,
     busy: &'static str,
     status: String,
+    /// 每次錯誤都有新序號，讓同一操作再次失敗時仍顯示通知。
+    status_notice_id: u64,
     error: bool,
     models: Option<ModelCatalog>,
     versions: VersionState,
@@ -304,7 +306,7 @@ impl App {
             "update_available":self.versions.known.as_ref().is_some_and(|info| info.available()),
             "update_status":self.update_status,"update_ready":self.update_ready.is_some(),"update_busy":self.update_busy,
             "update_kind":self.update_ready.as_ref().map(|ready|ready.artifact.kind.as_str()),
-            "version":service::CURRENT_VERSION,"config":self.config,"status":self.status,"error":self.error,
+            "version":service::CURRENT_VERSION,"config":self.config,"status":self.status,"status_notice_id":self.status_notice_id,"error":self.error,
             "busy":self.busy,"logged_in":self.logged_in(),"can_send":self.can_send(),"update_required":self.versions.blocked(),
             "retry":self.retry_state(),"projects":self.project_state(),"models":models,"conversations":conversations,"active_id":self.active_id,"messages":self.messages,
             "draft":self.draft,"draft_revision":self.draft_revision,"focus_draft":self.focus_draft,
@@ -315,6 +317,7 @@ impl App {
         self.focus_draft = false;
     }
     fn fail(&mut self, error: String) {
+        self.status_notice_id = self.status_notice_id.wrapping_add(1);
         // 強制更新對話框會遮住主畫面狀態列，下載／安裝錯誤須在對話框內可見。
         if self.versions.blocked() {
             self.update_status = error.clone();
@@ -2078,6 +2081,7 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
             focus_draft: false,
             busy: "none",
             status: "準備就緒".into(),
+            status_notice_id: 0,
             error: false,
             models: None,
             versions,

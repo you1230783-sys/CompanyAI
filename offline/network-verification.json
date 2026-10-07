@@ -1,7 +1,7 @@
 {
-  "version": "0.8.44.0",
+  "version": "0.8.45.0",
   "result": "PASS",
-  "fixture": "\\\\localhost\\Y$\\Rust\\Project\\CompanyAI\\.build\\network-9cbf941faa8b40ac880ecb4a78d251f5",
+  "fixture": "\\\\localhost\\Y$\\Rust\\Project\\CompanyAI\\.build\\network-158556e1fdb94f35ba3ef651588825a9",
   "checks": [
     "existing localhost SMB UNC",
     "temporary mapped drive",

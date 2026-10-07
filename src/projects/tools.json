@@ -1268,7 +1268,6 @@
                 "dataset-charts",
                 "context-management",
                 "outlook-coverage",
-                "image-read",
                 "python-analysis"
               ]
             },
@@ -1957,7 +1956,7 @@
       "type": "function",
       "function": {
         "name": "read_log",
-        "description": "唯讀大型 LOG/OUT/ERR/JSONL/TXT；每檔32 MiB，每頁12000字，依行號與字元位置續讀，原檔版本必須相同。",
+        "description": "唯讀大型 LOG/OUT/ERR/JSONL/TXT；每檔1 GiB，每頁12000字，依行號與字元位置續讀，原檔版本必須相同。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -2930,8 +2929,39 @@
                   },
                   "encoding": {
                     "type": "string",
-                    "enum": ["auto", "big5", "utf8"],
+                    "enum": [
+                      "auto",
+                      "big5",
+                      "utf8"
+                    ],
                     "description": "僅kind=text可指定；預設auto。LOG/OUT/ERR無BOM先Big5(CP950)再UTF-8，有UTF-8 BOM優先遵循；其他文字預設UTF-8。metadata[name].encoding_ambiguous=true時核對樣本，必要時指定utf8。其他kind省略或null。"
+                  },
+                  "log_range": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "start_line": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "line_count": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 50000
+                          }
+                        },
+                        "required": [
+                          "start_line",
+                          "line_count"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "LOG 大檔分段，最多2MiB完整行；續段帶revision，依sources.next_line接續到eof。"
                   }
                 },
                 "required": [
@@ -2964,40 +2994,288 @@
         "parameters": {
           "type": "object",
           "properties": {
-            "chart_index": { "type": "integer", "minimum": 0 },
+            "chart_index": {
+              "type": "integer",
+              "minimum": 0
+            },
             "transform": {
               "type": "object",
               "properties": {
                 "x": {
                   "type": "object",
                   "properties": {
-                    "mode": { "type": "string", "enum": ["original", "offset", "index"] },
-                    "offset": { "type": "number", "description": "offset模式加上的數值，可為負數；其他模式填0。" },
-                    "start": { "type": "number", "description": "index模式起點，通常為1；其他模式填1。" },
-                    "step": { "type": "number", "description": "index模式間距，通常為1，不可為0；其他模式填1。" }
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "original",
+                        "offset",
+                        "index"
+                      ]
+                    },
+                    "offset": {
+                      "type": "number",
+                      "description": "offset模式加上的數值，可為負數；其他模式填0。"
+                    },
+                    "start": {
+                      "type": "number",
+                      "description": "index模式起點，通常為1；其他模式填1。"
+                    },
+                    "step": {
+                      "type": "number",
+                      "description": "index模式間距，通常為1，不可為0；其他模式填1。"
+                    }
                   },
-                  "required": ["mode", "offset", "start", "step"],
+                  "required": [
+                    "mode",
+                    "offset",
+                    "start",
+                    "step"
+                  ],
                   "additionalProperties": false
                 },
                 "y": {
                   "type": "object",
                   "properties": {
-                    "mode": { "type": "string", "enum": ["original", "offset", "index"] },
-                    "offset": { "type": "number", "description": "offset模式加上的數值，可為負數；其他模式填0。" },
-                    "start": { "type": "number", "description": "index模式起點，通常為1；其他模式填1。" },
-                    "step": { "type": "number", "description": "index模式間距，通常為1，不可為0；其他模式填1。" }
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "original",
+                        "offset",
+                        "index"
+                      ]
+                    },
+                    "offset": {
+                      "type": "number",
+                      "description": "offset模式加上的數值，可為負數；其他模式填0。"
+                    },
+                    "start": {
+                      "type": "number",
+                      "description": "index模式起點，通常為1；其他模式填1。"
+                    },
+                    "step": {
+                      "type": "number",
+                      "description": "index模式間距，通常為1，不可為0；其他模式填1。"
+                    }
                   },
-                  "required": ["mode", "offset", "start", "step"],
+                  "required": [
+                    "mode",
+                    "offset",
+                    "start",
+                    "step"
+                  ],
                   "additionalProperties": false
                 },
-                "drop_empty": { "type": "boolean" }
+                "drop_empty": {
+                  "type": "boolean"
+                }
               },
-              "required": ["x", "y", "drop_empty"],
+              "required": [
+                "x",
+                "y",
+                "drop_empty"
+              ],
               "additionalProperties": false
             },
-            "progress_note": { "type": "string", "maxLength": 2000 }
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
           },
-          "required": ["chart_index", "transform"],
+          "required": [
+            "chart_index",
+            "transform"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "record_analysis",
+        "description": "階段性保存分析目標、發現、待確認、失效結論。證據與筆數從成功操作的 result 依 JSON Pointer 查回，空 pointer 代表完整 result。confirmed 是模型判斷。method 選填保存可重用方法到專案記憶；不用為每一步另呼叫。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "report": {
+              "type": "object",
+              "properties": {
+                "goal": {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                "current_step": {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                "open_questions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "maxItems": 12
+                },
+                "superseded": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "maxItems": 12
+                },
+                "findings": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "claim": {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "confirmed",
+                          "hypothesis",
+                          "rejected"
+                        ]
+                      },
+                      "evidence": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "operation_id": {
+                              "type": "string",
+                              "maxLength": 128
+                            },
+                            "pointer": {
+                              "type": "string",
+                              "maxLength": 400
+                            }
+                          },
+                          "required": [
+                            "operation_id",
+                            "pointer"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 4
+                      }
+                    },
+                    "required": [
+                      "claim",
+                      "status",
+                      "evidence"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 12
+                },
+                "checks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string",
+                        "maxLength": 100
+                      },
+                      "operation_id": {
+                        "type": "string",
+                        "maxLength": 128
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "balance",
+                          "zero"
+                        ]
+                      },
+                      "total_pointer": {
+                        "type": "string",
+                        "maxLength": 400
+                      },
+                      "part_pointers": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 400
+                        },
+                        "maxItems": 12
+                      }
+                    },
+                    "required": [
+                      "label",
+                      "operation_id",
+                      "kind",
+                      "total_pointer",
+                      "part_pointers"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 12
+                },
+                "method": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "applicability": {
+                          "type": "string",
+                          "maxLength": 300
+                        },
+                        "steps": {
+                          "type": "string",
+                          "maxLength": 700
+                        },
+                        "validation": {
+                          "type": "string",
+                          "maxLength": 300
+                        },
+                        "limitations": {
+                          "type": "string",
+                          "maxLength": 300
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "applicability",
+                        "steps",
+                        "validation",
+                        "limitations"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "goal",
+                "current_step",
+                "open_questions",
+                "superseded",
+                "findings",
+                "checks"
+              ],
+              "additionalProperties": false
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "report"
+          ],
           "additionalProperties": false
         }
       }

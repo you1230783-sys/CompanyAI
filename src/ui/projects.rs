@@ -29,13 +29,8 @@ pub(super) enum ProjectCommand {
         start: String,
         end: String,
         notes: String,
-        path: String,
     },
     QuickCancel {
-        conversation: String,
-        request_id: String,
-    },
-    QuickChooseImage {
         conversation: String,
         request_id: String,
     },
@@ -167,6 +162,7 @@ pub(super) enum ProjectEvent {
     ),
     Progress(String, String),
     Charts(String, Vec<projects::charts::Chart>),
+    Analysis(String, projects::analysis::State),
     ExportPng(
         String,
         projects::charts::Chart,
@@ -199,6 +195,7 @@ pub(super) struct Running {
     conversation: String,
     activity: Vec<String>,
     charts: Vec<projects::charts::Chart>,
+    analysis: Option<projects::analysis::State>,
     started: u64,
     cancel: Arc<AtomicBool>,
 }
@@ -363,6 +360,7 @@ impl App {
             };
             let mut message = Message::assistant(projects::runner::recover(&self.root, &id)?);
             message.project_paused = projects::runner::paused_available(&self.root, &id);
+            message.project_analysis = projects::runner::recover_analysis(&self.root, &id);
             message.project_activity =
                 projects::runner::recover_activity(&self.root, &id).unwrap_or_default();
             message.project_charts = projects::runner::recover_charts(&self.root, &id);
@@ -387,7 +385,7 @@ impl App {
             "supplements":self.projects.running.as_ref().and_then(|r|r.instructions.entries().ok()),
             "queued":self.archive.conversations.iter().find(|c| Some(&c.id)==self.active_id.as_ref()).and_then(|c| c.project_queued.as_ref()).map(|q| json!({"id":q.id,"text":q.text,"after_run":q.after_run,"interrupt":q.interrupt,"auto_start":q.auto_start})),
             "stopping":self.projects.running.as_ref().is_some_and(|r|r.cancel.load(Ordering::Relaxed)),
-            "running":self.projects.running.is_some(),"running_id":self.projects.running.as_ref().map(|r|&r.id),"activity":self.projects.running.as_ref().map(|r|&r.activity),"charts":self.projects.running.as_ref().map(|r|&r.charts),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
+            "running":self.projects.running.is_some(),"running_id":self.projects.running.as_ref().map(|r|&r.id),"activity":self.projects.running.as_ref().map(|r|&r.activity),"charts":self.projects.running.as_ref().map(|r|&r.charts),"analysis":self.projects.running.as_ref().and_then(|r|r.analysis.as_ref()),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
     }
     pub(super) fn project_command(&mut self, command: ProjectCommand) -> AppResult<()> {
         match self.chart_edit_command(&command) {
@@ -822,7 +820,6 @@ impl App {
             | ProjectCommand::QuickPrepare { .. }
             | ProjectCommand::QuickSubmit { .. }
             | ProjectCommand::QuickCancel { .. }
-            | ProjectCommand::QuickChooseImage { .. }
             | ProjectCommand::WeeklyCancel { .. }
             | ProjectCommand::WeeklyOpen { .. }
             | ProjectCommand::Compose { .. }
@@ -1102,6 +1099,7 @@ impl App {
             id: id.clone(),
             conversation: conversation.clone(),
             activity: vec!["準備專案任務…".into()],
+            analysis: None,
             charts: vec![],
             started: crate::unix_now(),
             cancel,
@@ -1164,6 +1162,8 @@ impl App {
                         }
                     }
                 });
+            let analysis_tx = tx.clone();
+            let analysis_id = id.clone();
             let result = projects::runner::run_with_chart_export(
                 run,
                 |text| {
@@ -1171,6 +1171,12 @@ impl App {
                 },
                 |charts| {
                     let _ = tx.send(Event::Project(ProjectEvent::Charts(id.clone(), charts)));
+                },
+                move |value| {
+                    let _ = analysis_tx.send(Event::Project(ProjectEvent::Analysis(
+                        analysis_id.clone(),
+                        value,
+                    )));
                 },
                 renderer,
                 chooser,
@@ -1261,6 +1267,11 @@ impl App {
                     let _ = reply.send(Err(error));
                 }
             }
+            ProjectEvent::Analysis(id, value) => {
+                if let Some(run) = self.projects.running.as_mut().filter(|r| r.id == id) {
+                    run.analysis = Some(value);
+                }
+            }
             ProjectEvent::Charts(id, charts) => {
                 if let Some(run) = self.projects.running.as_mut().filter(|r| r.id == id) {
                     run.charts = charts;
@@ -1348,6 +1359,7 @@ impl App {
                 let mut message = Message::assistant(text);
                 message.project_paused = paused;
                 message.project_activity = activity;
+                message.project_analysis = projects::runner::recover_analysis(&self.root, &id);
                 message.project_charts = projects::runner::recover_charts(&self.root, &id);
                 message.request_id = Some(id.clone());
                 c.messages.push(message);
@@ -1413,6 +1425,7 @@ impl App {
                         title_generation: false,
                         tool_events: vec![],
                         partial: String::new(),
+                        project_retry: Default::default(),
                     });
                     self.work_save()?;
                 }

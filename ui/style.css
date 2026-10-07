@@ -1456,7 +1456,7 @@ body.collapsed .project-section { overflow: visible; }
 .project-queued-message p { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 130px; overflow-y: auto; margin: 6px 0; }
 .project-queued-message small { display: block; color: var(--muted); }
 #project-supplements { margin-bottom: 8px; max-height: 200px; overflow: auto; }
-.supplement-entry { padding: 8px; border-bottom: 1px solid var(--border); }
+.supplement-entry { padding: 8px; border-bottom: 1px solid var(--line); }
 .supplement-entry p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0; }
 /* 資料夾名稱只供本機授權選擇；大信箱保持可捲動，不把按鈕推到視窗外。 */
 #project-outlook-consent { width: min(760px, 90vw); max-height: 90vh; overflow: auto; }
@@ -1519,3 +1519,13 @@ dialog button.icon-button { padding:6px; }
   .chart-axis-range { grid-template-columns:1fr 1fr; }
   .chart-axis-range button { grid-column:1 / -1; }
 }
+/* 長任務概況與證據使用同一面板；原文及清單可展開，避免擠掉最後答案。 */
+.analysis-panel { border:1px solid var(--line); border-radius:10px; padding:14px; margin:10px 0; overflow-wrap:anywhere; }
+.analysis-panel p { margin:8px 0; }
+.analysis-panel section { margin:12px 0; }
+.analysis-panel details { margin:8px 0; }
+.analysis-panel summary { cursor:pointer; padding:8px; border:1px solid var(--line); border-radius:6px; }
+.analysis-panel pre { white-space:pre-wrap; max-height:300px; overflow:auto; padding:10px; font-size:13px; }
+.analysis-coverage { max-height:360px; overflow:auto; }
+.analysis-coverage > div { padding:10px 0; border-bottom:1px solid var(--line); }
+.analysis-attention { color:var(--warning); font-weight:600; }

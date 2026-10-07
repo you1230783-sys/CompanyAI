@@ -119,12 +119,13 @@ pub(super) fn analyze(
             title_generation: false,
             tool_events: vec![],
             partial: String::new(),
+            project_retry: Default::default(),
         });
         super::events::register(&run.root, &id)?;
         // 先以 DPAPI 保存包含圖片的請求，後續即使斷線也只查同一個 ID。
         broker.memory()?.delegation_write(&key, &state)?;
     }
-    let task = state.pending.as_mut().ok_or("缺少圖片辨識請求。")?;
+    let mut task = state.pending.take().ok_or("缺少圖片辨識請求。")?;
     agent.advance_past(&task.request);
     progress(
         if lookup_only {
@@ -134,7 +135,22 @@ pub(super) fn analyze(
         }
         .into(),
     );
-    let response = model::receive(run, task, deadline, lookup_only, Some(&caps));
+    let response = model::receive(
+        run,
+        &mut task,
+        deadline,
+        lookup_only,
+        Some(&caps),
+        (
+            |task: &Task| {
+                state.pending = Some(task.clone());
+                broker.memory()?.delegation_write(&key, &state)
+            },
+            &mut progress,
+        ),
+    );
+    agent.advance_past(&task.request);
+    state.pending = Some(task);
     broker.memory()?.delegation_write(&key, &state)?;
     let result = match response? {
         model::Reply::Rejected(error) => {
