@@ -12,11 +12,11 @@ mod weekly;
 pub(super) enum ProjectCommand {
     ChartCustomize {
         target: chart_edit::Target,
-        style: Option<projects::charts::style::Style>,
+        style: Option<Box<projects::charts::style::Style>>,
     },
     ChartSave {
         target: chart_edit::Target,
-        style: Option<projects::charts::style::Style>,
+        style: Option<Box<projects::charts::style::Style>>,
     },
     QuickPrepare {
         conversation: String,
@@ -140,9 +140,22 @@ pub(super) enum ProjectCommand {
         run_id: String,
         instruction_id: String,
     },
+    AnswerPreference {
+        run_id: String,
+        question_id: String,
+        answer: String,
+    },
+    SetDebug {
+        enabled: bool,
+    },
     Diagnostics {
         conversation: String,
         run_id: String,
+        #[serde(default)]
+        index: Option<usize>,
+        /// Some(true) 只複製用量，Some(false) 複製 JSON；不把長正文經 JS 橋送回。
+        #[serde(default)]
+        copy: Option<bool>,
     },
 }
 pub(super) enum ProjectEvent {
@@ -168,7 +181,7 @@ pub(super) enum ProjectEvent {
         projects::charts::Chart,
         mpsc::Sender<AppResult<String>>,
     ),
-    Diagnostics(String, String, AppResult<String>),
+    Diagnostics(String, String, Option<bool>, AppResult<String>),
     Finished(String, String, AppResult<String>),
 }
 struct PendingChart {
@@ -379,6 +392,7 @@ impl App {
     }
     pub(super) fn project_state(&self) -> serde_json::Value {
         json!({"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len()})).collect::<Vec<_>>(),
+            "preferences":self.projects.running.as_ref().and_then(|r|r.instructions.questions().ok()),
             "chart_review":self.projects.running.as_ref().and_then(|r|r.pending_chart.as_ref().map(|p|json!({"request_id":p.id,"review":p.review}))),
             "outlook_consent":self.projects.running.as_ref().and_then(|r|r.pending_outlook.as_ref().map(|p|json!({"request_id":p.id,"folders":p.folders}))),
             "file_busy":self.projects.running.as_ref().and_then(|r|r.pending_file.as_ref().map(|p|json!({"request_id":p.id,"message":p.message}))),
@@ -584,9 +598,37 @@ impl App {
             self.projects.status = "正在套用圖表選擇…".into();
             return Ok(());
         }
+        if let ProjectCommand::AnswerPreference {
+            run_id,
+            question_id,
+            answer,
+        } = &command
+        {
+            let run = self
+                .projects
+                .running
+                .as_ref()
+                .filter(|r| r.id == *run_id && self.active_id.as_deref() == Some(&r.conversation))
+                .ok_or("請在原執行中的對話回答。")?;
+            if !self.logged_in() {
+                return Err("請先登入。".into());
+            }
+            run.instructions.answer(question_id, answer)?;
+            return Ok(());
+        }
+        if let ProjectCommand::SetDebug { enabled } = &command {
+            if !self.logged_in() {
+                return Err("請先登入。".into());
+            }
+            self.config.debug_mode = *enabled;
+            storage::save_config(&self.root, &self.config)?;
+            return Ok(());
+        }
         if let ProjectCommand::Diagnostics {
             conversation,
             run_id,
+            index,
+            copy,
         } = &command
         {
             if self.active_id.as_deref() != Some(conversation.as_str())
@@ -610,8 +652,23 @@ impl App {
                 .as_ref()
                 .map(|s| s.access_token.clone())
                 .unwrap_or_default();
+            let debug = self.config.debug_mode;
+            let selected = *index;
+            let copy = *copy;
+            let chat_task = self
+                .work
+                .store
+                .tasks
+                .iter()
+                .find(|t| t.request_id == *run_id && t.conversation_id == *conversation)
+                .cloned();
             thread::spawn(move || {
-                let result = projects::diagnostics::read(&root, &id, &conversation).map(|text| {
+                let result = if let Some(task) = chat_task {
+                    projects::diagnostics::task_reports(&task, debug)
+                } else {
+                    projects::diagnostics::read_reports(&root, &id, &conversation, debug, selected)
+                }
+                .map(|text| {
                     if token.is_empty() {
                         text
                     } else {
@@ -621,6 +678,7 @@ impl App {
                 let _ = tx.send(Event::Project(ProjectEvent::Diagnostics(
                     conversation,
                     id,
+                    copy,
                     result,
                 )));
             });
@@ -806,7 +864,11 @@ impl App {
                 self.toast("已清除匯入文字");
             }
             ProjectCommand::Reveal { .. } => unreachable!("已於上方處理成果定位"),
-            ProjectCommand::Diagnostics { .. } => unreachable!("已於上方處理診斷讀取"),
+            ProjectCommand::AnswerPreference { .. }
+            | ProjectCommand::SetDebug { .. }
+            | ProjectCommand::Diagnostics { .. } => {
+                unreachable!("已於上方處理診斷讀取")
+            }
             ProjectCommand::ChartChoice { .. }
             | ProjectCommand::OutlookConsent { .. }
             | ProjectCommand::FileReady { .. } => {
@@ -1250,8 +1312,22 @@ impl App {
                     run.activity.push(self.projects.status.clone());
                 }
             }
-            ProjectEvent::Diagnostics(conversation, id, result) => {
+            ProjectEvent::Diagnostics(conversation, id, copy, result) => {
                 if self.logged_in() && self.active_id.as_deref() == Some(&conversation) {
+                    if let Some(usage_only) = copy {
+                        // 剪貼簿在原生 UI 執行緒寫入；大量回合不受 JS 訊息長度限制。
+                        let report: serde_json::Value =
+                            serde_json::from_str(&result?).map_err(|e| e.to_string())?;
+                        let field = if usage_only { "tokens" } else { "trace" };
+                        let text = report[field].as_str().ok_or("診斷紀錄缺少可複製欄位。")?;
+                        selection::copy_text(self.window, text)?;
+                        self.toast(if usage_only {
+                            "已複製用量統計"
+                        } else {
+                            "已複製 JSON／紀錄"
+                        });
+                        return Ok(());
+                    }
                     self.view.post(&json!({"type":"project_diagnostics","conversation":conversation,"run_id":id,"text":result.unwrap_or_else(|e|format!("無法讀取執行紀錄：{e}"))}))?;
                 }
             }

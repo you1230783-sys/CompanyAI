@@ -52,6 +52,8 @@ pub struct Chart {
     /// AI 透過受控工具設定的呈現轉換；原始 X／Y 與來源仍完整保存。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transform: Option<Box<transform::Transform>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quality: Option<quality::Source>,
 }
 impl Chart {
     pub fn validate(&self) -> AppResult<()> {
@@ -101,6 +103,9 @@ impl Chart {
         }
         if serde_json::to_vec(self).map_err(|e| e.to_string())?.len() > MAX_CHART_BYTES {
             return Err("圖表資料超過 8 MiB，請縮短標籤或分圖；未自動抽樣。".into());
+        }
+        if let Some(source) = &self.quality {
+            source.validate(self)?;
         }
         self.transform
             .clone()
@@ -229,6 +234,7 @@ pub fn prepare_page(
         page,
         Chart {
             transform: None,
+            quality: None,
             kind: kind.into(),
             title: title.into(),
             x_label: x_label.into(),
@@ -287,6 +293,7 @@ mod tests {
     fn ten_thousand_points_are_preserved_without_sampling() {
         let mut chart = Chart {
             transform: None,
+            quality: None,
             kind: "line".into(),
             title: "T".into(),
             x_label: "x".into(),

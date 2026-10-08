@@ -569,7 +569,7 @@ impl App {
             skills: action != "mail",
             attachment_ids,
         });
-        let mut request = jobs::chat_request(
+        let mut request = jobs::current_chat_request(
             model,
             &messages,
             &local,
@@ -647,7 +647,7 @@ impl App {
         let prompt =
             format!("請為下列使用者問題產生繁體中文標題，最多 15 個字，只回覆標題：\n{question}");
         let id = jobs::new_id()?;
-        let mut request = jobs::chat_request(
+        let mut request = jobs::current_chat_request(
             "fast",
             &[Message::user(&prompt)],
             local,

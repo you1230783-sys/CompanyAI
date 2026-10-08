@@ -144,7 +144,7 @@ fn native_null_content_call_is_accepted_without_parsing_text() {
     let task = task(request());
     let status = status(
         &task,
-        r#"{"path":"測試.txt","offset":0,"progress_note":null}"#,
+        r#"{"path":"測試.txt","offset":0,"progress_note":"已確認目前要求；下一步讀取來源。"}"#,
     );
     let Parsed::Operation {
         parsed,
@@ -167,7 +167,8 @@ fn native_null_content_call_is_accepted_without_parsing_text() {
 #[test]
 fn provider_metadata_is_ignored_and_not_forwarded_in_history() {
     let task = task(request());
-    let args = r#"{"path":"測試.txt","offset":0,"progress_note":null}"#;
+    let args =
+        r#"{"path":"測試.txt","offset":0,"progress_note":"已確認目前要求；下一步讀取來源。"}"#;
     let mut status = status(&task, args);
     status
         .agent_envelope
@@ -197,15 +198,19 @@ fn provider_metadata_is_ignored_and_not_forwarded_in_history() {
 
     // 忽略封裝額外欄位不等於忽略實際操作參數。
     status.result.as_mut().unwrap()["choices"][0]["message"]["tool_calls"][0]["function"]
-        ["arguments"] =
-        json!(r#"{"path":"a","offset":0,"progress_note":null,"unknown_argument":true}"#);
+        ["arguments"] = json!(
+        r#"{"path":"a","offset":0,"progress_note":"已確認目前要求；下一步讀取來源。","unknown_argument":true}"#
+    );
     assert!(parse(&status, &task, "owner", "run").is_err());
 }
 
 #[test]
 fn response_allowlist_still_requires_valid_native_fields() {
     let task = task(request());
-    let original = status(&task, r#"{"path":"a","offset":0,"progress_note":null}"#);
+    let original = status(
+        &task,
+        r#"{"path":"a","offset":0,"progress_note":"已確認目前要求；下一步讀取來源。"}"#,
+    );
     for key in [
         "project_id",
         "run_id",
@@ -293,8 +298,8 @@ fn delegated_text_ignores_provider_metadata() {
 fn strict_schema_duplicate_keys_unknown_fields_and_malformed_arguments_fail() {
     let task = task(request());
     for args in [
-        r#"{"path":"a","path":"b","offset":0,"progress_note":null}"#,
-        r#"{"path":"a","offset":0,"progress_note":null,"escape":true}"#,
+        r#"{"path":"a","path":"b","offset":0,"progress_note":"已確認目前要求；下一步讀取來源。"}"#,
+        r#"{"path":"a","offset":0,"progress_note":"已確認目前要求；下一步讀取來源。","escape":true}"#,
         r#"{"path":"a"}"#,
         "{broken",
     ] {
@@ -324,7 +329,10 @@ fn non_strict_repair_retains_native_call_for_tool_error() {
 #[test]
 fn truncated_refused_multiple_or_wrong_identity_never_execute() {
     let task = task(request());
-    let original = status(&task, r#"{"path":"a","offset":0,"progress_note":null}"#);
+    let original = status(
+        &task,
+        r#"{"path":"a","offset":0,"progress_note":"已確認目前要求；下一步讀取來源。"}"#,
+    );
     let mut truncated = original.clone();
     truncated.result.as_mut().unwrap()["choices"][0]["finish_reason"] = json!("length");
     assert!(matches!(
@@ -366,7 +374,7 @@ fn history_pairs_and_request_scoped_ids_survive_repeated_calls() {
 #[test]
 fn catalog_is_portable_and_nullable_fields_restore_original_defaults() {
     let tools = schema::definitions(true).unwrap();
-    assert_eq!(tools.len(), 50);
+    assert_eq!(tools.len(), 54);
     let encoded = serde_json::to_string(&tools).unwrap();
     for key in [
         "\"oneOf\":",
@@ -506,9 +514,34 @@ fn nested_office_nullable_format_preserves_explicit_properties() {
         format.insert(name.clone(), Value::Null);
     }
     format.insert("bold".into(), json!(true));
-    let args = json!({"copy_id":"copy","revision":"revision","operation":{"kind":"format","target":"p1","format":format},"progress_note":null});
+    let args = json!({"copy_id":"copy","revision":"revision","operation":{"kind":"format","target":"p1","format":format},"progress_note":"已確認目前要求；下一步讀取來源。"});
     let verified =
         schema::decode_arguments(&args.to_string(), &tool["function"]["parameters"]).unwrap();
     let restored = schema::restore_optional("office_action", verified).unwrap();
     assert_eq!(restored["operation"]["format"], json!({"bold":true}));
+}
+
+/// 舊請求已提交時維持其原始 Schema；新請求才要求每輪非 null 的工作筆記。
+#[test]
+fn pending_old_request_keeps_nullable_note_but_new_request_requires_string() {
+    let mut old = task(request());
+    let tool = old.request["tools"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|tool| tool["function"]["name"] == "read_file")
+        .unwrap();
+    let note = &mut tool["function"]["parameters"]["properties"]["progress_note"];
+    assert_eq!(note["type"], "string");
+    *note = json!({"anyOf":[note.clone(), {"type":"null"}]});
+    let args = r#"{"path":"a","offset":0,"progress_note":null}"#;
+    assert!(matches!(
+        parse(&status(&old, args), &old, "owner", "run"),
+        Ok(Parsed::Operation { .. })
+    ));
+    let new = task(request());
+    assert!(parse(&status(&new, args), &new, "owner", "run")
+        .err()
+        .unwrap()
+        .contains("progress_note"));
 }

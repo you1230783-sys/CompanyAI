@@ -533,6 +533,30 @@ pub fn chat_request(
     )
 }
 
+/// 一般聊天由網站依 conversation_id 補上下文。保留本機顯示歷史，只送目前問題。
+/// Outlook 助理與專案子請求仍使用各自明確建立的訊息，不在共用序列化器截斷。
+pub fn current_chat_request(
+    model: &str,
+    messages: &[Message],
+    conversation: &str,
+    request_id: &str,
+    mode: &str,
+    tokens: Vec<String>,
+) -> AppResult<Value> {
+    let current = messages
+        .last()
+        .filter(|m| m.role == "user")
+        .ok_or("缺少本次使用者訊息。")?;
+    chat_request(
+        model,
+        std::slice::from_ref(current),
+        conversation,
+        request_id,
+        mode,
+        tokens,
+    )
+}
+
 /// 專案只使用背景往返及桌面技能；允許較長的受控工具歷程。
 pub(crate) fn project_chat_request(
     model: &str,
@@ -1214,5 +1238,26 @@ mod tests {
             ["1", "2", "3", "4"]
         );
         assert_eq!(store.remove_completed(), 0);
+    }
+    #[test]
+    fn ordinary_chat_over_twenty_rounds_sends_only_current_question() {
+        let mut messages = vec![];
+        for _ in 0..100 {
+            messages.push(Message::user("OLD_SECRET"));
+            messages.push(Message::assistant("old answer".into()));
+        }
+        messages.push(Message::user("本次問題"));
+        let request = current_chat_request(
+            "quality",
+            &messages,
+            "conversation",
+            "request",
+            "background",
+            vec![],
+        )
+        .unwrap();
+        assert_eq!(request["messages"].as_array().unwrap().len(), 1);
+        assert_eq!(request["messages"][0]["content"], "本次問題");
+        assert!(!request.to_string().contains("OLD_SECRET"));
     }
 }

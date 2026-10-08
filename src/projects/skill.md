@@ -56,3 +56,7 @@ Outlook 任務先載入 outlook-research，優先同討論串最新一封，使�
 線上收信可用 outlook_folders(scope="online_inbox")，列 Exchange／OST 收件匣，再以 parent_id 遍歷勾選的子資料夾；依收到日期篩選。仍需本次資料夾授權，不讀未勾選分支，不保證伺服器已同步。
 
 Excel分析必須依excel-read技能先plan_excel_analysis，再export_planned_excel與chart_dataset；量測Y不可誤用時間的Value2小數。不連續欄保留原始欄字母，規劃隨CSV與任務續接保存。
+
+
+## 0.8.46 工作交接
+每輪在工具 arguments.progress_note 更新累積工作筆記（目標、有效決策、已完成、待辦、下一步及來源），以本次操作前事實為準。下一輪主要保留筆記和最近1–3組結果，原文用read_work_log查回。技能切換收回上一組說明與工具，詳細範例用read_skill_guide；可選偏好用ask_preference並沿用公告預設繼續，不能用它代替權限同意。圖表Y預設保留缺值，回答後可切換政策；無效X未明確選擇時先處理其他工作。

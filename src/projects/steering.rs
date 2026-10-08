@@ -2,6 +2,8 @@
 //! 短暫互斥鎖定義操作開始／任務結束的界線，不在模型或工具等待期間鎖住 UI。
 use crate::{jobs, storage, AppResult};
 use serde::{Deserialize, Serialize};
+mod preferences;
+pub use preferences::Question;
 use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -17,6 +19,8 @@ pub struct Instruction {
 #[derive(Default, Clone, Serialize, Deserialize)]
 struct State {
     entries: Vec<Instruction>,
+    #[serde(default)]
+    questions: Vec<Question>,
     #[serde(skip)]
     closed: bool,
 }
@@ -51,6 +55,9 @@ impl Inbox {
         let mut next = guard.clone();
         let value = edit(&mut next)?;
         let bytes = serde_json::to_vec(&next).map_err(|e| e.to_string())?;
+        if bytes.len() > 150_000 {
+            return Err("偏好與補充指示紀錄過大，未寫入；請縮短內容。".into());
+        }
         storage::atomic_write(&self.path, &storage::protect(&bytes, true)?)?;
         *guard = next;
         Ok(value)
@@ -120,6 +127,9 @@ impl Inbox {
     /// 防止最後一次檢查與完成通知之間接受一則永遠無法處理的訊息。
     pub fn boundary(&self, terminal: bool) -> AppResult<Vec<Instruction>> {
         self.change(|state| {
+            if terminal {
+                Self::defaults(state)?;
+            }
             let mut entries = Vec::new();
             for entry in &mut state.entries {
                 if entry.status == "pending" {

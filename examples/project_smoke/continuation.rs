@@ -72,7 +72,7 @@ fn answer(case: Case, round: usize, body: &Value) -> Option<String> {
     assert_eq!(body["skills"], false);
     let decision = match case {
         Case::LongRead | Case::LongReadClean | Case::TransientSubmission => {
-            let reads = state["tool_usage"]["閱讀檔案"].as_u64().unwrap_or(0) as usize;
+            let reads = state["readings"][0]["next"].as_u64().unwrap_or(0) as usize / 6000;
             // 第五次有效閱讀才提供一次可選技能；正常情境完全略過筆記也須能讀完。
             assert_eq!(all.contains("可選技能：長文件閱讀筆記"), round == 5);
             assert!(!all.contains("已累積三段新閱讀或六次有效操作"));
@@ -84,7 +84,10 @@ fn answer(case: Case, round: usize, body: &Value) -> Option<String> {
             }
             if round == 8 && matches!(case, Case::LongRead) {
                 assert_eq!(state["total_repairs"], 2);
-                assert!(state["note"].as_str().unwrap().contains("來源 source.txt"));
+                assert!(state["working_note"]
+                    .as_str()
+                    .unwrap()
+                    .contains("來源 source.txt"));
                 let results: Vec<_> = body["messages"]
                     .as_array()
                     .unwrap()
@@ -100,11 +103,11 @@ fn answer(case: Case, round: usize, body: &Value) -> Option<String> {
                     .any(|m| m["content"].as_str().unwrap().contains("segment_05")));
             }
             if reads == 23 {
-                assert_eq!(state["readings"][0]["fully_read"], true);
-                assert_eq!(state["readings"][0]["next_unread_offset"], 138000);
-                assert_eq!(state["readings"][0]["read_count"], 0);
+                // 精簡模型狀態保留真正已讀位置與總長度，完成判定不靠工具次數。
+                assert_eq!(state["readings"][0]["next"], 138000);
+                assert_eq!(state["readings"][0]["total"], 138000);
                 if matches!(case, Case::LongReadClean) {
-                    assert!(state["note"].is_null(), "不寫筆記也可正常完成");
+                    assert!(state["working_note"].is_null(), "不寫筆記也可正常完成");
                     assert_eq!(state["total_repairs"], 0);
                 }
                 finish("已讀完 23 段；測試摘要含數字與限制。", json!([]))

@@ -56,7 +56,7 @@ impl App {
             if let Some(style) = style {
                 message
                     .project_chart_styles
-                    .insert(target.chart_index, style.clone());
+                    .insert(target.chart_index, (**style).clone());
             } else {
                 message.project_chart_styles.remove(&target.chart_index);
             }
@@ -73,7 +73,7 @@ impl App {
         }
         let (reply, receive) = mpsc::channel();
         self.view
-            .export_custom_chart_png(&chart, style.as_ref(), reply)?;
+            .export_custom_chart_png(&chart, style.as_deref(), reply)?;
         let tx = self.tx.clone();
         let conversation = target.conversation.clone();
         // WebView callback 在UI執行緒；等待及檔案I/O放到背景，避免阻塞操作。

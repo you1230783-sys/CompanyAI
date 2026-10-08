@@ -325,3 +325,36 @@ fn selected_folders_are_filtered_before_model_output_and_changed_scope_rejects_r
     assert!(resumed.authorize(&cancel, Instant::now()).is_err());
     assert!(!resumed.is_allowed());
 }
+
+#[test]
+fn empty_cursor_and_saved_header_search_recover_exact_ids_without_body_reads() {
+    let cancel = AtomicBool::new(false);
+    let mut source = Fixture::default();
+    let mut session = allowed();
+    session
+        .folders(&mut source, "local_inbox", None, 0, &cancel)
+        .unwrap();
+    let page = session
+        .headers(
+            &mut source,
+            "first",
+            "2026-06-22",
+            "2026-06-28",
+            Some(""),
+            &cancel,
+        )
+        .unwrap();
+    let id = page["headers"][0]["mail_id"].as_str().unwrap();
+    let found = session.index(&id[..8], 0).unwrap();
+    assert_eq!(found["headers"][0]["mail_id"], id);
+    assert!(!found.to_string().contains("PRIVATE_"));
+    assert_eq!(source.bodies, 0);
+    let calls = source.calls;
+    session.index("工作", 20).unwrap();
+    assert_eq!(source.calls, calls);
+    let restored = Session {
+        saved: session.saved,
+        ..Default::default()
+    };
+    assert!(restored.index("", 0).is_err());
+}

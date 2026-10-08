@@ -248,7 +248,7 @@ impl Session {
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
         self.require_consent()?;
-        let (page_id, offset) = if let Some(cursor) = cursor {
+        let (page_id, offset) = if let Some(cursor) = cursor.filter(|c| !c.trim().is_empty()) {
             let (id, offset) = cursor.rsplit_once(':').ok_or("郵件游標格式不正確。")?;
             (
                 id.to_owned(),
@@ -376,6 +376,38 @@ impl Session {
             "snapshot_id":page_id,"offset":offset,"next_offset":next,
             "next_cursor":(next<page.ids.len()).then(||format!("{page_id}:{next}")),"complete":page.complete&&next==page.ids.len(),"scan_complete":page.complete,"notices":page.notices,
             "dedup_rule":"本次任務內，相同寄出時間、寄件地址及完整收件地址集合只保留一份；主旨不參與。無法取得完整地址時保留並標示。"}),
+        )
+    }
+    /// 僅在本次已授權的快照內找回完整代號；不讀新信、不推測同主旨就是同一封。
+    pub fn index(&self, query: &str, offset: usize) -> AppResult<Value> {
+        self.require_consent()?;
+        let query = query.to_lowercase();
+        let entries: Vec<_> = self
+            .saved
+            .mails
+            .values()
+            .filter(|m| {
+                self.saved
+                    .folders
+                    .get(&m.folder_id)
+                    .is_some_and(|f| self.policy.permits(&f.store, &f.entry))
+                    && (query.is_empty()
+                        || m.id.to_lowercase().contains(&query)
+                        || m.subject.to_lowercase().contains(&query))
+            })
+            .collect();
+        if offset > entries.len() {
+            return Err("索引位置超出範圍，請從0開始。".into());
+        }
+        let headers: Vec<_> = entries
+            .iter()
+            .skip(offset)
+            .take(20)
+            .map(|m| m.public())
+            .collect();
+        Ok(
+            json!({"headers":headers,"total":entries.len(),"next_offset":offset+headers.len(),
+            "has_more":offset+headers.len()<entries.len(),"notice":"已取得標題的查回；不是新掃描或已讀內文。"}),
         )
     }
     pub fn body(

@@ -582,3 +582,12 @@ HTTP 協定保持不變：專案請求 `skills:false`，工具定義／呼叫／
 CSV 成功：archive_results → compact_now（僅最近一對工具訊息）→ 加密 checkpoint。compact_context 先驗證 working_note（2000 字）、superseded（最多 12 條，各 200 字）與 next_step（500 字）；封存成功後才套用交接並縮減。補充於模型／工具界線處理，舊筆記 instruction_review_required=true，新候選若過期仍 executed=false。用戶原文保留，來源／副本與資料集索引由程式管理，主動整理不重設修復或無進展計數。任何封存失敗不宣稱整理成功。
 
 已提交／未知模型請求保持原 client_request_id、原 request payload；整理僅作用於下一個新請求。舊 checkpoint 新欄位使用 serde default。原始加密操作簿與 read_work_log／read_task_result 查回入口不變。
+
+
+## 0.8.46 上下文與偏好補充
+
+專案仍使用 client_snapshot，網站不得補回桌面已移出的工具歷史。桌面以累積筆記、目前技能核心／工具及近期1–3組結果組裝請求，8K–12K為軟目標；原結果本機查回。工具目錄新增 read_skill_guide、outlook_index、ask_preference(question,options,default_choice)、set_chart_policy(chart_index,policy)，共54項，實際公告依工作階段而定。progress_note請每輪更新；舊checkpoint仍可解析未帶筆記的工具結果。
+
+read_work_log目錄offset按筆數，每頁20筆固定快照；指定operation_id後的原文offset仍按字元。Outlook空白cursor視為null，不改有效游標格式與授權。可選偏好不終止任務；未回答使用預先公告的預設，權限不得使用此路徑。圖表Y預設保留缺值，可切換呈現；無效X未取得明確選擇時回deferred，先處理其他工作。
+
+一般聊天桌面只送當前使用者訊息，不再受20輪上限；網站依conversation_id附加歷史。Outlook助理與專案請求不套用此裁減。DEBUG可保存桌面送出／收到的JSON與獨立無正文用量報表；請保留模型原始usage（含prompt/input、completion/output與可用的cached/reasoning細項），未回傳時桌面明示缺漏。

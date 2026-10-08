@@ -339,11 +339,13 @@ fn run_for(
         run.messages.insert(0, skill);
         let deadline = Instant::now() + budget;
         broker.set_chart_chooser(chart_chooser, deadline);
+        broker.set_preferences(run.instructions.clone());
         let mut progress_state = resumed.unwrap_or_else(|| {
             super::progress::Progress::new(
                 run.messages.clone().into_iter().map(Into::into).collect(),
             )
         });
+        progress_state.update_system(&prompt);
         if !run.resume {
             progress_state
                 .task_references(run.messages.iter().map(|m| m.request_id.clone()).collect());
@@ -386,6 +388,9 @@ fn run_for(
         let mut turn = 0;
         loop {
             check_cancel(&run.cancel)?;
+            if broker.refresh_preferences()? {
+                charts(broker.charts().to_vec());
+            }
             if pending_model.is_none() {
                 if let Some(inbox) = &run.instructions {
                     let entries = inbox.boundary(false)?;
@@ -537,6 +542,7 @@ fn run_for(
                     parent.as_deref(),
                 )?;
                 broker.restrict_tools(&mut request);
+                super::context::fit(&mut request);
                 request
             } else {
                 let legacy = messages
@@ -566,8 +572,16 @@ fn run_for(
             record["requests"]
                 .as_array_mut()
                 .ok_or("任務記錄不正確。")?
-                .push(json!({"id":id,"request":task.request}));
+                .push(json!({"id":id,"request":task.request,"token_estimate":super::context::measure(&task.request)}));
             trim_journal(&mut record);
+            super::diagnostics::save_turn(
+                &run.root,
+                &run.id,
+                &id,
+                &task.request,
+                None,
+                run.config.debug_mode,
+            )?;
             checkpoint(&journal, &record)?;
             // 先保存原請求 ID，再送出 HTTP。崩潰後只能 GET 查回，不另送 POST。
             save_pause(
@@ -624,6 +638,30 @@ fn run_for(
                 agent.advance_past(&task.request);
             }
             record["last_remote_status"] = json!(task.remote);
+            let response_json = task
+                .remote
+                .as_ref()
+                .map(serde_json::to_value)
+                .transpose()
+                .map_err(|e| e.to_string())?;
+            super::diagnostics::save_turn(
+                &run.root,
+                &run.id,
+                &id,
+                &task.request,
+                response_json.as_ref(),
+                run.config.debug_mode,
+            )?;
+            if let Some(entry) = record["requests"].as_array_mut().and_then(|a| a.last_mut()) {
+                if let Some(status) = &task.remote {
+                    if let Some(result) = &status.result {
+                        entry["actual_usage"] = super::context::actual(result);
+                        if run.config.debug_mode {
+                            entry["response_json"] = result.clone();
+                        }
+                    }
+                }
+            }
             // 每輪保留可讀的回覆摘錄與伺服器識別，不依賴網站是否建立聊天紀錄。
             // 不另外複製整份 messages／tools；長回覆明確標示截斷。
             if let Some(entry) = record["requests"].as_array_mut().and_then(|a| a.last_mut()) {
@@ -727,6 +765,7 @@ fn run_for(
                 }
             }
             record["last_remote_status"] = json!(task.remote);
+
             if let Some(inbox) = &run.instructions {
                 let terminal = parsed.as_ref().is_some_and(|p| {
                     matches!(
@@ -743,7 +782,7 @@ fn run_for(
                         callback(broker.analysis.clone());
                     }
                     progress_state.compact_for_instruction();
-                    let skipped = json!({"ok":false,"executed":false,"reason":"使用者在本輪期間補充指示；此候選操作未執行，請依新要求重新決定。"});
+                    let skipped = json!({"ok":false,"executed":false,"reason":"本輪收到補充或預設決策；此候選操作未執行，請依新要求重新決定。"});
                     if let Some((message, call_id)) = native_call {
                         progress_state.push_native(message, &call_id, &skipped);
                     } else if !native {
@@ -870,48 +909,68 @@ fn run_for(
                     }
                     record["pending_operation"]["state"] = json!("started");
                     checkpoint(&journal, &record)?;
-                    let result =
-                        if let Some(result) = broker.cached_result(&operation_id, &request)? {
-                            result
-                        } else if let super::Tool::AnalyzeImage { path, focus } = &request {
-                            match super::vision::analyze(
-                                &run,
-                                &mut broker,
-                                &operation_id,
-                                progress_state.agent.as_mut(),
-                                &task,
-                                path,
-                                focus,
-                                deadline,
-                                |text| report(&mut activity, &mut progress, text),
-                            )? {
-                                super::delegation::Outcome::Complete(result) => result,
-                                super::delegation::Outcome::Pending(reason) => {
-                                    return pause(&reason, &broker, &progress_state, Some(&task))
-                                }
+                    let result = if let Some(result) =
+                        broker.cached_result(&operation_id, &request)?
+                    {
+                        result
+                    } else if let super::Tool::AskPreference {
+                        question,
+                        options,
+                        default,
+                    } = &request
+                    {
+                        match run
+                            .instructions
+                            .as_ref()
+                            .ok_or("此任務沒有偏好回覆入口。".to_owned())
+                            .and_then(|inbox| inbox.ask(&operation_id, question, options, default))
+                        {
+                            Ok(question_id) => {
+                                json!({"ok":true,"operation_id":operation_id,"result":{"question_id":question_id,"default":default,"state":"pending","notice":"先做不依賴答案的工作；需要此偏好且未回答時採預設。不得用於授權或關鍵資料定義。"}})
                             }
-                        } else if let super::Tool::SummarizeDocument { path, focus } = &request {
-                            match super::delegation::summarize(
-                                &run,
-                                &mut broker,
-                                &mut worker,
-                                &caps.principal_id,
-                                &operation_id,
-                                progress_state.agent.as_mut(),
-                                &task,
-                                path,
-                                focus,
-                                deadline,
-                                |text| report(&mut activity, &mut progress, text),
-                            )? {
-                                super::delegation::Outcome::Complete(result) => result,
-                                super::delegation::Outcome::Pending(reason) => {
-                                    return pause(&reason, &broker, &progress_state, Some(&task))
-                                }
+                            Err(error) => {
+                                json!({"ok":false,"operation_id":operation_id,"error":error})
                             }
-                        } else {
-                            broker.execute(&operation_id, &request, &mut worker, &run.cancel)?
-                        };
+                        }
+                    } else if let super::Tool::AnalyzeImage { path, focus } = &request {
+                        match super::vision::analyze(
+                            &run,
+                            &mut broker,
+                            &operation_id,
+                            progress_state.agent.as_mut(),
+                            &task,
+                            path,
+                            focus,
+                            deadline,
+                            |text| report(&mut activity, &mut progress, text),
+                        )? {
+                            super::delegation::Outcome::Complete(result) => result,
+                            super::delegation::Outcome::Pending(reason) => {
+                                return pause(&reason, &broker, &progress_state, Some(&task))
+                            }
+                        }
+                    } else if let super::Tool::SummarizeDocument { path, focus } = &request {
+                        match super::delegation::summarize(
+                            &run,
+                            &mut broker,
+                            &mut worker,
+                            &caps.principal_id,
+                            &operation_id,
+                            progress_state.agent.as_mut(),
+                            &task,
+                            path,
+                            focus,
+                            deadline,
+                            |text| report(&mut activity, &mut progress, text),
+                        )? {
+                            super::delegation::Outcome::Complete(result) => result,
+                            super::delegation::Outcome::Pending(reason) => {
+                                return pause(&reason, &broker, &progress_state, Some(&task))
+                            }
+                        }
+                    } else {
+                        broker.execute(&operation_id, &request, &mut worker, &run.cancel)?
+                    };
                     if result["result"]["waiting_for_user"] == true {
                         // 預檢及等待未修改文件，不記為成功／失敗；續接重讀同一已完成的模型請求。
                         record["pending_operation"] = Value::Null;
@@ -945,7 +1004,18 @@ fn run_for(
                                 )
                             )
                         } else {
-                            format!("{label}：完成")
+                            if let super::Tool::OutlookHeaders { .. } = &request {
+                                let data = &result["result"];
+                                format!(
+                                    "{label}：完成（本頁 {} 封，位置 {}–{}／{}）",
+                                    data["headers"].as_array().map_or(0, Vec::len),
+                                    data["offset"],
+                                    data["next_offset"],
+                                    data["total_unique"]
+                                )
+                            } else {
+                                format!("{label}：完成")
+                            }
                         },
                     );
                     record["activity"] = json!(activity);
@@ -1295,6 +1365,9 @@ fn replay_safe(tool: &super::Tool) -> bool {
             | OutlookHeaders { .. }
             | OutlookCompare { .. }
             | OutlookRead { .. }
+            | OutlookIndex { .. }
+            | ReadSkillGuide { .. }
+            | AskPreference { .. }
     )
 }
 fn invalidate_pause(run: &Run) -> AppResult<()> {

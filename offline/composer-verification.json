@@ -19,5 +19,5 @@
   "next_worker": "real runner, cancelled and awaited",
   "prior_worker_completion": "controlled event",
   "result": "PASS",
-  "version": "0.8.45"
+  "version": "0.8.46"
 }

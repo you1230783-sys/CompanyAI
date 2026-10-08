@@ -66,7 +66,7 @@ impl App {
                 {
                     999
                 } else {
-                    39
+                    usize::MAX
                 }
     }
 
@@ -200,7 +200,7 @@ impl App {
                         .ok_or_else(|| "原附件已到期或移除，請重新加入附件。".to_string())
                 })
                 .collect::<AppResult<Vec<_>>>()?;
-            let mut request = jobs::chat_request(
+            let mut request = jobs::current_chat_request(
                 &settings.model,
                 &context(&messages)?,
                 conversation,

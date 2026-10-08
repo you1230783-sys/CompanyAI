@@ -1395,7 +1395,7 @@ body.collapsed .project-section { overflow: visible; }
 .project-activity-history { margin: 0; padding: 0 18px 12px 36px; max-height: 260px; overflow-y: auto; overflow-anchor: none; color: var(--muted); }
 .project-activity-history li { padding: 3px 0; white-space: pre-wrap; }
 #project-diagnostics-dialog { width: min(960px, 92vw); }
-#project-diagnostics-text { box-sizing: border-box; width: 100%; height: min(65vh, 680px); padding: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); resize: vertical; font-family: Consolas, monospace; white-space: pre-wrap; }
+#project-diagnostics-text, #project-token-text { box-sizing: border-box; width: 100%; height: min(24vh, 240px); min-height: 120px; max-height: none; padding: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); resize: vertical; font-family: Consolas, monospace; white-space: pre-wrap; }
 #project-activity { margin: 12px auto; max-width: 880px; }
 .notification-card .event-content { min-width: 0; overflow-wrap: anywhere; }
 .message-tools .retry-message { font-size: inherit; }
@@ -1529,3 +1529,6 @@ dialog button.icon-button { padding:6px; }
 .analysis-coverage { max-height:360px; overflow:auto; }
 .analysis-coverage > div { padding:10px 0; border-bottom:1px solid var(--line); }
 .analysis-attention { color:var(--warning); font-weight:600; }
+
+/* 可選問題維持非模態，閱讀及背景任務都可繼續。 */
+.project-preferences{position:fixed;right:20px;bottom:20px;z-index:30;max-width:390px;max-height:45vh;overflow:auto;background:var(--panel,#fff);border:1px solid #8893a4;border-radius:10px;padding:12px;box-shadow:0 4px 20px #0003}.project-preferences[hidden]{display:none}.preference-card{display:grid;gap:8px;margin:8px 0}.preference-card p{margin:0}

@@ -4,6 +4,23 @@
   let signature = "", importProject = null, settingsProject = null, removeProject = null;
   let lastNotice = "", pickerRequest = 0, activityKey = "", activitySignature = "";
   const command = value => send({type: "project", command: value});
+  // 非模態卡片不攔住其他操作；依原任務代號回答，關閉不代表同意。
+  const preferences=document.createElement("section"); preferences.id="project-preferences";
+  preferences.className="project-preferences"; preferences.hidden=true; document.body.append(preferences);
+  let preferenceKey="";
+  function renderPreferences(projects,visible) {
+    const rows=visible ? (projects.preferences || []).filter(q=>q.state==="pending") : [];
+    const key=JSON.stringify([projects.running_id,rows]); if(key===preferenceKey)return;
+    preferenceKey=key;preferences.replaceChildren();preferences.hidden=!rows.length;
+    for(const q of rows) {
+      const card=node("div","preference-card"),title=node("strong","",q.question),hint=node("p","",`未回答時採用：${q.default}。工作會繼續。`);
+      const select=document.createElement("select");select.setAttribute("aria-label",q.question);
+      for(const option of q.options){const item=document.createElement("option");item.value=option;item.textContent=option;select.append(item);}select.value=q.default;
+      const apply=node("button","primary-button","回答"),custom=document.createElement("input");custom.placeholder="也可自行輸入偏好";custom.maxLength=1000;
+      apply.onclick=()=>command({action:"answer_preference",run_id:projects.running_id,question_id:q.id,answer:custom.value.trim()||select.value});
+      card.append(title,hint,select,custom,apply);preferences.append(card);
+    }
+  }
   const fileDialog=document.createElement("dialog");fileDialog.id="project-file-busy";document.body.append(fileDialog);
   let fileKey="",fileTarget=null;
   function replyFile(retry) {
@@ -148,17 +165,22 @@
     buttons.append(pause,apply);reviewDialog.append(buttons);reviewDialog.showModal();
   }
   const findProject = id => state.projects?.items?.find(project => project.id === id);
+  $("debug-mode").onchange=()=>command({action:"set_debug",enabled:$("debug-mode").checked});
+  // 複製只傳紀錄選擇，長報表由原生重讀並寫剪貼簿，避免超過 JS 訊息上限。
+  $("project-token-copy").onclick=()=>{if(diagnosticsRequest)command({action:"diagnostics",...diagnosticsRequest,copy:true});};
   let diagnosticsRequest = null;
-  function openDiagnostics(conversation, runId) {
-    diagnosticsRequest = {conversation, run_id:runId};
+  function openDiagnostics(conversation, runId, index=null) {
+    diagnosticsRequest = {conversation, run_id:runId, index};
     $("project-diagnostics-text").value = "正在讀取本機紀錄…";
+    $("project-token-text").value = "";
     if (!$("project-diagnostics-dialog").open) $("project-diagnostics-dialog").showModal();
     command({action:"diagnostics", ...diagnosticsRequest});
   }
   $("project-diagnostics-close").onclick = () => $("project-diagnostics-dialog").close();
-  $("project-diagnostics-dialog").addEventListener("close", () => { diagnosticsRequest = null; $("project-diagnostics-text").value = ""; });
+  $("project-diagnostics-dialog").addEventListener("close", () => { diagnosticsRequest = null; $("project-diagnostics-text").value = ""; $("project-token-text").value = ""; $("project-diagnostics-round").replaceChildren(); });
+  $("project-diagnostics-round").onchange=()=>{if(diagnosticsRequest)openDiagnostics(diagnosticsRequest.conversation,diagnosticsRequest.run_id,Number($("project-diagnostics-round").value));};
   $("project-diagnostics-refresh").onclick = () => { if (diagnosticsRequest) openDiagnostics(diagnosticsRequest.conversation, diagnosticsRequest.run_id); };
-  $("project-diagnostics-copy").onclick = () => send({type:"copy",text:$("project-diagnostics-text").value});
+  $("project-diagnostics-copy").onclick = () => {if(diagnosticsRequest)command({action:"diagnostics",...diagnosticsRequest,copy:false});};
   $("project-diagnostics-open").onclick = () => {
     const runId = $("project-diagnostics-run").value;
     if (!runId) return;
@@ -240,7 +262,11 @@
       if (message.type === "project_diagnostics") {
         if (diagnosticsRequest && $("project-diagnostics-dialog").open && message.conversation === state.active_id &&
             message.conversation === diagnosticsRequest.conversation && message.run_id === diagnosticsRequest.run_id) {
-          $("project-diagnostics-text").value = message.text;
+          try { const reports=JSON.parse(message.text); if(diagnosticsRequest.index!=null && reports.selected!==diagnosticsRequest.index)return; $("project-diagnostics-text").value=reports.trace; $("project-token-text").value=reports.tokens;
+            const select=$("project-diagnostics-round");select.replaceChildren();
+            for(const round of reports.rounds||[]){const option=document.createElement("option");option.value=round.index;option.textContent=`第 ${Number(round.turn)||round.index+1} 輪（紀錄 ${round.index+1}）`;select.append(option);}
+            select.value=reports.selected;select.disabled=!(reports.rounds||[]).length; }
+          catch { $("project-diagnostics-text").value=message.text; $("project-token-text").value="此紀錄沒有獨立用量統計。"; }
         }
         return;
       }
@@ -259,10 +285,11 @@
     renderOutlookConsent(projects,showActivity);
     renderFileBusy(projects,showActivity);
     // 診斷只在設定的進階區提供；保留目前對話每次任務的入口，不在聊天區佔位。
+    $("debug-mode").checked=!!state.config.debug_mode;
     const selector = $("project-diagnostics-run"), old = selector.value;
     const runs = new Map();
     for (const message of state.messages || []) {
-      if (message.role === "assistant" && message.request_id && message.project_activity?.length) {
+      if (message.request_id) {
         runs.set(message.request_id, `${String(message.content || "專案任務").slice(0, 50)} · ${message.request_id.slice(0, 8)}`);
       }
     }
@@ -271,12 +298,13 @@
     if (selector.dataset.signature !== diagnosticsSignature) {
       selector.replaceChildren(); selector.dataset.signature = diagnosticsSignature;
       for (const [id, title] of [...runs].reverse()) selector.add(new Option(title, id));
-      if (!runs.size) selector.add(new Option("目前對話沒有專案執行紀錄", ""));
+      if (!runs.size) selector.add(new Option("目前對話沒有執行紀錄", ""));
       if (runs.has(old)) selector.value = old;
     }
     selector.disabled = !state.logged_in || !runs.size;
     $("project-diagnostics-open").disabled = selector.disabled;
     if (diagnosticsRequest && (!state.logged_in || diagnosticsRequest.conversation !== state.active_id)) $("project-diagnostics-dialog").close();
+    renderPreferences(projects,showActivity);
     ChartUI.render($("project-charts"), showActivity ? projects.charts : []);
     ChartUI.cleanup();
     AnalysisUI.render($("project-analysis"),showActivity ? projects.analysis : null);

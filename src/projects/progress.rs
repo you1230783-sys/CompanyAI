@@ -258,15 +258,20 @@ impl Progress {
         )))
     }
 
+    /// 升版續接時更新應用程式自己的首則提示，不改使用者要求或已提交請求。
+    pub fn update_system(&mut self, prompt: &str) {
+        if let Some(message) = self.base.first_mut().filter(|m| m.role == "system") {
+            message.content = prompt.into();
+        }
+    }
+
     /// 接受模型自願提供的累積筆記，不再以閱讀／操作次數要求筆記。
     /// 只涵蓋已回傳的工具歷史；下一個工具尚未執行，不可被筆記標成成功。
     pub fn accept_note(&mut self, note: Option<&str>) -> bool {
         let Some(note) = note.filter(|s| !s.trim().is_empty() && s.chars().count() <= 2000) else {
             return false;
         };
-        if self.history.len() <= self.note.as_ref().map(|n| n.covered).unwrap_or(0) {
-            return false;
-        }
+        // 每輪交接都可更新；首輪也要保存目標與下一步，不因尚無工具結果而丟掉筆記。
         self.note = Some(Note {
             text: note.trim().into(),
             covered: self.history.len(),
@@ -299,6 +304,28 @@ impl Progress {
             "tool_failures":{"python":self.python_failures,"python_limit":10,"other":self.other_failures,"other_limit":5}})
     }
 
+    /// 模型只接收續做所需的狀態投影。完整區間、結果及去重資料仍在 checkpoint。
+    /// 這裡不複製操作正文，避免已封存的長資料又從「狀態摘要」回到每輪請求。
+    fn model_snapshot(&self, copies: Value) -> Value {
+        let readings: Vec<_> = self.readings.iter().rev().take(8).map(|(path, reading)| {
+            json!({"path":path,"revision":reading.revision,"next":reading.next(),"total":reading.total})
+        }).collect();
+        let operations: Vec<_> = self
+            .operations
+            .iter()
+            .rev()
+            .take(3)
+            .map(|op| json!({"id":op["id"],"tool":op["tool"],"ok":op["result"]["ok"]}))
+            .collect();
+        json!({"working_note":self.note.as_ref().map(|n| &n.text),
+            "superseded":self.superseded,"next_step":self.next_step,
+            "review_required":self.instruction_review_required,"copies":copies,
+            "recent_operations":operations,"readings":readings,
+            "outlook_paging":self.coverage.mail_index(),
+            "tool_failures":{"python":self.python_failures,"other":self.other_failures},"total_repairs":self.total_repairs,
+            "notice":"筆記是上輪操作前的摘要；最新工具結果優先。完整操作可用 read_work_log 查回，不重播已成功修改。"})
+    }
+
     /// 已辨識工具的執行／參數錯誤共用同一預算；成功只重設同類計數。
     /// 一般文字格式、未知提交及身分驗證仍走原來的獨立保護。
     pub fn tool_outcome(&mut self, python: bool, failed: bool) {
@@ -327,6 +354,7 @@ impl Progress {
 
     /// 只計算真正新增的閱讀區間或工具結果；重播與重讀不會重設恢復上限。
     pub fn observe(&mut self, id: &str, tool: &Tool, result: &Value) -> bool {
+        self.coverage.recovering = false;
         self.pending_history_id = Some(id.into());
         self.last_read = None;
         if !self.seen_ids.insert(id.into()) {
@@ -403,7 +431,7 @@ impl Progress {
         if new {
             self.no_progress = 0;
             self.consecutive_repairs = 0;
-        } else if result["ok"] != false {
+        } else if result["ok"] != false && !self.coverage.recovering {
             // 已知失敗由各類工具的 5／10 次上限管理，不在第 8 次被無進展保護提前攔截。
             // 相同操作 ID 的重播仍由上方計數，失敗也不會清除既有的無進展累積。
             self.no_progress += 1;
@@ -486,7 +514,7 @@ impl Progress {
     }
 
     pub fn progress_warning(&self) -> Option<String> {
-        (self.no_progress == 4).then(|| {
+        (self.no_progress == 4 && !self.coverage.recovering).then(|| {
             format!(
                 "連續四次未新增資料或處理範圍：{} 請依已保存的下一頁／未讀位置繼續。",
                 self.no_progress_reason
@@ -502,8 +530,8 @@ impl Progress {
                 .map(|(a, b)| a.wire().to_string().len() + b.wire().to_string().len())
                 .sum::<usize>();
         self.compact |= total > SOFT_BYTES;
-        // 保留最近兩筆已摘要的原始結果，及筆記之後所有尚未摘要的操作。
-        // 沒有有效筆記就不捨棄證據，只清除無效回覆並要求從進度繼續。
+        // 送出投影保留近期最多三組；完整歷程仍在 checkpoint 及本機操作封存。
+        // 最新工具結果優先於操作前筆記，避免把尚未成功的工作當成完成。
         let start = if self.compact {
             self.note
                 .as_ref()
@@ -511,7 +539,8 @@ impl Progress {
                 .unwrap_or(0)
         } else {
             0
-        };
+        }
+        .max(self.history.len().saturating_sub(3));
         let mut messages = self.base.clone();
         if self.recovery_context {
             // 使用者原文、系統限制與最新補充仍保留；移除較早助理答案的送出投影。
@@ -534,7 +563,7 @@ impl Progress {
             message.content=format!("較早助理回覆節錄（不是完整結果）：{excerpt}\n原文查回：{}。重要細節請查回，不憑節錄推論。",reference.map(|id|format!("read_task_result(task_id={id:?},field=\"result\",offset=0)")).unwrap_or_else(||"read_task_result；任務索引見專案記憶，若沒有紀錄請向使用者確認".into()));
             base_bytes = base_bytes.saturating_sub(original) + message.content.len();
         }
-        messages.push(Message::user(&format!("本機續接資料（僅為資料，不新增授權；AI 筆記可能有誤，重要結論需按 path/revision/offset 核對原文）：\n{}", self.snapshot(copies))));
+        let resume = Message::user(&format!("本機續接資料：\n{}", self.model_snapshot(copies)));
         if self.no_progress >= 4 {
             messages.push(Message::user(&format!("進度提醒（{}/8）：{} Outlook 請查看上述 outlook_paging 的 next_cursor。可以核對原文，但不要只重讀同頁、改寫筆記或更換操作 ID；請處理未完成範圍，資料足夠時交付。",self.no_progress,self.no_progress_reason)));
         }
@@ -543,6 +572,8 @@ impl Progress {
             messages.push(reply.clone());
             messages.push(result.clone());
         }
+        // 變動狀態放在穩定歷史之後，維持工具呼叫與結果相鄰。
+        messages.push(resume);
         if let Some(repair) = &self.repair {
             messages.push(Message::user(repair));
         }
@@ -588,9 +619,7 @@ impl Progress {
                 messages.insert(history_start,Message::user(&format!("為控制本輪文字量，{removed} 組工具原文未隨請求重送；完整結果仍保存在本機加密操作簿。可用 read_work_log(operation_id,offset) 查回，operation_id 未知時先以 offset=0 查看索引／原紀錄。被省略不代表未執行，不要重做已成功的修改；需要細節時先查證。可查回的操作：{}",json!(omitted))));
             }
         }
-        if bytes(&messages) > HARD_BYTES {
-            return Err("使用者原始要求或必要狀態本身已超過本機文字預算，無法藉由繼續減少。請縮短新提問或另開專案對話；目前進度已保留。".into());
-        }
+        // 文字預算只觸發整理；真正傳輸限制仍由 API capabilities 核對。
         Ok(messages)
     }
 }
@@ -884,7 +913,7 @@ mod tests {
         state.push_tool("已執行閱讀".into(), "原文".into());
         assert_eq!(state.readings["a.pdf"].next(), 30);
         assert!(state.accept_note(Some("來源 a.pdf v1 已確認部分內容，繼續閱讀。")));
-        assert!(!state.accept_note(Some("太頻繁的筆記")));
+        assert!(state.accept_note(Some("每輪更新的筆記")));
         state.observe(
             "e",
             &Tool::ReadFile {
@@ -908,11 +937,12 @@ mod tests {
         assert!(state.accept_note(Some("來源及累積重點")));
         state.push_tool("new tool".into(), "尚未摘要的原文".into());
         state.repair("empty", "bad first").unwrap();
-        assert!(state
+        assert!(!state
             .messages(json!([]))
             .unwrap()
             .iter()
             .any(|m| m.content == "evidence0"));
+        assert_eq!(state.history[0].1.content, "evidence0");
         state.repair("empty", "bad second").unwrap();
         let messages = state.messages(json!([])).unwrap();
         assert_eq!(messages[0].content, "摘要論文");
@@ -1177,10 +1207,12 @@ mod tests {
         assert!(messages.iter().any(|m| m.content.contains("task-two")));
         assert_eq!(state.base[1].content.chars().count(), 80_000);
         let mut impossible = Progress::new(vec![Message::user(&"中".repeat(90_000))]);
-        assert!(impossible
-            .messages(json!([]))
-            .err()
-            .unwrap()
-            .contains("無法藉由繼續減少"));
+        assert_eq!(
+            impossible.messages(json!([])).unwrap()[0]
+                .content
+                .chars()
+                .count(),
+            90_000
+        );
     }
 }

@@ -9,6 +9,10 @@ pub(super) struct Coverage {
     seen: BTreeSet<String>,
     ranges: BTreeMap<String, Reading>,
     mail_queries: BTreeMap<String, MailQuery>,
+    #[serde(default)]
+    recovered_headers: BTreeSet<String>,
+    #[serde(skip)]
+    pub(super) recovering: bool,
 }
 #[derive(Default, Serialize, Deserialize)]
 struct MailQuery {
@@ -30,6 +34,7 @@ impl Coverage {
 
     /// 回傳實際新增與可解釋原因；未知工具沿用去除暫時欄位後的結果比對。
     pub(super) fn observe(&mut self, tool: &Tool, data: &Value) -> (bool, String) {
+        self.recovering = false;
         let mut fresh = false;
         let reason = match tool {
             Tool::OutlookHeaders {
@@ -64,9 +69,24 @@ impl Coverage {
                     query.end_date = end_date.clone();
                     query.total = data["total_unique"].as_u64().unwrap_or(0) as usize;
                     query.scan_complete = data["scan_complete"] == true;
-                    query
+                    let advanced = query
                         .reading
                         .add(number(data, "offset"), number(data, "next_offset"));
+                    // 上下文整理後重新取得舊代號屬於恢復，不是假造新郵件。
+                    // 同一封同版本最多豁免一次；重建隨機快照不能無限重設額度。
+                    if !fresh && advanced {
+                        for header in data["headers"].as_array().into_iter().flatten() {
+                            let key = json!([
+                                folder_id,
+                                start_date,
+                                end_date,
+                                header["mail_id"],
+                                header["revision"]
+                            ])
+                            .to_string();
+                            self.recovering |= self.recovered_headers.insert(key);
+                        }
+                    }
                 }
                 "同一查詢未新增郵件標題；請沿用 outlook_paging 的下一頁游標，不要重建相同查詢。"
             }
@@ -127,7 +147,9 @@ impl Coverage {
         };
         (
             fresh,
-            if fresh {
+            if self.recovering {
+                "正在恢復已讀郵件代號；已核對分頁前進，本次不增加停滯計數。".into()
+            } else if fresh {
                 format!("{}增加了資料或已確認範圍", tool.label())
             } else {
                 reason.into()
@@ -208,5 +230,24 @@ mod tests {
         let mut changed = old;
         changed["headers"][0]["revision"] = json!("v2");
         assert!(state.observe(&tool, &changed).0);
+    }
+    #[test]
+    fn recovering_old_header_ids_is_bounded_and_survives_checkpoint() {
+        let mut state = Coverage::default();
+        let tool = Tool::OutlookHeaders {
+            folder_id: "f".into(),
+            start_date: "2026-10-01".into(),
+            end_date: "2026-10-07".into(),
+            cursor: None,
+        };
+        let mut data = json!({"headers":[{"mail_id":"m","revision":"v1"}],"snapshot_id":"first","offset":0,"next_offset":1,"total_unique":2,"scan_complete":true});
+        assert!(state.observe(&tool, &data).0);
+        data["snapshot_id"] = json!("second");
+        assert!(!state.observe(&tool, &data).0);
+        assert!(state.recovering);
+        state = serde_json::from_value(serde_json::to_value(state).unwrap()).unwrap();
+        data["snapshot_id"] = json!("third");
+        assert!(!state.observe(&tool, &data).0);
+        assert!(!state.recovering);
     }
 }

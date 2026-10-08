@@ -107,13 +107,13 @@ pub struct ChatRequest<'a> {
 }
 
 pub fn chat_json(model: &str, messages: &[Message]) -> AppResult<String> {
-    if messages.is_empty() || messages.len() > 40 {
-        return Err("每次最多保留 20 輪對話；請清除對話後再試。".into());
+    if messages.is_empty() {
+        return Err("缺少訊息。".into());
     }
     encode_chat(model, messages)
 }
 
-/// 專案的工具往返不套用一般聊天 20 輪限制；總文字量另由進度管理器限制。
+/// 舊版專案文字契約的訊息數保護；一般聊天不設輪數限制。
 pub(crate) fn project_chat_json(model: &str, messages: &[Message]) -> AppResult<String> {
     if messages.is_empty() || messages.len() > 204 {
         return Err("專案訊息數超過上限，請縮小任務範圍。".into());
@@ -272,7 +272,7 @@ mod tests {
     #[test]
     fn project_rounds_have_a_separate_message_budget() {
         let messages = vec![Message::user("tool evidence"); 60];
-        assert!(chat_json("quality", &messages).is_err());
+        assert!(chat_json("quality", &messages).is_ok());
         assert!(project_chat_json("quality", &messages).is_ok());
         assert!(project_chat_json("quality", &vec![Message::user("tool"); 205]).is_err());
     }

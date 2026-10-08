@@ -457,8 +457,9 @@
         </section>
         <details id="advanced-settings">
           <summary>進階功能</summary>
-          <label for="project-diagnostics-run">目前對話的專案執行紀錄</label>
-          <select id="project-diagnostics-run" aria-label="選擇專案任務"></select>
+          <label><input type="checkbox" id="debug-mode">DEBUG：檢視一般對話 JSON，保存專案逐輪 JSON（新任務生效）</label>
+          <label for="project-diagnostics-run">目前對話的執行紀錄</label>
+          <select id="project-diagnostics-run" aria-label="選擇對話請求或專案任務"></select>
           <button id="project-diagnostics-open" class="secondary-button">查看執行紀錄</button>
         </details>
       </div>
@@ -631,8 +632,13 @@
     </dialog>
     <dialog id="project-diagnostics-dialog" aria-labelledby="project-diagnostics-title">
       <div class="dialog-heading"><h2 id="project-diagnostics-title">本機執行紀錄</h2><button id="project-diagnostics-close">關閉</button></div>
+      <p>JSON／執行紀錄（含對話內容，每次顯示一輪）</p>
+      <label>回合 <select id="project-diagnostics-round"></select></label>
       <textarea id="project-diagnostics-text" readonly rows="20" aria-label="AI 回覆與工具結果"></textarea>
-      <div class="dialog-actions"><button id="project-diagnostics-refresh">重新讀取</button><button id="project-diagnostics-copy">複製紀錄</button></div>
+      <div class="dialog-actions"><button id="project-diagnostics-refresh">重新讀取</button><button id="project-diagnostics-copy">複製 JSON／紀錄</button></div>
+      <p>用量統計（不含對話、檔名或工具參數，可單獨複製）</p>
+      <textarea id="project-token-text" readonly rows="12" aria-label="用量統計"></textarea>
+      <button id="project-token-copy">只複製用量統計</button>
     </dialog>
     <div id="toast" role="status" aria-live="polite" popover="manual" hidden></div>
     <script src="vendor/markdown-it.min.js"></script>
@@ -652,6 +658,7 @@
     <script src="chart-editor.js"></script>
     <script src="charts.js"></script>
     <script src="analysis.js"></script>
+    <script src="reply-tables.js"></script>
     <script src="app.js"></script>
     <script src="work.js"></script>
     <script src="mail.js"></script>

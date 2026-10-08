@@ -11,8 +11,16 @@ const DEFINITIONS: &str = include_str!("tools.json");
 /// 工具參數只有這份定義；壓成單行再附到技能，避免排版空白增加每輪內容。
 /// 沒有設定 strict:true，因為純文字提示並不能啟用服務端的約束解碼。
 pub(super) fn system_prompt() -> AppResult<String> {
-    let definitions: Value =
+    let mut definitions: Value =
         serde_json::from_str(DEFINITIONS).map_err(|_| "內建專案工具定義無法解析，已停止。")?;
+    // 共用筆記規則只說一次，舊文字契約也避免每個工具重複整段說明。
+    for tool in definitions["tools"].as_array_mut().into_iter().flatten() {
+        if let Some(note) =
+            tool["function"]["parameters"]["properties"]["progress_note"].as_object_mut()
+        {
+            note.remove("description");
+        }
+    }
     Ok(format!(
         "{}\n技能目錄：{}\n\n工具定義（OpenAI Chat Completions tools 形狀，僅為文字契約）：\n{}",
         super::SKILL,
@@ -470,6 +478,19 @@ mod tests {
                 json!({"path":"a.txt","revision":"r","note_revision":"1","summary":"摘要"}),
             ),
             ("read_work_log", json!({})),
+            (
+                "read_skill_guide",
+                json!({"id":"python-analysis","offset":0}),
+            ),
+            ("outlook_index", json!({"query":"PR2","offset":0})),
+            (
+                "ask_preference",
+                json!({"question":"圖例位置","options":["右側","下方"],"default_choice":"右側"}),
+            ),
+            (
+                "set_chart_policy",
+                json!({"chart_index":0,"policy":{"blank":"gap","invalid":"skip"}}),
+            ),
             (
                 "record_analysis",
                 json!({"report":{"goal":"核對","current_step":"整理","open_questions":[],"superseded":[],"findings":[],"checks":[],"method":null}}),

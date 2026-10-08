@@ -62,3 +62,16 @@ const transformedOptions=context.ChartUI.option(indexed,false,style);
 assert.ok(transformedOptions.tooltip.formatter([{seriesName:"A",value:[2,-2]}]).includes("X（時間）：2"));
 assert.ok(transformedOptions.tooltip.formatter({seriesName:"A",value:[1,null]}).includes("Y（數值）：—"));
 console.log("PASS: chart bounds (decimals, negatives, constant, empty, transformed and horizontal), X/Y tooltip escaping, blank reference labels, 10000 points / 8 series, PNG options and cleanup.");
+
+// 同一份來源依政策重畫，PNG 與畫面必須使用相同資料，不能把設零後的數字當原值。
+const quality={kind:"line",title:"缺值測試",x_label:"x",y_label:"y",source:"fixture",x:[1,2,3,4],
+  series:[{name:"a",values:[10,0,null,0]},{name:"b",values:[2,3,4,5]}],data_issues:[{original_value:"NG"},{original_value:null}],
+  quality:{cells:[{row:1,series:0,issue:0,blank:false},{row:2,series:0,issue:1,blank:true}]}};
+const qstyle=context.ChartEditor.defaults(quality);qstyle.quality_policy={blank:"skip",invalid:"gap"};
+const qview=context.ChartQuality.view(quality,qstyle.quality_policy);
+assert.deepEqual(pair(qview.series[0].values),[10,null,null,0]);
+assert.deepEqual(pair(qview.series[0].skip_indices),[2]);assert.equal(quality.series[0].values[1],0);
+assert.deepEqual(pair(context.ChartUI.option(quality,false,qstyle).series[0].data),[[0,10],[1,null],[3,0]]);
+assert.deepEqual(pair(context.ChartUI.option(quality,true,qstyle).series[0].data),[[0,10],[1,null],[3,0]]);
+assert.deepEqual(pair(qview.series[1].values),[2,3,4,5]);
+console.log("PASS: reversible missing-value policies preserve real zero, other series, source issues and matching display/PNG points.");

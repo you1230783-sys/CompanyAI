@@ -614,13 +614,8 @@ impl App {
             .as_deref()
             .and_then(|id| self.projects.store.project_for(id))
             .is_some();
-        if messages.len() >= if project_chat { 1000 } else { 40 } {
-            return Err(if project_chat {
-                "此專案對話已達 500 輪，請新增專案對話。"
-            } else {
-                "此對話已達 20 輪，請新增對話。"
-            }
-            .into());
+        if project_chat && messages.len() >= 1000 {
+            return Err("此專案對話已達 500 輪，請新增專案對話。".into());
         }
         if self
             .active_id
@@ -752,6 +747,7 @@ impl App {
                         // 不只檢查 JS 回傳前綴，確保下一次建置能驗收原生跨執行緒橋接。
                         let chart = crate::projects::charts::Chart {
                             transform: None,
+                            quality: None,
                             kind: "line".into(),
                             title: "10,000 筆量測趨勢／PNG 匯出測試".into(),
                             x_label: "時間 (秒)".into(),

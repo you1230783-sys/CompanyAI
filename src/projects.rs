@@ -2,6 +2,7 @@
 pub(crate) mod agent;
 pub mod analysis;
 pub mod charts;
+pub mod context;
 pub mod datasets;
 mod delegation;
 pub mod diagnostics;
@@ -243,6 +244,23 @@ pub enum Tool {
     LoadSkill {
         id: String,
     },
+    /// 查詢完整方法時只將當頁放入近期工具結果，不永久附加在 system。
+    ReadSkillGuide {
+        id: String,
+        #[serde(default)]
+        offset: usize,
+    },
+    OutlookIndex {
+        query: String,
+        #[serde(default)]
+        offset: usize,
+    },
+    AskPreference {
+        question: String,
+        options: Vec<String>,
+        #[serde(rename = "default_choice")]
+        default: String,
+    },
     SearchFiles {
         paths: Vec<String>,
         query: String,
@@ -259,6 +277,10 @@ pub enum Tool {
     ExportChartPng {
         chart_index: usize,
         name: String,
+    },
+    SetChartPolicy {
+        chart_index: usize,
+        policy: charts::quality::Policy,
     },
     TransformChart {
         chart_index: usize,
@@ -408,10 +430,14 @@ impl Tool {
             Self::InspectDataset { .. } => "查看 CSV 欄位、統計與首尾預覽",
             Self::ChartDataset { .. } => "直接以本地 CSV 建立圖表",
             Self::LoadSkill { .. } => "載入工作技能",
+            Self::ReadSkillGuide { .. } => "查閱技能詳細方法",
+            Self::OutlookIndex { .. } => "查回已取得郵件的代號",
+            Self::AskPreference { .. } => "詢問可選偏好並繼續工作",
             Self::SearchFiles { .. } => "跨文件搜尋",
             Self::OfficeBatch { .. } => "批次編輯 Office",
             Self::CreateChart { .. } | Self::ChartFromExcel { .. } => "建立圖表",
             Self::ExportChartPng { .. } => "儲存圖表 PNG",
+            Self::SetChartPolicy { .. } => "調整圖表缺值呈現",
             Self::TransformChart { .. } => "調整圖表座標與無值位置",
             Self::AnalyzeImage { .. } => "辨識專案圖片",
             Self::PlanExcelAnalysis { .. } => "核對並鎖定 Excel 分析欄位",

@@ -16,8 +16,13 @@ pub(super) fn definitions(strict: bool) -> AppResult<Vec<Value>> {
         .ok_or("內建工具目錄遺失。")?
         .iter()
         .map(|tool| {
+            let note = tool["function"]["parameters"]["properties"]["progress_note"].clone();
             let mut tool = tool.clone();
             tool["function"]["parameters"] = normalize(&tool["function"]["parameters"])?;
+            // 新請求明確要求每輪筆記；回覆相容層仍可讀舊 checkpoint 的 null／缺漏。
+            if note.is_object() {
+                tool["function"]["parameters"]["properties"]["progress_note"] = normalize(&note)?;
+            }
             tool["function"]["strict"] = json!(strict);
             Ok(tool)
         })

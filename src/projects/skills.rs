@@ -1,6 +1,7 @@
 //! 僅載入隨 EXE 發行的工作方法，不執行專案資料夾內的腳本或設定。
 use crate::AppResult;
 use serde_json::{json, Value};
+mod core;
 const SKILLS: &[(&str, &str, &str)] = &[
     (
         "python-analysis",
@@ -84,7 +85,16 @@ pub fn catalog() -> Value {
 pub fn catalog_for(_model: &str) -> Value {
     json!(SKILLS
         .iter()
-        .map(|(id, description, _)| json!({"id":id,"description":description}))
+        .map(|(id, description, _)| {
+            let category = match *id {
+                "python-analysis" | "log-analysis" | "excel-read" | "multi-file-excel" => {
+                    "資料分析"
+                }
+                "charts" | "dataset-charts" => "圖表",
+                _ => "文件與郵件",
+            };
+            json!({"category":category,"id":id,"description":description})
+        })
         .collect::<Vec<_>>())
 }
 pub fn load(id: &str) -> AppResult<&'static str> {
@@ -99,20 +109,14 @@ pub fn load(id: &str) -> AppResult<&'static str> {
         .ok_or("未知技能；請依技能目錄指定 id。".into())
 }
 pub fn context(ids: &[String]) -> AppResult<String> {
-    let mut parts = ids
-        .iter()
-        .map(|id| load(id))
-        .collect::<AppResult<Vec<_>>>()?;
-    // 分析技能共用一份方法說明；簡單閱讀不攜帶整份證據與統計契約。
-    if ids.iter().any(|id| {
-        matches!(
-            id.as_str(),
-            "log-analysis" | "python-analysis" | "research" | "excel-read" | "notes"
-        )
-    }) {
-        parts.push(include_str!("skills/analysis-quality.md"));
+    for id in ids {
+        load(id)?;
     }
-    Ok(parts.join("\n\n"))
+    Ok(ids
+        .iter()
+        .map(|id| core::guide(id))
+        .collect::<Vec<_>>()
+        .join("\n"))
 }
 
 pub fn context_for(ids: &[String], _model: &str) -> AppResult<String> {
@@ -127,7 +131,7 @@ pub fn context_for(ids: &[String], _model: &str) -> AppResult<String> {
 /// 圖片併入基本檔案閱讀，依模型能力提供方法，不需要多一輪載入技能。
 pub fn image_context_for(model: &str) -> &'static str {
     if super::vision::input::model_supported(model) {
-        include_str!("image-guide.md")
+        "圖片：analyze_image(path,focus)讀專案JPG/JPEG/PNG；每次一張、最多20次不同要求，原圖5MB。只回文字重點，關鍵數字需核對；不讀Outlook附件或掃描PDF。"
     } else {
         super::vision::input::UNSUPPORTED_MODEL
     }
@@ -136,15 +140,13 @@ pub fn image_context_for(model: &str) -> &'static str {
 /// 高階工作技能載入所需基本組；同一份說明在 system 只出現一次。
 pub fn activate(ids: &mut Vec<String>, id: &str) -> AppResult<()> {
     load(id)?;
+    // 技能代表當前階段；切換時收回舊詳細說明與工具，資料與成果仍由 broker 保存。
+    ids.clear();
     let dependencies: &[&str] = match id {
-        "python-analysis" => &["excel-read", "dataset-charts"],
         "outlook-research" => &["outlook-coverage"],
         "outlook-coverage" => &["outlook-research"],
-        "paper-evidence" => &["research", "notes"],
-        "weekly-update" => &["research", "notes", "office-edit"],
-        "multi-file-excel" => &["research", "office-edit", "excel-read"],
-        "charts" => &["excel-read", "dataset-charts"],
-        "dataset-charts" => &["excel-read", "log-analysis", "charts"],
+        "paper-evidence" => &["research"],
+        "multi-file-excel" => &["excel-read"],
         _ => &[],
     };
     for next in dependencies.iter().copied().chain(std::iter::once(id)) {
@@ -162,8 +164,8 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
         "analyze_image" => true,
         "plan_excel_analysis" | "export_planned_excel" => has("excel-read"),
         "outlook_compare" => has("outlook-coverage"),
-        "list_files" | "read_file" | "load_skill" | "ask_user" | "finish" | "read_work_log"
-        | "read_task_result" | "compact_context" => true,
+        "list_files" | "read_file" | "load_skill" | "read_skill_guide" | "ask_preference"
+        | "ask_user" | "finish" | "read_work_log" | "read_task_result" | "compact_context" => true,
         "record_analysis" => {
             has("log-analysis")
                 || has("python-analysis")
@@ -172,13 +174,15 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
                 || has("excel-read")
         }
         "export_log_dataset" | "export_excel_dataset" | "inspect_dataset" | "chart_dataset" => {
-            has("dataset-charts")
+            has("dataset-charts") || has("python-analysis") || has("charts")
         }
-        "inspect_excel" | "read_excel_range" => has("excel-read"),
+        "inspect_excel" | "read_excel_range" => has("excel-read") || has("dataset-charts"),
         "list_logs" | "read_log" | "search_logs" => has("log-analysis"),
-        "outlook_folders" | "outlook_headers" | "outlook_read" => has("outlook-research"),
+        "outlook_folders" | "outlook_headers" | "outlook_read" | "outlook_index" => {
+            has("outlook-research")
+        }
         "create_chart" | "chart_from_excel" | "chart_excel_range" | "export_chart_png"
-        | "transform_chart" => has("charts"),
+        | "transform_chart" | "set_chart_policy" => has("charts") || has("dataset-charts"),
         "create_working_copy" | "save_copy" | "delete_copy" => {
             has("text-edit") || has("office-edit")
         }
@@ -228,7 +232,14 @@ mod tests {
         assert!(!catalog().to_string().contains("image-read"));
         assert!(!enabled("office_action", &ids));
         activate(&mut ids, "weekly-update").unwrap();
+        assert!(!enabled("office_action", &ids));
+        activate(&mut ids, "office-edit").unwrap();
         assert!(enabled("office_action", &ids));
+        activate(&mut ids, "python-analysis").unwrap();
+        assert!(!enabled("office_action", &ids));
+        assert!(enabled("run_python", &ids));
+        assert!(context(&ids).unwrap().chars().count() < 1500);
+        activate(&mut ids, "weekly-update").unwrap();
         let before = context(&ids).unwrap();
         activate(&mut ids, "weekly-update").unwrap();
         assert_eq!(before, context(&ids).unwrap());

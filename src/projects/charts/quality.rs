@@ -1,6 +1,8 @@
 //! 作圖資料預檢及使用者決策；不改來源活頁簿，不讓模型傳入處理政策。
 use super::{Chart, Series};
+mod policy;
 use crate::{projects::office::excel::Page, AppResult};
+pub use policy::{Cell as MissingCell, Policy, Source};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -81,7 +83,10 @@ fn category(cell: &crate::projects::office::excel::Cell) -> &'static str {
     }
 }
 impl Prepared {
-    pub fn apply(mut self, choices: &[Choice]) -> AppResult<Chart> {
+    pub fn apply(self, choices: &[Choice]) -> AppResult<Chart> {
+        self.apply_policy(choices, None)
+    }
+    pub fn apply_policy(mut self, choices: &[Choice], policy: Option<&Policy>) -> AppResult<Chart> {
         self.review.validate(choices)?;
         let mut removed = BTreeSet::new();
         let mut counts = [0usize; 3];
@@ -105,6 +110,28 @@ impl Prepared {
                     }
                 }
             }
+        }
+        // 索引保存於本機圖表，供後續編輯從「設零」還原缺值；不複製有效數列。
+        let cells = self
+            .issues
+            .iter()
+            .enumerate()
+            .filter(|(_, (row, col, detail))| {
+                *col > 0 && detail.category != "數字文字" && !removed.contains(row)
+            })
+            .map(|(issue, (row, col, detail))| MissingCell {
+                row: row - removed.range(..*row).count(),
+                series: col - 1,
+                issue,
+                blank: detail.category == "空白",
+            })
+            .collect::<Vec<_>>();
+        if !cells.is_empty() {
+            self.chart.quality = Some(Source {
+                cells,
+                question_id: None,
+                applied_answer: None,
+            });
         }
         self.chart.data_issues = self
             .issues
@@ -146,6 +173,10 @@ impl Prepared {
             }
             series.values = values;
         }
+        self.chart.data_note = format!("數字文字轉換 {} 格；原空白 {} 格；異常值：缺值 {}、略過 {}、設零 {}；無效 X 排除 {} 列。", self.review.converted,self.review.blanks,counts[0],counts[1],counts[2],removed.len());
+        if let Some(policy) = policy {
+            self.chart = policy.view(&self.chart)?;
+        }
         if self
             .chart
             .series
@@ -154,7 +185,6 @@ impl Prepared {
         {
             return Err("選取範圍在處理後沒有可繪製的數值，請重新選擇資料。".into());
         }
-        self.chart.data_note = format!("數字文字轉換 {} 格；原空白 {} 格；異常值：缺值 {}、略過 {}、設零 {}；無效 X 排除 {} 列。", self.review.converted,self.review.blanks,counts[0],counts[1],counts[2],removed.len());
         self.chart.validate()?;
         Ok(self.chart)
     }
@@ -385,5 +415,29 @@ mod tests {
             .data_issues
             .iter()
             .any(|i| i.row == 2 && i.cell == "A2" && i.handling.contains("排除整列")));
+    }
+    #[test]
+    fn editable_policy_roundtrips_zero_to_gap_without_changing_valid_values() {
+        let chart = prepare(&fixture(), chart())
+            .unwrap()
+            .apply(&[Choice::Zero])
+            .unwrap();
+        let restored: Chart =
+            serde_json::from_value(serde_json::to_value(&chart).unwrap()).unwrap();
+        let view = Policy {
+            blank: Some(Choice::Skip),
+            invalid: Some(Choice::Gap),
+        }
+        .view(&restored)
+        .unwrap();
+        view.validate().unwrap();
+        assert_eq!(view.series[0].values, vec![Some(339.0), None, None]);
+        assert_eq!(view.series[0].skip_indices, vec![2]);
+        assert_eq!(view.series[1].values, vec![Some(2.0), Some(3.0), Some(4.0)]);
+        assert_eq!(restored.series[0].values[1], Some(0.0));
+        assert_eq!(view.data_issues[1].original_value, json!("NG"));
+        let mut invalid = restored;
+        invalid.quality.as_mut().unwrap().cells[0].row = usize::MAX;
+        assert!(invalid.validate().is_err());
     }
 }

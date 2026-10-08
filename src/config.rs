@@ -53,6 +53,8 @@ pub struct Config {
     pub always_new_chat: bool,
     /// 選用本機工具，預設隱藏；啟用後才允許讀取 VNC 機台設定。
     pub vnc_enabled: bool,
+    /// DEBUG 僅保存本機加密 JSON，數字用量報表與正文分開。
+    pub debug_mode: bool,
 }
 
 /// 只有個人偏好能落盤；舊版檔案中的網址、路由、Header 和 HTTP 欄位會被忽略。
@@ -73,6 +75,7 @@ struct Preferences {
     quick_actions_fast: Option<bool>,
     always_new_chat: bool,
     vnc_enabled: bool,
+    debug_mode: bool,
 }
 
 impl Serialize for Config {
@@ -92,6 +95,7 @@ impl Serialize for Config {
             quick_actions_fast: Some(self.quick_actions_fast),
             always_new_chat: self.always_new_chat,
             vnc_enabled: self.vnc_enabled,
+            debug_mode: self.debug_mode,
         }
         .serialize(serializer)
     }
@@ -114,6 +118,7 @@ impl<'de> Deserialize<'de> for Config {
             quick_actions_fast: saved.quick_actions_fast.unwrap_or(true),
             always_new_chat: saved.always_new_chat,
             vnc_enabled: saved.vnc_enabled,
+            debug_mode: saved.debug_mode,
             ..Self::default()
         })
     }
@@ -142,6 +147,7 @@ impl Default for Config {
             quick_actions_fast: true,
             always_new_chat: false,
             vnc_enabled: false,
+            debug_mode: false,
         }
     }
 }
@@ -337,7 +343,7 @@ mod tests {
         assert_eq!(config.model, "quality");
         assert_eq!(config.hotkey, "Ctrl+Shift+F8");
         let saved = serde_json::to_value(&config).unwrap();
-        assert_eq!(saved.as_object().unwrap().len(), 14);
+        assert_eq!(saved.as_object().unwrap().len(), 15);
         assert!(saved.get("server_url").is_none());
         assert!(Config::default().validate().is_ok());
     }

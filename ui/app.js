@@ -112,7 +112,7 @@ md.renderer.rules.image = (tokens, index) =>
   `<span class="external-image">[圖片：${md.utils.escapeHtml(tokens[index].content || "未命名圖片")}]</span>`;
 function renderMarkdown(text) {
   try {
-    return DOMPurify.sanitize(md.render(text), {
+    return DOMPurify.sanitize(md.render(ReplyTables.normalize(text)), {
       USE_PROFILES: { html: true, svg: true, mathMl: true },
       ADD_TAGS: ["eq", "eqn"],
       FORBID_TAGS: ["style", "iframe", "form"],
@@ -231,7 +231,7 @@ function renderStructuredReply(payload, receivedReplies = []) {
   root.append(answer);
   const sections = payload.sections || {};
   function appendList(parent, title, values) {
-    const items = (values || []).filter((value) => typeof value === "string" && value.trim());
+    const items = ReplyTables.group((values || []).filter((value) => typeof value === "string" && value.trim()));
     if (!items.length) return;
     parent.append(node("h3", "", title));
     const list = document.createElement("ul");

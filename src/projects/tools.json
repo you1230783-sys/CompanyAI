@@ -13,7 +13,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -41,7 +42,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -86,7 +88,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -146,7 +149,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -232,7 +236,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -267,7 +272,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -297,7 +303,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -335,7 +342,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -376,7 +384,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -775,7 +784,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -805,7 +815,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -830,7 +841,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -854,7 +866,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [],
@@ -875,7 +888,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -910,7 +924,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -947,7 +962,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -977,7 +993,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -1005,7 +1022,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -1034,7 +1052,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -1064,7 +1083,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -1106,7 +1126,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -1146,7 +1167,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -1179,7 +1201,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -1207,7 +1230,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -1221,7 +1245,7 @@
       "type": "function",
       "function": {
         "name": "read_work_log",
-        "description": "續接時查回本次任務完整原始操作與結果；offset 為 Unicode 字元位置，每次 6000 字。按 operation_id 排序，不代表時間順序。",
+        "description": "查本機封存。未指定operation_id：offset按筆數，每頁20筆固定索引；指定ID：offset按字元，每頁6000字。從0重取可更新索引。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -1232,7 +1256,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             },
             "operation_id": {
               "type": "string",
@@ -1247,7 +1272,7 @@
       "type": "function",
       "function": {
         "name": "load_skill",
-        "description": "載入技能說明與相關工具；下一輪生效，任務續接保留，無需重複。",
+        "description": "切換工作階段；下一輪只載入此技能與必要工具，旧成果保留。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -1274,7 +1299,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -1307,7 +1332,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -1711,7 +1736,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -1814,7 +1839,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -1875,7 +1900,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -1911,7 +1936,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -1941,7 +1966,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -1990,7 +2016,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -2068,7 +2094,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -2110,7 +2136,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -2146,7 +2172,7 @@
             },
             "progress_note": {
               "type": "string",
-              "description": "可選的本輪進度摘要。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -2178,7 +2204,7 @@
             },
             "progress_note": {
               "type": "string",
-              "description": "可選的本輪進度摘要。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -2207,7 +2233,7 @@
             },
             "progress_note": {
               "type": "string",
-              "description": "可選的本輪進度摘要。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -2248,7 +2274,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -2388,7 +2414,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -2457,7 +2483,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -2495,7 +2521,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -2572,7 +2598,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "累積工作筆記：目標／決策／已完成／目前工作／待辦及失敗，不含思考過程。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -2614,7 +2640,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "累積工作筆記，不含內部思考。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -2643,7 +2669,7 @@
             },
             "progress_note": {
               "type": "string",
-              "description": "可選的工作進度摘要。"
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -2804,7 +2830,7 @@
             },
             "progress_note": {
               "type": "string",
-              "description": "累積工作筆記，不含原始點陣。",
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。",
               "maxLength": 2000
             }
           },
@@ -2870,7 +2896,7 @@
             },
             "progress_note": {
               "type": "string",
-              "description": "累積工作筆記，不含原始點陣。",
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。",
               "maxLength": 2000
             }
           },
@@ -2974,7 +3000,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -3078,7 +3105,8 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -3270,11 +3298,163 @@
             },
             "progress_note": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
             "report"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_skill_guide",
+        "description": "按需閱讀完整技能方法；每頁3000字，不切換目前技能。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "outlook_index",
+        "description": "从本次已取得的郵件標題查回完整代號；query為主旨片段或代號，空字串列全部；offset為項目位置，每頁20封。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "query"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "ask_preference",
+        "description": "非阻塞詢問可事後修改的呈現偏好；繼續其他工作，未回答時可採明示預設。不得用於權限、刪除、來源或統計定義。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "question": {
+              "type": "string",
+              "maxLength": 1000
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 2,
+              "maxItems": 4
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "default_choice": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "question",
+            "options",
+            "default_choice"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "set_chart_policy",
+        "description": "依保留原值切換圖表 Y 缺值與異常呈現；不改來源。需要新PNG時再次匯出。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "chart_index": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "policy": {
+              "type": "object",
+              "properties": {
+                "blank": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "gap",
+                    "skip",
+                    "zero",
+                    null
+                  ]
+                },
+                "invalid": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "gap",
+                    "skip",
+                    "zero",
+                    null
+                  ]
+                }
+              },
+              "required": [
+                "blank",
+                "invalid"
+              ],
+              "additionalProperties": false
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "每輪累積筆記：目標、已核對事實、下一步與待確認。"
+            }
+          },
+          "required": [
+            "chart_index",
+            "policy"
           ],
           "additionalProperties": false
         }

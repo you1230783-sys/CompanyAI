@@ -63,7 +63,7 @@ pub fn verify(exe: &Path, root: &Path) -> AppResult<()> {
     )?;
     assert_eq!(
         loaded["result"]["loaded"],
-        json!(["research", "notes", "paper-evidence"])
+        json!(["research", "paper-evidence"])
     );
     assert!(
         loaded["result"].get("instructions").is_none(),
@@ -167,7 +167,11 @@ fn delegation(root: &Path, pending: bool) -> AppResult<()> {
                                     && m["content"]
                                         .as_str()
                                         .unwrap_or("")
-                                        .contains("# 論文閱讀與證據整理")));
+                                        .contains("摘要只作索引")));
+                            // 載入後只有當前階段的核心方法，完整手冊須另行按頁讀取。
+                            assert!(!body["messages"]
+                                .to_string()
+                                .contains("# 論文閱讀與證據整理"));
                             if parent == 2 {
                                 assert!(body.to_string().contains("快速模型摘要，主模型尚未核實"));
                             }

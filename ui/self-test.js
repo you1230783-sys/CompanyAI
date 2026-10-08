@@ -23,6 +23,8 @@ window.runSelfTest = async (structuredFixture) => {
     }
   }
   try {
+    // 原生 ready 訊息可能早於後續 script；先等全部介面入口就緒再驗證動態節點。
+    await waitFor(() => !!window.ProjectUI && !!window.AuthUI, "UI modules initialized");
     check(!!$("project-default-profile") && !$("project-default-desktop") && !$("project-default-downloads"),"default project uses one local profile action");
     check($("project-default-dialog").textContent.includes("LM_AI_Projects"),"default project location is explained");
     {
@@ -47,6 +49,26 @@ window.runSelfTest = async (structuredFixture) => {
       AnalysisUI.render(panel,{...analysis,review_required:false});
       check(panel.querySelector("details[data-key]").open,"analysis updates keep evidence expanded");
       AnalysisUI.render(panel,null);check(panel.hidden,"analysis clears when conversation changes");
+    }
+    {
+      const old=LMUI.getState(), originalSend=send, commands=[];
+      try {
+        send=message=>commands.push(message);
+        const projects={...(old.projects||{}),items:[],running:true,running_id:"preference-run",running_conversation:"preference-chat",preferences:[
+          {id:"q1",question:"Y 空白的顯示",options:["保留缺值","設為 0"],default:"保留缺值",state:"pending"}]};
+        LMUI.receive({...old,logged_in:true,active_id:"preference-chat",messages:[],projects});
+        const card=$("project-preferences");
+        check(!card.hidden && card.querySelector("select").value==="保留缺值","optional question has an explicit default");
+        check(!card.closest("dialog"),"optional question is nonmodal");
+        card.querySelector("button").click();
+        check(commands.some(m=>m.command?.action==="answer_preference"&&m.command.run_id==="preference-run"&&m.command.question_id==="q1"),"preference answer is bound to its run and question");
+        ProjectUI.openDiagnostics("preference-chat","preference-run");
+        $("project-diagnostics-text").value="PRIVATE CONTENT";$("project-token-text").value="0".repeat(400000);
+        $("project-token-copy").click();
+        check(commands.at(-1).command?.copy===true && JSON.stringify(commands.at(-1)).length<500 && !JSON.stringify(commands.at(-1)).includes("PRIVATE"),"large usage copy sends only its record selection and never conversation text");
+        $("project-diagnostics-dialog").close();
+      } finally {send=originalSend;LMUI.receive(old);}
+      check($("project-preferences").hidden,"optional questions are cleared when leaving the run");
     }
     const sample =
       '# Markdown 測試\n\n| 名稱 | 數值 |\n| --- | --- |\n| 快速 | 42 |\n\n- [x] 已完成\n\n行內公式 $E=mc^2$\n\n$$\\int_0^1 x^2\\,dx=\\frac{1}{3}$$\n\n```rust\nfn main() { println!("hello"); }\n```\n\n註腳[^1]\n\n[^1]: 補充說明\n\n<script>alert(1)</script>\n\n![外部圖片](https://example.com/private.png)\n\n[危險連結](javascript:alert(1))';
@@ -150,6 +172,19 @@ window.runSelfTest = async (structuredFixture) => {
     const editor=document.querySelector(".chart-edit-dialog");editor.querySelector("input").value="使用者標題";editor.querySelector("form").requestSubmit();
     check(applied?.title==="使用者標題" && !document.querySelector(".chart-edit-dialog"),"chart editor applies validated settings");
     check(largeChart.title==="一萬筆趨勢" && largeChart.series[0].values[0]===0,"chart editing preserves original data");
+    {
+      const quality={kind:"line",title:"缺值測試",x_label:"x",y_label:"y",source:"fixture",x:[1,2,3,4],series:[{name:"a",values:[10,0,null,0]}],
+        data_issues:[{original_value:"NG"},{original_value:null}],quality:{cells:[{row:1,series:0,issue:0,blank:false},{row:2,series:0,issue:1,blank:true}]}};
+      let selected=null;ChartEditor.open(quality,null,value=>{selected=value;});
+      const editor=document.querySelector(".chart-edit-dialog");
+      editor.querySelector('[data-quality="blank"]').value="skip";
+      editor.querySelector('[data-quality="invalid"]').value="gap";
+      editor.querySelector("form").requestSubmit();
+      check(selected?.quality_policy.blank==="skip" && selected.quality_policy.invalid==="gap","chart editor persists separate blank and invalid policies");
+      const visible=ChartUI.option(quality,false,selected),png=ChartUI.option(quality,true,selected);
+      check(JSON.stringify(visible.series[0].data)==="[[0,10],[1,null],[3,0]]" && JSON.stringify(png.series[0].data)===JSON.stringify(visible.series[0].data),"quality edit and PNG restore missing data and preserve valid zero");
+      check(ChartUI.exportPng(quality,selected).startsWith("data:image/png;base64,"),"quality policy renders actual PNG");
+    }
     const indexChart={kind:"scatter",title:"Index 7001 起",source:"假設 CSV",x_label:"Index",y_label:"Mean",x:[7001,7002,7003,7004,7005],series:[{name:"A",values:[10,null,20,null,0],skip_indices:[1]}]};
     const transformed=ChartEditor.defaults(indexChart);
     transformed.transform.x.mode="index";transformed.transform.y.mode="offset";transformed.transform.y.offset=-10;transformed.transform.drop_empty=true;
@@ -737,6 +772,18 @@ window.runSelfTest = async (structuredFixture) => {
     payloadDetails.remove();
     check(payload.sections.key_points.every((point) => structured.textContent.includes(point)) &&
       structured.querySelector("code")?.textContent === "robocopy", "structured answer and both key points remain visible");
+    for(const points of [
+      ["| 欄位 | 表頭文字 | 欄寬 |\n|---|---|---|\n| A | 日期 | 12 |"],
+      ["| 欄位 | 表頭文字 | 欄寬 |","|---|---|---|","| A | 日期 | 12 |"],
+      ["| 欄位 | 表頭文字 | 欄寬 | |---|---|---| | A | 日期 | 12 |"]
+    ]) {
+      const source=JSON.stringify(points),tableReply=document.createElement("div");
+      tableReply.innerHTML=LMUI.renderAssistantReply("",{answer:"設定如下。",sections:{key_points:points}});
+      check(tableReply.querySelectorAll("table th").length===3 && tableReply.querySelector("table tbody td")?.textContent==="A","key points render multiline, split-row and compact Markdown tables");
+      check(JSON.stringify(points)===source,"table repair never changes stored reply fields");
+    }
+    const literal="```text\n| A | B | |---|---|\n```";
+    check(ReplyTables.normalize(literal)===literal && ReplyTables.normalize("一般文字 | A | B |")==="一般文字 | A | B |","table repair preserves code and ordinary pipe text");
     const emptyPayload = { answer: "只有正文", sections: {}, citations: [] };
     check(!LMUI.renderAssistantReply("", emptyPayload).includes("answer-details"), "empty sections produce no empty disclosure");
     const hostilePayload = {

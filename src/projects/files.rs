@@ -1,6 +1,7 @@
 //! 固定檔案 broker：只接受專案相對路徑；逐層鎖住目錄、拒絕重新解析點與硬連結。
 //! 工作副本先留在記憶體，發布只用 create_new；原始文件從未取得可寫 handle。
 mod analysis;
+mod chart_preferences;
 mod python;
 use super::{
     office,
@@ -688,6 +689,8 @@ pub(super) struct SavedBroker {
     results: BTreeMap<String, (Value, Value)>,
     #[serde(default)]
     archived_results: BTreeMap<String, Value>,
+    #[serde(default)]
+    work_log_index: Option<Vec<Value>>,
     published: Vec<String>,
     txt_context: bool,
     #[serde(default)]
@@ -716,6 +719,7 @@ pub struct Broker {
     /// 同一 operation_id 只能配對同一份工具參數，重送僅回傳已記錄的結果。
     results: BTreeMap<String, (Value, Value)>,
     archived_results: BTreeMap<String, Value>,
+    work_log_index: Option<Vec<Value>>,
     published: Vec<String>,
     /// 任務接觸 TXT 後，不允許把內容混入未加密的 MD 成果。
     txt_context: bool,
@@ -726,6 +730,7 @@ pub struct Broker {
     python_artifacts: Vec<super::python::Artifact>,
     png_renderer: Option<super::charts::png::Renderer>,
     chart_chooser: Option<super::charts::quality::Chooser>,
+    preferences: Option<super::steering::Inbox>,
     chart_deadline: std::time::Instant,
 }
 impl Broker {
@@ -746,6 +751,7 @@ impl Broker {
             copies: BTreeMap::new(),
             results: BTreeMap::new(),
             archived_results: BTreeMap::new(),
+            work_log_index: None,
             published: Vec::new(),
             txt_context: false,
             loaded_skills: vec![],
@@ -755,6 +761,7 @@ impl Broker {
             python_artifacts: vec![],
             png_renderer: None,
             chart_chooser: None,
+            preferences: None,
             chart_deadline: std::time::Instant::now(),
         })
     }
@@ -762,7 +769,7 @@ impl Broker {
         // 經序列化建立不含程序資源的快照；授權與執行中的 COM 物件不保存。
         serde_json::from_value(
             json!({"analysis":self.analysis,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
-            "results":self.results,"archived_results":self.archived_results,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts}),
+            "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts}),
         )
         .map_err(|e| e.to_string())
     }
@@ -838,6 +845,7 @@ impl Broker {
         self.copies = state.copies;
         self.results = state.results;
         self.archived_results = state.archived_results;
+        self.work_log_index = state.work_log_index;
         self.published = state.published;
         self.txt_context = state.txt_context;
         Ok(())
@@ -918,7 +926,9 @@ impl Broker {
                     return false;
                 }
                 match name {
-                    "export_chart_png" | "transform_chart" => !self.charts.is_empty(),
+                    "export_chart_png" | "transform_chart" | "set_chart_policy" => {
+                        !self.charts.is_empty()
+                    }
                     "edit_text" => self.copies.values().any(|c| c.office.is_none()),
                     "edit_office" | "office_action" | "office_batch" => {
                         self.copies.values().any(|c| c.office.is_some())
@@ -975,6 +985,9 @@ impl Broker {
         prepared: super::charts::quality::Prepared,
         cancel: &AtomicBool,
     ) -> AppResult<Option<super::charts::Chart>> {
+        if self.preferences.is_some() {
+            return self.review_optional_chart(prepared);
+        }
         let choices = if prepared.review.groups.is_empty() {
             vec![]
         } else {
@@ -1285,6 +1298,7 @@ impl Broker {
                     | Tool::OutlookHeaders { .. }
                     | Tool::OutlookCompare { .. }
                     | Tool::OutlookRead { .. }
+                    | Tool::OutlookIndex { .. }
             ) && !self.outlook.is_allowed()
             {
                 return Ok(None);
@@ -1325,6 +1339,7 @@ impl Broker {
                 | Tool::OutlookHeaders { .. }
                 | Tool::OutlookCompare { .. }
                 | Tool::OutlookRead { .. }
+                | Tool::OutlookIndex { .. }
         ) && !self.outlook.authorize(cancel, self.chart_deadline)?
         {
             return Ok(
@@ -1578,6 +1593,7 @@ impl Broker {
                 *offset,
                 cancel,
             ),
+            Tool::OutlookIndex { query, offset } => self.outlook.index(query, *offset),
             Tool::OutlookRead { mail_id, offset } => {
                 self.txt_context = true;
                 self.outlook.body(
@@ -1735,7 +1751,7 @@ impl Broker {
                     &page, kind, title, x_label, y_label, path, revision,
                 )?;
                 let Some(chart) = self.review_chart(prepared, cancel)? else {
-                    return Ok(json!({"waiting_for_user":true}));
+                    return Ok(self.deferred_chart());
                 };
                 // 決策期間不佔用 Excel；接受前重新核對來源版本，舊決策不套到新資料。
                 self.with_excel(path, Some(revision), |_| Ok(()))?;
@@ -1838,7 +1854,7 @@ impl Broker {
                     &page, kind, title, x_label, y_label, path, revision,
                 )?;
                 let Some(mut chart) = self.review_chart(prepared, cancel)? else {
-                    return Ok(json!({"waiting_for_user":true}));
+                    return Ok(self.deferred_chart());
                 };
                 // 使用者選擇異常值處理期間，CSV 也可能被外部程式改動。
                 super::datasets::load(&self.project, path, revision, cancel)?;
@@ -1887,6 +1903,18 @@ impl Broker {
                 }
                 self.add_chart(chart)
             }
+            Tool::AskPreference { .. } => Err("偏好問題需由任務協調器保存。".into()),
+            Tool::ReadSkillGuide { id, offset } => {
+                let guide = super::skills::load(id)?;
+                let total = guide.chars().count();
+                if *offset > total {
+                    return Err("技能說明位置超出範圍。".into());
+                }
+                let text: String = guide.chars().skip(*offset).take(3000).collect();
+                Ok(
+                    json!({"id":id,"text":text,"next_offset":offset+text.chars().count(),"total":total}),
+                )
+            }
             Tool::LoadSkill { id } => {
                 super::skills::activate(&mut self.loaded_skills, id)?;
                 Ok(
@@ -1906,6 +1934,7 @@ impl Broker {
                 if !chart.data_note.is_empty()
                     || !chart.data_issues.is_empty()
                     || chart.transform.is_some()
+                    || chart.quality.is_some()
                     || chart.series.iter().any(|s| !s.skip_indices.is_empty())
                 {
                     return Err("圖表的使用者處理紀錄只能由桌面預檢建立。".into());
@@ -1914,6 +1943,19 @@ impl Broker {
             }
             Tool::ExportChartPng { chart_index, name } => {
                 self.export_chart_png(*chart_index, name, cancel)
+            }
+            Tool::SetChartPolicy {
+                chart_index,
+                policy,
+            } => {
+                let original = self.charts.get(*chart_index).ok_or("找不到本次圖表。")?;
+                let chart = policy.view(original)?;
+                chart.validate()?;
+                let note = chart.data_note.clone();
+                self.charts[*chart_index] = chart;
+                Ok(
+                    json!({"chart_index":chart_index,"data_note":note,"previous_png_files_unchanged":true,"notice":"如需PNG，請再次匯出以包含新政策。"}),
+                )
             }
             Tool::TransformChart {
                 chart_index,
@@ -1968,7 +2010,7 @@ impl Broker {
                     &content, *sheet, range, kind, title, x_label, y_label, path, revision,
                 )?;
                 let Some(chart) = self.review_chart(prepared, cancel)? else {
-                    return Ok(json!({"waiting_for_user":true}));
+                    return Ok(self.deferred_chart());
                 };
                 if text::revision(&self.content(path, cancel, worker)?) != *revision {
                     return Err("文件版本已變更，請重新讀取。".into());
@@ -1996,24 +2038,33 @@ impl Broker {
                         json!({"text":part,"offset":offset,"next_offset":offset+part.chars().count(),"total":total,"operation_id":id}),
                     );
                 }
-                // 預設只列索引；指定 operation_id 才讀原文，避免每次重建全天紀錄。
-                let mut index = self.archived_results.clone();
-                for (id, (request, result)) in &self.results {
-                    index.insert(
-                        id.clone(),
-                        json!({"tool":request["tool"],"ok":result["ok"]}),
+                // 一次索引分頁期間固定內容，避免新操作插到字典中間使游標漂移。
+                // 不把封存雜湊或工具正文混入目錄；細節仍以 operation_id 精確查回。
+                if *offset == 0 || self.work_log_index.is_none() {
+                    let mut index = self.archived_results.clone();
+                    for (id, (request, result)) in &self.results {
+                        index.insert(
+                            id.clone(),
+                            json!({"tool":request["tool"],"ok":result["ok"]}),
+                        );
+                    }
+                    self.work_log_index = Some(
+                        index
+                            .into_iter()
+                            .filter(|(_, v)| v["tool"] != "read_work_log")
+                            .map(|(id, v)| json!({"operation_id":id,"tool":v["tool"],"ok":v["ok"]}))
+                            .collect(),
                     );
                 }
-                let log =
-                    json!({"operations":index,"details":"以 operation_id 及 offset 查回原文"})
-                        .to_string();
-                let total = log.chars().count();
-                if *offset > total {
-                    return Err("紀錄讀取位置超出範圍。".into());
+                let index = self.work_log_index.as_ref().ok_or("紀錄索引尚未建立。")?;
+                if *offset > index.len() {
+                    return Err("索引位置超出範圍；新版索引按筆數分頁，請從 offset=0 重取。".into());
                 }
-                let part: String = log.chars().skip(*offset).take(6000).collect();
+                let end = offset.saturating_add(20).min(index.len());
                 Ok(
-                    json!({"text":part,"offset":offset,"next_offset":offset+part.chars().count(),"total":total,"order":"operation_id；非時間順序"}),
+                    json!({"operations":index[*offset..end],"offset":offset,"next_offset":end,
+                    "total":index.len(),"has_more":end<index.len(),"order":"固定快照，依operation_id排序；非時間順序",
+                    "notice":"索引offset是筆數；指定operation_id後offset是原文字元。需要更新索引時從0重取。"}),
                 )
             }
             Tool::ListNotes { query } => self.memory()?.list_notes(query),
@@ -2695,6 +2746,7 @@ mod tests {
         };
         let mut broker = Broker::new(project.clone(), "run".into()).unwrap();
         let chart = super::super::charts::Chart {
+            quality: None,
             transform: None,
             kind: "line".into(),
             title: "圖".into(),

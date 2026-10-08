@@ -33,6 +33,8 @@ pub struct Style {
     pub lines: Vec<ReferenceLine>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transform: Option<super::transform::Transform>,
+    #[serde(default)]
+    pub quality_policy: super::quality::Policy,
 }
 fn color(value: &str) -> bool {
     value.len() == 7 && value.starts_with('#') && value[1..].bytes().all(|b| b.is_ascii_hexdigit())
@@ -51,7 +53,8 @@ impl Style {
             .or(chart.transform.as_deref())
             .cloned()
             .unwrap_or_default();
-        let view = transform.view(chart, &self.kind)?;
+        let source = self.quality_policy.view(chart)?;
+        let view = transform.view(&source, &self.kind)?;
         if [&self.title, &self.x_label, &self.y_label]
             .iter()
             .any(|s| s.chars().count() > 200)

@@ -517,14 +517,16 @@ impl App {
             }))
             .map_err(|e| e.to_string())?,
         );
-        let command = |id: &str, style| ProjectCommand::ChartCustomize {
-            target: chart_edit::Target {
-                conversation: chat.clone(),
-                message_index: 0,
-                request_id: id.into(),
-                chart_index: 0,
-            },
-            style,
+        let command = |id: &str, style: Option<projects::charts::style::Style>| {
+            ProjectCommand::ChartCustomize {
+                target: chart_edit::Target {
+                    conversation: chat.clone(),
+                    message_index: 0,
+                    request_id: id.into(),
+                    chart_index: 0,
+                },
+                style: style.map(Box::new),
+            }
         };
         verify(
             self.project_command(command("wrong", Some(style.clone())))

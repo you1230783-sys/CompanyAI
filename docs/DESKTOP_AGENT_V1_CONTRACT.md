@@ -550,3 +550,12 @@ OpenAI 的原生 function calling 使用 tools、assistant.tool_calls 及 role=t
 上述 OpenAI 文件不能證明本地 GLM／Gemma 服務具備相同能力。是否開啟原生工具／strict，必須以公司實際推論服務及本清單測試為準。schema 正確也不等於文字事實、計算或檔案操作正確。
 
 現有對照：[0.8.25 文字工具契約](DESKTOP_0_8_25_CONTRACT.md)、[0.8.23 上下文與通知](DESKTOP_0_8_23_CONTRACT.md)、[0.8.28 技能與委派](DESKTOP_0_8_28_CONTRACT.md)、[網站整合入口](WEB_INTEGRATION.md)。本文件獲雙方實作驗收前，這些已發布版本的執行行為不變。
+
+
+## 0.8.46 上下文與偏好補充
+
+專案仍使用 client_snapshot，網站不得補回桌面已移出的工具歷史。桌面以累積筆記、目前技能核心／工具及近期1–3組結果組裝請求，8K–12K為軟目標；原結果本機查回。工具目錄新增 read_skill_guide、outlook_index、ask_preference(question,options,default_choice)、set_chart_policy(chart_index,policy)，共54項，實際公告依工作階段而定。progress_note請每輪更新；舊checkpoint仍可解析未帶筆記的工具結果。
+
+read_work_log目錄offset按筆數，每頁20筆固定快照；指定operation_id後的原文offset仍按字元。Outlook空白cursor視為null，不改有效游標格式與授權。可選偏好不終止任務；未回答使用預先公告的預設，權限不得使用此路徑。圖表Y預設保留缺值，可切換呈現；無效X未取得明確選擇時回deferred，先處理其他工作。
+
+一般聊天桌面只送當前使用者訊息，不再受20輪上限；網站依conversation_id附加歷史。Outlook助理與專案請求不套用此裁減。DEBUG可保存桌面送出／收到的JSON與獨立無正文用量報表；請保留模型原始usage（含prompt/input、completion/output與可用的cached/reasoning細項），未回傳時桌面明示缺漏。

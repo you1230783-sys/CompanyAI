@@ -1,3 +1,5 @@
+> **0.8.46 維護位置：** `progress.rs` 產生每輪筆記與最近1–3組工具結果的送出投影；`context.rs` 管理軟預算與純數字用量；`skills/core.rs` 保存精簡方法，完整教學由 `read_skill_guide` 分頁取得。`steering/preferences.rs` 管理非阻塞問題，`files/chart_preferences.rs` 處理圖表答案，`charts/quality/policy.rs` 與 `ui/chart-editor.js` 共用缺值政策。`diagnostics.rs` 將逐輪JSON與用量分開DPAPI保存；`ui/reply-tables.js` 只在顯示時修復可核對的表格。正式發行結果與限制見 [0.8.46](VALIDATION_0_8_46.md)。
+
 > **0.8.45 維護位置：** setup.rs 使用FOLDERID_Profile及固定磁碟檢查；model/retry.rs 定義延後排程及可替換的失敗，Task.project_retry沿用DPAPI保存。model.rs負責只查原ID／替換失敗推論，runner、delegation及vision提供checkpoint。progress/coverage.rs保存實際資料指紋與Outlook分頁區間。整合測試resilience.rs使用HTTP／DPAPI／副本操作，debug測試可縮短等待，release沒有加速入口。正式發行必須完整Build.ps1 -EmptyCargoCache -TestOffice -NetworkTestRoot <SMB測試路徑> -IncludeInstaller，結果見 [0.8.45](VALIDATION_0_8_45.md)。
 
 > **0.8.45 最終驗證：** 2026-10-07已用指定v142 x64、空Cargo快取與`--frozen`完成完整流程，263項測試及Python／Office／SMB／正式NSIS均通過。圖片方法改為 `src/projects/image-guide.md` 基本說明，不再提供快捷入口或獨立技能；舊版協定使用獨立指示訊息，保留單則64KB上限。正式產物雜湊與實測界線以本版驗證文件為準。

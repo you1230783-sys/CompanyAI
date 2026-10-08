@@ -29,6 +29,7 @@ window.ChartUI = (() => {
   // 畫面與 PNG 共用資料／座標規則；匯出另建畫布，避免跟隨聊天室縮放或隱藏狀態。
   function option(data, exporting = false, style = null) {
     const view=style || ChartEditor.defaults(data), horizontal=view.kind==="horizontal_bar", scatter=view.kind==="scatter";
+    data=ChartQuality.view(data,view.quality_policy);
     const transform=ChartTransform.settings(data,style), transformNote=ChartTransform.summary(data,view.kind,transform);
     data=ChartTransform.view(data,view.kind,transform);
     const xCategory=ChartTransform.category(view.kind,"x",transform), yCategory=ChartTransform.category(view.kind,"y",transform);
@@ -139,7 +140,7 @@ window.ChartUI = (() => {
       const plot = document.createElement("div"); plot.className = "chart-plot";
       plot.setAttribute("role", "img"); plot.setAttribute("aria-label", `${data.title}：${data.x_label} / ${data.y_label}`);
       const source = document.createElement("p"); source.className = "chart-source";
-      const updateSource=()=>{source.textContent=[sourceLabel(data.source),data.data_note,ChartTransform.summary(data,style?.kind || data.kind,ChartTransform.settings(data,style))].filter(Boolean).join("\n");};
+      const updateSource=()=>{const shown=ChartQuality.view(data,style?.quality_policy);source.textContent=[sourceLabel(data.source),shown.data_note,ChartTransform.summary(shown,style?.kind || data.kind,ChartTransform.settings(data,style))].filter(Boolean).join("\n");};
       updateSource();
       const expand = document.createElement("button"); expand.className = "text-button"; expand.textContent = "放大圖表";
       expand.onclick = () => { const large = card.classList.toggle("chart-expanded"); expand.textContent = large ? "縮小圖表" : "放大圖表"; };
@@ -148,7 +149,7 @@ window.ChartUI = (() => {
         const target={conversation:context.conversation,message_index:context.message_index,request_id:context.request_id,chart_index};
         const edit=document.createElement("button"),reset=document.createElement("button"),save=document.createElement("button");
         edit.textContent="編輯圖表";reset.textContent="恢復原樣";save.textContent="儲存此圖片";
-        const apply=value=>{style=value;charts.get(plot)?.setOption(option(data,false,style),{notMerge:true});updateSource();command({action:"chart_customize",target,style});};
+        const apply=value=>{style=value;const replacement=renderIssues(ChartQuality.view(data,style?.quality_policy));issueDetails.replaceWith(replacement);issueDetails=replacement;charts.get(plot)?.setOption(option(data,false,style),{notMerge:true});updateSource();command({action:"chart_customize",target,style});};
         edit.onclick=()=>ChartEditor.open(data,style,apply);plot.ondblclick=edit.onclick;reset.onclick=()=>apply(null);
         save.onclick=()=>{
           if(pendingSave){toast("圖片正在儲存，請稍候。");return;}
@@ -179,7 +180,7 @@ window.ChartUI = (() => {
       details.ontoggle = () => { if (details.open) showPage(); };
       controls.append(previous, label, next);
       details.append(summary, controls, table); card.append(title, toolbar, plot, source, details);
-      card.append(renderIssues(data)); container.append(card);
+      let issueDetails=renderIssues(ChartQuality.view(data,style?.quality_policy));card.append(issueDetails); container.append(card);
       requestAnimationFrame(() => {
         if (!plot.isConnected) return;
         try {

@@ -32,12 +32,12 @@ pub fn verify(root: &Path) -> AppResult<()> {
     } else {
         0
     };
-    if first > 24 {
-        return Err("原生測試案例需介於 0–24。".into());
+    if first > 25 {
+        return Err("原生測試案例需介於 0–25。".into());
     }
     // Python 從呼叫端 EXE 旁啟動；先依正式規則授予 AppContainer 唯讀權限。
     company_ai::projects::python::prepare_runtime()?;
-    for case in first..=24 {
+    for case in first..=25 {
         verify_case(root, case)?;
     }
     Ok(())
@@ -78,6 +78,10 @@ pub(super) fn call(body: &Value, name: &str, mut args: Value) -> Value {
         .iter()
         .find(|t| t["function"]["name"] == name)
         .unwrap();
+    // 合成模型遵守當輪公告的筆記契約；案例有指定累積筆記時保留原值。
+    if args.get("progress_note").is_none() {
+        args["progress_note"] = json!("依測試案例已確認上一輪結果；接著執行本輪指定步驟。");
+    }
     fill_optional(&mut args, &tool["function"]["parameters"]);
     json!({"role":"assistant","content":"**處理中**","tool_calls":[{"id":"call_001","type":"function",
         "function":{"name":name,"arguments":args.to_string()}}]})
@@ -256,8 +260,8 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                 if posts == 1 {
                     assert_eq!(
                         body["tools"].as_array().unwrap().len(),
-                        9,
-                        "首次提供基本閱讀，含按需圖片辨識"
+                        11,
+                        "首次提供基本閱讀、按需圖片、技能手冊與可選問題"
                     );
                     println!(
                         "Initial native tools: {} bytes, system: {} bytes",
@@ -274,7 +278,10 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                         .unwrap();
                     let state: Value = serde_json::from_str(state.split_once('\n').unwrap().1)
                         .map_err(|e| e.to_string())?;
-                    copy = state["operations"][0]["id"].as_str().unwrap().to_owned();
+                    copy = state["recent_operations"][0]["id"]
+                        .as_str()
+                        .unwrap()
+                        .to_owned();
                 }
                 let mut message = if body["model"] == "fast" {
                     fast += 1;
@@ -289,6 +296,39 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                         assert_eq!(parent["context"][key], body["context"][key]);
                     }
                     json!({"role":"assistant","content":"原文為原始文字，無其他數據。"})
+                } else if case == 25 {
+                    // 使用者整段未回答：詢問後仍讀資料，完成前只通知一次預設並正常交付。
+                    match posts {
+                        1 => call(
+                            &body,
+                            "ask_preference",
+                            json!({"question":"圖例位置", "options":["右側","下方"], "default_choice":"右側"}),
+                        ),
+                        2 => {
+                            assert_eq!(previous["result"]["state"], "pending");
+                            assert_eq!(server_instructions.questions()?[0].state, "pending");
+                            call(&body, "read_file", json!({"path":"source.txt"}))
+                        }
+                        3 => {
+                            assert_eq!(previous["ok"], true);
+                            assert_eq!(server_instructions.questions()?[0].state, "pending");
+                            call(
+                                &body,
+                                "finish",
+                                json!({"message":"資料已讀取", "artifacts":[]}),
+                            )
+                        }
+                        4 => {
+                            assert_eq!(server_instructions.questions()?[0].state, "default");
+                            assert!(body["messages"].to_string().contains("不是使用者回答"));
+                            call(
+                                &body,
+                                "finish",
+                                json!({"message":"已讀取來源，圖例採預設右側", "artifacts":[]}),
+                            )
+                        }
+                        _ => panic!("可選偏好不能重問或無限延後交付"),
+                    }
                 } else if matches!(case, 22..=24) {
                     // 22 混合 Python 參數／執行失敗，確實到第 10 次；23 其他工具第 5 次。
                     // 24 Python 第 10 次修正成功可交付，不能被 8 次無進展提前攔截。
@@ -341,15 +381,20 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     if posts == 4 {
                         let after = body["messages"].to_string().len();
                         assert!(
-                            after < before_csv_bytes,
-                            "CSV 後舊原文應移出：{before_csv_bytes} -> {after}"
+                            !body["messages"]
+                                .to_string()
+                                .contains(&"原始文字".repeat(50)),
+                            "CSV 後只保留索引與預覽，不得帶回已封存原文"
                         );
-                        println!("CSV native request messages: {before_csv_bytes} -> {after} bytes (100 rows retained locally)");
+                        assert_eq!(messages.iter().filter(|m| m["role"] == "tool").count(), 1);
+                        // 軟預算可能在匯出前就已移出全文；CSV 新增索引不要求總長度繼續下降。
+                        println!("CSV native request messages: {before_csv_bytes} -> {after} bytes (raw evidence absent; 100 rows retained locally)");
                     }
                     match posts {
                         1 => call(&body, "read_file", json!({"path":"source.txt","offset":0})),
                         2 => {
-                            old_operation = state["operations"][0]["id"].as_str().unwrap().into();
+                            old_operation =
+                                state["recent_operations"][0]["id"].as_str().unwrap().into();
                             call(&body, "load_skill", json!({"id":"dataset-charts"}))
                         }
                         3 => call(
@@ -393,7 +438,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                             )
                         }
                         6 => {
-                            assert!(state["working_note"]["instruction_review_required"] == true);
+                            assert!(state["review_required"] == true);
                             assert!(body["messages"].to_string().contains("改用 corrected 欄"));
                             assert!(!body["messages"].to_string().contains("原始文字"));
                             call(
@@ -403,10 +448,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                             )
                         }
                         7 => {
-                            assert_eq!(
-                                state["working_note"]["superseded_conclusions"][0],
-                                "pressure 欄及舊圖無效"
-                            );
+                            assert_eq!(state["superseded"][0], "pressure 欄及舊圖無效");
                             assert_eq!(messages.iter().filter(|m| m["role"] == "tool").count(), 1);
                             call(
                                 &body,
@@ -465,10 +507,11 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                         ),
                         66 => call(&body, "read_work_log", json!({"offset":0})),
                         67 => {
-                            assert!(previous["result"]["text"]
-                                .as_str()
-                                .unwrap()
-                                .contains("operations"));
+                            assert_eq!(
+                                previous["result"]["operations"].as_array().unwrap().len(),
+                                20
+                            );
+                            assert!(previous["result"]["has_more"] == true);
                             call(
                                 &body,
                                 "read_work_log",
@@ -807,7 +850,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         session: session.clone(),
         root: root.join("native-app"),
         cancel: cancel.clone(),
-        instructions: matches!(case, 12 | 13 | 21).then(|| instructions.clone()),
+        instructions: matches!(case, 12 | 13 | 21 | 25).then(|| instructions.clone()),
         outlook_consent: (case == 15)
             .then(|| Box::new(|_: &AtomicBool, _| Ok(None)) as company_ai::projects::mail::Consent),
         file_waiter: if matches!(case, 16 | 17 | 20) {
@@ -995,6 +1038,13 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         24 => {
             assert!(result?.contains("Python 修正後完成"));
             assert_eq!(posts, 12);
+        }
+        25 => {
+            assert!(result?.contains("圖例採預設右側"));
+            assert_eq!(posts, 4);
+            assert_eq!(instructions.questions()?[0].state, "default");
+            assert!(instructions.questions()?[0].answer.is_none());
+            assert!(!runner::paused_available(&root.join("native-app"), &id));
         }
         _ => unreachable!(),
     }

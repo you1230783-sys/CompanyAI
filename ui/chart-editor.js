@@ -1,12 +1,30 @@
 /* 使用者呈現設定及有限座標轉換；不允許 ECharts option 或腳本，不改原始點陣。 */
 "use strict";
+// 與 Rust quality::Policy 相同：只重建原生標記的缺值，保留有效數值及原始明細。
+window.ChartQuality = {
+  view(original, policy) {
+    if(!original.quality || !policy || (!policy.blank && !policy.invalid)) return original;
+    const data=structuredClone(original), labels={gap:"保留缺值（折線中斷）",skip:"略過此點（保留 X 位置，折線接續）",zero:"設為 0"};
+    for(const cell of data.quality.cells) {
+      const choice=cell.blank?policy.blank:policy.invalid;if(!choice) continue;
+      if(!labels[choice]) throw new Error("不支援的缺值政策。");
+      const series=data.series[cell.series];series.values[cell.row]=choice==="zero"?0:null;
+      series.skip_indices=(series.skip_indices||[]).filter(i=>i!==cell.row);
+      if(choice==="skip") series.skip_indices.push(cell.row);
+      data.data_issues[cell.issue].handling=labels[choice];
+    }
+    for(const series of data.series) if(series.skip_indices) series.skip_indices.sort((a,b)=>a-b);
+    data.data_note=`Y 空白：${labels[policy.blank]||"沿用建立時處理"}；Y 異常：${labels[policy.invalid]||"沿用建立時處理"}。原值與來源明細保留。`;
+    return data;
+  }
+};
 window.ChartEditor = (() => {
   const kinds={line:"折線圖",bar:"直條圖",scatter:"散佈圖",step:"階梯線",area:"面積圖",horizontal_bar:"水平長條圖"};
   const palette=["#5470c6","#91cc75","#fac858","#ee6666","#73c0de","#3ba272","#fc8452","#9a60b4"];
   let dialogNumber = 0;
   function defaults(data) {
     return {title:data.title,x_label:data.kind==="horizontal_bar"?data.y_label:data.x_label,y_label:data.kind==="horizontal_bar"?data.x_label:data.y_label,kind:data.kind,legend:"right",x_min:null,x_max:null,y_min:null,y_max:null,
-      series:data.series.map((s,i)=>({name:s.name,color:palette[i]})),lines:[],transform:ChartTransform.settings(data)};
+      series:data.series.map((s,i)=>({name:s.name,color:palette[i]})),lines:[],quality_policy:{blank:null,invalid:null},transform:ChartTransform.settings(data)};
   }
   const category=ChartTransform.category;
   // 類別軸輸入顯示標籤；重複標籤不猜位置，可用明確的 #資料序號（1起算）。
@@ -24,7 +42,7 @@ window.ChartEditor = (() => {
   function open(data,current,apply) {
     const initial=structuredClone(current || defaults(data));
     initial.transform=ChartTransform.settings(data,current);
-    const initialData=ChartTransform.view(data,initial.kind,initial.transform);
+    const initialData=ChartTransform.view(ChartQuality.view(data,initial.quality_policy),initial.kind,initial.transform);
     const dialog=document.createElement("dialog");dialog.className="chart-edit-dialog";
     const form=document.createElement("form"),heading=document.createElement("h2");heading.textContent="編輯圖表";
     // 分頁內的欄位可能不可見；由下方驗證集中切換到錯誤欄位，不讓瀏覽器聚焦隱藏輸入框。
@@ -73,6 +91,21 @@ window.ChartEditor = (() => {
     controls.kind=field(grid,"圖表類型",initial.kind,"text",kinds);
     controls.legend=field(grid,"圖例位置",initial.legend,"text",{right:"右側",bottom_right:"右下方",bottom:"下方置中",top:"標題下方",hidden:"隱藏"});
     pages[0].append(grid);
+    const qualityControls={};
+    if(data.quality?.cells?.length) {
+      const choices={original:"沿用建立時的處理",gap:"保留缺值（折線中斷）",skip:"略過此點（折線接續）",zero:"設為 0"};
+      for(const [key,label] of [["blank","Y 原始空白"],["invalid","Y 異常值"]]) {
+        qualityControls[key]=field(grid,label,initial.quality_policy?.[key]||"original","text",choices);
+        qualityControls[key].dataset.quality=key;
+        qualityControls[key].onchange=()=>refreshTransform(true);
+      }
+      help(pages[0],"缺值處理可以隨時切換",["保留缺值不補數值；略過此點保留原 X 位置並接續折線；設為 0 會改變圖形與範圍。來源檔案與異常明細不變；原本有效的 0 不受影響。"]);
+    }
+    function readQuality() {
+      const read=key=>qualityControls[key]?.value&&qualityControls[key].value!=="original"?qualityControls[key].value:null;
+      return {blank:read("blank"),invalid:read("invalid")};
+    }
+    const qualityData=()=>ChartQuality.view(data,readQuality());
     const rangeStatus=document.createElement("p");rangeStatus.setAttribute("role","status");
     for(const axis of ["x","y"]) {
       const range=document.createElement("fieldset"),legend=document.createElement("legend"),row=document.createElement("div");
@@ -80,8 +113,8 @@ window.ChartEditor = (() => {
       for(const bound of ["min","max"]){const key=`${axis}_${bound}`;controls[key]=field(row,bound==="min"?"下限":"上限",display(initialData,initial.kind,axis,initial[key],initial.transform));controls[key].dataset.bound=key;}
       const auto=document.createElement("button");auto.type="button";auto.textContent="自動調整";auto.dataset.autoAxis=axis;row.append(auto);
       auto.onclick=()=>{try {
-        const transform=readTransform(),shown=ChartTransform.view(data,controls.kind.value,transform);
-        const [min,max]=ChartTransform.bounds(data,controls.kind.value,transform,axis);
+        const transform=readTransform(),shown=ChartTransform.view(qualityData(),controls.kind.value,transform);
+        const [min,max]=ChartTransform.bounds(qualityData(),controls.kind.value,transform,axis);
         controls[`${axis}_min`].value=display(shown,controls.kind.value,axis,min,transform);
         controls[`${axis}_max`].value=display(shown,controls.kind.value,axis,max,transform);
         error.textContent="";rangeStatus.textContent=`${axis.toUpperCase()} 軸已依目前資料調整。`;
@@ -143,7 +176,7 @@ window.ChartEditor = (() => {
         input.start.disabled=input.step.disabled=input.mode.value!=="index";
       }
       if(reset){for(const key of ["x_min","x_max","y_min","y_max"]) controls[key].value="";for(const line of lineInputs) line.value.value="";rangeStatus.textContent="";}
-      try {preview.textContent=ChartTransform.summary(data,controls.kind.value,readTransform()) || "保留全部原始座標。";preview.classList.remove("error");}
+      try {preview.textContent=ChartTransform.summary(qualityData(),controls.kind.value,readTransform()) || "保留全部原始座標。";preview.classList.remove("error");}
       catch(e){preview.textContent=e.message;preview.classList.add("error");}
     }
     for(const input of Object.values(transformControls)) for(const control of Object.values(input)) control.addEventListener("input",()=>refreshTransform(true));
@@ -167,8 +200,8 @@ window.ChartEditor = (() => {
     form.onsubmit=event=>{event.preventDefault();try {
       validationPage=1;validationField=null;
       const style={title:controls.title.value.trim(),x_label:controls.x_label.value,y_label:controls.y_label.value,kind:controls.kind.value,legend:controls.legend.value,
-        series:seriesInputs.map(s=>({name:s.name.value.trim(),color:s.color.value})),lines:[],transform:readTransform()};
-      const shown=ChartTransform.view(data,style.kind,style.transform);
+        series:seriesInputs.map(s=>({name:s.name.value.trim(),color:s.color.value})),lines:[],quality_policy:readQuality(),transform:readTransform()};
+      const shown=ChartTransform.view(qualityData(),style.kind,style.transform);
       if(!style.title){validationPage=0;validationField=controls.title;throw new Error("標題不可空白。");}
       const unnamed=seriesInputs.find(s=>!s.name.value.trim());
       if(unnamed){validationPage=2;validationField=unnamed.name;throw new Error("系列名稱不可空白。");}
