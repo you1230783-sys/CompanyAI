@@ -81,6 +81,8 @@ pub(super) struct Progress {
     pub agent: Option<super::agent::State>,
     base: Vec<Message>,
     #[serde(default)]
+    started_local_date: Option<String>,
+    #[serde(default)]
     base_task_ids: Vec<Option<String>>,
     /// 使用者原文獨立保存，精簡工具歷史時不得刪除或交給 AI 改寫。
     #[serde(default)]
@@ -131,6 +133,7 @@ impl Progress {
         Self {
             agent: None,
             base,
+            started_local_date: crate::calendar::today().ok().map(|date| date.to_string()),
             base_task_ids: vec![],
             instructions: vec![],
             history: vec![],
@@ -159,6 +162,9 @@ impl Progress {
             python_failures: 0,
             other_failures: 0,
         }
+    }
+    pub fn calendar_context(&self) -> AppResult<String> {
+        crate::calendar::context(self.started_local_date.as_deref())
     }
     pub fn task_references(&mut self, ids: Vec<Option<String>>) {
         self.base_task_ids = ids;

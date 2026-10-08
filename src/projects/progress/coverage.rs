@@ -90,6 +90,38 @@ impl Coverage {
                 }
                 "同一查詢未新增郵件標題；請沿用 outlook_paging 的下一頁游標，不要重建相同查詢。"
             }
+            Tool::ReadMailNotes { mode, .. } => {
+                let sources: Vec<_> = data["notes"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|n| {
+                        let source = n.get("source").unwrap_or(n);
+                        json!([source["note_id"], source["revision"]])
+                    })
+                    .collect();
+                fresh = self.mark(json!([
+                    "mail-notes-read",
+                    mode,
+                    sources,
+                    data["source_operation"],
+                    data["offset"],
+                    data["next_offset"]
+                ]));
+                "此頁筆記／原文已提供，請完成整理或寫入，勿反覆查回。"
+            }
+            Tool::SetWorkStage { stage, .. } => {
+                fresh = self.mark(json!(["work-stage", stage]));
+                "已在相同階段；切換理由或改寫筆記不算新進展。"
+            }
+            Tool::OutlookRead { mail_id, .. } if data["reused_note"] == true => {
+                fresh = self.mark(json!([
+                    "mail-note-recovery",
+                    mail_id,
+                    data["source"]["revision"]
+                ]));
+                "此郵件已有成果，請沿用摘要或定向查回原文。"
+            }
             Tool::OutlookRead { mail_id, .. } => {
                 fresh = self.range(
                     json!(["mail-body", mail_id, data["mail"]["revision"]]).to_string(),

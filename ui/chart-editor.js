@@ -24,7 +24,7 @@ window.ChartEditor = (() => {
   let dialogNumber = 0;
   function defaults(data) {
     return {title:data.title,x_label:data.kind==="horizontal_bar"?data.y_label:data.x_label,y_label:data.kind==="horizontal_bar"?data.x_label:data.y_label,kind:data.kind,legend:"right",x_min:null,x_max:null,y_min:null,y_max:null,
-      series:data.series.map((s,i)=>({name:s.name,color:palette[i]})),lines:[],quality_policy:{blank:null,invalid:null},transform:ChartTransform.settings(data)};
+      series:data.series.map((s,i)=>({name:s.name,color:palette[i]})),lines:structuredClone(data.reference_lines||[]),quality_policy:{blank:null,invalid:null},transform:ChartTransform.settings(data)};
   }
   const category=ChartTransform.category;
   // 類別軸輸入顯示標籤；重複標籤不猜位置，可用明確的 #資料序號（1起算）。
@@ -74,8 +74,8 @@ window.ChartEditor = (() => {
       parent.append(details);
     }
     help(pages[0],"範圍與自動調整怎麼用？",[
-      "上下限留白時由圖表自動決定；「自動調整」會將目前轉換後的所有系列資料向外取整，填入上下限。之後仍可自行修改。",
-      "範例：12～23 → 10～25；0.12～0.23 → 0.10～0.25；−23～−12 → −25～−10。同值資料會在兩側留白。",
+      "上下限留白時自動決定；量測軸以所有有效點的兩倍標準差留白，限制為資料跨度的5%～40%，再依跨度向外取整。「自動調整」可填入計算值，手動上下限優先。",
+      "範例：90～110、標準差3 → 80～120；0.25～0.35、標準差0.02 → 0.2～0.4。同值資料以值的5%留白；全部為0時使用−1～1。",
       "類別軸（例如文字或日期）會取第一到最後一筆。手動設定可填完整標籤，或用 #1、#5 指定第 1、第 5 個位置。上下限只調整可見範圍，不刪除資料。"
     ]);
     const grid=document.createElement("div");grid.className="chart-edit-grid";
@@ -200,7 +200,7 @@ window.ChartEditor = (() => {
     form.onsubmit=event=>{event.preventDefault();try {
       validationPage=1;validationField=null;
       const style={title:controls.title.value.trim(),x_label:controls.x_label.value,y_label:controls.y_label.value,kind:controls.kind.value,legend:controls.legend.value,
-        series:seriesInputs.map(s=>({name:s.name.value.trim(),color:s.color.value})),lines:[],quality_policy:readQuality(),transform:readTransform()};
+        series:seriesInputs.map(s=>({name:s.name.value.trim(),color:s.color.value})),lines:structuredClone(data.reference_lines||[]),quality_policy:readQuality(),transform:readTransform()};
       const shown=ChartTransform.view(qualityData(),style.kind,style.transform);
       if(!style.title){validationPage=0;validationField=controls.title;throw new Error("標題不可空白。");}
       const unnamed=seriesInputs.find(s=>!s.name.value.trim());

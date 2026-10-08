@@ -10,3 +10,9 @@ description: 延續既有週報，核對本週新增事項並保留其餘內容�
 一開始先讀舊週報的結構與版本，再讀本週來源。來源含 Outlook 時載入 outlook-research（會一併啟用 outlook-coverage），先按標題選相關討論串、本機比對前文，優先最新信與必要缺口補充；不逐封讀完、不因字數增加就判定前文完整。每個主題確認後保留「本週進度／待辦／來源 mail_id／尚缺證據」短筆記，資料足以完成簡單週報就開始撰寫；引用上週內容不是本週成果，不反覆 read_work_log 查回相同操作。AI 50 封是上限而非必須用滿的額度。
 
 缺少週次／範圍且會影響結果時 ask_user。建立來源對照與本週新增、變更、延續、待確認清單。只用明確證據更新進度，不因郵件回覆就判定完成；不能把上週計畫當本週成果。create_working_copy 保留格式，使用 office_batch 對同一副本套用一組已確認的修改；操作依序解讀，中途結構變更會影響後面的區塊 ID，不確定時拆批重新讀取。未要求區域保留。核對姓名、日期、週次、數字與遺漏，save_copy 後提供變更摘要與來源。
+
+## 郵件成果生命週期
+
+讀取內文後，下一個操作同時提供 mail_note（JSON 字串），依 pending.operation 填來源、累積摘要、待寫草稿、include/exclude/uncertain、理由與未確認事項。不可只把信件代號寫進全域進度筆記。優先 read_mail_notes(index/notes) 查成果；數值、主導者或日期需要核對時，使用 source 指定原操作與焦點讀本地原文。
+
+整理用 set_work_stage(organize)，寫週報用 set_work_stage(write, note_ids, reason)，每批最多4份，自動帶入草稿。寫入後在 progress_note 記錄成功操作與位置，配合工作紀錄避免重複寫入；階段本身不是完成證據。切換 chart 時收回 Outlook／Python／文件編輯工具，保留來源索引。必要時可重新切換 read 並說明需要重讀的筆記與理由；不要重新掃描整批郵件。

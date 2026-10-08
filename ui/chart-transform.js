@@ -44,45 +44,58 @@ window.ChartTransform = (() => {
   function axisLabel(label,axis) {
     return axis.mode==="index"?`${label}（重新編號）`:axis.mode==="offset"?`${label}（位移 ${axis.offset}）`:label;
   }
-  // 以數值量級的 5 為單位向外取整：12～23 → 10～25，0.12～0.23 → 0.10～0.25。
-  // 同值資料向兩側各留一格；不可用 toFixed，否則極小量測值會被捨成 0。
-  function niceBounds(min, max) {
-    if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) {
-      throw new Error("這個座標軸沒有可用的數值。");
-    }
-    const magnitude = Math.max(Math.abs(min), Math.abs(max));
-    const step = magnitude === 0 ? 5 : 5 * 10 ** (Math.floor(Math.log10(magnitude)) - 1);
-    if (!Number.isFinite(step) || step === 0) throw new Error("數值過大或過小，請手動設定範圍。");
+  /** 依跨度取1/2/5刻度，不能依絕對值把90～110擴成50～150。 */
+  function niceBounds(min, max, padding = 0) {
+    if (![min,max,padding].every(Number.isFinite) || min > max || padding < 0) throw new Error("這個座標軸沒有可用的數值。");
+    if (min === max) padding = Math.max(padding, Math.abs(min) * 0.05 || 1);
+    const low = min - padding, high = max + padding, target = (high - low) / 5;
+    const power = 10 ** Math.floor(Math.log10(target));
+    const factor = [1,2,5,10].find(value => value >= target / power);
+    const step = power * factor;
+    if (!Number.isFinite(step) || step <= 0) throw new Error("數值過大或過小，請手動設定範圍。");
     const clean = value => Number(value.toPrecision(15));
-    let lower = clean(Math.floor(min / step) * step);
-    let upper = clean(Math.ceil(max / step) * step);
-    if (lower === upper) { lower = clean(lower - step); upper = clean(upper + step); }
-    // 清除浮點尾數後仍須包住原值，避免極接近格線的資料被裁掉。
+    let lower = clean(Math.floor(low / step) * step), upper = clean(Math.ceil(high / step) * step);
+    // 浮點修整不得把實際觀測點裁掉。
     if (lower > min) lower = clean(lower - step);
     if (upper < max) upper = clean(upper + step);
-    if (![lower, upper].every(Number.isFinite) || lower >= upper) {
-      throw new Error("無法取得有效範圍，請手動設定上下限。");
-    }
+    if (![lower,upper].every(Number.isFinite) || lower >= upper || lower > min || upper < max) throw new Error("無法取得有效範圍，請手動設定上下限。");
     return [lower, upper];
   }
-  /** 依呈現副本計算實體軸範圍；排除被略過的點，所有可見系列共同決定範圍。 */
+  /** 母體標準差只用作顯示留白，並非信賴區間；以跨度正規化避免平方溢位。 */
+  function measurementBounds(values, zeroBaseline = false) {
+    if (!values.length) throw new Error("這個座標軸沒有可用的數值。");
+    let min=Infinity,max=-Infinity;
+    for(const value of values){min=Math.min(min,value);max=Math.max(max,value);}
+    const span=max-min;
+    let padding=0;
+    if(span>0 && Number.isFinite(span)) {
+      let count=0,mean=0,m2=0;
+      for(const value of values){const x=(value-min)/span,delta=x-mean;count++;mean+=delta/count;m2+=delta*(x-mean);}
+      padding=span*Math.max(0.05,Math.min(0.40,2*Math.sqrt(Math.max(0,m2/values.length))));
+    }
+    const result=niceBounds(min,max,padding);
+    // 長條／面積以零為基準，避免用截斷的長度誇大量測差異；手動設定仍由呼叫者優先。
+    if(zeroBaseline){result[0]=min>=0?0:Math.min(0,result[0]);result[1]=max<=0?0:Math.max(0,result[1]);}
+    return result;
+  }
+  /** 使用呈現副本：空值／略過點不算，真實0及所有可見系列均保留。 */
   function bounds(data, kind, transform, axis) {
     const shown = view(data, kind, transform);
-    if (category(kind, axis, transform)) {
-      // 類別不可數值取整；單一類別交由繪圖器留白，不產生相等的上下限。
-      return [0, shown.x.length > 1 ? shown.x.length - 1 : null];
-    }
-    const base = kind === "horizontal_bar" ? "y" : "x";
-    let min = Infinity, max = -Infinity;
+    if (category(kind, axis, transform)) return [0, shown.x.length > 1 ? shown.x.length - 1 : null];
+    const base = kind === "horizontal_bar" ? "y" : "x", values=[];
     for (const series of shown.series) {
       const skipped = new Set(series.skip_indices || []);
       series.values.forEach((value, i) => {
         if (value == null || skipped.has(i)) return;
         const coordinate = axis === base ? shown.x[i] : value;
-        if (Number.isFinite(coordinate)) { min = Math.min(min, coordinate); max = Math.max(max, coordinate); }
+        if (Number.isFinite(coordinate)) values.push(coordinate);
       });
     }
-    return niceBounds(min, max);
+    if(axis!==base) return measurementBounds(values,["bar","horizontal_bar","area"].includes(kind));
+    // 時間／X資料軸只取整跨度，不套量測標準差留白。
+    let min=Infinity,max=-Infinity;
+    for(const value of values){min=Math.min(min,value);max=Math.max(max,value);}
+    return niceBounds(min,max);
   }
   function summary(data,kind,transform) {
     const rendered=view(data,kind,transform), notes=[];
@@ -93,5 +106,5 @@ window.ChartTransform = (() => {
     }
     return notes.length?`${notes.join("；")}。原始資料保留。`:"";
   }
-  return {defaults,settings,category,view,summary,axisLabel,niceBounds,bounds};
+  return {defaults,settings,category,view,summary,axisLabel,niceBounds,measurementBounds,bounds};
 })();

@@ -114,6 +114,27 @@ pub fn read_reports(
         "tokens":serde_json::to_string_pretty(&serde_json::json!({"format":"lmai-usage-v1","contains_content":false,"turns":metrics})).map_err(|e|e.to_string())?})).map_err(|e|e.to_string())
 }
 
+/// 完成的專案也會有一張一般工作清單摘要卡，不能讓它遮住專案的逐輪紀錄。
+/// 有專案 journal 時先核對其對話綁定；損壞／拒絕存取不能靜默退回摘要卡。
+pub fn reports(
+    root: &Path,
+    id: &str,
+    conversation: &str,
+    debug: bool,
+    selected: Option<usize>,
+    task: Option<&jobs::Task>,
+) -> AppResult<String> {
+    jobs::validate_id(id)?;
+    let journal = root.join("project-runs").join(format!("{id}.dpapi"));
+    if journal.try_exists().map_err(|e| e.to_string())? {
+        return read_reports(root, id, conversation, debug, selected);
+    }
+    let task = task
+        .filter(|t| t.request_id == id && t.conversation_id == conversation)
+        .ok_or("找不到這次任務的執行紀錄。")?;
+    task_reports(task, debug)
+}
+
 /// 一般對話本來就有加密 Task 紀錄，直接投影該筆請求，不另外複製聊天歷史。
 pub fn task_reports(task: &jobs::Task, debug: bool) -> AppResult<String> {
     let response = serde_json::to_value(&task.remote).map_err(|e| e.to_string())?;
@@ -271,6 +292,30 @@ mod tests {
         assert_eq!(stats["turns"].as_array().unwrap().len(), 12);
         assert_eq!(stats["turns"][11]["actual"]["prompt_tokens"], 10);
         assert!(read_reports(&root, "run", "other", true, None).is_err());
+        // 專案完成後的摘要 Task 不得使12輪診斷變成單輪；仍可選較早一輪。
+        let card = jobs::Task {
+            request_id: "run".into(),
+            conversation_id: "chat".into(),
+            request: serde_json::json!({}),
+            mode: "background".into(),
+            title: "專案工作".into(),
+            created_at: 0,
+            remote: None,
+            applied: true,
+            message: "專案任務已完成。".into(),
+            mail_analysis: false,
+            title_generation: false,
+            tool_events: vec![],
+            partial: String::new(),
+            project_retry: Default::default(),
+        };
+        let complete: Value = serde_json::from_str(
+            &reports(&root, "run", "chat", true, Some(4), Some(&card)).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(complete["rounds"].as_array().unwrap().len(), 12);
+        assert_eq!(complete["selected"], 4);
+        assert!(reports(&root, "run", "other", true, None, Some(&card)).is_err());
         let encrypted = std::fs::read(root.join("project-runs/run.debug/request0.dpapi")).unwrap();
         assert!(!String::from_utf8_lossy(&encrypted).contains("PRIVATE_FILENAME"));
     }

@@ -12,6 +12,7 @@ pub mod files;
 pub mod interaction;
 pub mod logs;
 pub mod mail;
+pub mod mail_notes;
 pub mod memory;
 mod model;
 pub mod office;
@@ -125,6 +126,18 @@ pub enum Tool {
         mail_ids: Vec<String>,
         #[serde(default)]
         offset: usize,
+    },
+    ReadMailNotes {
+        mode: String,
+        note_ids: Vec<String>,
+        #[serde(default)]
+        offset: usize,
+        focus: String,
+    },
+    SetWorkStage {
+        stage: mail_notes::Stage,
+        note_ids: Vec<String>,
+        reason: String,
     },
     OutlookRead {
         mail_id: String,
@@ -278,6 +291,10 @@ pub enum Tool {
         chart_index: usize,
         name: String,
     },
+    SetChartReferenceLines {
+        chart_index: usize,
+        lines: Vec<charts::style::ReferenceLine>,
+    },
     SetChartPolicy {
         chart_index: usize,
         policy: charts::quality::Policy,
@@ -417,6 +434,8 @@ impl Tool {
             Self::OutlookFolders { .. } => "列出授權的 Outlook 資料夾",
             Self::OutlookHeaders { .. } => "讀取選定資料夾的郵件標題",
             Self::OutlookCompare { .. } => "本機比對郵件前文並建議閱讀",
+            Self::ReadMailNotes { .. } => "查閱郵件成果筆記",
+            Self::SetWorkStage { .. } => "切換工作階段與待寫草稿",
             Self::OutlookRead { .. } => "讀取選定的重要郵件內文",
             Self::ListLogs { .. } => "依日期與機台篩選 LOG",
             Self::ReadLog { .. } => "分批讀取 LOG",
@@ -437,6 +456,7 @@ impl Tool {
             Self::OfficeBatch { .. } => "批次編輯 Office",
             Self::CreateChart { .. } | Self::ChartFromExcel { .. } => "建立圖表",
             Self::ExportChartPng { .. } => "儲存圖表 PNG",
+            Self::SetChartReferenceLines { .. } => "標示圖表參考線",
             Self::SetChartPolicy { .. } => "調整圖表缺值呈現",
             Self::TransformChart { .. } => "調整圖表座標與無值位置",
             Self::AnalyzeImage { .. } => "辨識專案圖片",

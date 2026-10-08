@@ -22,3 +22,5 @@ Excel Y 的明確數字文字自動轉數值；原空白、NG、錯誤及合併�
 Excel分析必須依excel-read技能先plan_excel_analysis，再export_planned_excel與chart_dataset；量測Y不可誤用時間的Value2小數。不連續欄保留原始欄字母，規劃隨CSV與任務續接保存。
 
 未指定種類時依目的選擇：趨勢用line，離散設定變化用step，表達隨時間量的大小可用area（不可暗示累積量），比較類別用bar／horizontal_bar，兩個數值變數關係用scatter。類別時間軸不可猜成數值散佈X。沒有箱形圖、直方圖或堆疊統計能力。完成後使用者可自行編輯顯示設定、參考線及儲存PNG；這些設定不提供模型修改。
+
+參考線：建立圖表後用 set_chart_reference_lines(chart_index,lines) 整組設定（最多10條；[]清除）。每條 axis=x/y、value=有限數值、name=最多100字、color=#RRGGBB。使用目前圖上的實體座標；類別軸為0起算位置，scatter為真實數值。先完成座標轉換，再標線。參數1在[0,200)、參數2在[200,500)、其餘為3時，在X=200與500畫線；若界線來自資料欄，先核對新參數第一筆的原座標。不能默默省略切換點或重編時間。已指定同圖就不詢問，未指定的多時段先以ask_preference詢問同圖加參考線／分圖；UI另有其他文字輸入。先做獨立資料工作，需要圖時採已公告預設並於交付說明。參考線隨圖表保存，編輯器可修改或清除；先前PNG不覆寫，要新版PNG需再次export_chart_png。

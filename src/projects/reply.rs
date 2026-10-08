@@ -6,6 +6,7 @@ pub struct Parsed {
     pub decision: Decision,
     pub commentary: String,
     pub note: Option<String>,
+    pub mail_note: Option<super::mail_notes::Digest>,
     pub task_summary: Option<String>,
 }
 
@@ -79,6 +80,14 @@ pub fn parse(text: &str) -> AppResult<ParseOutcome> {
             return Err("模型要求未知工具，已停止。".into());
         }
     }
+    let mail_note = match value.as_object_mut().and_then(|v| v.remove("mail_note")) {
+        None | Some(serde_json::Value::Null) => None,
+        Some(serde_json::Value::String(text)) if text.chars().count() <= 3500 => match serde_json::from_str::<super::mail_notes::Digest>(&text) {
+            Ok(note) => Some(note),
+            Err(_) => return Ok(ParseOutcome::Repair("mail_note 必須是符合郵件成果契約的 JSON 字串，包含 source_operation、summary、draft、disposition、rationale、open_questions。")),
+        },
+        _ => return Ok(ParseOutcome::Repair("mail_note 必須是 ≤3500 字的 JSON 字串。")),
+    };
     let note = match value
         .as_object_mut()
         .and_then(|v| v.remove("progress_note"))
@@ -123,6 +132,7 @@ pub fn parse(text: &str) -> AppResult<ParseOutcome> {
         decision,
         commentary,
         note,
+        mail_note,
         task_summary,
     })))
 }

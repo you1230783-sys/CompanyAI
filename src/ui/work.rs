@@ -1113,6 +1113,7 @@ impl App {
                 }
             }
             WorkEvent::Submitted(id, result) => {
+                let result = result.map_err(|e| self.friendly_error("chat_submission", &e));
                 self.work.streams.remove(&id);
                 self.work.cancellations.remove(&id);
                 if result.is_err() {
@@ -1246,6 +1247,8 @@ impl App {
             } else if !task.title_generation {
                 self.preserve_partial_reply(&task)?;
             }
+            let failure = (remote.state == "failed")
+                .then(|| self.friendly_error("chat_task", &remote.error_message));
             if let Some(saved) = self
                 .work
                 .store
@@ -1253,6 +1256,9 @@ impl App {
                 .iter_mut()
                 .find(|t| t.request_id == task.request_id)
             {
+                if let Some(message) = failure {
+                    saved.message = message;
+                }
                 saved.applied = true;
                 saved.partial.clear();
                 saved.request = json!({});

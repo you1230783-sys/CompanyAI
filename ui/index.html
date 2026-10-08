@@ -351,15 +351,19 @@
           data-icon="x"
         ></button>
       </div>
-      <div class="settings-content">
-        <section>
+      <div class="settings-tabs" role="tablist" aria-label="設定分類">
+<button type="button" id="settings-tab-0" role="tab" aria-controls="settings-panel-0" aria-selected="true" tabindex="0">一般</button>
+<button type="button" id="settings-tab-1" role="tab" aria-controls="settings-panel-1" aria-selected="false" tabindex="-1">操作</button>
+<button type="button" id="settings-tab-2" role="tab" aria-controls="settings-panel-2" aria-selected="false" tabindex="-1">進階</button>
+</div><div class="settings-content">
+<div id="settings-panel-0" class="settings-panel" role="tabpanel" aria-labelledby="settings-tab-0"><section>
           <h3>帳號</h3>
           <p id="settings-account">尚未登入</p>
           <div class="button-row">
             <button id="logout" class="secondary-button">登出</button>
           </div>
         </section>
-        <section>
+<section>
           <h3>外觀</h3>
           <label class="check-row"><input id="dark-mode" type="checkbox" />深色模式</label>
           <p class="subtle">使用柔和的深灰藍背景，設定會保留。</p>
@@ -375,7 +379,34 @@
           />
           <p class="subtle">調整聊天與操作介面的字體，設定會保留。</p>
         </section>
-        <section>
+<section>
+          <h3>通知</h3>
+          <label class="check-row"
+            ><input
+              id="notification-popups"
+              type="checkbox"
+              checked
+            />新通知顯示 Windows 提示</label
+          >
+          <p class="subtle">
+            程式開啟時接收；網路暫時中斷會自動補查，不搶走目前視窗焦點。
+          </p>
+        </section>
+<section>
+          <h3>版本與服務</h3>
+          <p>Largan, Inc. · 公司 AI 助理 · Dev: 1230783</p>
+          <p class="subtle">Copyright © 2026 Largan, Inc. All rights reserved.</p>
+          <p id="update-status" class="subtle" role="status"></p>
+          <p id="version-label">LM_AI</p>
+          <div class="button-row">
+            <button id="refresh" class="secondary-button">
+              <span data-icon="refresh"></span>重新整理服務</button
+            ><button id="download" class="secondary-button">
+              <span data-icon="download"></span>下載更新
+            </button>
+          </div>
+        </section></div>
+<div id="settings-panel-1" class="settings-panel" role="tabpanel" aria-labelledby="settings-tab-1" hidden><section>
           <h3>選取文字快捷鍵</h3>
           <div class="input-row">
             <input
@@ -399,7 +430,7 @@
             搭配字母、數字、功能鍵與控制鍵。系統占用的組合會提示；只帶入草稿，不自動送出。
           </p>
         </section>
-        <section>
+<section>
           <h3>使用習慣</h3>
           <label class="check-row"><input id="hotkey-enabled" type="checkbox" />啟用選取文字快捷鍵</label>
           <p class="subtle">只在按下指定快捷鍵時複製選字並填入草稿，不監聽一般輸入、不自動送出。</p>
@@ -417,37 +448,11 @@
           <p id="quick-model-hint" class="subtle"></p>
           <label class="check-row"><input id="always-new-chat" type="checkbox" />永遠開啟新對話</label>
           <p class="subtle">啟動或從托盤、捷徑叫出時開啟新對話，保留原草稿與背景任務；點擊指定對話或任務不受影響。</p>
-          <label class="check-row"><input id="vnc-enabled" type="checkbox" />啟用 VNC 快速連線功能</label>
-          <p class="subtle">啟用後顯示側欄入口。機台設定沿用 LM_AI.exe 同一資料夾的 machines.json 與 user_config.json。</p>
-        </section>
-        <section>
-          <h3>通知</h3>
-          <label class="check-row"
-            ><input
-              id="notification-popups"
-              type="checkbox"
-              checked
-            />新通知顯示 Windows 提示</label
-          >
-          <p class="subtle">
-            程式開啟時接收；網路暫時中斷會自動補查，不搶走目前視窗焦點。
-          </p>
-        </section>
-        <section>
-          <h3>版本與服務</h3>
-          <p>Largan, Inc. · 公司 AI 助理 · Dev: 1230783</p>
-          <p class="subtle">Copyright © 2026 Largan, Inc. All rights reserved.</p>
-          <p id="update-status" class="subtle" role="status"></p>
-          <p id="version-label">LM_AI</p>
-          <div class="button-row">
-            <button id="refresh" class="secondary-button">
-              <span data-icon="refresh"></span>重新整理服務</button
-            ><button id="download" class="secondary-button">
-              <span data-icon="download"></span>下載更新
-            </button>
-          </div>
-        </section>
-        <section>
+
+        </section></div>
+<div id="settings-panel-2" class="settings-panel" role="tabpanel" aria-labelledby="settings-tab-2" hidden><section><h3>VNC</h3>          <label class="check-row"><input id="vnc-enabled" type="checkbox" />啟用 VNC 快速連線功能</label>
+          <p class="subtle">啟用後顯示側欄入口。機台設定沿用 LM_AI.exe 同一資料夾的 machines.json 與 user_config.json。</p></section>
+<section>
           <h3>本機資料</h3>
           <p class="subtle">
             對話在此 Windows
@@ -455,14 +460,20 @@
             伺服器端仍會儲存已送出的對話、附件及任務資料；刪除本機資料或移除任務卡片不會刪除伺服器端的紀錄。
           </p>
         </section>
-        <details id="advanced-settings">
-          <summary>進階功能</summary>
-          <label><input type="checkbox" id="debug-mode">DEBUG：檢視一般對話 JSON，保存專案逐輪 JSON（新任務生效）</label>
+<section id="advanced-settings">
+          <h3>診斷</h3>
+          <label class="check-row"><input type="checkbox" id="debug-mode">DEBUG：保存專案逐輪 JSON（新任務生效）</label>
+          <p class="subtle">完整 JSON 與不含正文的用量統計分開查看、複製。</p>
           <label for="project-diagnostics-run">目前對話的執行紀錄</label>
-          <select id="project-diagnostics-run" aria-label="選擇對話請求或專案任務"></select>
+          <select id="project-diagnostics-run" size="4" aria-label="選擇對話請求或專案任務"></select>
           <button id="project-diagnostics-open" class="secondary-button">查看執行紀錄</button>
-        </details>
-      </div>
+          <h4>輸出錯誤資訊</h4>
+          <p class="subtle">輸出可攜式 JSON，包含近期錯誤碼、時間、操作階段、版本與技術代碼；不附加對話、郵件或文件內容。檔案由你自行交給維護者。</p>
+          <label class="check-row"><input type="checkbox" id="diagnostics-include-details">附加原始錯誤文字（可能包含檔名、路徑或服務回覆）</label>
+          <button id="diagnostics-export" class="secondary-button">匯出錯誤診斷檔</button>
+          <p id="diagnostics-export-status" class="subtle" role="status"></p>
+        </section></div>
+</div>
     </dialog>
     <dialog id="required-update-dialog" aria-labelledby="required-update-title">
       <h2 id="required-update-title">必須更新 LM_AI</h2>
@@ -633,7 +644,8 @@
     <dialog id="project-diagnostics-dialog" aria-labelledby="project-diagnostics-title">
       <div class="dialog-heading"><h2 id="project-diagnostics-title">本機執行紀錄</h2><button id="project-diagnostics-close">關閉</button></div>
       <p>JSON／執行紀錄（含對話內容，每次顯示一輪）</p>
-      <label>回合 <select id="project-diagnostics-round"></select></label>
+      <div class="diagnostics-navigation"><label>回合 <select id="project-diagnostics-round"></select></label>
+      <button id="project-diagnostics-prev" class="secondary-button">上一輪</button><button id="project-diagnostics-next" class="secondary-button">下一輪</button><button id="project-diagnostics-latest" class="secondary-button">查看最新</button></div>
       <textarea id="project-diagnostics-text" readonly rows="20" aria-label="AI 回覆與工具結果"></textarea>
       <div class="dialog-actions"><button id="project-diagnostics-refresh">重新讀取</button><button id="project-diagnostics-copy">複製 JSON／紀錄</button></div>
       <p>用量統計（不含對話、檔名或工具參數，可單獨複製）</p>
@@ -667,6 +679,7 @@
     <script src="vnc-sync.js"></script>
     <script src="chart-review-examples.js"></script>
     <script src="projects.js"></script>
+    <script src="settings.js"></script>
     <script src="weekly.js"></script>
     <script src="project-quick.js"></script>
     <script src="project-composer.js"></script>

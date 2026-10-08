@@ -234,8 +234,15 @@ pub(super) fn serve_work(
                 sse.push_str(&format!(
                     "event: status\ndata: {final_status}\n\nevent: done\n\n"
                 ));
-                if chat.request["messages"][0]["content"]
-                    .as_str()
+                if chat.request["messages"]
+                    .as_array()
+                    .and_then(|messages| {
+                        messages
+                            .iter()
+                            .rev()
+                            .find(|message| message["role"] == "user")
+                    })
+                    .and_then(|message| message["content"].as_str())
                     .is_some_and(|text| text.starts_with("[demo:disconnect]"))
                 {
                     if let Some(end) = sse.find("event: status") {

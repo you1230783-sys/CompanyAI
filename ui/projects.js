@@ -16,8 +16,12 @@
       const card=node("div","preference-card"),title=node("strong","",q.question),hint=node("p","",`未回答時採用：${q.default}。工作會繼續。`);
       const select=document.createElement("select");select.setAttribute("aria-label",q.question);
       for(const option of q.options){const item=document.createElement("option");item.value=option;item.textContent=option;select.append(item);}select.value=q.default;
+      const other=new Option("其他（自行輸入）","__custom__");select.add(other);
       const apply=node("button","primary-button","回答"),custom=document.createElement("input");custom.placeholder="也可自行輸入偏好";custom.maxLength=1000;
-      apply.onclick=()=>command({action:"answer_preference",run_id:projects.running_id,question_id:q.id,answer:custom.value.trim()||select.value});
+      custom.hidden=true;
+      const updateAnswer=()=>{custom.hidden=select.value!=="__custom__";apply.disabled=!custom.hidden && !custom.value.trim();};
+      select.onchange=()=>{updateAnswer();if(!custom.hidden)custom.focus();};custom.oninput=updateAnswer;
+      apply.onclick=()=>{const answer=select.value==="__custom__"?custom.value.trim():select.value;if(answer)command({action:"answer_preference",run_id:projects.running_id,question_id:q.id,answer});};
       card.append(title,hint,select,custom,apply);preferences.append(card);
     }
   }
@@ -169,8 +173,9 @@
   // 複製只傳紀錄選擇，長報表由原生重讀並寫剪貼簿，避免超過 JS 訊息上限。
   $("project-token-copy").onclick=()=>{if(diagnosticsRequest)command({action:"diagnostics",...diagnosticsRequest,copy:true});};
   let diagnosticsRequest = null;
+  let diagnosticsSequence = 0;
   function openDiagnostics(conversation, runId, index=null) {
-    diagnosticsRequest = {conversation, run_id:runId, index};
+    diagnosticsRequest = {conversation, run_id:runId, index, view_request:++diagnosticsSequence};
     $("project-diagnostics-text").value = "正在讀取本機紀錄…";
     $("project-token-text").value = "";
     if (!$("project-diagnostics-dialog").open) $("project-diagnostics-dialog").showModal();
@@ -179,7 +184,13 @@
   $("project-diagnostics-close").onclick = () => $("project-diagnostics-dialog").close();
   $("project-diagnostics-dialog").addEventListener("close", () => { diagnosticsRequest = null; $("project-diagnostics-text").value = ""; $("project-token-text").value = ""; $("project-diagnostics-round").replaceChildren(); });
   $("project-diagnostics-round").onchange=()=>{if(diagnosticsRequest)openDiagnostics(diagnosticsRequest.conversation,diagnosticsRequest.run_id,Number($("project-diagnostics-round").value));};
-  $("project-diagnostics-refresh").onclick = () => { if (diagnosticsRequest) openDiagnostics(diagnosticsRequest.conversation, diagnosticsRequest.run_id); };
+  // 重新整理維持已選回合；只有「查看最新」會主動跳到尾端。
+  $("project-diagnostics-refresh").onclick = () => { if (diagnosticsRequest) openDiagnostics(diagnosticsRequest.conversation, diagnosticsRequest.run_id, diagnosticsRequest.index); };
+  $("project-diagnostics-latest").onclick = () => { if (diagnosticsRequest) openDiagnostics(diagnosticsRequest.conversation, diagnosticsRequest.run_id); };
+  for (const [id,step] of [["project-diagnostics-prev",-1],["project-diagnostics-next",1]]) $(id).onclick=()=>{
+    const select=$("project-diagnostics-round"), next=select.selectedIndex+step;
+    if(diagnosticsRequest && next>=0 && next<select.options.length) openDiagnostics(diagnosticsRequest.conversation,diagnosticsRequest.run_id,Number(select.options[next].value));
+  };
   $("project-diagnostics-copy").onclick = () => {if(diagnosticsRequest)command({action:"diagnostics",...diagnosticsRequest,copy:false});};
   $("project-diagnostics-open").onclick = () => {
     const runId = $("project-diagnostics-run").value;
@@ -261,11 +272,15 @@
     receive(message) {
       if (message.type === "project_diagnostics") {
         if (diagnosticsRequest && $("project-diagnostics-dialog").open && message.conversation === state.active_id &&
-            message.conversation === diagnosticsRequest.conversation && message.run_id === diagnosticsRequest.run_id) {
+            message.conversation === diagnosticsRequest.conversation && message.run_id === diagnosticsRequest.run_id &&
+            message.view_request === diagnosticsRequest.view_request) {
           try { const reports=JSON.parse(message.text); if(diagnosticsRequest.index!=null && reports.selected!==diagnosticsRequest.index)return; $("project-diagnostics-text").value=reports.trace; $("project-token-text").value=reports.tokens;
             const select=$("project-diagnostics-round");select.replaceChildren();
             for(const round of reports.rounds||[]){const option=document.createElement("option");option.value=round.index;option.textContent=`第 ${Number(round.turn)||round.index+1} 輪（紀錄 ${round.index+1}）`;select.append(option);}
-            select.value=reports.selected;select.disabled=!(reports.rounds||[]).length; }
+            select.value=reports.selected;select.disabled=!(reports.rounds||[]).length;
+            diagnosticsRequest.index=reports.selected;
+            $("project-diagnostics-prev").disabled=select.selectedIndex<=0;
+            $("project-diagnostics-next").disabled=select.selectedIndex<0 || select.selectedIndex>=select.options.length-1; }
           catch { $("project-diagnostics-text").value=message.text; $("project-token-text").value="此紀錄沒有獨立用量統計。"; }
         }
         return;

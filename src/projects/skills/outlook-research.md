@@ -13,3 +13,9 @@
 工具快照會在本機加密保存以供本次任務續接；沒有永久 Outlook 授權。不要要求或輸出 EntryID、StoreID、PST／OST 磁碟路徑。
 
 線上收信可用 outlook_folders(scope="online_inbox")，列 Exchange／OST 收件匣，再以 parent_id 遍歷勾選的子資料夾；依收到日期篩選。仍需本次資料夾授權，不讀未勾選分支，不保證伺服器已同步。
+
+## 郵件成果生命週期
+
+讀取內文後，下一個操作同時提供 mail_note（JSON 字串），依 pending.operation 填來源、累積摘要、待寫草稿、include/exclude/uncertain、理由與未確認事項。不可只把信件代號寫進全域進度筆記。優先 read_mail_notes(index/notes) 查成果；數值、主導者或日期需要核對時，使用 source 指定原操作與焦點讀本地原文。
+
+整理用 set_work_stage(organize)，寫週報用 set_work_stage(write, note_ids, reason)，每批最多4份，自動帶入草稿。寫入後在 progress_note 記錄成功操作與位置，配合工作紀錄避免重複寫入；階段本身不是完成證據。切換 chart 時收回 Outlook／Python／文件編輯工具，保留來源索引。必要時可重新切換 read 並說明需要重讀的筆記與理由；不要重新掃描整批郵件。

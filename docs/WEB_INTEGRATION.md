@@ -591,3 +591,19 @@ CSV 成功：archive_results → compact_now（僅最近一對工具訊息）→
 read_work_log目錄offset按筆數，每頁20筆固定快照；指定operation_id後的原文offset仍按字元。Outlook空白cursor視為null，不改有效游標格式與授權。可選偏好不終止任務；未回答使用預先公告的預設，權限不得使用此路徑。圖表Y預設保留缺值，可切換呈現；無效X未取得明確選擇時回deferred，先處理其他工作。
 
 一般聊天桌面只送當前使用者訊息，不再受20輪上限；網站依conversation_id附加歷史。Outlook助理與專案請求不套用此裁減。DEBUG可保存桌面送出／收到的JSON與獨立無正文用量報表；請保留模型原始usage（含prompt/input、completion/output與可用的cached/reasoning細項），未回傳時桌面明示缺漏。
+
+
+## 0.8.47 日期、圖表與診斷
+
+一般聊天仍只送本次提問及既有 conversation_id；另帶一則 `system` 日期提示（Windows 本機日期／星期／ISO週與當週範圍），供網站轉發時作今天的依據。網站仍負責既有聊天歷史；不應把文件日期或伺服器預設日期覆蓋此桌面時區依據。專案原生工具的 system 也加入日期，既有未知提交快照不改寫；API路由、owner和request_id去重不變。
+
+圖表工具目錄新增 `set_chart_reference_lines`；由桌面執行並驗證，不增加網站工具執行權限。診斷錯誤碼與JSON匯出全在本機，沒有自動上傳端點。設計與用量分析見 [前置紀錄](PENDING_SETTINGS_CHARTS_DIAGNOSTICS.md)，發行驗證見 [0.8.47紀錄](VALIDATION_0_8_47.md)。
+
+
+### 0.8.47 郵件成果與階段
+
+原生代理工具目錄57項，新增 `read_mail_notes`／`set_work_stage`，仍依目前技能及實際對象只送子集。網站沿用請求中的tools，不額外補歷史或永久載入所有技能。
+
+成功 `outlook_read` 後，下一請求在各工具參數動態增加 `mail_note` 字串。字串內為JSON，包含 source_operation、summary、draft、disposition(include/exclude/uncertain)、rationale、open_questions。詳細契約在system只說一次，避免複製每工具的大型schema。必須搭配下一操作提交，不另外推論摘要；`read_mail_notes` 可用null先查本地來源，其餘操作需先提交摘要。非待摘要回合只在兩個筆記管理工具提供可空的修訂欄位。桌面將該欄位與工具參數分離，核對來源後才執行；網站不處理或保存應用程式筆記。未知／待查請求仍使用原Schema與原ID。
+
+階段read載入Outlook、organize載入notes、write載入office-edit、chart載入dataset-charts；切換不刪來源、圖表或副本。寫入選最多4份草稿，下輪帶摘要與原文操作索引；實際成功寫入另記關聯，階段不是完成證據。完整內容沿用加密broker與journal。摘要不能取代授權或精確事實核對。

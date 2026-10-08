@@ -39,6 +39,32 @@ pub struct Style {
 fn color(value: &str) -> bool {
     value.len() == 7 && value.starts_with('#') && value[1..].bytes().all(|b| b.is_ascii_hexdigit())
 }
+/// 共用 AI 與編輯器的參考線界線；數值使用目前圖上的實體 X／Y，類別軸使用位置。
+pub(super) fn validate_lines(
+    lines: &[ReferenceLine],
+    kind: &str,
+    transform: &super::transform::Transform,
+    positions: usize,
+) -> AppResult<()> {
+    if lines.len() > 10 {
+        return Err("參考線最多10條，請選擇重要切換點或分圖；未自動省略。".into());
+    }
+    for line in lines {
+        let category = transform.category(kind, &line.axis);
+        if !["x", "y"].contains(&line.axis.as_str())
+            || !line.value.is_finite()
+            || (category
+                && (line.value.fract() != 0.0
+                    || line.value < 0.0
+                    || line.value >= positions as f64))
+            || line.name.chars().count() > 100
+            || !color(&line.color)
+        {
+            return Err("參考線座標、名稱或顏色無效；類別軸使用從0起算的有效位置。".into());
+        }
+    }
+    Ok(())
+}
 impl Style {
     pub fn validate(&self, chart: &Chart) -> AppResult<()> {
         chart.validate()?;
@@ -82,15 +108,7 @@ impl Style {
                 return Err("系列名稱最多100字，顏色需為#RRGGBB。".into());
             }
         }
-        for line in &self.lines {
-            if !["x", "y"].contains(&line.axis.as_str())
-                || !position(&line.axis, line.value)
-                || line.name.chars().count() > 100
-                || !color(&line.color)
-            {
-                return Err("參考線座標、名稱或顏色無效。".into());
-            }
-        }
+        validate_lines(&self.lines, &self.kind, &transform, view.x.len())?;
         Ok(())
     }
 }

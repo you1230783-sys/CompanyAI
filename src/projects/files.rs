@@ -1,7 +1,9 @@
 //! 固定檔案 broker：只接受專案相對路徑；逐層鎖住目錄、拒絕重新解析點與硬連結。
 //! 工作副本先留在記憶體，發布只用 create_new；原始文件從未取得可寫 handle。
 mod analysis;
+mod chart_annotations;
 mod chart_preferences;
+mod mail_notes;
 mod python;
 use super::{
     office,
@@ -683,6 +685,8 @@ pub(super) struct SavedBroker {
     #[serde(default)]
     outlook: super::mail::Saved,
     #[serde(default)]
+    mail_notes: super::mail_notes::State,
+    #[serde(default)]
     log_cursors: BTreeMap<String, super::logs::Cursor>,
     output_folder: Option<String>,
     copies: BTreeMap<String, Copy>,
@@ -710,6 +714,7 @@ pub struct Broker {
     excel_plans: BTreeMap<String, super::excel_plan::Plan>,
     file_waiter: Option<super::interaction::FileWaiter>,
     outlook: super::mail::Session,
+    pub(super) mail_notes: super::mail_notes::State,
     log_cursors: BTreeMap<String, super::logs::Cursor>,
     server_pdf: Option<super::server_pdf::Reader>,
     memory: Option<super::memory::Memory>,
@@ -740,6 +745,7 @@ impl Broker {
         Ok(Self {
             task_id: task,
             analysis: Default::default(),
+            mail_notes: Default::default(),
             excel_plans: BTreeMap::new(),
             file_waiter: None,
             outlook: super::mail::Session::default(),
@@ -768,13 +774,15 @@ impl Broker {
     pub(super) fn saved(&self) -> AppResult<SavedBroker> {
         // 經序列化建立不含程序資源的快照；授權與執行中的 COM 物件不保存。
         serde_json::from_value(
-            json!({"analysis":self.analysis,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
+            json!({"analysis":self.analysis,"mail_notes":self.mail_notes,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
             "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts}),
         )
         .map_err(|e| e.to_string())
     }
     pub(super) fn restore(&mut self, state: SavedBroker, cancel: &AtomicBool) -> AppResult<()> {
         self.analysis = state.analysis;
+        state.mail_notes.validate()?;
+        self.mail_notes = state.mail_notes;
         if state.excel_plans.len() > 30 {
             return Err("保存的 Excel 規劃超過上限。".into());
         }
@@ -926,9 +934,13 @@ impl Broker {
                     return false;
                 }
                 match name {
-                    "export_chart_png" | "transform_chart" | "set_chart_policy" => {
-                        !self.charts.is_empty()
+                    "read_mail_notes" => {
+                        !self.mail_notes.notes.is_empty() || self.mail_notes.pending.is_some()
                     }
+                    "export_chart_png"
+                    | "transform_chart"
+                    | "set_chart_policy"
+                    | "set_chart_reference_lines" => !self.charts.is_empty(),
                     "edit_text" => self.copies.values().any(|c| c.office.is_none()),
                     "edit_office" | "office_action" | "office_batch" => {
                         self.copies.values().any(|c| c.office.is_some())
@@ -1314,6 +1326,39 @@ impl Broker {
         result: &Value,
     ) -> AppResult<()> {
         self.cached_result(id, tool)?;
+        // 寫入只記實際成功操作及當時選定草稿；這是可追溯關聯，不宣稱每條文字已核對。
+        if result["ok"] == true
+            && matches!(
+                tool,
+                Tool::EditOffice { .. }
+                    | Tool::OfficeAction { .. }
+                    | Tool::OfficeBatch { .. }
+                    | Tool::EditText { .. }
+                    | Tool::SaveCopy { .. }
+            )
+        {
+            let request = serde_json::to_value(tool).map_err(|e| e.to_string())?;
+            for note_id in &self.mail_notes.selected {
+                if let Some(note) = self.mail_notes.notes.get_mut(note_id) {
+                    if !note
+                        .write_operations
+                        .iter()
+                        .any(|op| op["operation_id"] == id)
+                    {
+                        note.write_operations.push(json!({"operation_id":id,"tool":request["tool"],"copy_id":request["copy_id"],"revision":result["result"]["revision"],"path":result["result"]["path"],"meaning":"操作時選定的草稿；內容是否完整仍需核對"}));
+                        if note.write_operations.len() > 8 {
+                            note.write_operations.remove(0);
+                        }
+                    }
+                }
+            }
+        }
+        if matches!(tool, Tool::OutlookRead { .. })
+            && result["ok"] == true
+            && result["result"]["text"].is_string()
+        {
+            self.mail_notes.observe(id, result)?;
+        }
         self.results.insert(
             id.into(),
             (
@@ -1502,6 +1547,17 @@ impl Broker {
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
         match tool {
+            Tool::ReadMailNotes {
+                mode,
+                note_ids,
+                offset,
+                focus,
+            } => self.read_mail_notes(mode, note_ids, *offset, focus),
+            Tool::SetWorkStage {
+                stage,
+                note_ids,
+                reason,
+            } => self.set_work_stage(*stage, note_ids, reason),
             Tool::RecordAnalysis { report } => self.record_analysis(report),
             Tool::PlanExcelAnalysis { proposal } => {
                 let columns = proposal.columns()?;
@@ -1596,6 +1652,9 @@ impl Broker {
             Tool::OutlookIndex { query, offset } => self.outlook.index(query, *offset),
             Tool::OutlookRead { mail_id, offset } => {
                 self.txt_context = true;
+                if let Some(note) = self.reuse_mail_note(mail_id, *offset)? {
+                    return Ok(note);
+                }
                 self.outlook.body(
                     &mut crate::outlook::project::Reader,
                     mail_id,
@@ -1916,6 +1975,12 @@ impl Broker {
                 )
             }
             Tool::LoadSkill { id } => {
+                if id.starts_with("outlook-")
+                    && !self.mail_notes.notes.is_empty()
+                    && self.mail_notes.stage != super::mail_notes::Stage::Read
+                {
+                    return Err("已有郵件成果；先查 read_mail_notes。確需回讀請用 set_work_stage(read,note_ids,reason)。".into());
+                }
                 super::skills::activate(&mut self.loaded_skills, id)?;
                 Ok(
                     json!({"id":id,"loaded":self.loaded_skills,"instructions_location":"下一輪 system，工具定義位於 tools；無需重複載入。"}),
@@ -1943,6 +2008,9 @@ impl Broker {
             }
             Tool::ExportChartPng { chart_index, name } => {
                 self.export_chart_png(*chart_index, name, cancel)
+            }
+            Tool::SetChartReferenceLines { chart_index, lines } => {
+                self.set_reference_lines(*chart_index, lines)
             }
             Tool::SetChartPolicy {
                 chart_index,
@@ -2747,6 +2815,7 @@ mod tests {
         let mut broker = Broker::new(project.clone(), "run".into()).unwrap();
         let chart = super::super::charts::Chart {
             quality: None,
+            reference_lines: Vec::new(),
             transform: None,
             kind: "line".into(),
             title: "圖".into(),

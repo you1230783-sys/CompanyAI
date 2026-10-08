@@ -260,9 +260,19 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                 if posts == 1 {
                     assert_eq!(
                         body["tools"].as_array().unwrap().len(),
-                        11,
-                        "首次提供基本閱讀、按需圖片、技能手冊與可選問題"
+                        12,
+                        "首次提供基本閱讀、按需圖片、技能手冊、工作階段與可選問題"
                     );
+                    assert!(body["tools"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|t| t["function"]["name"] == "set_work_stage"));
+                    assert!(!body["tools"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|t| t["function"]["name"] == "read_mail_notes"));
                     println!(
                         "Initial native tools: {} bytes, system: {} bytes",
                         body["tools"].to_string().len(),

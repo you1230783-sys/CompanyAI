@@ -175,7 +175,13 @@ impl Session {
         }
         Ok(self.allowed == Some(true))
     }
-    fn require_consent(&self) -> AppResult<()> {
+    pub(super) fn mail_revision(&self, id: &str) -> Option<String> {
+        self.saved
+            .mails
+            .get(id)
+            .map(|h| super::text::revision(&h.modified))
+    }
+    pub(super) fn require_consent(&self) -> AppResult<()> {
         if self.allowed != Some(true) {
             return Err("尚未取得本次 Outlook 讀取同意。".into());
         }

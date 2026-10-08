@@ -161,7 +161,7 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
     let has = |id: &str| ids.iter().any(|i| i == id);
     match tool {
         "run_python" => has("python-analysis"),
-        "analyze_image" => true,
+        "analyze_image" | "read_mail_notes" | "set_work_stage" => true,
         "plan_excel_analysis" | "export_planned_excel" => has("excel-read"),
         "outlook_compare" => has("outlook-coverage"),
         "list_files" | "read_file" | "load_skill" | "read_skill_guide" | "ask_preference"
@@ -181,8 +181,13 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
         "outlook_folders" | "outlook_headers" | "outlook_read" | "outlook_index" => {
             has("outlook-research")
         }
-        "create_chart" | "chart_from_excel" | "chart_excel_range" | "export_chart_png"
-        | "transform_chart" | "set_chart_policy" => has("charts") || has("dataset-charts"),
+        "create_chart"
+        | "chart_from_excel"
+        | "chart_excel_range"
+        | "export_chart_png"
+        | "transform_chart"
+        | "set_chart_policy"
+        | "set_chart_reference_lines" => has("charts") || has("dataset-charts"),
         "create_working_copy" | "save_copy" | "delete_copy" => {
             has("text-edit") || has("office-edit")
         }

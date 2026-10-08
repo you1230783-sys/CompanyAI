@@ -14,3 +14,5 @@
 - CSV 自動納入成果，不要把 CSV 路徑當作 finish.artifacts 的 copy_id。原檔不修改。這是本工具生成的來源追蹤 CSV，尚非任意 CSV 匯入器。
 
 Excel CSV 的 excel_schema 保存真實表頭、格式、規劃及篩選條件；前六個追蹤欄中的 __display 第一筆可為version=2物件，其餘仍為顯示文字陣列。以inspect_dataset／chart_dataset讀取，不自行解析並重新編號。時間區間為起點含、終點不含，需向使用者說明實際使用範圍。
+
+參考線：建立圖表後用 set_chart_reference_lines(chart_index,lines) 整組設定（最多10條；[]清除）。每條 axis=x/y、value=有限數值、name=最多100字、color=#RRGGBB。使用目前圖上的實體座標；類別軸為0起算位置，scatter為真實數值。先完成座標轉換，再標線。參數1在[0,200)、參數2在[200,500)、其餘為3時，在X=200與500畫線；若界線來自資料欄，先核對新參數第一筆的原座標。不能默默省略切換點或重編時間。已指定同圖就不詢問，未指定的多時段先以ask_preference詢問同圖加參考線／分圖；UI另有其他文字輸入。先做獨立資料工作，需要圖時採已公告預設並於交付說明。參考線隨圖表保存，編輯器可修改或清除；先前PNG不覆寫，要新版PNG需再次export_chart_png。

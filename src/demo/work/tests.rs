@@ -214,6 +214,14 @@ fn attachments_background_stream_recovery_cancel_and_ownership() {
     );
     let mut interrupted = make_task("stream");
     interrupted.request["messages"][0]["content"] = serde_json::json!("[demo:disconnect] 測試中斷");
+    // 普通聊天可帶桌面日期 system，斷線測試標記仍由最後一則使用者問題判定。
+    interrupted.request["messages"]
+        .as_array_mut()
+        .unwrap()
+        .insert(
+            0,
+            serde_json::json!({"role":"system","content":"Windows 本機日期：2026-10-08"}),
+        );
     let mut partial = String::new();
     assert!(jobs::submit(
         &config,

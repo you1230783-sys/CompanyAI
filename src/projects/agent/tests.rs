@@ -374,7 +374,7 @@ fn history_pairs_and_request_scoped_ids_survive_repeated_calls() {
 #[test]
 fn catalog_is_portable_and_nullable_fields_restore_original_defaults() {
     let tools = schema::definitions(true).unwrap();
-    assert_eq!(tools.len(), 54);
+    assert_eq!(tools.len(), 57);
     let encoded = serde_json::to_string(&tools).unwrap();
     for key in [
         "\"oneOf\":",

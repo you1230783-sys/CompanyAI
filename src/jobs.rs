@@ -547,9 +547,11 @@ pub fn current_chat_request(
         .last()
         .filter(|m| m.role == "user")
         .ok_or("缺少本次使用者訊息。")?;
+    let mut calendar = Message::user(&crate::calendar::context(None)?);
+    calendar.role = "system".into();
     chat_request(
         model,
-        std::slice::from_ref(current),
+        &[calendar, current.clone()],
         conversation,
         request_id,
         mode,
@@ -1256,8 +1258,13 @@ mod tests {
             vec![],
         )
         .unwrap();
-        assert_eq!(request["messages"].as_array().unwrap().len(), 1);
-        assert_eq!(request["messages"][0]["content"], "本次問題");
+        assert_eq!(request["messages"].as_array().unwrap().len(), 2);
+        assert_eq!(request["messages"][0]["role"], "system");
+        assert!(request["messages"][0]["content"]
+            .as_str()
+            .unwrap()
+            .contains("Windows 本機時區"));
+        assert_eq!(request["messages"][1]["content"], "本次問題");
         assert!(!request.to_string().contains("OLD_SECRET"));
     }
 }

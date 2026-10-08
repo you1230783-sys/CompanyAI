@@ -86,10 +86,7 @@ pub fn normal_path(path: &Path) -> AppResult<PathBuf> {
 
 /// 讀取 Windows 本機日期，與 Outlook／使用者桌面時區一致，不依 UTC 猜週次。
 pub fn local_date() -> AppResult<NaiveDate> {
-    let mut time = windows_sys::Win32::Foundation::SYSTEMTIME::default();
-    unsafe { windows_sys::Win32::System::SystemInformation::GetLocalTime(&mut time) };
-    NaiveDate::from_ymd_opt(time.wYear.into(), time.wMonth.into(), time.wDay.into())
-        .ok_or_else(|| "無法取得目前日期。".into())
+    crate::calendar::today()
 }
 
 /// 回傳所選日期那一週的週一；跨月、跨年沿用日曆運算。

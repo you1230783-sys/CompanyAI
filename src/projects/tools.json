@@ -3459,6 +3459,155 @@
           "additionalProperties": false
         }
       }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "set_chart_reference_lines",
+        "description": "為既有圖表設定參考線，最多10條；整組取代，空陣列清除。X線標示參數或時間切換，新參數第一筆為切換點。保留原始數列，可在編輯器調整；舊PNG不變，需重新匯出。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "chart_index": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "lines": {
+              "type": "array",
+              "maxItems": 10,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "axis": {
+                    "type": "string",
+                    "enum": [
+                      "x",
+                      "y"
+                    ]
+                  },
+                  "value": {
+                    "type": "number",
+                    "description": "圖上實體座標；類別軸為從0起算的位置，數值軸為目前轉換後值。"
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "color": {
+                    "type": "string",
+                    "description": "#RRGGBB，例如#d62728"
+                  }
+                },
+                "required": [
+                  "axis",
+                  "value",
+                  "name",
+                  "color"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
+            }
+          },
+          "required": [
+            "chart_index",
+            "lines"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_mail_notes",
+        "description": "查加密郵件成果。index分頁20份，notes分頁4份；source用一個原文operation_id、頁內offset及focus讀本地原文3000字，不重讀Outlook。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "index",
+                "notes",
+                "source"
+              ]
+            },
+            "note_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 4
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "focus": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "mode",
+            "note_ids",
+            "offset",
+            "focus"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "set_work_stage",
+        "description": "依步驟切換技能。read郵件、organize摘要、write文件、chart作圖；選最多4個note_ids自動帶入草稿。回讀用read+note_ids+理由。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "stage": {
+              "type": "string",
+              "enum": [
+                "read",
+                "organize",
+                "write",
+                "chart"
+              ]
+            },
+            "note_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 4
+            },
+            "reason": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "stage",
+            "note_ids",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      }
     }
   ]
 }

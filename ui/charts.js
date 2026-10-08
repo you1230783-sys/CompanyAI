@@ -31,14 +31,27 @@ window.ChartUI = (() => {
     const view=style || ChartEditor.defaults(data), horizontal=view.kind==="horizontal_bar", scatter=view.kind==="scatter";
     data=ChartQuality.view(data,view.quality_policy);
     const transform=ChartTransform.settings(data,style), transformNote=ChartTransform.summary(data,view.kind,transform);
+    // 自動量測範圍與編輯器共用算法；單邊手動設定仍保持使用者指定值。
+    const measure=horizontal?"x":"y", range={x_min:view.x_min,x_max:view.x_max,y_min:view.y_min,y_max:view.y_max};
+    if(range[`${measure}_min`]==null || range[`${measure}_max`]==null) {
+      try {
+        const [min,max]=ChartTransform.bounds(data,view.kind,transform,measure);
+        range[`${measure}_min`]??=min;range[`${measure}_max`]??=max;
+        // 手動單邊界線可能超出自動範圍；保留該側，另一側交由圖表引擎處理。
+        if(range[`${measure}_min`]>=range[`${measure}_max`]) {
+          if(view[`${measure}_min`]==null) range[`${measure}_min`]=null;
+          if(view[`${measure}_max`]==null) range[`${measure}_max`]=null;
+        }
+      } catch { /* 全空值或浮點極端時，維持引擎預設與手動設定。 */ }
+    }
     data=ChartTransform.view(data,view.kind,transform);
     const xCategory=ChartTransform.category(view.kind,"x",transform), yCategory=ChartTransform.category(view.kind,"y",transform);
     const legend={show:view.legend!=="hidden",type:"scroll",...(view.legend==="right"?{orient:"vertical",right:12,top:80,bottom:exporting?170:110}:view.legend==="top"?{top:55,left:"center"}:view.legend==="bottom_right"?{bottom:exporting?100:65,right:20}:{bottom:exporting?100:65,left:"center"})};
     const axis=(name,type,values,min,max,setting)=>({type,name,nameLocation:"middle",nameGap:40,...(values?{data:values}:{}),
       ...(type==="value" && setting.mode==="index"?{min:min??"dataMin",max:max??"dataMax",minInterval:Math.abs(setting.step)}:{...(min!=null?{min}:{}),...(max!=null?{max}:{})}),
       ...(type==="value" && setting.mode!=="original"?{scale:true}:{}),axisLabel:{hideOverlap:true}});
-    const xa=axis(ChartTransform.axisLabel(view.x_label,transform.x),xCategory?"category":"value",xCategory?data.x:null,view.x_min,view.x_max,transform.x);
-    const ya=axis(ChartTransform.axisLabel(view.y_label,transform.y),yCategory?"category":"value",yCategory?data.x:null,view.y_min,view.y_max,transform.y);
+    const xa=axis(ChartTransform.axisLabel(view.x_label,transform.x),xCategory?"category":"value",xCategory?data.x:null,range.x_min,range.x_max,transform.x);
+    const ya=axis(ChartTransform.axisLabel(view.y_label,transform.y),yCategory?"category":"value",yCategory?data.x:null,range.y_min,range.y_max,transform.y);
     return {animation:false, backgroundColor: exporting ? "#fff" : "transparent",
       aria:{enabled:true}, legend,
       tooltip:{trigger:scatter ? "item" : "axis", renderMode:"html",confine:true,formatter:tooltipFormatter(data,view,xCategory,yCategory)},

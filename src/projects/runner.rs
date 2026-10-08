@@ -398,6 +398,7 @@ fn run_for(
                         broker.archive_results()?;
                         progress_state.add_instructions(entries);
                         broker.analysis.review_required = true;
+                        broker.review_mail_notes();
                         if let Some(callback) = analysis.as_mut() {
                             callback(broker.analysis.clone());
                         }
@@ -499,12 +500,18 @@ fn run_for(
             if native {
                 messages[0].content = super::agent::system_prompt_for(&run.config.model);
             }
-            let mut instructions = broker.skill_context(&run.config.model)?;
+            let mut instructions = format!(
+                "{}\n{}",
+                progress_state.calendar_context()?,
+                broker.skill_context(&run.config.model)?
+            );
+            instructions.push_str(&format!("\n{}", broker.mail_note_context()?));
             if !native {
                 // 舊協定把完整工具 Schema 放在第一則，已接近單則 64 KB 上限。
                 // 基本圖片方法沿用下方獨立 system 說明，不增加工具載入回合。
                 instructions.push_str(&format!(
-                    "\n{}",
+                    "\n技能目錄：{}\n{}",
+                    super::skills::catalog(),
                     super::skills::image_context_for(&run.config.model)
                 ));
             }
@@ -542,6 +549,7 @@ fn run_for(
                     parent.as_deref(),
                 )?;
                 broker.restrict_tools(&mut request);
+                broker.mail_note_schema(&mut request);
                 super::context::fit(&mut request);
                 request
             } else {
@@ -699,7 +707,7 @@ fn run_for(
             }
             let mut native_call = None;
             let mut repair_tool_is_python = None;
-            let (reply, parsed, reason) = match outcome {
+            let (reply, mut parsed, mut reason) = match outcome {
                 super::model::Reply::Rejected(error) => return Err(error),
                 super::model::Reply::Native => {
                     if let Some(agent) = progress_state.agent.as_mut() {
@@ -778,6 +786,7 @@ fn run_for(
                     broker.archive_results()?;
                     progress_state.add_instructions(entries);
                     broker.analysis.review_required = true;
+                    broker.review_mail_notes();
                     if let Some(callback) = analysis.as_mut() {
                         callback(broker.analysis.clone());
                     }
@@ -797,6 +806,32 @@ fn run_for(
                         "收到新的補充指示；上一輪候選操作未執行，正在重新安排".into(),
                     );
                     continue;
+                }
+            }
+            // 摘要與下一操作同輪提交；只有來源核對成功才執行該操作。舊待查請求相容原契約。
+            if let Some(candidate) = parsed.as_mut() {
+                let required = !native
+                    || task.request["tools"].as_array().is_some_and(|tools| {
+                        tools.iter().any(|t| {
+                            t["function"]["parameters"]["properties"]["mail_note"]["type"]
+                                == "string"
+                        })
+                    });
+                if let Err(error) = broker.accept_mail_note(
+                    candidate.mail_note.take(),
+                    &candidate.decision,
+                    required,
+                ) {
+                    reason = error;
+                    parsed = None;
+                    if let Some((message, call_id)) = native_call.take() {
+                        repair_tool_is_python = Some(false);
+                        progress_state.push_native(
+                            message,
+                            &call_id,
+                            &json!({"ok":false,"error":reason,"executed":false}),
+                        );
+                    }
                 }
             }
             // 已知終態才可發起修復；多 JSON、空白完成均不執行候選工具。
@@ -985,6 +1020,7 @@ fn run_for(
                         );
                     }
                     broker.remember_result(&operation_id, &request, &result)?;
+                    record["mail_notes"] = json!(broker.mail_notes);
                     record["analysis"] = json!(broker.analysis);
                     record["charts"] = json!(broker.charts());
                     charts(broker.charts().to_vec());
@@ -996,11 +1032,19 @@ fn run_for(
                         &mut progress,
                         if result["ok"] == false {
                             let reason = result["error"].as_str().unwrap_or("工具未提供錯誤原因");
+                            // 只取已解析的工具名稱，不把參數、檔名或內容放進預設診斷。
+                            let descriptor = serde_json::to_value(&request).unwrap_or_default();
+                            let stage = format!(
+                                "project_tool.{}",
+                                descriptor["tool"].as_str().unwrap_or("unknown")
+                            );
                             format!(
                                 "{label}：失敗（操作 {operation_id}）\n{}",
-                                diagnostic_excerpt(
-                                    &reason.replace(&run.session.access_token, "[已隱藏]"),
-                                    800
+                                crate::errors::report(
+                                    &run.root,
+                                    &stage,
+                                    reason,
+                                    &[&run.session.access_token]
                                 )
                             )
                         } else {
@@ -1192,6 +1236,7 @@ fn run_for(
     } else {
         "stopped"
     });
+    record["mail_notes"] = json!(broker.mail_notes);
     record["analysis"] = json!(broker.analysis);
     record["charts"] = json!(broker.charts());
     record["outputs"] = json!(broker.published());
@@ -1346,6 +1391,8 @@ fn replay_safe(tool: &super::Tool) -> bool {
     matches!(
         tool,
         ListFiles { .. }
+            | ReadMailNotes { .. }
+            | SetWorkStage { .. }
             | AnalyzeImage { .. }
             | ReadFile { .. }
             | FindText { .. }

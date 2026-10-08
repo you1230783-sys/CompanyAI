@@ -153,6 +153,8 @@ pub(super) enum ProjectCommand {
         run_id: String,
         #[serde(default)]
         index: Option<usize>,
+        #[serde(default)]
+        view_request: u64,
         /// Some(true) 只複製用量，Some(false) 複製 JSON；不把長正文經 JS 橋送回。
         #[serde(default)]
         copy: Option<bool>,
@@ -178,10 +180,10 @@ pub(super) enum ProjectEvent {
     Analysis(String, projects::analysis::State),
     ExportPng(
         String,
-        projects::charts::Chart,
+        Box<projects::charts::Chart>,
         mpsc::Sender<AppResult<String>>,
     ),
-    Diagnostics(String, String, Option<bool>, AppResult<String>),
+    Diagnostics(String, String, u64, Option<bool>, AppResult<String>),
     Finished(String, String, AppResult<String>),
 }
 struct PendingChart {
@@ -628,6 +630,7 @@ impl App {
             conversation,
             run_id,
             index,
+            view_request,
             copy,
         } = &command
         {
@@ -654,6 +657,7 @@ impl App {
                 .unwrap_or_default();
             let debug = self.config.debug_mode;
             let selected = *index;
+            let view_request = *view_request;
             let copy = *copy;
             let chat_task = self
                 .work
@@ -663,11 +667,14 @@ impl App {
                 .find(|t| t.request_id == *run_id && t.conversation_id == *conversation)
                 .cloned();
             thread::spawn(move || {
-                let result = if let Some(task) = chat_task {
-                    projects::diagnostics::task_reports(&task, debug)
-                } else {
-                    projects::diagnostics::read_reports(&root, &id, &conversation, debug, selected)
-                }
+                let result = projects::diagnostics::reports(
+                    &root,
+                    &id,
+                    &conversation,
+                    debug,
+                    selected,
+                    chat_task.as_ref(),
+                )
                 .map(|text| {
                     if token.is_empty() {
                         text
@@ -678,6 +685,7 @@ impl App {
                 let _ = tx.send(Event::Project(ProjectEvent::Diagnostics(
                     conversation,
                     id,
+                    view_request,
                     copy,
                     result,
                 )));
@@ -1179,7 +1187,7 @@ impl App {
                 export_tx
                     .send(Event::Project(ProjectEvent::ExportPng(
                         export_id.clone(),
-                        chart.clone(),
+                        Box::new(chart.clone()),
                         reply,
                     )))
                     .map_err(|_| "桌面介面已關閉，PNG 未匯出。")?;
@@ -1312,7 +1320,7 @@ impl App {
                     run.activity.push(self.projects.status.clone());
                 }
             }
-            ProjectEvent::Diagnostics(conversation, id, copy, result) => {
+            ProjectEvent::Diagnostics(conversation, id, view_request, copy, result) => {
                 if self.logged_in() && self.active_id.as_deref() == Some(&conversation) {
                     if let Some(usage_only) = copy {
                         // 剪貼簿在原生 UI 執行緒寫入；大量回合不受 JS 訊息長度限制。
@@ -1328,7 +1336,7 @@ impl App {
                         });
                         return Ok(());
                     }
-                    self.view.post(&json!({"type":"project_diagnostics","conversation":conversation,"run_id":id,"text":result.unwrap_or_else(|e|format!("無法讀取執行紀錄：{e}"))}))?;
+                    self.view.post(&json!({"type":"project_diagnostics","view_request":view_request,"conversation":conversation,"run_id":id,"text":result.unwrap_or_else(|e|self.friendly_error("diagnostics_read", &e))}))?;
                 }
             }
             ProjectEvent::ExportPng(id, chart, reply) => {
@@ -1399,7 +1407,12 @@ impl App {
                 }
                 .into();
                 let succeeded = result.is_ok();
-                let text = result.unwrap_or_else(|error| format!("本次任務未完成：{error}"));
+                let text = result.unwrap_or_else(|error| {
+                    format!(
+                        "本次任務未完成：{}",
+                        self.friendly_error("project_run", &error)
+                    )
+                });
                 let mut archive = self.archive.clone();
                 let c = archive
                     .conversations

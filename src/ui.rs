@@ -33,6 +33,7 @@ use windows_sys::Win32::{
     UI::{HiDpi::*, Shell::*, WindowsAndMessaging::*},
 };
 mod access;
+mod diagnostics;
 mod mail_batch;
 mod projects;
 mod retry;
@@ -59,6 +60,9 @@ enum Command {
     },
     Work {
         command: work::WorkCommand,
+    },
+    ExportDiagnostics {
+        include_details: bool,
     },
     StartHotkeyRecording,
     CancelHotkeyRecording,
@@ -317,6 +321,11 @@ impl App {
         self.focus_draft = false;
     }
     fn fail(&mut self, error: String) {
+        let error = if error.starts_with("Error Code: ") {
+            error
+        } else {
+            self.friendly_error("interface", &error)
+        };
         self.status_notice_id = self.status_notice_id.wrapping_add(1);
         // 強制更新對話框會遮住主畫面狀態列，下載／安裝錯誤須在對話框內可見。
         if self.versions.blocked() {
@@ -664,7 +673,22 @@ impl App {
     fn command(&mut self, command: Command) -> AppResult<()> {
         command.check_access(self.logged_in(), self.versions.blocked(), self.smoke)?;
         match command {
-            Command::Project { command } => self.project_command(command)?,
+            Command::ExportDiagnostics { include_details } => {
+                self.export_diagnostics(include_details)?
+            }
+            Command::Project { command } => {
+                let stage = if matches!(
+                    &command,
+                    projects::ProjectCommand::Create { .. }
+                        | projects::ProjectCommand::CreateDefault { .. }
+                ) {
+                    "project_folder"
+                } else {
+                    "project"
+                };
+                self.project_command(command)
+                    .map_err(|e| self.friendly_error(stage, &e))?;
+            }
             Command::Vnc { command } => self.vnc_command(command)?,
             Command::SiteAction { command } => self.site_action(command)?,
             Command::MailBatch { command } => self.mail_batch_command(command)?,
@@ -748,6 +772,7 @@ impl App {
                         let chart = crate::projects::charts::Chart {
                             transform: None,
                             quality: None,
+                            reference_lines: Vec::new(),
                             kind: "line".into(),
                             title: "10,000 筆量測趨勢／PNG 匯出測試".into(),
                             x_label: "時間 (秒)".into(),

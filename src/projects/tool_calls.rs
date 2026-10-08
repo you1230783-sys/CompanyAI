@@ -10,6 +10,7 @@ const DEFINITIONS: &str = include_str!("tools.json");
 
 /// 工具參數只有這份定義；壓成單行再附到技能，避免排版空白增加每輪內容。
 /// 沒有設定 strict:true，因為純文字提示並不能啟用服務端的約束解碼。
+/// 技能目錄由 runner 另附短 system 訊息，避免完整工具定義超過單則 64 KB。
 pub(super) fn system_prompt() -> AppResult<String> {
     let mut definitions: Value =
         serde_json::from_str(DEFINITIONS).map_err(|_| "內建專案工具定義無法解析，已停止。")?;
@@ -21,10 +22,28 @@ pub(super) fn system_prompt() -> AppResult<String> {
             note.remove("description");
         }
     }
+    fn compact_schema(value: &mut Value) {
+        match value {
+            Value::Object(map) => {
+                map.remove("description");
+                for child in map.values_mut() {
+                    compact_schema(child);
+                }
+            }
+            Value::Array(items) => {
+                for item in items {
+                    compact_schema(item);
+                }
+            }
+            _ => (),
+        }
+    }
+    for tool in definitions["tools"].as_array_mut().into_iter().flatten() {
+        compact_schema(&mut tool["function"]["parameters"]);
+    }
     Ok(format!(
-        "{}\n技能目錄：{}\n\n工具定義（OpenAI Chat Completions tools 形狀，僅為文字契約）：\n{}",
+        "{}\n\n工具定義（OpenAI Chat Completions tools 形狀，僅為文字契約）：\n{}",
         super::SKILL,
-        super::skills::catalog(),
         definitions
     ))
 }
@@ -137,6 +156,7 @@ pub(super) fn convert(value: Value) -> AppResult<Conversion> {
         ));
     }
     let note = arguments.remove("progress_note");
+    let mail_note = arguments.remove("mail_note");
     let terminal = matches!(call.function.name.as_str(), "finish" | "ask_user");
     let mut normalized = if terminal {
         arguments.insert("action".into(), json!(call.function.name));
@@ -145,6 +165,9 @@ pub(super) fn convert(value: Value) -> AppResult<Conversion> {
         arguments.insert("tool".into(), json!(call.function.name));
         json!({"action":"tool", "operation_id":call.id, "request":arguments})
     };
+    if let Some(note) = mail_note {
+        normalized["mail_note"] = note;
+    }
     if let Some(note) = note {
         normalized["progress_note"] = note;
     }
@@ -484,8 +507,20 @@ mod tests {
             ),
             ("outlook_index", json!({"query":"PR2","offset":0})),
             (
+                "read_mail_notes",
+                json!({"mode":"index","note_ids":[],"offset":0,"focus":""}),
+            ),
+            (
+                "set_work_stage",
+                json!({"stage":"write","note_ids":[],"reason":"整理完成"}),
+            ),
+            (
                 "ask_preference",
                 json!({"question":"圖例位置","options":["右側","下方"],"default_choice":"右側"}),
+            ),
+            (
+                "set_chart_reference_lines",
+                json!({"chart_index":0,"lines":[{"axis":"x","value":200,"name":"參數1→2","color":"#d62728"}]}),
             ),
             (
                 "set_chart_policy",

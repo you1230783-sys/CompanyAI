@@ -214,7 +214,7 @@ window.runSelfTest = async (structuredFixture) => {
     const tabbed=document.querySelector(".chart-edit-dialog"),tabs=tabbed.querySelectorAll('[role="tab"]'),pages=tabbed.querySelectorAll('[role="tabpanel"]');
     check(tabs.length===3 && !pages[0].hidden && pages[1].hidden && pages[2].hidden,"chart editor has three accessible tabs");
     tabbed.querySelector('[data-auto-axis="y"]').click();
-    check(tabbed.querySelector('[data-bound="y_min"]').value==="0" && tabbed.querySelector('[data-bound="y_max"]').value==="20","auto range uses all retained values including zero");
+    check(tabbed.querySelector('[data-bound="y_min"]').value==="-10" && tabbed.querySelector('[data-bound="y_max"]').value==="30","auto range pads all retained values including zero");
     tabs[1].click();tabs[1].dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowRight",bubbles:true}));
     check(!pages[2].hidden && tabs[2].getAttribute("aria-selected")==="true","tabs support keyboard navigation");
     check(tabbed.querySelectorAll("details.chart-editor-help").length===3 && pages[1].textContent.includes("(3,0)"),"editor help includes concrete missing-value and numbering example");
@@ -228,7 +228,7 @@ window.runSelfTest = async (structuredFixture) => {
     }
     if(themeBefore===undefined) delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=themeBefore;
     tabbed.querySelector("form").requestSubmit();
-    check(tabbedStyle?.y_max===20 && !document.querySelector(".chart-edit-dialog"),"switching tabs preserves bounds and applies all pages");
+    check(tabbedStyle?.y_max===30 && tabbedStyle?.y_min===-10 && !document.querySelector(".chart-edit-dialog"),"switching tabs preserves bounds and applies all pages");
     custom.lines[0].name="";
     const blankReference=ChartUI.option(largeChart,true,custom).series[0].markLine.data[0];
     check(blankReference.label.show===false && blankReference.label.formatter()==="","blank reference labels never fall back to numbers");
@@ -1188,7 +1188,9 @@ window.runSelfTest = async (structuredFixture) => {
       fixture.projects.activity = ["讀取檔案清單：完成", "建立副本…"];
       LMUI.receive(fixture); LMUI.showView("chat");
       check(!$("project-context").hidden && $("project-context").textContent === "C:\\測試", "project path moved below title");
-      check(!document.getElementById("project-diagnostics-live") && !$("advanced-settings").open, "diagnostics hidden in collapsed advanced settings");
+      check(!document.getElementById("project-diagnostics-live") && $("settings-panel-2").hidden, "diagnostics hidden in advanced tab");
+      // 歷史選擇現在保留；測試使用者明確選取執行中任務，不要求介面搶走選擇。
+      $("project-diagnostics-run").value = "run-one";
       check($("project-diagnostics-run").value === "run-one" && !$("project-diagnostics-open").disabled, "advanced diagnostics can select running task");
       $("project-diagnostics-open").click();
       check($("project-diagnostics-dialog").open && retryCommands.at(-1)?.command?.run_id === "run-one", "advanced diagnostics opens selected local log");
