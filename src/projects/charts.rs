@@ -48,6 +48,9 @@ pub struct Chart {
     /// AI 的參考線與原始資料一併保存；使用者呈現設定可覆寫，PNG沿用同一份資料。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reference_lines: Vec<style::ReferenceLine>,
+    /// AI與使用者共用的受控呈現設定；來源點陣保持不變。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<Box<style::Style>>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub data_note: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -113,6 +116,9 @@ impl Chart {
         let transform = self.transform.clone().unwrap_or_default();
         let view = transform.view(self, &self.kind)?;
         style::validate_lines(&self.reference_lines, &self.kind, &transform, view.x.len())?;
+        if let Some(style) = &self.style {
+            style.validate_view(self)?;
+        }
         Ok(())
     }
 }
@@ -238,6 +244,7 @@ pub fn prepare_page(
             transform: None,
             quality: None,
             reference_lines: Vec::new(),
+            style: None,
             kind: kind.into(),
             title: title.into(),
             x_label: x_label.into(),
@@ -298,6 +305,7 @@ mod tests {
             transform: None,
             quality: None,
             reference_lines: Vec::new(),
+            style: None,
             kind: "line".into(),
             title: "T".into(),
             x_label: "x".into(),

@@ -39,6 +39,7 @@ impl App {
             return Err("無法確認帳號或保存排程，文字尚未送出。".into());
         }
         let pending = QueuedProjectMessage {
+            local_time: Some(crate::calendar::local_timestamp()),
             id: crate::jobs::new_id()?,
             after_run: run_id.into(),
             project_id: project.id.clone(),
@@ -152,7 +153,9 @@ impl App {
         if messages.len() >= 998 {
             return Err("此專案對話已達長度上限，請將待送文字帶到新對話。".into());
         }
-        messages.push(Message::user(&queued.text));
+        let mut message = Message::user(&queued.text);
+        message.local_time = queued.local_time;
+        messages.push(message);
         // 排程 ID 同時作為新 run ID；清除排程與加入使用者訊息在同一次歷史保存完成。
         self.begin_project_for(conversation.into(), messages, None, Some(&queued.id))
     }

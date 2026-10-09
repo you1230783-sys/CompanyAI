@@ -75,6 +75,7 @@ impl Inbox {
             q.answer = Some(answer.into());
             q.state = "answered".into();
             state.entries.push(Instruction {
+                local_time: Some(crate::calendar::local_timestamp()),
                 id: jobs::new_id()?,
                 text: format!(
                     "使用者回答可選問題「{}」：{}。請更新受影響的成果。",
@@ -95,7 +96,7 @@ impl Inbox {
             }
         }
         if !defaults.is_empty() {
-            state.entries.push(Instruction{id:jobs::new_id()?,text:format!("桌面可選偏好已依事先公告的預設處理（不是使用者回答）：{}。完成必要成果並在交付中說明；不要再等待或重問同題。",defaults.join("；")),status:"pending".into()});
+            state.entries.push(Instruction{local_time:Some(crate::calendar::local_timestamp()),id:jobs::new_id()?,text:format!("桌面可選偏好已依事先公告的預設處理（不是使用者回答）：{}。完成必要成果並在交付中說明；不要再等待或重問同題。",defaults.join("；")),status:"pending".into()});
         }
         Ok(())
     }

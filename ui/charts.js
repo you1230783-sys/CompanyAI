@@ -2,6 +2,7 @@
 "use strict";
 window.ChartUI = (() => {
   const charts = new Map();
+  const layouts = new Map();
   let pendingSave = null;
   const command=value=>send({type:"project",command:value});
   // 版本仍在原生資料保存，只在顯示／PNG拿掉完整版本碼。
@@ -19,18 +20,18 @@ window.ChartUI = (() => {
     }).join("<br><br>");
   }
   const observer = new ResizeObserver(entries => {
-    for (const {target} of entries) charts.get(target)?.resize();
+    for (const {target} of entries) { charts.get(target)?.resize(); layouts.get(target)?.(); }
   });
   function cleanup() {
     for (const [element, instance] of charts) if (!element.isConnected) {
-      observer.unobserve(element); instance.dispose(); charts.delete(element);
+      observer.unobserve(element); instance.dispose(); charts.delete(element); layouts.delete(element);
     }
   }
   // 畫面與 PNG 共用資料／座標規則；匯出另建畫布，避免跟隨聊天室縮放或隱藏狀態。
   function option(data, exporting = false, style = null) {
     const view=style || ChartEditor.defaults(data), horizontal=view.kind==="horizontal_bar", scatter=view.kind==="scatter";
     data=ChartQuality.view(data,view.quality_policy);
-    const transform=ChartTransform.settings(data,style), transformNote=ChartTransform.summary(data,view.kind,transform);
+    const transform=ChartTransform.settings(data,view), transformNote=ChartTransform.summary(data,view.kind,transform);
     // 自動量測範圍與編輯器共用算法；單邊手動設定仍保持使用者指定值。
     const measure=horizontal?"x":"y", range={x_min:view.x_min,x_max:view.x_max,y_min:view.y_min,y_max:view.y_max};
     if(range[`${measure}_min`]==null || range[`${measure}_max`]==null) {
@@ -67,7 +68,8 @@ window.ChartUI = (() => {
         return {name:view.series[index].name,type:["area","step"].includes(view.kind)?"line":horizontal?"bar":view.kind,
           ...(view.kind==="step"?{step:"end"}:{}),...(view.kind==="area"?{areaStyle:{opacity:0.2}}:{}),
           itemStyle:{color:view.series[index].color},lineStyle:{color:view.series[index].color},
-          markLine:index===0?{symbol:["none","none"],silent:true,data:view.lines.map(l=>({name:l.name,[l.axis==="x"?"xAxis":"yAxis"]:l.value,lineStyle:{color:l.color,type:"dashed"},label:{show:!!l.name.trim(),formatter:()=>l.name,color:l.color}}))}:undefined,
+          // 文字由共用排版器定位並加引線；markLine僅畫真正的數值線，不畫重複標籤。
+          markLine:index===0?{symbol:["none","none"],silent:true,data:view.lines.map(l=>({name:l.name,[l.axis==="x"?"xAxis":"yAxis"]:l.value,lineStyle:{color:l.color,type:"dashed"},label:{show:false,formatter:()=>l.name,color:l.color}}))}:undefined,
           connectNulls:false,progressive:0,showSymbol:data.x.length <= 300,encode:{x:0,y:1},data:values};
       })};
   }
@@ -83,7 +85,9 @@ window.ChartUI = (() => {
     let instance;
     try {
       instance = echarts.init(canvas, null, {renderer:"canvas",width:1600,height:1000,devicePixelRatio:1});
-      instance.setOption(option(data, true, style), {notMerge:true,lazyUpdate:false});
+      const options=option(data,true,style);
+      instance.setOption(options, {notMerge:true,lazyUpdate:false});
+      ChartLayout.draw(instance,style || ChartEditor.defaults(data),true,options.graphic);
       // ECharts 可能對大型系列分批繪製；匯出必須同步完成全圖。
       instance.getZr().flush();
       return instance.getDataURL({type:"png",pixelRatio:1,backgroundColor:"#fff"});
@@ -142,18 +146,53 @@ window.ChartUI = (() => {
   }
 
   function render(container, values, context = null) {
-    const signature = JSON.stringify([values || [],context]);
+    const signature = JSON.stringify([values || [],context,ChartAppearance.palette()]);
     if (container.dataset.chartSignature === signature) return;
     container.dataset.chartSignature = signature;
     container.replaceChildren(); container.hidden = !values?.length; cleanup();
     for (const [chart_index,data] of (values || []).entries()) {
       let style=context?.styles?.[chart_index] || null;
+      let layoutMode=false, beforeLayout=null;
+      const textPanel=document.createElement("div");textPanel.className="chart-text-panel";textPanel.hidden=true;
+      function editText(index) {
+        const current=(style || ChartEditor.defaults(data)).layout?.annotations?.[index];
+        ChartText.open(current,annotation=>{
+          style=structuredClone(style || ChartEditor.defaults(data));style.layout ??= ChartLayout.empty();style.layout.annotations ??= [];
+          if(index==null) style.layout.annotations.push(annotation);else style.layout.annotations[index]=annotation;
+          renderTextPanel();refreshLayout();
+        });
+      }
+      function renderTextPanel() {
+        textPanel.replaceChildren();
+        const annotations=(style || ChartEditor.defaults(data)).layout?.annotations || [];
+        const add=document.createElement("button");add.type="button";add.textContent="新增文字";add.disabled=annotations.length>=20;add.onclick=()=>editText(null);textPanel.append(add);
+        for(const [index,annotation] of annotations.entries()) {
+          const row=document.createElement("div"),label=document.createElement("span"),edit=document.createElement("button"),remove=document.createElement("button");
+          row.className="chart-text-row";label.textContent=annotation.text;edit.textContent="編輯文字";remove.textContent="刪除文字";edit.type=remove.type="button";
+          edit.onclick=()=>editText(index);remove.onclick=()=>{style=structuredClone(style || ChartEditor.defaults(data));style.layout.annotations.splice(index,1);renderTextPanel();refreshLayout();};
+          row.append(label,edit,remove);textPanel.append(row);
+        }
+      }
       const card = document.createElement("section"); card.className = "chart-card";
       const title = document.createElement("h3"); title.textContent = data.title;title.className="chart-accessible-title";
       const plot = document.createElement("div"); plot.className = "chart-plot";
       plot.setAttribute("role", "img"); plot.setAttribute("aria-label", `${data.title}：${data.x_label} / ${data.y_label}`);
+      const layoutHint=document.createElement("p");layoutHint.className="chart-layout-hint";layoutHint.setAttribute("role","status");layoutHint.hidden=true;
+      function refreshLayout() {
+        const instance=charts.get(plot);if(!instance)return;
+        const result=ChartLayout.draw(instance,style || ChartEditor.defaults(data));
+        layoutHint.hidden=!layoutMode&&!result.crowded;
+        layoutHint.textContent=[layoutMode?"拖曳框線移動標題、圖例、參考線及自訂文字；方向鍵微調，Shift加速。按完成排版保存，取消則還原。":"",
+          result.crowded?"文字空間不足，請放大圖表或縮短標籤。":""].filter(Boolean).join(" ");
+        if(layoutMode) ChartLayout.handles(plot,result,(key,point)=>{
+          style=structuredClone(style || ChartEditor.defaults(data));style.layout=ChartLayout.update(style.layout,key,point);
+          refreshLayout();plot.querySelector(`[data-layout-key="${key}"]`)?.focus({preventScroll:true});
+        },editText);
+        else plot.querySelector(".chart-layout-layer")?.remove();
+      }
+      function redraw() {charts.get(plot)?.setOption(option(data,false,style),{notMerge:true});refreshLayout();}
       const source = document.createElement("p"); source.className = "chart-source";
-      const updateSource=()=>{const shown=ChartQuality.view(data,style?.quality_policy);source.textContent=[sourceLabel(data.source),shown.data_note,ChartTransform.summary(shown,style?.kind || data.kind,ChartTransform.settings(data,style))].filter(Boolean).join("\n");};
+      const updateSource=()=>{const shown=ChartQuality.view(data,(style || data.style)?.quality_policy);source.textContent=[sourceLabel(data.source),shown.data_note,ChartTransform.summary(shown,style?.kind || data.style?.kind || data.kind,ChartTransform.settings(data,style || data.style))].filter(Boolean).join("\n");};
       updateSource();
       const expand = document.createElement("button"); expand.className = "text-button"; expand.textContent = "放大圖表";
       expand.onclick = () => { const large = card.classList.toggle("chart-expanded"); expand.textContent = large ? "縮小圖表" : "放大圖表"; };
@@ -162,8 +201,23 @@ window.ChartUI = (() => {
         const target={conversation:context.conversation,message_index:context.message_index,request_id:context.request_id,chart_index};
         const edit=document.createElement("button"),reset=document.createElement("button"),save=document.createElement("button");
         edit.textContent="編輯圖表";reset.textContent="恢復原樣";save.textContent="儲存此圖片";
-        const apply=value=>{style=value;const replacement=renderIssues(ChartQuality.view(data,style?.quality_policy));issueDetails.replaceWith(replacement);issueDetails=replacement;charts.get(plot)?.setOption(option(data,false,style),{notMerge:true});updateSource();command({action:"chart_customize",target,style});};
-        edit.onclick=()=>ChartEditor.open(data,style,apply);plot.ondblclick=edit.onclick;reset.onclick=()=>apply(null);
+        const apply=value=>{style=value;const replacement=renderIssues(ChartQuality.view(data,(style || data.style)?.quality_policy));issueDetails.replaceWith(replacement);issueDetails=replacement;redraw();updateSource();command({action:"chart_customize",target,style});};
+        edit.onclick=()=>ChartEditor.open(data,style,apply);plot.ondblclick=()=>{if(!layoutMode)edit.onclick();};reset.onclick=()=>apply(null);
+        const layout=document.createElement("button"),cancelLayout=document.createElement("button"),autoLayout=document.createElement("button");
+        layout.textContent="調整排版";cancelLayout.textContent="取消排版";autoLayout.textContent="自動排版";
+        cancelLayout.hidden=autoLayout.hidden=true;
+        function toggleLayout(enabled) {
+          layoutMode=enabled;textPanel.hidden=!enabled;if(enabled)renderTextPanel();layout.textContent=enabled?"完成排版":"調整排版";
+          plot.setAttribute("role",enabled?"group":"img");
+          cancelLayout.hidden=autoLayout.hidden=!enabled;edit.disabled=reset.disabled=save.disabled=enabled;
+          refreshLayout();
+        }
+        layout.onclick=()=>{
+          if(!layoutMode){beforeLayout=structuredClone(style);toggleLayout(true);}
+          else {toggleLayout(false);command({action:"chart_customize",target,style});beforeLayout=null;}
+        };
+        cancelLayout.onclick=()=>{style=beforeLayout;beforeLayout=null;toggleLayout(false);redraw();};
+        autoLayout.onclick=()=>{style=structuredClone(style || ChartEditor.defaults(data));const annotations=style.layout?.annotations || [];style.layout={...ChartLayout.empty(),annotations};refreshLayout();};
         save.onclick=()=>{
           if(pendingSave){toast("圖片正在儲存，請稍候。");return;}
           const pending={target,button:save};pendingSave=pending;save.disabled=true;
@@ -171,7 +225,7 @@ window.ChartUI = (() => {
           // 登出或關閉頁面可能收不到ack；不永久鎖住按鈕，也不把逾時當作成功。
           setTimeout(()=>{if(pendingSave===pending){pendingSave=null;save.disabled=false;toast("尚未收到存圖結果，請先查看專案輸出資料夾。");}},65000);
         };
-        toolbar.append(edit,reset,save);
+        toolbar.append(edit,layout,cancelLayout,autoLayout,reset,save);
       }
       const details = document.createElement("details"), summary = document.createElement("summary"); summary.textContent = "查看原始資料表";
       const table = document.createElement("table");
@@ -192,13 +246,14 @@ window.ChartUI = (() => {
       next.onclick = () => { if ((page + 1) * 100 < data.x.length) { page++; showPage(); } };
       details.ontoggle = () => { if (details.open) showPage(); };
       controls.append(previous, label, next);
-      details.append(summary, controls, table); card.append(title, toolbar, plot, source, details);
-      let issueDetails=renderIssues(ChartQuality.view(data,style?.quality_policy));card.append(issueDetails); container.append(card);
+      details.append(summary, controls, table); card.append(title, toolbar, textPanel, layoutHint, plot, source, details);
+      let issueDetails=renderIssues(ChartQuality.view(data,(style || data.style)?.quality_policy));card.append(issueDetails); container.append(card);
       requestAnimationFrame(() => {
         if (!plot.isConnected) return;
         try {
           const instance = echarts.init(plot, null, {renderer:"canvas"}); charts.set(plot, instance); observer.observe(plot);
           instance.setOption(option(data,false,style));
+          layouts.set(plot,refreshLayout);instance.on("datazoom",refreshLayout);refreshLayout();
         } catch { plot.textContent = "圖表無法顯示，請展開資料表查看。"; }
       });
     }

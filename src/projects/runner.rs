@@ -1,6 +1,7 @@
 //! 專案代理往返。每輪模型請求有獨立 ID；工具只在本次活躍任務內執行。
 //! 中斷紀錄保留供檢查，不在重新登入或重啟後自動重播寫入。
 use super::{files::Broker, sandbox::Worker, Decision, Project};
+use crate::calendar::Activity;
 use crate::{
     config::Config,
     jobs::{self, Task},
@@ -108,7 +109,7 @@ pub(super) fn diagnostic_excerpt(text: &str, limit: usize) -> String {
     result
 }
 
-pub fn run(run: Run, progress: impl FnMut(String)) -> AppResult<String> {
+pub fn run(run: Run, progress: impl FnMut(Activity)) -> AppResult<String> {
     run_for(
         run,
         progress,
@@ -129,7 +130,7 @@ pub fn with_retry_test_clock<T>(work: impl FnOnce() -> T) -> T {
 /// 圖表為結構化 UI 事件，不混入模型文字或一般進度字串。
 pub fn run_with_charts(
     run: Run,
-    progress: impl FnMut(String),
+    progress: impl FnMut(Activity),
     charts: impl FnMut(Vec<super::charts::Chart>),
 ) -> AppResult<String> {
     run_for(
@@ -146,7 +147,7 @@ pub fn run_with_charts(
 /// 正式桌面提供固定 PNG 繪製服務；非 UI 測試入口不虛構成功匯出。
 pub fn run_with_chart_export(
     run: Run,
-    progress: impl FnMut(String),
+    progress: impl FnMut(Activity),
     charts: impl FnMut(Vec<super::charts::Chart>),
     analysis: impl FnMut(super::analysis::State) + 'static,
     renderer: super::charts::png::Renderer,
@@ -167,7 +168,7 @@ pub fn run_with_chart_export(
 #[cfg(debug_assertions)]
 pub fn run_with_test_budget(
     run: Run,
-    progress: impl FnMut(String),
+    progress: impl FnMut(Activity),
     budget: Duration,
 ) -> AppResult<String> {
     run_for(run, progress, budget, (|_| {}, None), false, None, None)
@@ -175,7 +176,7 @@ pub fn run_with_test_budget(
 
 /// 舊文字協定的回歸測試入口；正式 EXE 不編入，不能用它降級新任務。
 #[cfg(debug_assertions)]
-pub fn run_legacy_test(run: Run, progress: impl FnMut(String)) -> AppResult<String> {
+pub fn run_legacy_test(run: Run, progress: impl FnMut(Activity)) -> AppResult<String> {
     run_for(
         run,
         progress,
@@ -189,7 +190,7 @@ pub fn run_legacy_test(run: Run, progress: impl FnMut(String)) -> AppResult<Stri
 #[cfg(debug_assertions)]
 pub fn run_legacy_with_test_budget(
     run: Run,
-    progress: impl FnMut(String),
+    progress: impl FnMut(Activity),
     budget: Duration,
 ) -> AppResult<String> {
     run_for(run, progress, budget, (|_| {}, None), true, None, None)
@@ -197,7 +198,7 @@ pub fn run_legacy_with_test_budget(
 #[cfg(debug_assertions)]
 pub fn run_legacy_with_charts(
     run: Run,
-    progress: impl FnMut(String),
+    progress: impl FnMut(Activity),
     charts: impl FnMut(Vec<super::charts::Chart>),
 ) -> AppResult<String> {
     run_for(
@@ -215,7 +216,7 @@ type AnalysisCallback = Box<dyn FnMut(super::analysis::State)>;
 
 fn run_for(
     mut run: Run,
-    mut progress: impl FnMut(String),
+    mut progress: impl FnMut(Activity),
     budget: Duration,
     hooks: (
         impl FnMut(Vec<super::charts::Chart>),
@@ -235,6 +236,7 @@ fn run_for(
     let mut record = json!({"project_id":run.project.id,"conversation_id":run.conversation,"state":"starting","requests":[],"operations":[],"outputs":[]});
     checkpoint(&journal, &record)?;
     let mut broker = Broker::new(run.project.clone(), run.id.clone())?;
+    broker.set_chart_history(&run.messages, &run.config.chart_palette);
     broker.set_outlook_root(&run.root);
     broker.set_outlook_consent(run.outlook_consent.take());
     broker.set_file_waiter(run.file_waiter.take());
@@ -1227,6 +1229,7 @@ fn run_for(
         }
         .into(),
     );
+    record["finished_local"] = json!(crate::calendar::local_timestamp());
     record["activity"] = json!(activity);
     let paused = result.is_ok() && paused_available(&run.root, &run.id);
     record["state"] = json!(if paused {
@@ -1292,20 +1295,21 @@ fn run_for(
     })
 }
 /// 重複輪詢訊息不重複加入，歷程有明確大小上限，不保存文件全文。
-fn report(activity: &mut Vec<String>, progress: &mut impl FnMut(String), message: String) {
+fn report(activity: &mut Vec<Activity>, progress: &mut impl FnMut(Activity), message: String) {
     let message: String = message.chars().take(2048).collect();
-    if activity.last() == Some(&message) {
+    if activity.last().is_some_and(|last| **last == message) {
         return;
     }
     if activity.len() >= 120 {
         activity.remove(0);
     }
-    activity.push(message.clone());
-    progress(message);
+    let event = Activity::from(message);
+    activity.push(event.clone());
+    progress(event);
 }
 
 /// 重啟後只恢復顯示紀錄，不執行任何原有操作。
-pub fn recover_activity(root: &Path, id: &str) -> AppResult<Vec<String>> {
+pub fn recover_activity(root: &Path, id: &str) -> AppResult<Vec<Activity>> {
     jobs::validate_id(id)?;
     let path = root.join("project-runs").join(format!("{id}.dpapi"));
     if !path.exists() {
@@ -1321,8 +1325,7 @@ pub fn recover_activity(root: &Path, id: &str) -> AppResult<Vec<String>> {
         .into_iter()
         .flatten()
         .take(120)
-        .filter_map(|value| value.as_str())
-        .map(|text| text.chars().take(2048).collect())
+        .filter_map(|value| serde_json::from_value::<Activity>(value.clone()).ok())
         .collect())
 }
 
@@ -1444,6 +1447,21 @@ pub fn recover_analysis(root: &Path, id: &str) -> Option<super::analysis::State>
     }
     let record: Value = serde_json::from_slice(&storage::protect(&bytes, false).ok()?).ok()?;
     serde_json::from_value(record["analysis"].clone()).ok()
+}
+
+/// 只有舊任務實際保存的時間可恢復；沒有欄位的版本顯示空白。
+pub fn recover_local_time(root: &Path, id: &str) -> Option<String> {
+    let read = || -> AppResult<Option<String>> {
+        jobs::validate_id(id)?;
+        let path = root.join("project-runs").join(format!("{id}.dpapi"));
+        if std::fs::metadata(&path).map_err(|e| e.to_string())?.len() > 64_000_000 {
+            return Ok(None);
+        }
+        let bytes = storage::protect(&std::fs::read(path).map_err(|e| e.to_string())?, false)?;
+        let record: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        Ok(record["finished_local"].as_str().map(str::to_owned))
+    };
+    read().ok().flatten()
 }
 
 #[cfg(test)]

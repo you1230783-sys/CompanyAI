@@ -377,15 +377,26 @@ function showView(view) {
 // 原生 runner 將 progress_note 與工具活動一起保存，舊對話不需要資料遷移。
 const PROJECT_NOTE_PREFIX = "AI 進度筆記：";
 
+// 新舊歷史並存；時間只能取原生保存值，重繪時不得用現在時間補值。
+function activityEvents(events) {
+  return (events || []).flatMap(event=>typeof event==="string" ? [{text:event,at:null}]
+    : event && typeof event.text==="string" ? [event] : []);
+}
+function localTimeNode(value, short=false) {
+  if(typeof value!=="string" || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)) return null;
+  const time=node("time","local-time",short?value.slice(11):value);
+  time.dateTime=value.replace(" ","T");time.title=`本機時間：${value}`;return time;
+}
+
 /** 工具紀錄以純文字呈現；結束後用固定標題，避免長筆記出現在收合列。 */
 function renderProjectActivity(details, events, finished = false) {
-  const history = (events || []).filter(text => typeof text === "string").slice(-120);
+  const history = activityEvents(events).slice(-120);
   details.className = "project-activity";
   if (!history.length) { details.hidden = true; details.replaceChildren(); return; }
   details.hidden = false;
   const latest = history.at(-1);
   const label = finished ? "查看工具紀錄與進度筆記"
-    : latest.startsWith(PROJECT_NOTE_PREFIX) ? "AI 已更新進度筆記" : latest;
+    : latest.text.startsWith(PROJECT_NOTE_PREFIX) ? "AI 已更新進度筆記" : latest.text;
   let summary = details.querySelector("summary");
   let list = details.querySelector(".project-activity-history");
   if (!list) {
@@ -393,6 +404,7 @@ function renderProjectActivity(details, events, finished = false) {
     details.append(summary, list);
   }
   summary.textContent = label;
+  if(!finished){const time=localTimeNode(latest.at,true);if(time)summary.prepend(time);}
   const previous = [...list.children];
   const oldTop = list.scrollTop;
   const follow = details.open && list.scrollHeight - list.clientHeight - oldTop < 12;
@@ -402,12 +414,16 @@ function renderProjectActivity(details, events, finished = false) {
   // 找出舊尾段與新開頭的重疊；新增紀錄只 append，120筆輪替時仍保留可見的節點。
   let keep = 0;
   for (let count = Math.min(previous.length, history.length); count > 0; count--) {
-    if (previous.slice(-count).every((item, index) => item.textContent === history[index])) {
+    if (previous.slice(-count).every((item, index) => item.dataset.event === JSON.stringify(history[index]))) {
       keep = count; break;
     }
   }
   previous.slice(0, previous.length - keep).forEach(item => item.remove());
-  history.slice(keep).forEach(text => list.append(node("li", "", text)));
+  history.slice(keep).forEach(event => {
+    const item=node("li");item.dataset.event=JSON.stringify(event);
+    const time=localTimeNode(event.at,true);if(time)item.append(time);
+    item.append(document.createTextNode(event.text));list.append(item);
+  });
   if (follow) list.scrollTop = list.scrollHeight;
   else if (anchor?.isConnected && list.contains(anchor)) {
     list.scrollTop += anchor.getBoundingClientRect().top - list.getBoundingClientRect().top - offset;
@@ -416,9 +432,9 @@ function renderProjectActivity(details, events, finished = false) {
 
 /** 僅供執行中的區域使用；累積筆記只顯示最新一份，舊版本留在工具紀錄。 */
 function renderProjectNarration(container, events) {
-  const history = (events || []).filter(text => typeof text === "string");
-  const notes = history.filter(text => text.startsWith("AI 說明："));
-  const latestNote = history.filter(text => text.startsWith(PROJECT_NOTE_PREFIX)).at(-1);
+  const history = activityEvents(events);
+  const notes = history.filter(event => event.text.startsWith("AI 說明："));
+  const latestNote = history.filter(event => event.text.startsWith(PROJECT_NOTE_PREFIX)).at(-1);
   // 一般工具活動沒有改變說明／筆記時，不重建正在閱讀的內容。
   const signature = JSON.stringify([notes, latestNote]);
   if (container.dataset.signature === signature) return;
@@ -430,15 +446,16 @@ function renderProjectNarration(container, events) {
   container.hidden = !notes.length && !latestNote;
   for (const note of notes) {
     const text = node("div", "project-narration markdown");
-    text.innerHTML = renderMarkdown(note.slice(6));
+    text.innerHTML = renderMarkdown(note.text.slice(6));
     container.append(text);
   }
   if (latestNote) {
     const card = node("section", "project-progress-note");
     card.setAttribute("aria-label", "AI 進度筆記");
     card.append(node("strong", "", "AI 進度筆記"));
+    const time=localTimeNode(latestNote.at,true);if(time)card.append(time);
     // 筆記只作文字，保留換行；不解譯其中的 HTML 或可執行連結。
-    card.append(node("div", "project-progress-note-text", latestNote.slice(PROJECT_NOTE_PREFIX.length)));
+    card.append(node("div", "project-progress-note-text", latestNote.text.slice(PROJECT_NOTE_PREFIX.length)));
     container.append(card);
     const text = card.querySelector(".project-progress-note-text");
     text.scrollTop = followNote ? text.scrollHeight : noteTop;
@@ -478,12 +495,12 @@ function linkProjectArtifacts(bubble) {
   }
   for (const text of plain) {
     const lines = text.textContent.split("\n");
-    if (!lines.some(line => /^_AI_Output[/\\].+\.(txt|md|docx|doc|docm|xlsx|xls|xlsm|xlsb|pptx|ppt|pptm|png)$/iu.test(line.trim()))) continue;
+    if (!lines.some(line => /^_AI_Output[/\\].+\.(txt|md|py|docx|doc|docm|xlsx|xls|xlsm|xlsb|pptx|ppt|pptm|png)$/iu.test(line.trim()))) continue;
     const fragment = document.createDocumentFragment();
     lines.forEach((line,index) => {
       if (index) fragment.append(document.createTextNode("\n"));
       const path = line.trim();
-      if (/^_AI_Output[/\\].+\.(txt|md|docx|doc|docm|xlsx|xls|xlsm|xlsb|pptx|ppt|pptm|png)$/iu.test(path)) {
+      if (/^_AI_Output[/\\].+\.(txt|md|py|docx|doc|docm|xlsx|xls|xlsm|xlsb|pptx|ppt|pptm|png)$/iu.test(path)) {
         const link = node("a","project-artifact",path);
         link.href = "#"; link.dataset.path = path; link.dataset.conversation = state.active_id;
         link.title = "在檔案總管中顯示"; fragment.append(link);
@@ -497,6 +514,8 @@ function renderMessages() {
   const signature = JSON.stringify([
     state.active_id,
     state.messages,
+    // 配色變更也需重畫未自訂圖表；只比較訊息內容會把舊畫布留在畫面上。
+    state.config.chart_palette,
     state.busy === "chat",
     state.retry,
   ]);
@@ -528,9 +547,9 @@ function renderMessages() {
     const avatar = node("div", "avatar");
     avatar.innerHTML = icon(message.role === "user" ? "user" : "chat");
     const content = node("div", "message-content");
-    content.append(
-      node("div", "message-meta", message.role === "user" ? "你" : "AI"),
-    );
+    const meta=node("div", "message-meta", message.role === "user" ? "你" : "AI");
+    const time=localTimeNode(message.local_time);if(time)meta.append(time);
+    content.append(meta);
     const bubble = node(
       "div",
       "bubble" + (message.role === "assistant" ? " markdown" : ""),
@@ -779,6 +798,7 @@ function renderMail() {
 function receive(next) {
   window.AuthUI?.beforeRender();
   state = next;
+  window.SettingsUI?.render(state.config);
   document.documentElement.dataset.theme = state.config.dark_mode ? "dark" : "light";
   $("dark-mode").checked = !!state.config.dark_mode;
   document.documentElement.style.setProperty(

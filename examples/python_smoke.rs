@@ -7,6 +7,8 @@ use company_ai::{
 use serde_json::{json, Value};
 #[path = "python_smoke/analysis.rs"]
 mod analysis;
+#[path = "python_smoke/edit.rs"]
+mod edit;
 use std::{
     collections::BTreeMap,
     path::PathBuf,
@@ -46,6 +48,7 @@ fn run() -> AppResult<()> {
     let cancel = AtomicBool::new(false);
     let mut worker = Worker::start(&exe, &cancel)?;
     analysis::run(&mut broker, &mut worker, &project)?;
+    let python_copy = edit::run(&mut broker, &mut worker, &project)?;
     call(
         &mut broker,
         &mut worker,
@@ -258,19 +261,21 @@ result = {{'denied': denied}}
     let changed_runtime = python::execute("result={}", json!([]), &cancel);
     std::fs::write(&known, &original_worker).map_err(|e| e.to_string())?;
     assert!(changed_runtime.unwrap_err().contains("損毀或版本不符"));
-    let completed = broker.finish(&[])?;
-    assert_eq!(completed.len(), if office { 3 } else { 2 });
+    let artifacts = [python_copy];
+    let completed = broker.finish(&artifacts)?;
+    assert_eq!(completed.len(), if office { 4 } else { 3 });
     assert_eq!(
         std::fs::read_to_string(root.join("input.csv")).map_err(|e| e.to_string())?,
         csv
     );
     // 交付時再次核對，不接受被其他程式改寫的生成檔。
     std::fs::write(root.join(book_path), b"modified fixture").map_err(|e| e.to_string())?;
-    assert!(broker.finish(&[]).is_err());
+    assert!(broker.finish(&artifacts).is_err());
     let report = json!({"result":"PASS","version":env!("CARGO_PKG_VERSION"),"actual_excel_com":office,
         "python":"3.13.12","pandas":"2.2.3","numpy":"2.2.6","openpyxl":"3.1.5","duration_seconds":started.elapsed().as_secs_f64(),
         "checks":["CSV leading zeros and literal NA","LOG event duration","Big5 LOG plus UTF-8 BOM and fallback snapshots through real Python", "groupby count/mean/sum","tracked CSV and generated XLSX round trip",
             "literal XLSX formula text","idempotent results","source/output path and revision rejection","OS file/network/child-process isolation",
+            "PY working copy edit and unchanged source","AST plus compile without executing source","UTF-8 BOM and Big5 source encoding","coding declaration mismatch rejection","current revision syntax validation required before publish","PY artifact verified at finish",
             "environment allowlist","active cancellation","120 second timeout","unlisted and modified runtime files rejected","original unchanged","modified output rejected at finish"]});
     std::fs::write(
         root.join("python-verification.json"),

@@ -116,6 +116,9 @@ enum Command {
     Hotkey {
         value: String,
     },
+    ChartPalette {
+        colors: Vec<String>,
+    },
     Login,
     Logout,
     CancelLogin,
@@ -773,6 +776,7 @@ impl App {
                             transform: None,
                             quality: None,
                             reference_lines: Vec::new(),
+                            style: None,
                             kind: "line".into(),
                             title: "10,000 筆量測趨勢／PNG 匯出測試".into(),
                             x_label: "時間 (秒)".into(),
@@ -951,6 +955,17 @@ impl App {
                 }
                 storage::save_config(&self.root, &self.config)?;
                 apply_window_theme(self.window, self.config.dark_mode);
+            }
+            Command::ChartPalette { colors } => {
+                if !crate::config::valid_chart_palette(&colors) {
+                    return Err("圖表預設配色需為八個 #RRGGBB 色碼。".into());
+                }
+                // 先保存成功再套用，避免寫入失敗時畫面宣稱設定已保留。
+                let mut config = self.config.clone();
+                config.chart_palette = colors;
+                storage::save_config(&self.root, &config)?;
+                self.config = config;
+                self.toast("圖表預設配色已儲存");
             }
             Command::Hotkey { value } => {
                 if let Err(message) = self.apply_hotkey(value) {

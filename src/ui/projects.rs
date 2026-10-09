@@ -175,7 +175,7 @@ pub(super) enum ProjectEvent {
         projects::charts::quality::Review,
         mpsc::Sender<Option<Vec<projects::charts::quality::Choice>>>,
     ),
-    Progress(String, String),
+    Progress(String, crate::calendar::Activity),
     Charts(String, Vec<projects::charts::Chart>),
     Analysis(String, projects::analysis::State),
     ExportPng(
@@ -208,7 +208,7 @@ pub(super) struct Running {
     pending_chart: Option<PendingChart>,
     id: String,
     conversation: String,
-    activity: Vec<String>,
+    activity: Vec<crate::calendar::Activity>,
     charts: Vec<projects::charts::Chart>,
     analysis: Option<projects::analysis::State>,
     started: u64,
@@ -374,6 +374,7 @@ impl App {
                 continue;
             };
             let mut message = Message::assistant(projects::runner::recover(&self.root, &id)?);
+            message.local_time = projects::runner::recover_local_time(&self.root, &id);
             message.project_paused = projects::runner::paused_available(&self.root, &id);
             message.project_analysis = projects::runner::recover_analysis(&self.root, &id);
             message.project_activity =
@@ -1285,7 +1286,7 @@ impl App {
                         reply,
                     });
                     self.projects.status = "等待關閉檔案，再繼續讀取…".into();
-                    run.activity.push(self.projects.status.clone());
+                    run.activity.push(self.projects.status.clone().into());
                 }
             }
             ProjectEvent::OutlookConsent(id, request_id, folders, reply) => {
@@ -1301,7 +1302,7 @@ impl App {
                         reply,
                     });
                     self.projects.status = "等待確認 AI 可使用的 Outlook 資料夾…".into();
-                    run.activity.push(self.projects.status.clone());
+                    run.activity.push(self.projects.status.clone().into());
                 }
             }
             ProjectEvent::ReviewChart(id, request_id, review, reply) => {
@@ -1317,7 +1318,7 @@ impl App {
                         reply,
                     });
                     self.projects.status = "等待選擇圖表資料處理方式…".into();
-                    run.activity.push(self.projects.status.clone());
+                    run.activity.push(self.projects.status.clone().into());
                 }
             }
             ProjectEvent::Diagnostics(conversation, id, view_request, copy, result) => {
@@ -1363,13 +1364,13 @@ impl App {
             }
             ProjectEvent::Progress(id, text) => {
                 if let Some(run) = self.projects.running.as_mut().filter(|r| r.id == id) {
-                    if run.activity.last() != Some(&text) {
+                    if !run.activity.last().is_some_and(|last| **last == *text) {
                         if run.activity.len() >= 120 {
                             run.activity.remove(0);
                         }
                         run.activity.push(text.clone());
                     }
-                    self.projects.status = text;
+                    self.projects.status = text.to_string();
                 }
             }
             ProjectEvent::Finished(id, conversation, result) => {
@@ -1433,6 +1434,7 @@ impl App {
                         };
                         let mut note =
                             Message::user(&format!("補充指示（{status}）：\n{}", instruction.text));
+                        note.local_time = instruction.local_time;
                         note.request_id = Some(instruction.id.clone());
                         if let Some(previous) = c
                             .messages

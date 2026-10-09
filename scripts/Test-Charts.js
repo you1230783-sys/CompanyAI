@@ -8,13 +8,14 @@ let options, disposed = 0, removed = 0, fail = false;
 const context = {structuredClone, ResizeObserver:class {}, document:{
   body:{append(){}}, createElement(){return {style:{}, remove(){removed++;}};}
 }, echarts:{init(){return {
-  setOption(value){options=value;},getZr(){return {flush(){}};},
+  setOption(value,settings){options=settings?.notMerge?value:{...options,...value};},getZr(){return {flush(){}};},
+  getWidth(){return 1600;},getHeight(){return 1000;},getOption(){return {grid:[options.grid]};},convertToPixel(){return 500;},containPixel(){return true;},
   getDataURL(){if(fail)throw new Error("renderer failed"); return "data:image/png;base64,test";},
   dispose(){disposed++;}
 };}}};
 context.window=context;
 vm.createContext(context);
-for(const name of ["chart-transform.js","chart-editor.js","charts.js"]) vm.runInContext(fs.readFileSync(path.join(__dirname,"../ui",name),"utf8"),context);
+for(const name of ["chart-transform.js","chart-appearance.js","chart-layout.js","chart-editor.js","charts.js"]) vm.runInContext(fs.readFileSync(path.join(__dirname,"../ui",name),"utf8"),context);
 const chart = {kind:"line",title:"<script>只是標題</script>",x_label:"時間",y_label:"數值",source:"測試",
   x:Array.from({length:10000},(_,i)=>i),series:Array.from({length:8},(_,s)=>({name:`s${s}`,values:Array.from({length:10000},(_,i)=>i===3000?null:i)}))};
 assert.equal(context.window.ChartUI.exportPng(chart),"data:image/png;base64,test");

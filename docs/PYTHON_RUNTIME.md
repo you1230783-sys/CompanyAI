@@ -1,5 +1,18 @@
 # Python 執行環境與離線重建
 
+## 0.8.48：Python原始碼編輯試用
+
+`python-edit`技能沿用受控文字工具讀取、新建與修訂.py工作副本；`check_python(path,revision)`可檢查專案原文或副本。原文仍由Rust唯讀取得，不把路徑交給檢查器。副本以即將儲存的編碼轉成bytes，固定`check_source.py`經既有AppContainer Python執行器傳入；受檢文字只作資料。
+
+使用標準函式庫的`tokenize.detect_encoding`、`ast.parse`與`compile(..., dont_inherit=True)`。AST建構成功不代表通過所有範圍規則，因此另外編譯但不執行產生的程式物件；例如模組最上層的return也會被拒絕。沒有exec／import受檢模組、.pyc寫入或新的外部套件。編碼宣告解出的內容必須與工作副本文字完全相同。
+
+回傳`syntax_valid`、`source_executed=false`、`functional_tests_run=false`、Python版本、首個錯誤行列、最多5則警告及20個函式／類別索引與總數。檢查通過的文字revision隨工作副本加密保存；`save_copy`對.py要求目前revision已通過，每次內容變動都使舊結果不適用。版本或格式不符、檢查器失敗均不放行儲存。
+
+語法驗證只適用內建CPython 3.13.12，不代表依賴、外部資源、執行結果或其他版本相容。本版沒有pytest／pip，不默默執行整份來源程式。Python worker、套件、runtime清單與指紋不變，安裝仍可通過自檢後沿用舊環境。
+
+整合驗證入口`examples/python_smoke/edit.rs`包含：語法錯誤與修正、編碼宣告、UTF-8 BOM、Big5、未安裝模組、頂層raise不執行、版本檢查失效、拒絕未檢查的發布、成果讀回及原檔不變。實際結果見 [0.8.48驗證](VALIDATION_0_8_48.md)。
+
+
 ## 0.8.45：大檔分段與分析核對
 
 inputs[].log_range 可指定 {start_line:1,line_count:50000}，只適用 kind=text 的 LOG／OUT／ERR／JSONL。原始檔上限 1 GiB，每段最多 2 MiB 完整行；單次其他快照仍限 32 MiB、合計 60 MiB。原生程序核對整份原始 bytes 的版本，回傳 start_line／line_count／next_line／eof；續段必須帶 revision，不混用新舊檔。分段解碼沿用 BOM 優先、無 BOM 的 Big5／UTF-8 選擇，歧義明示，可覆寫 encoding。

@@ -2,6 +2,56 @@
 use chrono::{Datelike, Duration, NaiveDate};
 use windows_sys::Win32::System::SystemInformation::GetLocalTime;
 
+/// 顯示用時間在事件發生時擷取並隨歷史保存；不加入模型上下文。
+pub fn local_timestamp() -> String {
+    let mut local = windows_sys::Win32::Foundation::SYSTEMTIME::default();
+    unsafe { GetLocalTime(&mut local) };
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+        local.wYear, local.wMonth, local.wDay, local.wHour, local.wMinute, local.wSecond
+    )
+}
+
+/// 舊版活動是字串，新版保留事件的本機時間；讀取舊紀錄不補造時間。
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+pub enum Activity {
+    Timed { text: String, at: String },
+    Legacy(String),
+}
+impl Activity {
+    /// 提供純文字給既有狀態比對；时间另留在序列化事件中。
+    pub fn as_str(&self) -> &str {
+        self
+    }
+}
+impl std::ops::Deref for Activity {
+    type Target = str;
+    fn deref(&self) -> &str {
+        match self {
+            Self::Timed { text, .. } | Self::Legacy(text) => text,
+        }
+    }
+}
+impl From<String> for Activity {
+    fn from(text: String) -> Self {
+        Self::Timed {
+            text,
+            at: local_timestamp(),
+        }
+    }
+}
+impl From<&str> for Activity {
+    fn from(text: &str) -> Self {
+        text.to_owned().into()
+    }
+}
+impl PartialEq<str> for Activity {
+    fn eq(&self, other: &str) -> bool {
+        &**self == other
+    }
+}
+
 /// 回傳 Windows 本機時區的公曆日期；失敗不以 UTC 或模型日期猜補。
 pub fn today() -> crate::AppResult<NaiveDate> {
     let mut local = windows_sys::Win32::Foundation::SYSTEMTIME::default();

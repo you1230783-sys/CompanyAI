@@ -4,6 +4,16 @@ use serde_json::{json, Value};
 mod core;
 const SKILLS: &[(&str, &str, &str)] = &[
     (
+        "python-edit",
+        "試用：Python原始碼閱讀、修改副本與語法檢查",
+        include_str!("skills/python-edit.md"),
+    ),
+    (
+        "chart-edit",
+        "編輯既有圖表、配色、排版與圖中文字",
+        include_str!("skills/chart-edit.md"),
+    ),
+    (
         "python-analysis",
         "多檔關聯、統計、LOG配對與XLSX，主動選用Python",
         include_str!("skills/python-analysis.md"),
@@ -87,10 +97,9 @@ pub fn catalog_for(_model: &str) -> Value {
         .iter()
         .map(|(id, description, _)| {
             let category = match *id {
-                "python-analysis" | "log-analysis" | "excel-read" | "multi-file-excel" => {
-                    "資料分析"
-                }
-                "charts" | "dataset-charts" => "圖表",
+                "python-analysis" | "python-edit" | "log-analysis" | "excel-read"
+                | "multi-file-excel" => "資料分析",
+                "charts" | "dataset-charts" | "chart-edit" => "圖表",
                 _ => "文件與郵件",
             };
             json!({"category":category,"id":id,"description":description})
@@ -181,19 +190,23 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
         "outlook_folders" | "outlook_headers" | "outlook_read" | "outlook_index" => {
             has("outlook-research")
         }
+        "check_python" => has("python-edit"),
+        "edit_chart" => has("chart-edit"),
+        "inspect_chart" | "export_chart_png" => {
+            has("chart-edit") || has("charts") || has("dataset-charts")
+        }
         "create_chart"
         | "chart_from_excel"
         | "chart_excel_range"
-        | "export_chart_png"
         | "transform_chart"
         | "set_chart_policy"
         | "set_chart_reference_lines" => has("charts") || has("dataset-charts"),
         "create_working_copy" | "save_copy" | "delete_copy" => {
-            has("text-edit") || has("office-edit")
+            has("text-edit") || has("office-edit") || has("python-edit")
         }
-        "find_text" | "edit_text" => has("text-edit"),
+        "find_text" | "edit_text" => has("text-edit") || has("python-edit"),
         "edit_office" | "office_action" | "office_batch" => has("office-edit"),
-        "search_files" => has("research") || has("text-edit"),
+        "search_files" => has("research") || has("text-edit") || has("python-edit"),
         "list_document_sections" | "read_document_section" | "summarize_document" => {
             has("research")
         }

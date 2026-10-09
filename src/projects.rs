@@ -291,6 +291,19 @@ pub enum Tool {
         chart_index: usize,
         name: String,
     },
+    CheckPython {
+        path: String,
+        revision: String,
+    },
+    InspectChart {
+        message_index: Option<usize>,
+        chart_index: Option<usize>,
+    },
+    EditChart {
+        message_index: Option<usize>,
+        chart_index: usize,
+        style: Box<charts::style::Style>,
+    },
     SetChartReferenceLines {
         chart_index: usize,
         lines: Vec<charts::style::ReferenceLine>,
@@ -456,6 +469,9 @@ impl Tool {
             Self::OfficeBatch { .. } => "批次編輯 Office",
             Self::CreateChart { .. } | Self::ChartFromExcel { .. } => "建立圖表",
             Self::ExportChartPng { .. } => "儲存圖表 PNG",
+            Self::CheckPython { .. } => "檢查Python語法（不執行原文）",
+            Self::InspectChart { .. } => "查看圖表設定",
+            Self::EditChart { .. } => "編輯圖表呈現與文字",
             Self::SetChartReferenceLines { .. } => "標示圖表參考線",
             Self::SetChartPolicy { .. } => "調整圖表缺值呈現",
             Self::TransformChart { .. } => "調整圖表座標與無值位置",

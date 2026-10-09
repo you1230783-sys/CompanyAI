@@ -132,6 +132,7 @@ impl App {
         let mut question = messages[index].clone();
         question.retry_context_index = Some(question.retry_context_index.unwrap_or(index));
         question.project_activity.clear();
+        question.local_time = Some(crate::calendar::local_timestamp());
         messages.push(question);
         if self.projects.store.project_for(conversation).is_some() {
             self.begin_project_chat(messages)?;

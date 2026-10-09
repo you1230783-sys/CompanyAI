@@ -807,6 +807,7 @@ mod tests {
         state.push_tool("read".into(), "舊大量數值".repeat(2000));
         state.accept_note(Some("用 C 欄"));
         state.add_instructions(vec![super::super::steering::Instruction {
+            local_time: None,
             id: "i".into(),
             text: "改用 F，原件唯讀".into(),
             status: "staged".into(),
@@ -866,6 +867,7 @@ mod tests {
     fn user_supplements_survive_compaction_and_serialized_resume() {
         let mut progress = Progress::new(vec![Message::user("原始目標：分析 12:25 到 12:33")]);
         progress.add_instructions(vec![super::super::steering::Instruction {
+            local_time: None,
             id: "first".into(),
             text: "只看 Z01-CY，保留原始時間".into(),
             status: "staged".into(),
@@ -1165,6 +1167,7 @@ mod tests {
     fn resume_with_two_large_results_does_not_repeat_the_budget_pause() {
         let mut state = Progress::new(vec![Message::user("保留原始要求")]);
         state.add_instructions(vec![super::super::steering::Instruction {
+            local_time: None,
             id: "new".into(),
             text: "只看 A01-01".into(),
             status: "sent".into(),

@@ -20,6 +20,26 @@ pub const UPDATE_MANIFEST_PATHS: [&str; 3] = [
 ];
 pub const MAX_SESSION_SECONDS: u64 = 30 * 24 * 60 * 60;
 
+/// 未自訂圖表的八個系列色；順序與前端預設一致，舊設定直接沿用。
+pub fn default_chart_palette() -> Vec<String> {
+    [
+        "#5470c6", "#91cc75", "#fac858", "#ee6666", "#73c0de", "#3ba272", "#fc8452", "#9a60b4",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
+/// 原生入口只接受固定數量的RGB色碼，不讓任意CSS或可執行字串落入設定。
+pub fn valid_chart_palette(colors: &[String]) -> bool {
+    colors.len() == 8
+        && colors.iter().all(|color| {
+            color.len() == 7
+                && color.starts_with('#')
+                && color[1..].bytes().all(|b| b.is_ascii_hexdigit())
+        })
+}
+
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthHeader {
@@ -55,6 +75,8 @@ pub struct Config {
     pub vnc_enabled: bool,
     /// DEBUG 僅保存本機加密 JSON，數字用量報表與正文分開。
     pub debug_mode: bool,
+    /// 僅影響未自訂系列顏色的呈現，不傳送模型或修改來源數據。
+    pub chart_palette: Vec<String>,
 }
 
 /// 只有個人偏好能落盤；舊版檔案中的網址、路由、Header 和 HTTP 欄位會被忽略。
@@ -76,6 +98,7 @@ struct Preferences {
     always_new_chat: bool,
     vnc_enabled: bool,
     debug_mode: bool,
+    chart_palette: Vec<String>,
 }
 
 impl Serialize for Config {
@@ -96,6 +119,7 @@ impl Serialize for Config {
             always_new_chat: self.always_new_chat,
             vnc_enabled: self.vnc_enabled,
             debug_mode: self.debug_mode,
+            chart_palette: self.chart_palette.clone(),
         }
         .serialize(serializer)
     }
@@ -119,6 +143,11 @@ impl<'de> Deserialize<'de> for Config {
             always_new_chat: saved.always_new_chat,
             vnc_enabled: saved.vnc_enabled,
             debug_mode: saved.debug_mode,
+            chart_palette: if valid_chart_palette(&saved.chart_palette) {
+                saved.chart_palette
+            } else {
+                default_chart_palette()
+            },
             ..Self::default()
         })
     }
@@ -148,6 +177,7 @@ impl Default for Config {
             always_new_chat: false,
             vnc_enabled: false,
             debug_mode: false,
+            chart_palette: default_chart_palette(),
         }
     }
 }
@@ -343,7 +373,7 @@ mod tests {
         assert_eq!(config.model, "quality");
         assert_eq!(config.hotkey, "Ctrl+Shift+F8");
         let saved = serde_json::to_value(&config).unwrap();
-        assert_eq!(saved.as_object().unwrap().len(), 15);
+        assert_eq!(saved.as_object().unwrap().len(), 16);
         assert!(saved.get("server_url").is_none());
         assert!(Config::default().validate().is_ok());
     }
@@ -533,5 +563,23 @@ mod tests {
         let saved = serde_json::to_string(&config).unwrap();
         assert!(serde_json::from_str::<Config>(&saved).unwrap().dark_mode);
         assert!(!saved.contains(SERVER_URL));
+    }
+
+    #[test]
+    fn chart_palette_round_trips_and_invalid_saved_colors_fall_back() {
+        let mut config: Config = serde_json::from_str("{}").unwrap();
+        assert_eq!(config.chart_palette, default_chart_palette());
+        config.chart_palette[0] = "#AA2288".into();
+        let saved = serde_json::to_string(&config).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Config>(&saved)
+                .unwrap()
+                .chart_palette[0],
+            "#AA2288"
+        );
+        let bad: Config = serde_json::from_str(r##"{"chart_palette":["url(script)"]}"##).unwrap();
+        assert_eq!(bad.chart_palette, default_chart_palette());
+        config.chart_palette[0] = "#你好".into();
+        assert!(!valid_chart_palette(&config.chart_palette));
     }
 }

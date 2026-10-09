@@ -13,6 +13,8 @@ const MAX_CONVERSATIONS: usize = 200;
 /// 已明確送出的下一則專案訊息。與對話一起加密保存，重啟後不自動執行。
 #[derive(Clone, Serialize, Deserialize)]
 pub struct QueuedProjectMessage {
+    #[serde(default)]
+    pub local_time: Option<String>,
     pub id: String,
     pub after_run: String,
     pub project_id: String,
@@ -221,6 +223,7 @@ mod tests {
         let mut archive = Archive::default();
         let id = archive.insert(vec![Message::user("本機私密測試")]).unwrap();
         archive.conversations[0].project_queued = Some(QueuedProjectMessage {
+            local_time: None,
             id: crate::jobs::new_id().unwrap(),
             after_run: crate::jobs::new_id().unwrap(),
             project_id: "test-project".into(),

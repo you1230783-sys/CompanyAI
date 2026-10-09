@@ -20,11 +20,11 @@ window.ChartQuality = {
 };
 window.ChartEditor = (() => {
   const kinds={line:"折線圖",bar:"直條圖",scatter:"散佈圖",step:"階梯線",area:"面積圖",horizontal_bar:"水平長條圖"};
-  const palette=["#5470c6","#91cc75","#fac858","#ee6666","#73c0de","#3ba272","#fc8452","#9a60b4"];
   let dialogNumber = 0;
   function defaults(data) {
+    if(data.style) return structuredClone(data.style);
     return {title:data.title,x_label:data.kind==="horizontal_bar"?data.y_label:data.x_label,y_label:data.kind==="horizontal_bar"?data.x_label:data.y_label,kind:data.kind,legend:"right",x_min:null,x_max:null,y_min:null,y_max:null,
-      series:data.series.map((s,i)=>({name:s.name,color:palette[i]})),lines:structuredClone(data.reference_lines||[]),quality_policy:{blank:null,invalid:null},transform:ChartTransform.settings(data)};
+      series:data.series.map((s,i)=>({name:s.name,color:ChartAppearance.palette()[i]})),lines:structuredClone(data.reference_lines||[]),layout:{title:null,legend:null,reference_labels:[],annotations:[]},quality_policy:{blank:null,invalid:null},transform:ChartTransform.settings(data)};
   }
   const category=ChartTransform.category;
   // 類別軸輸入顯示標籤；重複標籤不猜位置，可用明確的 #資料序號（1起算）。
@@ -41,7 +41,8 @@ window.ChartEditor = (() => {
   function display(data,kind,axis,value,transform=ChartTransform.defaults()) {return value==null ? "" : category(kind,axis,transform) ? `#${value+1}` : String(value);}
   function open(data,current,apply) {
     const initial=structuredClone(current || defaults(data));
-    initial.transform=ChartTransform.settings(data,current);
+    initial.layout ??= {title:null,legend:null,reference_labels:[],annotations:[]};
+    initial.transform=ChartTransform.settings(data,initial);
     const initialData=ChartTransform.view(ChartQuality.view(data,initial.quality_policy),initial.kind,initial.transform);
     const dialog=document.createElement("dialog");dialog.className="chart-edit-dialog";
     const form=document.createElement("form"),heading=document.createElement("h2");heading.textContent="編輯圖表";
@@ -162,10 +163,11 @@ window.ChartEditor = (() => {
     const seriesInputs=initial.series.map(s=>{const row=document.createElement("div");row.className="chart-edit-grid";series.append(row);const name=field(row,"圖例名稱",s.name);name.maxLength=100;return {name,color:field(row,"顏色",s.color,"color")};});
     const lines=document.createElement("fieldset"),ll=document.createElement("legend");ll.textContent="參考線（最多10條）";lines.append(ll);const lineInputs=[];
     const add=document.createElement("button");add.type="button";add.textContent="新增參考線";
-    function addLine(line={axis:"y",value:null,name:"上限",color:"#d62728"}) {
+    function addLine(line={axis:"y",value:null,name:"上限",color:"#d62728"}, index=null) {
       if(lineInputs.length>=10) return;
       const row=document.createElement("div");row.className="chart-line-row";
       const entry={row,axis:field(row,"方向",line.axis,"text",{y:"水平線（Y）",x:"垂直線（X）"}),value:field(row,"座標",display(initialData,controls.kind.value,line.axis,line.value,initial.transform)),name:field(row,"標示文字",line.name),color:field(row,"顏色",line.color,"color")};
+      entry.original=line;entry.labelPosition=index==null?null:initial.layout.reference_labels?.[index];
       entry.name.maxLength=100;entry.axis.onchange=()=>{entry.value.value="";};
       const remove=document.createElement("button");remove.type="button";remove.textContent="移除";remove.onclick=()=>{lineInputs.splice(lineInputs.indexOf(entry),1);row.remove();add.disabled=false;};row.append(remove);lines.append(row);lineInputs.push(entry);add.disabled=lineInputs.length>=10;
     }
@@ -200,7 +202,7 @@ window.ChartEditor = (() => {
     form.onsubmit=event=>{event.preventDefault();try {
       validationPage=1;validationField=null;
       const style={title:controls.title.value.trim(),x_label:controls.x_label.value,y_label:controls.y_label.value,kind:controls.kind.value,legend:controls.legend.value,
-        series:seriesInputs.map(s=>({name:s.name.value.trim(),color:s.color.value})),lines:structuredClone(data.reference_lines||[]),quality_policy:readQuality(),transform:readTransform()};
+        series:seriesInputs.map(s=>({name:s.name.value.trim(),color:s.color.value})),lines:[],layout:structuredClone(initial.layout),quality_policy:readQuality(),transform:readTransform()};
       const shown=ChartTransform.view(qualityData(),style.kind,style.transform);
       if(!style.title){validationPage=0;validationField=controls.title;throw new Error("標題不可空白。");}
       const unnamed=seriesInputs.find(s=>!s.name.value.trim());
@@ -210,6 +212,9 @@ window.ChartEditor = (() => {
         if(style[`${axis}_min`]!=null&&style[`${axis}_max`]!=null&&style[`${axis}_min`]>=style[`${axis}_max`]) throw new Error("下限必須小於上限。");}
       validationPage=2;
       style.lines=lineInputs.map(l=>{validationField=l.value;const value=position(shown,style.kind,l.axis.value,l.value.value,style.transform);if(value==null) throw new Error("請填參考線座標，或移除不需要的參考線。");return {axis:l.axis.value,value,name:l.name.value,color:l.color.value};});
+      // 刪除／插入參考線時，位置隨原本那條線移動；改數值或換軸則重新自動定位。
+      style.layout.reference_labels=lineInputs.map((entry,i)=>entry.original.axis===style.lines[i].axis && entry.original.value===style.lines[i].value ? entry.labelPosition??null : null);
+      if(style.legend!==initial.legend) style.layout.legend=null;
       apply(style);close();
     } catch(e){selectPage(validationPage);validationField?.focus();error.textContent=e.message;}};
     refreshTransform();selectPage(0);form.append(heading,hint,tabs,body,error,actions);dialog.append(form);document.body.append(dialog);dialog.showModal();

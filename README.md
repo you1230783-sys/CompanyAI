@@ -1,3 +1,5 @@
+> **0.8.48：圖中文字、AI 圖表編輯與 Python 原始碼試用。** 可拖曳圖表文字並調整字型、色彩與底色；AI 可接續編輯歷史圖表。本機時間保存在對話與工具紀錄，Python 可修改副本並驗證語法。詳見 [驗證與限制](docs/VALIDATION_0_8_48.md)。
+
 > **0.8.47：郵件成果筆記、圖表與診斷改善。** 讀信後保存摘要及待寫草稿，依工作階段載入工具，優先查回既有成果；量測軸採標準差留白，AI可畫參考線。設定改頁籤，新增錯誤碼與診斷匯出、本機日期依據。詳見 [驗證與限制](docs/VALIDATION_0_8_47.md)。
 
 > **0.8.45：長任務恢復與分析依據。** 預設專案改存本機個人資料夾；暫時上游故障依10／30／60／180／300秒恢復，耗盡可續接。Outlook按新郵件與實際範圍判定進展，加入分析依據、筆數核對與專案方法記憶。圖片併入一般專案來源，移除專用按鈕與獨立技能。詳見 [驗證與限制](docs/VALIDATION_0_8_45.md)。
@@ -16,7 +18,7 @@
 
 CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供日常問答、文件整理、專案副本修訂與 Classic Outlook 郵件分析。
 
-**目前 EXE／NSIS：0.8.47** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
+**目前 EXE／NSIS：0.8.48** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
 
 ## 下載與開始使用
 
@@ -26,7 +28,7 @@ CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供�
 
 執行需要 WebView2 Runtime，不需安裝 Rust、Node 或 Python。若啟動時提示缺少 WebView2，請依 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md) 處理。正式功能需要公司服務連線與桌面帳號權限。
 
-本版 EXE 與 NSIS 都是 **0.8.47**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；新增的 `python-inputs.zip` 僅供開發者離線重建 Python 環境。
+本版 EXE 與 NSIS 都是 **0.8.48**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；新增的 `python-inputs.zip` 僅供開發者離線重建 Python 環境。
 
 ## 可以做什麼
 
@@ -37,6 +39,7 @@ CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供�
 | 專案圖片閱讀 | JPG／JPEG／PNG 由 AI 按需逐張閱讀；每任務最多20次不同要求、單張5 MB，後續保留文字重點；快速模型不支援。 |
 | 生成週報 | 建立素材資料夾、設定日期與補充、再次確認後整理文件及授權郵件；可參考上週格式。 |
 | 專案技能與圖表 | 論文證據、週報增量、Excel 抽取、跨文件搜尋、批次 Office、離線圖表與快速模型摘要委派。 |
+| Python 原始碼（試用） | 讀取與修訂 .py 工作副本，以內建 Python 檢查語法與編碼，通過後另存成果。 |
 | Python 分析 | 本機 pandas 分組、合併、事件分析；輸出追蹤 CSV 及多工作表 XLSX，模型只接收精簡結論。 |
 | LOG 分析 | 支援只有時間的紀錄；以近似時間定位事件，分批回讀前後文並附來源行號。 |
 | 執行中傳送 | 主輸入框選下一輪提示、停止後新任務或完成後新任務；待送訊息可取消。 |
@@ -48,7 +51,7 @@ CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供�
 | 選字快捷鍵 | 在其他程式選取文字，帶入 LM_AI 草稿後再送出。 |
 | VNC 快速連線 | 選用功能，管理機台清單並啟動已安裝的 UltraVNC Viewer。 |
 
-專案支援 TXT、MD、Word、Excel、PowerPoint、PDF、MSG，以及唯讀 LOG／OUT／ERR／JSONL。各格式的可讀取／可修改範圍，請見 [使用指南](docs/USER_GUIDE.md)。
+專案支援 TXT、MD、PY（試用）、Word、Excel、PowerPoint、PDF、MSG，以及唯讀 LOG／OUT／ERR／JSONL。各格式的可讀取／可修改範圍，請見 [使用指南](docs/USER_GUIDE.md)。
 
 ## 文件導覽
 

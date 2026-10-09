@@ -479,6 +479,15 @@ mod tests {
             ),
             ("save_copy", json!({"copy_id":"c","revision":"r"})),
             ("delete_copy", json!({"copy_id":"c"})),
+            (
+                "inspect_chart",
+                json!({"message_index":null,"chart_index":null}),
+            ),
+            ("check_python", json!({"path":"app.py","revision":"r"})),
+            (
+                "edit_chart",
+                json!({"message_index":null,"chart_index":0,"style":{"title":"圖","x_label":"X","y_label":"Y","kind":"scatter","legend":"right","x_min":null,"x_max":null,"y_min":null,"y_max":null,"series":[{"name":"Y","color":"#123456"}],"lines":[]}}),
+            ),
             ("list_notes", json!({})),
             ("read_note", json!({"id":"n"})),
             (

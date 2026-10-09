@@ -150,6 +150,7 @@ function actionButton(label, action) {
 function toolStatusNode(status) {
   if (!status?.tool_name || !status?.status) return null;
   const row = node("div", "tool-status", `${status.tool_name} · ${status.status}`);
+  const time=localTimeNode(status.local_time,true);if(time)row.prepend(time);
   row.setAttribute("role", "status");
   return row;
 }

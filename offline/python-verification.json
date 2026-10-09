@@ -10,6 +10,12 @@
     "idempotent results",
     "source/output path and revision rejection",
     "OS file/network/child-process isolation",
+    "PY working copy edit and unchanged source",
+    "AST plus compile without executing source",
+    "UTF-8 BOM and Big5 source encoding",
+    "coding declaration mismatch rejection",
+    "current revision syntax validation required before publish",
+    "PY artifact verified at finish",
     "environment allowlist",
     "active cancellation",
     "120 second timeout",
@@ -17,11 +23,11 @@
     "original unchanged",
     "modified output rejected at finish"
   ],
-  "duration_seconds": 184.4784526,
+  "duration_seconds": 197.5556607,
   "numpy": "2.2.6",
   "openpyxl": "3.1.5",
   "pandas": "2.2.3",
   "python": "3.13.12",
   "result": "PASS",
-  "version": "0.8.47"
+  "version": "0.8.48"
 }

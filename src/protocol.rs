@@ -26,6 +26,9 @@ pub struct RetrySettings {
 pub struct Message {
     pub role: String,
     pub content: String,
+    /// Windows本機送出／收到時間；舊紀錄為None，不參與API訊息。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_time: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -40,7 +43,7 @@ pub struct Message {
     pub received_replies: Vec<ReceivedReply>,
     /// 專案工具歷程只供本機顯示，不加入模型對話內容。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub project_activity: Vec<String>,
+    pub project_activity: Vec<crate::calendar::Activity>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_analysis: Option<crate::projects::analysis::State>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -63,6 +66,7 @@ impl Message {
     pub fn user(content: &str) -> Self {
         Self {
             role: "user".into(),
+            local_time: Some(crate::calendar::local_timestamp()),
             content: content.into(),
             request_id: None,
             attachments: Vec::new(),
@@ -81,6 +85,7 @@ impl Message {
     pub fn assistant(content: String) -> Self {
         Self {
             role: "assistant".into(),
+            local_time: Some(crate::calendar::local_timestamp()),
             content,
             request_id: None,
             attachments: Vec::new(),
@@ -95,6 +100,35 @@ impl Message {
             retry_settings: None,
             retry_context_index: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod local_time_tests {
+    use super::*;
+    #[test]
+    fn old_messages_have_no_fabricated_time_and_new_times_stay_local() {
+        let old: Message = serde_json::from_str(
+            r#"{"role":"assistant","content":"舊回答","project_activity":["舊工具紀錄"]}"#,
+        )
+        .unwrap();
+        assert!(old.local_time.is_none());
+        assert!(matches!(
+            old.project_activity[0],
+            crate::calendar::Activity::Legacy(_)
+        ));
+        let mut new = Message::user("目前問題");
+        new.project_activity.push("新事件".into());
+        let local = serde_json::to_value(&new).unwrap();
+        assert_eq!(local["local_time"].as_str().unwrap().len(), 19);
+        assert_eq!(
+            local["project_activity"][0]["at"].as_str().unwrap().len(),
+            19
+        );
+        let restored: Message = serde_json::from_value(local).unwrap();
+        assert_eq!(restored.local_time, new.local_time);
+        let request = chat_json("quality", &[restored]).unwrap();
+        assert!(!request.contains("local_time") && !request.contains("project_activity"));
     }
 }
 

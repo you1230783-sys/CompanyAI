@@ -673,12 +673,15 @@ impl SseDecoder {
 /// 工具狀態僅用來呈現進度，忽略 arguments／result，不把事件轉成本機工具指令。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ToolStatus {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_time: Option<String>,
     pub tool_name: String,
     pub status: String,
 }
 impl ToolStatus {
     fn from_event(value: Value) -> Option<Self> {
-        let result: Self = serde_json::from_value(value).ok()?;
+        let mut result: Self = serde_json::from_value(value).ok()?;
+        result.local_time = Some(crate::calendar::local_timestamp());
         if result.tool_name.trim().is_empty()
             || result.tool_name.len() > 200
             || result.status.trim().is_empty()

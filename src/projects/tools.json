@@ -1293,7 +1293,9 @@
                 "dataset-charts",
                 "context-management",
                 "outlook-coverage",
-                "python-analysis"
+                "python-analysis",
+                "python-edit",
+                "chart-edit"
               ]
             },
             "progress_note": {
@@ -3604,6 +3606,567 @@
             "stage",
             "note_ids",
             "reason"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_chart",
+        "description": "查本輪或同對話歷史圖表。兩索引null列目錄；指定chart_index讀樣式，不重送點陣。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "message_index": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "chart_index": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
+            }
+          },
+          "required": [
+            "message_index",
+            "chart_index",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "edit_chart",
+        "description": "共用圖表編輯設定。先inspect_chart，保留未要求改動欄位；歷史圖另建本輪版本。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "message_index": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "chart_index": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "style": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "x_label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "y_label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "line",
+                    "bar",
+                    "scatter",
+                    "step",
+                    "area",
+                    "horizontal_bar"
+                  ]
+                },
+                "legend": {
+                  "type": "string",
+                  "enum": [
+                    "right",
+                    "bottom_right",
+                    "bottom",
+                    "top",
+                    "hidden"
+                  ]
+                },
+                "x_min": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "x_max": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "y_min": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "y_max": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "series": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "maxLength": 100
+                      },
+                      "color": {
+                        "type": "string",
+                        "description": "#RRGGBB"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "color"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 8
+                },
+                "lines": {
+                  "type": "array",
+                  "maxItems": 10,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "axis": {
+                        "type": "string",
+                        "enum": [
+                          "x",
+                          "y"
+                        ]
+                      },
+                      "value": {
+                        "type": "number",
+                        "description": "圖上實體座標；類別軸為從0起算的位置，數值軸為目前轉換後值。"
+                      },
+                      "name": {
+                        "type": "string",
+                        "maxLength": 100
+                      },
+                      "color": {
+                        "type": "string",
+                        "description": "#RRGGBB，例如#d62728"
+                      }
+                    },
+                    "required": [
+                      "axis",
+                      "value",
+                      "name",
+                      "color"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "transform": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "original",
+                            "offset",
+                            "index"
+                          ]
+                        },
+                        "offset": {
+                          "type": "number",
+                          "description": "offset模式加上的數值，可為負數；其他模式填0。"
+                        },
+                        "start": {
+                          "type": "number",
+                          "description": "index模式起點，通常為1；其他模式填1。"
+                        },
+                        "step": {
+                          "type": "number",
+                          "description": "index模式間距，通常為1，不可為0；其他模式填1。"
+                        }
+                      },
+                      "required": [
+                        "mode",
+                        "offset",
+                        "start",
+                        "step"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "y": {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "original",
+                            "offset",
+                            "index"
+                          ]
+                        },
+                        "offset": {
+                          "type": "number",
+                          "description": "offset模式加上的數值，可為負數；其他模式填0。"
+                        },
+                        "start": {
+                          "type": "number",
+                          "description": "index模式起點，通常為1；其他模式填1。"
+                        },
+                        "step": {
+                          "type": "number",
+                          "description": "index模式間距，通常為1，不可為0；其他模式填1。"
+                        }
+                      },
+                      "required": [
+                        "mode",
+                        "offset",
+                        "start",
+                        "step"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "drop_empty": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y",
+                    "drop_empty"
+                  ],
+                  "additionalProperties": false
+                },
+                "quality_policy": {
+                  "type": "object",
+                  "properties": {
+                    "blank": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "gap",
+                        "skip",
+                        "zero",
+                        null
+                      ]
+                    },
+                    "invalid": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "gap",
+                        "skip",
+                        "zero",
+                        null
+                      ]
+                    }
+                  },
+                  "required": [
+                    "blank",
+                    "invalid"
+                  ],
+                  "additionalProperties": false
+                },
+                "layout": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "x": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "y": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "x",
+                            "y"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "legend": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "x": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "y": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "x",
+                            "y"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "reference_labels": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "x": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "y": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              }
+                            },
+                            "required": [
+                              "x",
+                              "y"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "maxItems": 10
+                    },
+                    "annotations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          },
+                          "position": {
+                            "type": "object",
+                            "properties": {
+                              "x": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "y": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              }
+                            },
+                            "required": [
+                              "x",
+                              "y"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "font_family": {
+                            "type": "string",
+                            "enum": [
+                              "sans-serif",
+                              "Microsoft JhengHei",
+                              "PMingLiU",
+                              "DFKai-SB",
+                              "Arial",
+                              "Times New Roman",
+                              "Consolas"
+                            ]
+                          },
+                          "font_size": {
+                            "type": "integer",
+                            "minimum": 8,
+                            "maximum": 72
+                          },
+                          "bold": {
+                            "type": "boolean"
+                          },
+                          "italic": {
+                            "type": "boolean"
+                          },
+                          "underline": {
+                            "type": "boolean"
+                          },
+                          "color": {
+                            "type": "string",
+                            "description": "#RRGGBB"
+                          },
+                          "background": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "description": "#RRGGBB；null透明"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "text",
+                          "position",
+                          "font_family",
+                          "font_size",
+                          "bold",
+                          "italic",
+                          "underline",
+                          "color",
+                          "background"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 20
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "legend",
+                    "reference_labels",
+                    "annotations"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "title",
+                "x_label",
+                "y_label",
+                "kind",
+                "legend",
+                "x_min",
+                "x_max",
+                "y_min",
+                "y_max",
+                "series",
+                "lines",
+                "transform",
+                "quality_policy",
+                "layout"
+              ],
+              "additionalProperties": false
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
+            }
+          },
+          "required": [
+            "message_index",
+            "chart_index",
+            "style",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "check_python",
+        "description": "試用：檢查專案PY或工作副本目前revision的語法與結構，不執行原文。修改後需重查，通過才save_copy。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
+            }
+          },
+          "required": [
+            "path",
+            "revision",
+            "progress_note"
           ],
           "additionalProperties": false
         }

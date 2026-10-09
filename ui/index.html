@@ -364,6 +364,12 @@
           </div>
         </section>
 <section>
+          <h3>圖表預設顏色</h3>
+          <p class="subtle">依系列順序使用色票，散佈點、折線及長條共用。已套用自訂設定的圖表保留原配色；選好後按儲存。</p>
+          <div id="chart-palette" class="chart-palette"></div>
+          <div class="button-row"><button id="chart-palette-save" type="button">儲存配色</button><button id="chart-palette-reset" type="button">還原預設色票</button></div>
+</section>
+<section>
           <h3>外觀</h3>
           <label class="check-row"><input id="dark-mode" type="checkbox" />深色模式</label>
           <p class="subtle">使用柔和的深灰藍背景，設定會保留。</p>
@@ -667,6 +673,9 @@
     <script src="self-test.js"></script>
     <script src="vendor/echarts.min.js"></script>
     <script src="chart-transform.js"></script>
+    <script src="chart-appearance.js"></script>
+    <script src="chart-layout.js"></script>
+    <script src="chart-text.js"></script>
     <script src="chart-editor.js"></script>
     <script src="charts.js"></script>
     <script src="analysis.js"></script>

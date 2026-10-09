@@ -11,6 +11,8 @@ use std::{
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Instruction {
+    #[serde(default)]
+    pub local_time: Option<String>,
     pub id: String,
     pub text: String,
     /// pending 可修改／撤回；staged 已接收，sent 已帶入模型請求。
@@ -105,6 +107,7 @@ impl Inbox {
             }
             let id = jobs::new_id()?;
             state.entries.push(Instruction {
+                local_time: Some(crate::calendar::local_timestamp()),
                 id: id.clone(),
                 text: text.into(),
                 status: "pending".into(),

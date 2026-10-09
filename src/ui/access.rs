@@ -40,6 +40,9 @@ mod tests {
     #[test]
     fn unauthenticated_features_are_rejected_even_when_called_directly() {
         let commands = [
+            Command::ChartPalette {
+                colors: crate::config::default_chart_palette(),
+            },
             Command::ExportDiagnostics {
                 include_details: false,
             },

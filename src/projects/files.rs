@@ -5,6 +5,7 @@ mod chart_annotations;
 mod chart_preferences;
 mod mail_notes;
 mod python;
+mod python_edit;
 use super::{
     office,
     sandbox::{Edit, Worker},
@@ -173,8 +174,8 @@ fn extension(path: &Path) -> AppResult<String> {
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    if !matches!(ext.as_str(), "txt" | "md" | "pdf" | "msg") && !office::supported(path) {
-        return Err("支援 TXT、MD、PDF、MSG 及 Word／Excel／PowerPoint 文件。".into());
+    if !matches!(ext.as_str(), "txt" | "md" | "py" | "pdf" | "msg") && !office::supported(path) {
+        return Err("支援 TXT、MD、PY、PDF、MSG 及 Word／Excel／PowerPoint 文件。".into());
     }
     Ok(ext)
 }
@@ -663,6 +664,9 @@ struct Copy {
     text: String,
     encoding: Encoding,
     saved_revision: Option<String>,
+    /// 只對目前內容版本有效；任何文字修改都需重新語法檢查。
+    #[serde(default)]
+    python_checked_revision: Option<String>,
     paths: Vec<String>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -737,6 +741,9 @@ pub struct Broker {
     chart_chooser: Option<super::charts::quality::Chooser>,
     preferences: Option<super::steering::Inbox>,
     chart_deadline: std::time::Instant,
+    /// 只來自同一對話的歷史，按需查看樣式；不把完整數列重送模型。
+    previous_charts: BTreeMap<usize, Vec<super::charts::Chart>>,
+    chart_palette: Vec<String>,
 }
 impl Broker {
     pub fn new(mut project: Project, task: String) -> AppResult<Self> {
@@ -769,6 +776,8 @@ impl Broker {
             chart_chooser: None,
             preferences: None,
             chart_deadline: std::time::Instant::now(),
+            previous_charts: BTreeMap::new(),
+            chart_palette: crate::config::default_chart_palette(),
         })
     }
     pub(super) fn saved(&self) -> AppResult<SavedBroker> {
@@ -936,6 +945,9 @@ impl Broker {
                 match name {
                     "read_mail_notes" => {
                         !self.mail_notes.notes.is_empty() || self.mail_notes.pending.is_some()
+                    }
+                    "inspect_chart" | "edit_chart" => {
+                        !self.charts.is_empty() || !self.previous_charts.is_empty()
                     }
                     "export_chart_png"
                     | "transform_chart"
@@ -2000,6 +2012,7 @@ impl Broker {
                     || !chart.data_issues.is_empty()
                     || chart.transform.is_some()
                     || chart.quality.is_some()
+                    || chart.style.is_some()
                     || chart.series.iter().any(|s| !s.skip_indices.is_empty())
                 {
                     return Err("圖表的使用者處理紀錄只能由桌面預檢建立。".into());
@@ -2009,6 +2022,15 @@ impl Broker {
             Tool::ExportChartPng { chart_index, name } => {
                 self.export_chart_png(*chart_index, name, cancel)
             }
+            Tool::InspectChart {
+                message_index,
+                chart_index,
+            } => self.inspect_chart(*message_index, *chart_index),
+            Tool::EditChart {
+                message_index,
+                chart_index,
+                style,
+            } => self.edit_chart(*message_index, *chart_index, style),
             Tool::SetChartReferenceLines { chart_index, lines } => {
                 self.set_reference_lines(*chart_index, lines)
             }
@@ -2017,7 +2039,10 @@ impl Broker {
                 policy,
             } => {
                 let original = self.charts.get(*chart_index).ok_or("找不到本次圖表。")?;
-                let chart = policy.view(original)?;
+                let mut chart = policy.view(original)?;
+                if let Some(style) = chart.style.as_mut() {
+                    style.quality_policy = policy.clone();
+                }
                 chart.validate()?;
                 let note = chart.data_note.clone();
                 self.charts[*chart_index] = chart;
@@ -2035,7 +2060,11 @@ impl Broker {
                     .get(*chart_index)
                     .ok_or("找不到本次任務的圖表編號，請先建立圖表。")?;
                 let mut candidate = original.clone();
-                candidate.transform = Some(Box::new(transform.clone()));
+                if let Some(style) = candidate.style.as_mut() {
+                    style.transform = Some(transform.clone());
+                } else {
+                    candidate.transform = Some(Box::new(transform.clone()));
+                }
                 candidate.validate()?;
                 let serialized_size = |value: &super::charts::Chart| {
                     serde_json::to_vec(value)
@@ -2050,7 +2079,17 @@ impl Broker {
                 if total > 16 * 1024 * 1024 {
                     return Err("本次任務的圖表資料合計超過16 MiB，未套用轉換。".into());
                 }
-                let view = transform.view(&candidate, &candidate.kind)?;
+                // 呈現樣式可換圖型或缺值政策；工具預覽需與實際畫面使用相同資料。
+                let source = if let Some(style) = &candidate.style {
+                    style.quality_policy.view(&candidate)?
+                } else {
+                    candidate.clone()
+                };
+                let kind = candidate
+                    .style
+                    .as_ref()
+                    .map_or(&candidate.kind, |s| &s.kind);
+                let view = transform.view(&source, kind)?;
                 let result = json!({"chart_index":chart_index,"transform":transform,
                     "original_rows":candidate.x.len(),"retained_rows":view.source_indices.len(),
                     "first_x":view.x.first(),"last_x":view.x.last(),
@@ -2327,11 +2366,11 @@ impl Broker {
                             office::render(None, &rel, None, &[], None, cancel)?.serialize()?,
                             Encoding::Utf8(true),
                         )
-                    } else if ext == "txt" {
+                    } else if matches!(ext.as_str(), "txt" | "py") {
                         (String::new(), Encoding::Utf8(true))
                     } else {
                         return Err(
-                            "新建只支援 TXT、DOCX、XLSX、PPTX；舊格式與 MD 請從來源建立副本。"
+                            "新建只支援 TXT、PY、DOCX、XLSX、PPTX；舊格式與 MD 請從來源建立副本。"
                                 .into(),
                         );
                     }
@@ -2363,6 +2402,7 @@ impl Broker {
                         text: content,
                         encoding,
                         saved_revision: None,
+                        python_checked_revision: None,
                         paths: Vec::new(),
                     },
                 );
@@ -2422,6 +2462,9 @@ impl Broker {
                 revision,
                 operation,
             } => self.office_action(copy_id, revision, *operation.clone(), cancel),
+            Tool::CheckPython { path, revision } => {
+                self.check_python(path, revision, cancel, worker)
+            }
             Tool::SaveCopy { copy_id, revision } => {
                 let copy = self
                     .copies
@@ -2429,6 +2472,14 @@ impl Broker {
                     .ok_or("不是本次任務的工作副本。")?;
                 if text::revision(&copy.text) != *revision {
                     return Err("版本已改變，請重新讀取。".into());
+                }
+                if extension(Path::new(&copy.name))? == "py"
+                    && copy.python_checked_revision.as_ref() != Some(revision)
+                {
+                    return Err(
+                        "PY副本需先用check_python核對目前revision並通過語法檢查，再save_copy。"
+                            .into(),
+                    );
                 }
                 if copy.saved_revision.as_ref() == Some(revision) {
                     return Ok(
@@ -2764,6 +2815,7 @@ mod tests {
                 text: String::new(),
                 encoding: Encoding::Utf8(false),
                 saved_revision: None,
+                python_checked_revision: None,
                 paths: vec![],
             },
         );
@@ -2816,6 +2868,7 @@ mod tests {
         let chart = super::super::charts::Chart {
             quality: None,
             reference_lines: Vec::new(),
+            style: None,
             transform: None,
             kind: "line".into(),
             title: "圖".into(),
