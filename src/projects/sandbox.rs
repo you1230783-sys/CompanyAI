@@ -80,6 +80,7 @@ enum Request {
 }
 
 pub struct Worker {
+    executable: std::path::PathBuf,
     // 順序很重要：先終止程序，關閉 IPC，再刪除 AppContainer 設定。
     process: Handle,
     job: Handle,
@@ -121,6 +122,10 @@ fn pipe() -> AppResult<(File, File)> {
 }
 
 impl Worker {
+    pub(super) fn executable(&self) -> &std::path::Path {
+        &self.executable
+    }
+
     pub fn start(exe: &std::path::Path, cancel: &AtomicBool) -> AppResult<Self> {
         Self::launch(
             exe,
@@ -325,6 +330,7 @@ impl Worker {
             return Err(error("無法管理子程序"));
         }
         let mut worker = Self {
+            executable: exe.into(),
             process,
             job,
             input,

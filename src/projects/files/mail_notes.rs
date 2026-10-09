@@ -8,7 +8,7 @@ impl Broker {
             return Ok(String::new());
         }
         self.outlook.require_consent()?;
-        Ok(self.mail_notes.instructions())
+        Ok(format!("{}\n每封讀完立即產生可帶入的完整句子，不能以『稍後整理』代替。unwritten_count>=4時，先用set_work_stage(write,note_ids,reason)把目前條目寫入週報／工作日誌副本，再讀下一批。selected_drafts 是可直接使用的文字；疑點只定向查本機source，不重掃Outlook。郵件整理草稿是中間成果，不能當成使用者要求的週報已完成。", self.mail_notes.instructions()))
     }
     /// 僅待摘要回合增加小字串欄位；詳細格式在 context 說一次，避免每工具複製大型 schema。
     pub(in crate::projects) fn mail_note_schema(&self, request: &mut Value) {
@@ -56,7 +56,34 @@ impl Broker {
             return Err("郵件摘要來源必須是已成功的 outlook_read。".into());
         }
         let page = Page::from_result(&digest.source_operation, &result)?;
-        self.mail_notes.accept(digest, page)
+        let previous = self.mail_notes.clone();
+        self.mail_notes.accept(digest, page)?;
+        if let Err(error) = self.persist_mail_draft() {
+            self.mail_notes = previous;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    /// 每次成功接收摘要即更新同一份 TXT。內容為模型草稿，保留来源與待確認標示。
+    fn persist_mail_draft(&mut self) -> AppResult<()> {
+        let mut text =
+            String::from("郵件整理草稿（尚未完成週報／工作日誌；模型整理，需依來源核對）\r\n\r\n");
+        for (id, note) in &self.mail_notes.notes {
+            let mail = &note.pages[0].mail;
+            text.push_str(&format!("筆記：{id}\r\n主旨：{}\r\n日期：{}\r\n判定：{:?}；來源已完整讀取：{}；待重新核對：{}\r\n摘要：{}\r\n可帶入文字：{}\r\n理由：{}\r\n待確認：{}\r\n\r\n",
+                mail["subject"].as_str().unwrap_or(""), mail["sent_at"].as_str().unwrap_or(""), note.digest.disposition,
+                note.complete(), note.stale, note.digest.summary, note.digest.draft, note.digest.rationale, note.digest.open_questions));
+        }
+        let previous = self.mail_draft.clone();
+        let draft = self.write_draft(
+            "郵件整理草稿.txt",
+            previous.as_ref(),
+            &text::encode(&text, Encoding::Utf8(true))?,
+        )?;
+        self.mail_notes.draft_path = Some(draft.path.clone());
+        self.mail_draft = Some(draft);
+        Ok(())
     }
     /// 查回已讀原文只走加密本地操作檔；焦點由模型明確提供，不重新連線 Outlook。
     fn mail_source(&self, operation: &str, offset: usize, focus: &str) -> AppResult<Value> {
@@ -233,7 +260,14 @@ mod tests {
             Project {
                 id: "p".into(),
                 name: "p".into(),
-                root: std::env::current_dir().unwrap(),
+                root: {
+                    let path = std::env::current_dir()
+                        .unwrap()
+                        .join(".build")
+                        .join(format!("mail-notes-{}", crate::jobs::new_id().unwrap()));
+                    std::fs::create_dir_all(&path).unwrap();
+                    path
+                },
                 imports: BTreeMap::new(),
             },
             "r".into(),
@@ -290,7 +324,7 @@ mod tests {
         b.restrict_tools(&mut request);
         assert_eq!(request["tools"].as_array().unwrap().len(), 2);
         assert!(!request.to_string().contains("outlook_read"));
-        let mut restored = broker();
+        let mut restored = Broker::new(b.project.clone(), "restored".into()).unwrap();
         restored
             .restore(b.saved().unwrap(), &AtomicBool::new(false))
             .unwrap();

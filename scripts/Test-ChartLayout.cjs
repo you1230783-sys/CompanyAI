@@ -152,7 +152,7 @@ const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
       button('完成排版').click();window.textStyle=structuredClone(sent.at(-1).command.style);
       const a=textStyle.layout.annotations[0];check(a.bold&&a.italic&&a.underline&&a.background==='#fff0c0'&&a.color==='#163f80','formatting persisted');
       check(a.position.x!==.22,'text position changed');
-      button('調整排版').click();button('刪除文字').click();button('取消排版').click();
+      button('調整排版').click();button('編輯文字').click();document.querySelector('.chart-text-dialog .danger-button').click();button('取消排版').click();
       button('調整排版').click();button('自動排版').click();button('完成排版').click();
       check(sent.at(-1).command.style.layout.annotations.length===1,'reset layout retains user annotations');
       renderChart(JSON.parse(JSON.stringify(textStyle)));
@@ -168,6 +168,18 @@ const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
       check(ChartEditor.defaults(ai).layout.annotations[0].underline,'AI annotations retained');
       check(JSON.stringify(data)===original,'annotations preserve original source');
     })()`);
+    // 實際雙擊畫面文字與排版框，不能只呼叫編輯按鈕。
+    for(const editing of [false,true]) {
+      if(editing)await evaluate("button('調整排版').click()");
+      const point=await evaluate(`(() => {const plot=host.querySelector('.chart-plot');plot.scrollIntoView({block:'center'});const r=plot.getBoundingClientRect();const box=ChartLayout.draw(echarts.getInstanceByDom(plot),textStyle).boxes.find(b=>b.key==='text-0');return {x:r.x+box.x+box.width/2,y:r.y+box.y+box.height/2};})()`);
+      for(const clickCount of [1,2]) {
+        await call('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount});
+        await call('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount});
+      }
+      await evaluate(`(() => {const dialog=document.querySelector('.chart-text-dialog');check(dialog?.open,'real double click opens text modal');check(dialog.querySelector('.danger-button'),'delete is inside modal');dialog.querySelector('.dialog-actions button:not(.danger-button)').click();})()`);
+      if(editing)await evaluate("button('取消排版').click()");
+    }
+    checks.push('real double click in viewing and layout modes; modal deletion; history/time clicks do not send read_event');
     fs.writeFileSync('.build/chart-layout-text.png',Buffer.from((await evaluate('textPng')).split(',')[1],'base64'));
     await capture('text-editor');checks.push('custom text formatting, keyboard positioning, validation, cancel/delete, reset, reload, AI style and PNG');
     await evaluate(`(() => {
@@ -180,12 +192,18 @@ const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
       check(JSON.stringify(times)===JSON.stringify(['2026-10-09 23:59:50','2026-10-10 00:00:10']),'message dates across midnight');
       const list=document.querySelector('.project-activity-history');check(!list.children[0].querySelector('time'),'legacy event no invented timestamp');
       check(list.children[1].querySelector('time').textContent==='23:59:51','activity HH:MM:SS');
+      const before=sent.length;list.children[1].click();list.children[1].querySelector('time').click();check(sent.length===before,'history click never sends notification read_event');
       const live=document.createElement('details');document.body.append(live);live.open=true;
       renderProjectActivity(live,fixture.messages[1].project_activity);const first=live.querySelector('li');
       renderProjectActivity(live,[...fixture.messages[1].project_activity,{text:'工具完成',at:'2026-10-10 00:00:05'}]);check(live.querySelector('li')===first,'timed activity retains nodes');
       const notes=document.createElement('div');renderProjectNarration(notes,fixture.messages[1].project_activity);check(notes.textContent.includes('已完成核對'),'timed progress notes still detected');live.remove();
       check(toolStatusNode({tool_name:'read',status:'completed',local_time:'2026-10-10 00:00:05'}).querySelector('time').textContent==='00:00:05','ordinary chat tool timestamp');
     })()`);
+    await evaluate(`(() => {
+      fixture.config.vnc_enabled=true;fixture.vnc={loaded:true,revision:7,groups:[{name:'A',machines:[{name:'A10',ip:'127.0.0.1',index:0},{name:'A2',ip:'127.0.0.2',index:1}]},{name:'B',machines:[]}]};LMUI.receive(fixture);
+      const sorts=[...document.querySelectorAll('#vnc-manager-rows button')].filter(b=>b.textContent==='依名稱排序此分類');check(sorts.length===2&&sorts[1].disabled,'sort only populated group');sorts[0].click();check(sent.at(-1).command.action==='sort_group'&&sent.at(-1).command.group==='A'&&sent.at(-1).command.revision===7,'category sort is revision bound');
+    })()`);
+    checks.push('VNC category sort command, revision and empty group');
     await capture('timestamps');checks.push('local timestamp persistence display, midnight, old history, narration and stable activity nodes');
     fs.writeFileSync(".build/chart-layout-review.json",JSON.stringify({result:"PASS",checks},null,2));console.log(JSON.stringify({result:"PASS",checks}));
   } finally {ws?.close();browser.kill();}

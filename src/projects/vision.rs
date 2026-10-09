@@ -1,6 +1,7 @@
 //! 專案圖片辨識：沿用目前模型與正式代理 API，以獨立、無工具的子請求按需看圖。
 //! 主任務只取得辨識文字和來源；未知提交保留原 ID 查回，不重送圖片。
 pub(crate) mod input;
+mod jpeg;
 use super::{agent, delegation::Outcome, files::Broker, model, runner::Run, text};
 use crate::{
     jobs::{self, Task},
@@ -10,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::time::Instant;
 
-/// 一次只送一張，允許任務按需逐張閱讀；相同來源與焦點的完成快取不扣新額度。
-const MAX_REQUESTS: usize = 20;
+/// 每次任務累計100張；雙圖計兩張，相同已完成快取不扣新額度。
+const MAX_IMAGES: usize = 100;
 
 #[derive(Default, Serialize, Deserialize)]
 struct State {
@@ -33,6 +34,7 @@ pub(super) fn analyze(
     agent: Option<&mut agent::State>,
     parent: &Task,
     path: &str,
+    compare_path: Option<&str>,
     focus: &str,
     deadline: Instant,
     mut progress: impl FnMut(String),
@@ -47,14 +49,20 @@ pub(super) fn analyze(
         return Ok(failed("圖片辨識要求需為 1–1000 字。"));
     }
     super::runner::check_cancel(&run.cancel)?;
-    let image = match input::load(&run.project, path) {
-        Ok(image) => image,
-        Err(error) => return Ok(failed(&error)),
-    };
+    let mut images = Vec::new();
+    for path in std::iter::once(path).chain(compare_path) {
+        match input::load(&run.project, path) {
+            Ok(image) => images.push(image),
+            Err(error) => return Ok(failed(&error)),
+        }
+    }
+    if let Err(error) = input::validate_batch(&images) {
+        return Ok(failed(&error));
+    }
     let caps = agent.caps.clone();
     caps.validate(&run.config.model, false)?;
-    // 保留既有識別碼，讓試驗版的待查請求與快取仍可按原 ID 續接。
-    let identity = json!({"profile":"project-image-trial-v1","image":image.metadata(),"focus":focus,
+    let metadata: Vec<_> = images.iter().map(input::Image::metadata).collect();
+    let mut identity = json!({"profile":"project-images-jpeg-v2","images":metadata,"focus":focus,
         "model":run.config.model,"principal":caps.principal_id,"binding":run.config.binding()?});
     let key = text::revision(&format!(
         "vision|{}|{operation}|{}",
@@ -64,6 +72,17 @@ pub(super) fn analyze(
         .memory()?
         .delegation_read::<State>(&key)?
         .unwrap_or_default();
+    // 舊單圖待查只能查原ID；來源雜湊、目的及授權一致才沿用，不重送轉檔後的新圖。
+    if images.len() == 1
+        && state.identity["profile"] == "project-image-trial-v1"
+        && state.identity["image"]["path"] == images[0].path
+        && state.identity["image"]["sha256"] == images[0].sha256
+        && ["focus", "model", "principal", "binding"]
+            .iter()
+            .all(|key| state.identity[key] == identity[key])
+    {
+        identity = state.identity.clone();
+    }
     if !state.identity.is_null() && state.identity != identity {
         return Ok(failed(
             "圖片或辨識要求已變更；保留原請求，未重播，請重新指定圖片。",
@@ -91,12 +110,12 @@ pub(super) fn analyze(
             .delegation_read::<Vec<String>>(&budget_key)?
             .unwrap_or_default();
         if !attempts.contains(&key) {
-            if attempts.len() >= MAX_REQUESTS {
+            if attempts.len() + images.len() > MAX_IMAGES {
                 return Ok(failed(
-                    "每次任務最多 20 次不同圖片辨識要求；請沿用已取得的文字重點，仍不足時再另開任務。",
+                    "每次任務最多辨識100張圖片（雙圖計兩張）；請沿用已取得的文字重點，仍不足時再另開任務。",
                 ));
             }
-            attempts.push(key.clone());
+            attempts.extend(std::iter::repeat_n(key.clone(), images.len()));
             broker.memory()?.delegation_write(&budget_key, &attempts)?;
         }
         let id = jobs::new_id()?;
@@ -104,7 +123,7 @@ pub(super) fn analyze(
         let remote = parent.request["conversation_id"]
             .as_str()
             .ok_or("父請求缺少遠端對話。")?;
-        let request = agent.image_request(run, remote, &id, &parent.request_id, &image, focus)?;
+        let request = agent.image_request(run, remote, &id, &parent.request_id, &images, focus)?;
         state.pending = Some(Task {
             request_id: id.clone(),
             conversation_id: run.conversation.clone(),
@@ -167,9 +186,9 @@ pub(super) fn analyze(
             )? {
                 agent::Parsed::Text(answer) if answer.chars().count() <= 6000 => {
                     json!({"ok":true,"result":{
-                    "image":image.metadata(),"focus":focus,"model":run.config.model,"analysis":answer,
+                    "image":metadata[0],"images":metadata,"focus":focus,"model":run.config.model,"analysis":answer,
                     "context_note":"後續只使用這份文字重點及來源；不再附原圖。未辨識或不確定的內容不可視為已讀取。",
-                    "evidence_status":"模型對單張圖片的辨識，並非已核實事實；看不清的文字、數字及推測需另行確認。"}})
+                    "evidence_status":"模型對本次圖片的辨識，並非已核實事實；看不清的文字、數字及推測需另行確認。"}})
                 }
                 agent::Parsed::Repair { reason, .. } => json!({"ok":false,"error":reason}),
                 _ => json!({"ok":false,"error":"圖片辨識未回傳有效的有限文字；不接受工具呼叫。"}),

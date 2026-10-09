@@ -2657,7 +2657,7 @@
       "type": "function",
       "function": {
         "name": "analyze_image",
-        "description": "按任務需要閱讀專案 JPG／JPEG／PNG，由 AI 自行決定是否使用。每次一張、每任務最多20次不同辨識要求，單張最大5 MB（5,000,000 bytes）；相同來源與焦點可重用。只回文字重點及來源，後續不附原圖。快速模型不支援；不讀Outlook附件或網址。",
+        "description": "讀取1–2張專案圖片；JPG/PNG/BMP/TIFF/GIF本機轉JPG，每張5MB、雙圖合計8MB，每任務100張。compare_path為null讀單圖，提供第二路徑比較雙圖。多頁/動畫只讀第一幀並回報頁數。後續只留文字。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -2672,6 +2672,13 @@
             "progress_note": {
               "type": "string",
               "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
+            },
+            "compare_path": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "第二張圖片相對路徑；不比較時null。"
             }
           },
           "required": [
@@ -4166,6 +4173,144 @@
           "required": [
             "path",
             "revision",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_code_section",
+        "description": "讀取PY指定小段並取得section_hash；每段最多200行/6000字，行號從1開始。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "first_line": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "last_line": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
+            }
+          },
+          "required": [
+            "path",
+            "first_line",
+            "last_line",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "edit_code_section",
+        "description": "依revision與section_hash修改PY小段，立即更新同一份草稿；新文字最多6000字。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "copy_id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "first_line": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "last_line": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "section_hash": {
+              "type": "string"
+            },
+            "replacement": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
+            }
+          },
+          "required": [
+            "copy_id",
+            "revision",
+            "first_line",
+            "last_line",
+            "section_hash",
+            "replacement",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "run_batch",
+        "description": "一次提交2–4個互不依賴的工作，最多2個同時運算；每項獨立回傳結果。禁止修改同一副本、讀信或巢狀批次。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "tasks": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 4,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "task_id": {
+                    "type": "string"
+                  },
+                  "tool": {
+                    "type": "string",
+                    "enum": [
+                      "read_file",
+                      "read_code_section",
+                      "find_text",
+                      "inspect_dataset",
+                      "chart_dataset",
+                      "run_python"
+                    ]
+                  },
+                  "arguments_json": {
+                    "type": "string",
+                    "description": "該工具原參數JSON字串，不含progress_note；沿用本輪已公告工具的參數格式。不可引用本批其他項目尚未產生的結果。"
+                  }
+                },
+                "required": [
+                  "task_id",
+                  "tool",
+                  "arguments_json"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
+            }
+          },
+          "required": [
+            "tasks",
             "progress_note"
           ],
           "additionalProperties": false

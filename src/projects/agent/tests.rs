@@ -23,17 +23,17 @@ fn image_payload_is_multimodal_and_keeps_request_limit() {
         false,
     )
     .unwrap();
-    attach_image(&caps(), &mut body, &image).unwrap();
+    attach_image(&caps(), &mut body, std::slice::from_ref(&image)).unwrap();
     assert_eq!(body["messages"][0]["content"][0]["text"], "描述圖片");
     assert!(body["messages"][0]["content"][1]["image_url"]["url"]
         .as_str()
         .unwrap()
-        .starts_with("data:image/png;base64,iVBOR"));
+        .starts_with("data:image/jpeg;base64,/9j/"));
     assert_eq!(body["tools"], json!([]));
     let mut small = caps();
     small.limits.request_bytes = 100;
     let mut body = json!({"messages":[{"role":"user","content":"圖片"}]});
-    assert!(attach_image(&small, &mut body, &image).is_err());
+    assert!(attach_image(&small, &mut body, std::slice::from_ref(&image)).is_err());
     for bad in [
         "../outside.png",
         "C:\\outside.png",
@@ -374,7 +374,7 @@ fn history_pairs_and_request_scoped_ids_survive_repeated_calls() {
 #[test]
 fn catalog_is_portable_and_nullable_fields_restore_original_defaults() {
     let tools = schema::definitions(true).unwrap();
-    assert_eq!(tools.len(), 60);
+    assert_eq!(tools.len(), 63);
     let encoded = serde_json::to_string(&tools).unwrap();
     for key in [
         "\"oneOf\":",

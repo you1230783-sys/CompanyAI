@@ -101,6 +101,9 @@ impl Store {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "tool", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Tool {
+    RunBatch {
+        tasks: Vec<files::batch::Task>,
+    },
     RecordAnalysis {
         report: Box<analysis::Report>,
     },
@@ -329,6 +332,8 @@ pub enum Tool {
     /// 圖片由同模型的獨立無工具請求辨識，原任務只取得文字。
     AnalyzeImage {
         path: String,
+        #[serde(default)]
+        compare_path: Option<String>,
         focus: String,
     },
     SummarizeDocument {
@@ -356,6 +361,19 @@ pub enum Tool {
         revision: String,
         start: usize,
         expected: String,
+        replacement: String,
+    },
+    ReadCodeSection {
+        path: String,
+        first_line: usize,
+        last_line: usize,
+    },
+    EditCodeSection {
+        copy_id: String,
+        revision: String,
+        first_line: usize,
+        last_line: usize,
+        section_hash: String,
         replacement: String,
     },
     EditOffice {
@@ -442,6 +460,7 @@ impl Tool {
     /// 使用者可讀的操作名稱，避免將 JSON 或文件全文當進度訊息。
     pub fn label(&self) -> &'static str {
         match self {
+            Self::RunBatch { .. } => "並行處理獨立工作",
             Self::RecordAnalysis { .. } => "保存分析狀態、證據與核對結果",
             Self::RunPython { .. } => "Python 本機資料分析",
             Self::OutlookFolders { .. } => "列出授權的 Outlook 資料夾",
@@ -481,6 +500,8 @@ impl Tool {
             Self::SummarizeDocument { .. } => "快速模型摘要",
             Self::ListFiles { .. } => "讀取檔案清單",
             Self::ReadFile { .. } => "閱讀檔案",
+            Self::ReadCodeSection { .. } => "讀取程式小段",
+            Self::EditCodeSection { .. } => "修改程式並保存草稿",
             Self::FindText { .. } => "尋找文字",
             Self::CreateWorkingCopy { source: None, .. } => "建立新檔案",
             Self::CreateWorkingCopy { .. } => "建立副本",

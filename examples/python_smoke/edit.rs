@@ -54,6 +54,14 @@ pub(super) fn run(
         "py-break",
         json!({"tool":"edit_text","copy_id":id,"revision":copy["revision"],"start":0,"expected":original,"replacement":invalid}),
     )?;
+    let draft = changed["draft_path"]
+        .as_str()
+        .ok_or("修改後未保存草稿")?
+        .to_owned();
+    assert_eq!(
+        std::fs::read_to_string(project.root.join(&draft)).map_err(|e| e.to_string())?,
+        invalid
+    );
     let check = call(
         broker,
         worker,
@@ -76,12 +84,23 @@ pub(super) fn run(
         false
     );
     let fixed="def greeting(name):\n    return f'歡迎 {name}'\n\nimport module_that_is_not_installed\nraise RuntimeError('not executed')\n";
+    let section = call(
+        broker,
+        worker,
+        "py-section",
+        json!({"tool":"read_code_section","path":id,"first_line":1,"last_line":1}),
+    )?;
     let changed = call(
         broker,
         worker,
         "py-fix",
-        json!({"tool":"edit_text","copy_id":id,"revision":changed["revision"],"start":0,"expected":invalid,"replacement":fixed}),
+        json!({"tool":"edit_code_section","copy_id":id,"revision":section["revision"],"first_line":1,"last_line":1,"section_hash":section["section_hash"],"replacement":fixed}),
     )?;
+    assert_eq!(changed["draft_path"], draft);
+    assert_eq!(
+        std::fs::read_to_string(project.root.join(&draft)).map_err(|e| e.to_string())?,
+        fixed
+    );
     assert_eq!(
         call(
             broker,
@@ -97,6 +116,7 @@ pub(super) fn run(
         "py-save",
         json!({"tool":"save_copy","copy_id":id,"revision":changed["revision"]}),
     )?;
+    assert_eq!(saved["path"], draft);
     assert_eq!(
         call(
             broker,

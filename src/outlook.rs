@@ -1,6 +1,7 @@
 //! Classic Outlook 的唯讀 COM 橋接。只在明確操作時連接已開啟的 Outlook。
 //! 不寄信、不修改信箱；多封流程經使用者授權後可匯出 MSG 副本。
 pub mod batch;
+mod exclusions;
 pub mod msg;
 pub mod privacy;
 pub mod project;
@@ -119,6 +120,8 @@ pub fn read_selected(expected_id: Option<&str>, include_body: bool) -> AppResult
     }
     let policy = privacy::Policy::current()?;
     privacy::require_item(&policy, &mail)?;
+    exclusions::Exclusions::from_app(&app, &policy, &std::sync::atomic::AtomicBool::new(false))?
+        .require(&mail)?;
     let entry_id = text(&mail, "EntryID", 4096)?;
     if expected_id.is_some_and(|id| id != entry_id) {
         return Err("Outlook 選取的郵件已改變；請重新讀取基本資訊。".into());
@@ -160,6 +163,12 @@ fn validate_preview(mail: &MailPreview) -> AppResult<()> {
             &mut [mail.store_id.as_str().into(), mail.entry_id.as_str().into()],
         )?)?;
         privacy::require_item(&policy, &item)?;
+        exclusions::Exclusions::from_namespace(
+            &ns,
+            &policy,
+            &std::sync::atomic::AtomicBool::new(false),
+        )?
+        .require(&item)?;
     }
     Ok(())
 }

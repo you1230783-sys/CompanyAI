@@ -44,6 +44,10 @@ pub(super) enum VncCommand {
         index: usize,
         direction: MoveDirection,
     },
+    SortGroup {
+        revision: u64,
+        group: String,
+    },
     Open,
     Reload,
     ChooseViewer,
@@ -217,6 +221,12 @@ impl App {
 
     fn vnc_dispatch(&mut self, command: VncCommand) -> AppResult<()> {
         match command {
+            VncCommand::SortGroup { revision, group } => {
+                self.vnc_manager(revision)?.sort_group(&group)?;
+                self.vnc.revision += 1;
+                self.vnc.status = format!("已依名稱排序「{group}」分類。其他分類維持原順序。");
+                self.view.post(&json!({"type":"vnc_saved"}))?;
+            }
             VncCommand::SyncSettings {
                 mut settings,
                 clear_password,

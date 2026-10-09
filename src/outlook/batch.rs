@@ -217,6 +217,8 @@ pub fn list(
     if period != "selected" {
         return query::list(&app, period, unread, scope, cancel);
     }
+    let hidden =
+        super::exclusions::Exclusions::from_app(&app, &super::privacy::Policy::current()?, cancel)?;
     let mut list = MailList {
         scope: "Outlook 目前選取".into(),
         ..Default::default()
@@ -231,7 +233,8 @@ pub fn list(
         if super::privacy::folder_allowed(
             &super::privacy::Policy::current()?,
             &object(&get(&item, "Parent", &mut [])?)?,
-        )? {
+        )? && !hidden.contains(&item)?
+        {
             list.mails.push(snapshot(&item)?);
         }
         return Ok(list);
@@ -252,7 +255,8 @@ pub fn list(
         if super::privacy::folder_allowed(
             &super::privacy::Policy::current()?,
             &object(&get(&item, "Parent", &mut [])?)?,
-        )? {
+        )? && !hidden.contains(&item)?
+        {
             list.mails.push(snapshot(&item)?);
         }
     }
@@ -296,6 +300,8 @@ pub fn export(
         return Err("原郵件已移動或不存在，請重新取得清單。".into());
     }
     super::privacy::require_item(&super::privacy::Policy::load(root)?, &item)?;
+    super::exclusions::Exclusions::from_app(&app, &super::privacy::Policy::load(root)?, cancel)?
+        .require(&item)?;
     // 快照關鍵欄位改變時停止，不能把新內容當成先前授權的郵件。
     if text(&item, "Subject", 3000)? != mail.preview.subject
         || text(&item, "SenderName", 3000)? != mail.preview.sender

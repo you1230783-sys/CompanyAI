@@ -417,6 +417,18 @@ mod tests {
     #[test]
     fn catalogue_covers_all_existing_operations_and_defaults() {
         let samples = [
+            (
+                "read_code_section",
+                json!({"path":"a.py","first_line":1,"last_line":4}),
+            ),
+            (
+                "edit_code_section",
+                json!({"copy_id":"c","revision":"r","first_line":1,"last_line":2,"section_hash":"h","replacement":"pass\n"}),
+            ),
+            (
+                "run_batch",
+                json!({"tasks":[{"task_id":"a","tool":"read_file","arguments_json":"{\"path\":\"a.py\"}"},{"task_id":"b","tool":"read_file","arguments_json":"{\"path\":\"b.py\"}"}]}),
+            ),
             ("outlook_folders", json!({"scope":"local_inbox"})),
             (
                 "outlook_headers",

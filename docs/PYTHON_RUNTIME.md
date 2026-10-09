@@ -1,5 +1,12 @@
 # Python 執行環境與離線重建
 
+## 0.8.49：並行與分段草稿
+
+run_batch一次2–4項、最多兩個獨立AppContainer同時運算，每個Python仍有各自1 GiB與120秒上限。父程序依序驗證／發布成果，各項結果與錯誤獨立；同批不得依賴新生成結果，同一副本不能並行修改。
+
+read_code_section／edit_code_section以revision、1起算行號與section_hash保護每段編輯，每段最多200行／6000字。每次成功修改先寫入同一PY草稿並flush／讀回，原件唯讀；check_python通過後save_copy將該路徑標為完成。外部改檔拒絕覆寫，既有已知I/O失敗嘗試回復；不宣稱電源中斷期間原地寫入具原子性。既有AppContainer檢查器、runtime與套件指紋不變。
+
+
 ## 0.8.48：Python原始碼編輯試用
 
 `python-edit`技能沿用受控文字工具讀取、新建與修訂.py工作副本；`check_python(path,revision)`可檢查專案原文或副本。原文仍由Rust唯讀取得，不把路徑交給檢查器。副本以即將儲存的編碼轉成bytes，固定`check_source.py`經既有AppContainer Python執行器傳入；受檢文字只作資料。

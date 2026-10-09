@@ -1,6 +1,6 @@
 {
-  "recorded_at": "2026-10-09T08:35:21.5565616+08:00",
-  "version": "0.8.48.0",
+  "recorded_at": "2026-10-09T11:54:46.5250654+08:00",
+  "version": "0.8.49.0",
   "result": "PASS",
   "msvc": "14.29.30133",
   "compiler_report": [
@@ -29,15 +29,25 @@
   ],
   "image_read_checks": [
     "same owner/project/run/conversation parent binding for images and native delegation",
-    "5 MB image accepted and 5 MB plus one byte rejected",
-    "20-request budget, fast-model prohibition and definite-rejection cleanup",
+    "converted JPEG 5,000,000-byte per-image and 8,000,000-byte pair limits",
+    "100-image cumulative budget exercised by fifty dual-image requests; fast-model prohibition and definite-rejection cleanup",
     "ordinary file-list discovery, read_file metadata without upload, and basic analyze_image without loading a skill",
     "list-only task does not submit images",
     "native Outlook quick action and removal of image quick commands",
-    "JPEG/PNG exact bytes in text+image_url JSON through existing agent API",
-    "same-model tool-free child, text-only parent result and source hash",
+    "local WIC JPEG conversion for JPEG/PNG/BMP/TIFF/GIF, first-frame scope and source preservation",
+    "same-model tool-free single or dual image child, text-only parent result and original-source hash",
     "image cache and unknown request resume without repost",
-    "out-of-project and oversize images rejected without image POST"
+    "out-of-project and converted-oversize images rejected without image POST"
+  ],
+  "parallel_draft_checks": [
+    "two actual isolated Python executions have overlapping measured intervals",
+    "bounded run_batch preserves child result order and independently reports failure",
+    "chart preparation plus next-file read and failed Python alongside successful Python",
+    "same batch replay reuses results without duplicate artifacts",
+    "line/section hash edits preserve CRLF and source revision",
+    "every Python edit saves the same draft before syntax validation; restore checks disk hash",
+    "later edits remove completed status until syntax is checked and saved again",
+    "hidden Outlook folder copies excluded across stores using Message-ID and conservative missing-ID fallback; COM fixture only"
   ],
   "chart_transform_checks": [
     "locked Excel CSV keeps A/Index and D/Mean source roles while deriving Index 1",
@@ -57,7 +67,7 @@
     "six chart kinds, user axis ranges, reference lines and colors",
     "native customized PNG callback and verified manual _AI_Output write"
   ],
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-ee5133cb23e641d6b0eaa5b7cd8c0146",
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-48c4ae40ac794a2cb603994d32bbf6c1",
   "checks": [
     "weekly wizard prepare/confirm/cancel and conversation binding",
     "online inbox COM fixture",
@@ -91,7 +101,7 @@
     "Outlook folder picker, DPAPI policy and ancestor enforcement, native forged/stale selection rejection",
     "local mail coverage with 1000-message limit, no raw-body tool output, independent 50-message AI limit, branches and gaps"
   ],
-  "exe_sha256": "e1025163aced465a9ec2d477b11bf92493a365659753feac740d1b96e64e61fc",
+  "exe_sha256": "08d5794e66d6bad8bdd15dc110482f563b59de5f839f3173bbbd1331efd30174",
   "installer_built": true,
   "real_vnc_tested": false,
   "real_office_tested": true,

@@ -7,6 +7,8 @@ use company_ai::{
 use serde_json::{json, Value};
 #[path = "python_smoke/analysis.rs"]
 mod analysis;
+#[path = "python_smoke/batch.rs"]
+mod batch;
 #[path = "python_smoke/edit.rs"]
 mod edit;
 use std::{
@@ -48,6 +50,7 @@ fn run() -> AppResult<()> {
     let cancel = AtomicBool::new(false);
     let mut worker = Worker::start(&exe, &cancel)?;
     analysis::run(&mut broker, &mut worker, &project)?;
+    batch::run(&project, &mut worker)?;
     let python_copy = edit::run(&mut broker, &mut worker, &project)?;
     call(
         &mut broker,
@@ -275,7 +278,7 @@ result = {{'denied': denied}}
         "python":"3.13.12","pandas":"2.2.3","numpy":"2.2.6","openpyxl":"3.1.5","duration_seconds":started.elapsed().as_secs_f64(),
         "checks":["CSV leading zeros and literal NA","LOG event duration","Big5 LOG plus UTF-8 BOM and fallback snapshots through real Python", "groupby count/mean/sum","tracked CSV and generated XLSX round trip",
             "literal XLSX formula text","idempotent results","source/output path and revision rejection","OS file/network/child-process isolation",
-            "PY working copy edit and unchanged source","AST plus compile without executing source","UTF-8 BOM and Big5 source encoding","coding declaration mismatch rejection","current revision syntax validation required before publish","PY artifact verified at finish",
+            "two Python processes overlap with separate AppContainers","parallel chart and next file read; per-item errors and idempotent batch","incremental edits persist same draft before syntax check","PY working copy edit and unchanged source","AST plus compile without executing source","UTF-8 BOM and Big5 source encoding","coding declaration mismatch rejection","current revision syntax validation required before publish","PY artifact verified at finish",
             "environment allowlist","active cancellation","120 second timeout","unlisted and modified runtime files rejected","original unchanged","modified output rejected at finish"]});
     std::fs::write(
         root.join("python-verification.json"),

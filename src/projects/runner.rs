@@ -906,7 +906,20 @@ fn run_for(
                     if tool_calls >= MAX_TOOLS {
                         return Err("已達本次 60 次工具操作上限，已保留進度與成果。".into());
                     }
-                    tool_calls += 1;
+                    let count = if let super::Tool::RunBatch { tasks } = &request {
+                        tasks.len()
+                    } else {
+                        1
+                    };
+                    if tool_calls + count > MAX_TOOLS {
+                        return pause(
+                            "本批工具預算不足以處理整組工作，已保存進度供續接。",
+                            &broker,
+                            &progress_state,
+                            Some(&task),
+                        );
+                    }
+                    tool_calls += count;
                     let pdf_source = match &request {
                         super::Tool::ReadFile { path, .. } | super::Tool::FindText { path, .. } => {
                             Some(path)
@@ -969,7 +982,12 @@ fn run_for(
                                 json!({"ok":false,"operation_id":operation_id,"error":error})
                             }
                         }
-                    } else if let super::Tool::AnalyzeImage { path, focus } = &request {
+                    } else if let super::Tool::AnalyzeImage {
+                        path,
+                        compare_path,
+                        focus,
+                    } = &request
+                    {
                         match super::vision::analyze(
                             &run,
                             &mut broker,
@@ -977,6 +995,7 @@ fn run_for(
                             progress_state.agent.as_mut(),
                             &task,
                             path,
+                            compare_path.as_deref(),
                             focus,
                             deadline,
                             |text| report(&mut activity, &mut progress, text),
@@ -1032,7 +1051,9 @@ fn run_for(
                     report(
                         &mut activity,
                         &mut progress,
-                        if result["ok"] == false {
+                        if run.cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                            format!("{label}：已依你的操作停止；先前保存的草稿與成果保留。")
+                        } else if result["ok"] == false {
                             let reason = result["error"].as_str().unwrap_or("工具未提供錯誤原因");
                             // 只取已解析的工具名稱，不把參數、檔名或內容放進預設診斷。
                             let descriptor = serde_json::to_value(&request).unwrap_or_default();
@@ -1058,6 +1079,16 @@ fn run_for(
                                     data["offset"],
                                     data["next_offset"],
                                     data["total_unique"]
+                                )
+                            } else if let Some(tasks) = result["result"]["tasks"].as_array() {
+                                let successful = tasks
+                                    .iter()
+                                    .filter(|task| task["outcome"]["ok"] == true)
+                                    .count();
+                                format!(
+                                    "{label}：{}項成功、{}項失敗；成功成果已保存。",
+                                    successful,
+                                    tasks.len() - successful
                                 )
                             } else {
                                 format!("{label}：完成")

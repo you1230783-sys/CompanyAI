@@ -26,6 +26,27 @@ impl Drop for Fixture {
 const SAMPLE: &str = r#"{"A":[{"name":"機台1","ip":"192.168.1.101","password":"test-secret","note":"保留"}],"B":[]}"#;
 
 #[test]
+fn sort_one_group_naturally_keeps_credentials_and_other_group_order() {
+    let fixture = Fixture::new();
+    let entries = |names: &[&str]| {
+        names.iter().map(|name|json!({"name":name,"ip":"192.168.1.1","password":format!("secret-{name}"),"note":name})).collect::<Vec<_>>()
+    };
+    let data = json!({"A":entries(&["機台10","機台2","機台1"]),"B":entries(&["B10","B2"])});
+    fixture.write(
+        "machines.json",
+        serde_json::to_string(&data).unwrap().as_bytes(),
+    );
+    let mut manager = Manager::load(fixture.path()).unwrap();
+    manager.sort_group("A").unwrap();
+    let saved: Value = serde_json::from_slice(&fs::read(fixture.path()).unwrap()).unwrap();
+    assert_eq!(saved["A"][0]["name"], "機台1");
+    assert_eq!(saved["A"][1]["name"], "機台2");
+    assert_eq!(saved["A"][2], data["A"][0]);
+    assert_eq!(saved["B"], data["B"]);
+    assert!(manager.sort_group("missing").is_err());
+}
+
+#[test]
 fn legacy_format_round_trips_without_exposing_passwords() {
     let fixture = Fixture::new();
     fixture.write("machines.json", SAMPLE.as_bytes());

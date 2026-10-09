@@ -1,8 +1,12 @@
 //! 固定檔案 broker：只接受專案相對路徑；逐層鎖住目錄、拒絕重新解析點與硬連結。
-//! 工作副本先留在記憶體，發布只用 create_new；原始文件從未取得可寫 handle。
+//! 一般成果以 create_new 發布；Python 持續草稿只更新本任務擁有且雜湊吻合的檔案。
+//! 原始文件從未取得可寫 handle。
 mod analysis;
+pub mod batch;
 mod chart_annotations;
 mod chart_preferences;
+mod code_sections;
+mod drafts;
 mod mail_notes;
 mod python;
 mod python_edit;
@@ -667,6 +671,8 @@ struct Copy {
     /// 只對目前內容版本有效；任何文字修改都需重新語法檢查。
     #[serde(default)]
     python_checked_revision: Option<String>,
+    #[serde(default)]
+    draft: Option<drafts::Draft>,
     paths: Vec<String>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -690,6 +696,8 @@ pub(super) struct SavedBroker {
     outlook: super::mail::Saved,
     #[serde(default)]
     mail_notes: super::mail_notes::State,
+    #[serde(default)]
+    mail_draft: Option<drafts::Draft>,
     #[serde(default)]
     log_cursors: BTreeMap<String, super::logs::Cursor>,
     output_folder: Option<String>,
@@ -719,6 +727,7 @@ pub struct Broker {
     file_waiter: Option<super::interaction::FileWaiter>,
     outlook: super::mail::Session,
     pub(super) mail_notes: super::mail_notes::State,
+    mail_draft: Option<drafts::Draft>,
     log_cursors: BTreeMap<String, super::logs::Cursor>,
     server_pdf: Option<super::server_pdf::Reader>,
     memory: Option<super::memory::Memory>,
@@ -753,6 +762,7 @@ impl Broker {
             task_id: task,
             analysis: Default::default(),
             mail_notes: Default::default(),
+            mail_draft: None,
             excel_plans: BTreeMap::new(),
             file_waiter: None,
             outlook: super::mail::Session::default(),
@@ -783,7 +793,7 @@ impl Broker {
     pub(super) fn saved(&self) -> AppResult<SavedBroker> {
         // 經序列化建立不含程序資源的快照；授權與執行中的 COM 物件不保存。
         serde_json::from_value(
-            json!({"analysis":self.analysis,"mail_notes":self.mail_notes,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
+            json!({"analysis":self.analysis,"mail_notes":self.mail_notes,"mail_draft":self.mail_draft,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
             "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts}),
         )
         .map_err(|e| e.to_string())
@@ -792,6 +802,7 @@ impl Broker {
         self.analysis = state.analysis;
         state.mail_notes.validate()?;
         self.mail_notes = state.mail_notes;
+        self.mail_draft = state.mail_draft;
         if state.excel_plans.len() > 30 {
             return Err("保存的 Excel 規劃超過上限。".into());
         }
@@ -830,12 +841,21 @@ impl Broker {
                     return Err("暫存 Office 版本不一致。".into());
                 }
             }
+            if let Some(draft) = &copy.draft {
+                self.verify_draft(draft, state.output_folder.as_deref())?;
+                if read_cancel(&self.project, &draft.path, cancel, None, None)?.0 != copy.text {
+                    return Err("草稿與保存的副本版本不一致，未繼續覆寫。".into());
+                }
+            }
             if copy.saved_revision.as_deref() == Some(text::revision(&copy.text).as_str()) {
                 let path = copy.paths.last().ok_or("暫存成果缺少路徑。")?;
                 if read_cancel(&self.project, path, cancel, None, None)?.0 != copy.text {
                     return Err(format!("成果 {path} 已變更，未繼續舊任務。"));
                 }
             }
+        }
+        if let Some(draft) = &self.mail_draft {
+            self.verify_draft(draft, state.output_folder.as_deref())?;
         }
         super::skills::context(&state.loaded_skills)?;
         for chart in &state.charts {
@@ -901,7 +921,7 @@ impl Broker {
             .iter()
             .map(|(id, copy)| json!({
                 "copy_id":id,"name":copy.name,"revision":text::revision(&copy.text),
-                "saved_revision":copy.saved_revision,"paths":copy.paths
+                "saved_revision":copy.saved_revision,"paths":copy.paths,"draft_path":copy.draft.as_ref().map(|d|&d.path),"syntax_checked":copy.python_checked_revision.as_ref()==Some(&text::revision(&copy.text))
             }))
             .collect::<Vec<_>>())
     }
@@ -953,7 +973,9 @@ impl Broker {
                     | "transform_chart"
                     | "set_chart_policy"
                     | "set_chart_reference_lines" => !self.charts.is_empty(),
-                    "edit_text" => self.copies.values().any(|c| c.office.is_none()),
+                    "edit_text" | "edit_code_section" => {
+                        self.copies.values().any(|c| c.office.is_none())
+                    }
                     "edit_office" | "office_action" | "office_batch" => {
                         self.copies.values().any(|c| c.office.is_some())
                     }
@@ -1411,7 +1433,11 @@ impl Broker {
             return Ok(result.clone());
         }
         let outcome = loop {
-            let result = self.perform(tool, worker, cancel);
+            let result = if let Tool::RunBatch { tasks } = tool {
+                self.run_batch(id, tasks, worker.executable(), cancel)
+            } else {
+                self.perform(tool, worker, cancel)
+            };
             let Err(error) = &result else {
                 break result;
             };
@@ -1975,6 +2001,7 @@ impl Broker {
                 self.add_chart(chart)
             }
             Tool::AskPreference { .. } => Err("偏好問題需由任務協調器保存。".into()),
+            Tool::RunBatch { .. } => Err("批次工作只能由頂層 broker 執行，不允許巢狀批次。".into()),
             Tool::ReadSkillGuide { id, offset } => {
                 let guide = super::skills::load(id)?;
                 let total = guide.chars().count();
@@ -2313,18 +2340,39 @@ impl Broker {
                     json!({"path":path,"working_copy":self.copies.contains_key(path),"text":text,"offset":offset,"next_offset":next,"total":total,"truncated":next<total,"revision":text::revision(&content),"document":document,"imported_snapshot":self.project.imports.contains_key(&path.replace('\\', "/"))}),
                 )
             }
+            Tool::ReadCodeSection {
+                path,
+                first_line,
+                last_line,
+            } => self.read_code_section(path, *first_line, *last_line, cancel, worker),
+            Tool::EditCodeSection {
+                copy_id,
+                revision,
+                first_line,
+                last_line,
+                section_hash,
+                replacement,
+            } => self.edit_code_section(
+                copy_id,
+                revision,
+                *first_line,
+                *last_line,
+                section_hash,
+                replacement,
+            ),
             Tool::FindText { path, text: needle } => {
                 if needle.is_empty() {
                     return Err("搜尋文字不可空白。".into());
                 }
                 let content = self.content(path, cancel, worker)?;
+                let matches: Vec<_> = content.match_indices(needle).take(100).map(|(index,_)| json!({"offset":content[..index].chars().count(),"line":content[..index].bytes().filter(|b| *b == b'\n').count()+1})).collect();
                 let positions: Vec<_> = content
                     .match_indices(needle)
                     .take(101)
                     .map(|(index, _)| content[..index].chars().count())
                     .collect();
                 Ok(
-                    json!({"positions":positions.iter().take(100).collect::<Vec<_>>(),"truncated":positions.len()>100,"revision":text::revision(&content)}),
+                    json!({"matches":matches,"total_lines":content.split_inclusive('\n').count(),"positions":positions.iter().take(100).collect::<Vec<_>>(),"truncated":positions.len()>100,"revision":text::revision(&content)}),
                 )
             }
             Tool::CreateWorkingCopy { source, name } => {
@@ -2403,6 +2451,7 @@ impl Broker {
                         encoding,
                         saved_revision: None,
                         python_checked_revision: None,
+                        draft: None,
                         paths: Vec::new(),
                     },
                 );
@@ -2437,6 +2486,9 @@ impl Broker {
                 // 即使子程序出錯，broker 也只接受相同固定操作的結果。
                 if next != text::edit(&copy.text, revision, *start, expected, replacement)? {
                     return Err("子程序修改結果不一致。".into());
+                }
+                if extension(Path::new(&copy.name))? == "py" {
+                    return self.save_python_draft(copy_id, &next);
                 }
                 copy.text = next;
                 Ok(json!({"copy_id":copy_id,"revision":text::revision(&copy.text)}))
@@ -2484,6 +2536,24 @@ impl Broker {
                 if copy.saved_revision.as_ref() == Some(revision) {
                     return Ok(
                         json!({"copy_id":copy_id,"path":copy.paths.last(),"revision":revision}),
+                    );
+                }
+                // PY 每段已落盤；檢查通過只升級同一路徑為完成成果，不產生 _1、_2。
+                if let Some(draft) = &copy.draft {
+                    let path = draft.path.clone();
+                    if read_cancel(&self.project, &path, cancel, Some(worker), None)?.0 != copy.text
+                    {
+                        return Err("草稿內容已變更，未發布。".into());
+                    }
+                    if !copy.paths.contains(&path) {
+                        copy.paths.push(path.clone());
+                    }
+                    if !self.published.contains(&path) {
+                        self.published.push(path.clone());
+                    }
+                    copy.saved_revision = Some(revision.clone());
+                    return Ok(
+                        json!({"copy_id":copy_id,"path":path,"revision":revision,"verified":true,"syntax_valid":true}),
                     );
                 }
                 if self.txt_context && extension(Path::new(&copy.name))? == "md" {
@@ -2569,8 +2639,8 @@ impl Broker {
             }
             Tool::DeleteCopy { copy_id } => {
                 let copy = self.copies.get(copy_id).ok_or("不是本次任務的工作副本。")?;
-                if !copy.paths.is_empty() {
-                    return Err("已發布的成果不可刪除；請由使用者管理。".into());
+                if !copy.paths.is_empty() || copy.draft.is_some() {
+                    return Err("已保存的草稿或成果不可刪除；請由使用者管理。".into());
                 }
                 self.copies.remove(copy_id);
                 Ok(json!({"discarded":copy_id}))
@@ -2816,6 +2886,7 @@ mod tests {
                 encoding: Encoding::Utf8(false),
                 saved_revision: None,
                 python_checked_revision: None,
+                draft: None,
                 paths: vec![],
             },
         );

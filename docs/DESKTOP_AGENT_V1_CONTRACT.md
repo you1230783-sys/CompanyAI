@@ -559,3 +559,11 @@ OpenAI 的原生 function calling 使用 tools、assistant.tool_calls 及 role=t
 read_work_log目錄offset按筆數，每頁20筆固定快照；指定operation_id後的原文offset仍按字元。Outlook空白cursor視為null，不改有效游標格式與授權。可選偏好不終止任務；未回答使用預先公告的預設，權限不得使用此路徑。圖表Y預設保留缺值，可切換呈現；無效X未取得明確選擇時回deferred，先處理其他工作。
 
 一般聊天桌面只送當前使用者訊息，不再受20輪上限；網站依conversation_id附加歷史。Outlook助理與專案請求不套用此裁減。DEBUG可保存桌面送出／收到的JSON與獨立無正文用量報表；請保留模型原始usage（含prompt/input、completion/output與可用的cached/reasoning細項），未回傳時桌面明示缺漏。
+
+## 0.8.49桌面擴充
+
+主推論每輪仍送一個原生工具；run_batch工具承載2–4個task_id/tool/arguments_json工作，最多2個並行，父broker逐項保存。回傳tasks[].outcome必須個別檢查；外層ok只代表批次已處理，不代表所有子項成功。新增read_code_section／edit_code_section，Python修改成功即有draft_path，syntax_checked=false不是已完成成果。
+
+專案圖片子請求例外使用user content parts；所有格式本機轉JPEG後，最多兩個image_url、每張5,000,000 bytes且合計8,000,000 bytes。本機序列化請求上限12,000,000 bytes，同時遵守capabilities.limits.request_bytes較小值；若网站仍公告10 MB，接近8 MB的雙圖會明確拒絕，不繞過公告。每任務圖片額度100張，原有budget字串清單兼容，雙圖記兩次。此擴充不改一般聊天／Outlook附件契約，亦不讓fast模型接受圖片。
+
+待查子請求保留原ID／原payload；只在原圖SHA256、目的、帳號／binding與模型一致時沿用舊v1待查，不能在未知提交時重送新JPEG。父上下文只留文字摘要與來源。多頁TIFF／動畫明示只送第一頁／第一幀。

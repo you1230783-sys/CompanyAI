@@ -18,6 +18,18 @@ impl Broker {
         let sources: Vec<Value> = snapshot.as_array().ok_or("Python 來源格式無效。")?.iter()
             .map(|v|json!({"name":v["name"],"path":v["path"],"kind":v["kind"],"revision":v["revision"],"scope":v["scope"],"start_line":v["start_line"],"line_count":v["line_count"],"next_line":v["next_line"],"eof":v["eof"]})).collect();
         let response = python::execute(code, snapshot, cancel)?;
+        self.publish_python(purpose, code, sources, response, cancel)
+    }
+
+    /// 並行子程序只計算；驗證與檔案發布由主 broker 依序提交，避免共享狀態競爭。
+    pub(super) fn publish_python(
+        &mut self,
+        purpose: &str,
+        code: &str,
+        sources: Vec<Value>,
+        response: Value,
+        cancel: &AtomicBool,
+    ) -> AppResult<Value> {
         let outputs = response["outputs"]
             .as_array()
             .ok_or("Python 成果清單無效。")?;

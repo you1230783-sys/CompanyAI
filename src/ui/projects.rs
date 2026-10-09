@@ -279,12 +279,12 @@ fn choose_path(
             dialog
                 .SetFileTypes(&[COMDLG_FILTERSPEC {
                     pszName: if image {
-                        w!("圖片試驗（JPG、JPEG、PNG）")
+                        w!("圖片試驗（JPG、JPEG、PNG、BMP、TIFF、GIF）")
                     } else {
                         w!("文字匯入來源（TXT、MD、PDF、MSG）")
                     },
                     pszSpec: if image {
-                        w!("*.jpg;*.jpeg;*.png")
+                        w!("*.jpg;*.jpeg;*.png;*.bmp;*.tif;*.tiff;*.gif")
                     } else {
                         w!("*.txt;*.md;*.pdf;*.msg")
                     },
@@ -1409,6 +1409,9 @@ impl App {
                 .into();
                 let succeeded = result.is_ok();
                 let text = result.unwrap_or_else(|error| {
+                    if cancelled {
+                        return "專案任務已依你的操作停止。已寫入的成果與草稿保留在專案輸出資料夾。".into();
+                    }
                     format!(
                         "本次任務未完成：{}",
                         self.friendly_error("project_run", &error)

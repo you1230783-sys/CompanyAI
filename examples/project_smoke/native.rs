@@ -260,9 +260,14 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                 if posts == 1 {
                     assert_eq!(
                         body["tools"].as_array().unwrap().len(),
-                        12,
-                        "首次提供基本閱讀、按需圖片、技能手冊、工作階段與可選問題"
+                        13,
+                        "首次提供基本閱讀、按需圖片、技能手冊、工作階段、並行批次與可選問題"
                     );
+                    assert!(body["tools"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|t| t["function"]["name"] == "run_batch"));
                     assert!(body["tools"]
                         .as_array()
                         .unwrap()

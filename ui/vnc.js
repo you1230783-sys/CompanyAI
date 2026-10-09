@@ -68,7 +68,11 @@
       const groupBox = document.createElement("input"); groupBox.type = "checkbox"; groupBox.className = "vnc-category-select";
       groupBox.checked = checkedGroups.has(group.name);
       groupLabel.append(groupBox, node("strong", "", `選取整類：${group.name}`));
-      heading.append(groupLabel); groupRow.append(heading); $("vnc-manager-rows").append(groupRow);
+      const sort = node("button", "secondary-button", "依名稱排序此分類");
+      sort.type = "button"; sort.disabled = group.machines.length < 2;
+      const revision = state.vnc.revision;
+      sort.onclick = () => command({ action: "sort_group", revision, group: group.name });
+      heading.append(groupLabel, sort); groupRow.append(heading); $("vnc-manager-rows").append(groupRow);
       groupBox.onchange = () => {
         if (groupBox.checked) checkedGroups.add(group.name); else checkedGroups.delete(group.name);
         for (const machine of group.machines) {

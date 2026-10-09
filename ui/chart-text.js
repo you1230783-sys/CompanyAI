@@ -3,7 +3,7 @@
 window.ChartText = (() => {
   const fonts={"sans-serif":"系統預設","Microsoft JhengHei":"微軟正黑體","PMingLiU":"新細明體","DFKai-SB":"標楷體",Arial:"Arial","Times New Roman":"Times New Roman",Consolas:"Consolas"};
   const defaults=()=>({text:"區間1",position:{x:.4,y:.35},font_family:"Microsoft JhengHei",font_size:18,bold:false,italic:false,underline:false,color:"#333333",background:null});
-  function open(current, apply) {
+  function open(current, apply, remove) {
     const initial=structuredClone(current || defaults());
     const dialog=document.createElement("dialog"),form=document.createElement("form"),heading=document.createElement("h2"),grid=document.createElement("div");
     dialog.className="chart-text-dialog";dialog.setAttribute("aria-label","圖中文字");heading.textContent=current?"編輯圖中文字":"新增圖中文字";
@@ -29,6 +29,10 @@ window.ChartText = (() => {
     const actions=document.createElement("div");actions.className="dialog-actions";
     const cancel=document.createElement("button"),save=document.createElement("button");cancel.type="button";cancel.textContent="取消";save.type="submit";save.className="primary";save.textContent="套用文字";actions.append(cancel,save);
     const close=()=>{dialog.close();dialog.remove();};cancel.onclick=close;dialog.oncancel=event=>{event.preventDefault();close();};
+    if(current && remove) {
+      const button=document.createElement("button");button.type="button";button.textContent="刪除文字";button.className="danger-button";
+      button.onclick=()=>{remove();close();};actions.prepend(button);
+    }
     form.onsubmit=event=>{event.preventDefault();
       if(!text.value.trim()||[...text.value].length>500){error.textContent="請輸入1–500字的文字。";text.focus();return;}
       if(!size.value||!Number.isInteger(Number(size.value))||size.value<8||size.value>72){error.textContent="字級請填8–72的整數。";size.focus();return;}

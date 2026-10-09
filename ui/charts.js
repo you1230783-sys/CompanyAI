@@ -152,14 +152,17 @@ window.ChartUI = (() => {
     container.replaceChildren(); container.hidden = !values?.length; cleanup();
     for (const [chart_index,data] of (values || []).entries()) {
       let style=context?.styles?.[chart_index] || null;
-      let layoutMode=false, beforeLayout=null;
+      let layoutMode=false, beforeLayout=null, layoutBoxes=[], persistText=()=>{};
       const textPanel=document.createElement("div");textPanel.className="chart-text-panel";textPanel.hidden=true;
       function editText(index) {
         const current=(style || ChartEditor.defaults(data)).layout?.annotations?.[index];
         ChartText.open(current,annotation=>{
           style=structuredClone(style || ChartEditor.defaults(data));style.layout ??= ChartLayout.empty();style.layout.annotations ??= [];
           if(index==null) style.layout.annotations.push(annotation);else style.layout.annotations[index]=annotation;
-          renderTextPanel();refreshLayout();
+          renderTextPanel();refreshLayout();if(!layoutMode)persistText();
+        },()=>{
+          style=structuredClone(style || ChartEditor.defaults(data));style.layout.annotations.splice(index,1);
+          renderTextPanel();refreshLayout();if(!layoutMode)persistText();
         });
       }
       function renderTextPanel() {
@@ -167,10 +170,10 @@ window.ChartUI = (() => {
         const annotations=(style || ChartEditor.defaults(data)).layout?.annotations || [];
         const add=document.createElement("button");add.type="button";add.textContent="新增文字";add.disabled=annotations.length>=20;add.onclick=()=>editText(null);textPanel.append(add);
         for(const [index,annotation] of annotations.entries()) {
-          const row=document.createElement("div"),label=document.createElement("span"),edit=document.createElement("button"),remove=document.createElement("button");
-          row.className="chart-text-row";label.textContent=annotation.text;edit.textContent="編輯文字";remove.textContent="刪除文字";edit.type=remove.type="button";
-          edit.onclick=()=>editText(index);remove.onclick=()=>{style=structuredClone(style || ChartEditor.defaults(data));style.layout.annotations.splice(index,1);renderTextPanel();refreshLayout();};
-          row.append(label,edit,remove);textPanel.append(row);
+          const row=document.createElement("div"),label=document.createElement("span"),edit=document.createElement("button");
+          row.className="chart-text-row";label.textContent=annotation.text;edit.textContent="編輯文字";edit.type="button";
+          edit.onclick=()=>editText(index);label.ondblclick=()=>editText(index);
+          row.append(label,edit);textPanel.append(row);
         }
       }
       const card = document.createElement("section"); card.className = "chart-card";
@@ -181,6 +184,7 @@ window.ChartUI = (() => {
       function refreshLayout() {
         const instance=charts.get(plot);if(!instance)return;
         const result=ChartLayout.draw(instance,style || ChartEditor.defaults(data));
+        layoutBoxes=result.boxes;
         layoutHint.hidden=!layoutMode&&!result.crowded;
         layoutHint.textContent=[layoutMode?"拖曳框線移動標題、圖例、參考線及自訂文字；方向鍵微調，Shift加速。按完成排版保存，取消則還原。":"",
           result.crowded?"文字空間不足，請放大圖表或縮短標籤。":""].filter(Boolean).join(" ");
@@ -202,7 +206,15 @@ window.ChartUI = (() => {
         const edit=document.createElement("button"),reset=document.createElement("button"),save=document.createElement("button");
         edit.textContent="編輯圖表";reset.textContent="恢復原樣";save.textContent="儲存此圖片";
         const apply=value=>{style=value;const replacement=renderIssues(ChartQuality.view(data,(style || data.style)?.quality_policy));issueDetails.replaceWith(replacement);issueDetails=replacement;redraw();updateSource();command({action:"chart_customize",target,style});};
-        edit.onclick=()=>ChartEditor.open(data,style,apply);plot.ondblclick=()=>{if(!layoutMode)edit.onclick();};reset.onclick=()=>apply(null);
+        persistText=()=>command({action:"chart_customize",target,style});
+        edit.onclick=()=>ChartEditor.open(data,style,apply);
+        // 以實際繪製後的框命中；一般檢視也能雙擊文字，單擊仍保留圖例與縮放功能。
+        plot.ondblclick=event=>{
+          if(layoutMode)return;
+          const bounds=plot.getBoundingClientRect(),x=event.clientX-bounds.left,y=event.clientY-bounds.top;
+          const box=layoutBoxes.find(b=>b.key.startsWith("text-") && x>=b.x && x<=b.x+b.width && y>=b.y && y<=b.y+b.height);
+          if(box){event.stopPropagation();editText(Number(box.key.slice(5)));}else edit.onclick();
+        };reset.onclick=()=>apply(null);
         const layout=document.createElement("button"),cancelLayout=document.createElement("button"),autoLayout=document.createElement("button");
         layout.textContent="調整排版";cancelLayout.textContent="取消排版";autoLayout.textContent="自動排版";
         cancelLayout.hidden=autoLayout.hidden=true;

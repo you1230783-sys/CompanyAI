@@ -1,3 +1,5 @@
+> **0.8.49 維護位置：** `files/batch.rs`管理白名單、最多兩項計算並行及逐項提交，`sandbox::Worker`保存實際執行器路徑；`files/code_sections.rs`以行號／雜湊編輯，`files/drafts.rs`核對並更新任務草稿。`outlook/exclusions.rs`管理本機隱藏副本識別，`files/mail_notes.rs`保存可寫入草稿。`vision/jpeg.rs`使用WIC轉JPEG，`vision.rs`保留圖片額度／待查／快取，`agent.rs`組雙圖content parts。UI活動使用activityEvent屬性，與通知data-event分開；文字雙擊使用實際繪製框命中。詳見[0.8.49驗證](VALIDATION_0_8_49.md)。
+
 > **0.8.48 維護位置：** `ui/chart-layout.js`共用文字量測、避讓、比例位置與拖曳；`ui/chart-text.js`管理新增文字表單；`ui/chart-appearance.js`管理色票。Rust的`charts/style.rs`驗證相同受控欄位，`files/chart_annotations.rs`處理歷史圖索引及另建樣式版本。`calendar::Activity`相容舊字串並保存本機時間，Message／工具事件只在本機顯示時間。`files/python_edit.rs`與固定`python/check_source.py`驗證.py當前副本的編碼、AST及compile，原文不執行。完整結果見 [0.8.48](VALIDATION_0_8_48.md)。
 
 > **0.8.46 維護位置：** `progress.rs` 產生每輪筆記與最近1–3組工具結果的送出投影；`context.rs` 管理軟預算與純數字用量；`skills/core.rs` 保存精簡方法，完整教學由 `read_skill_guide` 分頁取得。`steering/preferences.rs` 管理非阻塞問題，`files/chart_preferences.rs` 處理圖表答案，`charts/quality/policy.rs` 與 `ui/chart-editor.js` 共用缺值政策。`diagnostics.rs` 將逐輪JSON與用量分開DPAPI保存；`ui/reply-tables.js` 只在顯示時修復可核對的表格。正式發行結果與限制見 [0.8.46](VALIDATION_0_8_46.md)。

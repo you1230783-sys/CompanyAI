@@ -36,7 +36,7 @@ fn time(item: &IDispatch, name: &str) -> AppResult<NaiveDateTime> {
         })
         .ok_or("郵件時間無法換算。".into())
 }
-fn timestamp(item: &IDispatch, name: &str) -> AppResult<String> {
+pub(super) fn timestamp(item: &IDispatch, name: &str) -> AppResult<String> {
     Ok(time(item, name)?
         .format("%Y-%m-%d %H:%M:%S%.3f")
         .to_string())
@@ -56,7 +56,7 @@ fn jet_day(day: NaiveDate) -> AppResult<String> {
     let value = unsafe { formatted.Anonymous.Anonymous.Anonymous.bstrVal.to_string() };
     Ok(value.replace('\'', "''"))
 }
-fn property(item: &IDispatch, tag: &str) -> AppResult<String> {
+pub(super) fn property(item: &IDispatch, tag: &str) -> AppResult<String> {
     let accessor = object(&get(item, "PropertyAccessor", &mut [])?)?;
     let value = get(&accessor, "GetProperty", &mut [VARIANT::from(tag)])?;
     let mut converted = VARIANT::default();
@@ -69,11 +69,11 @@ fn property(item: &IDispatch, tag: &str) -> AppResult<String> {
     Ok(value)
 }
 /// 優先 SMTP 地址；無法解析時保留 Outlook 原地址，但去重層不猜測相同身分。
-fn sender(item: &IDispatch) -> AppResult<String> {
+pub(super) fn sender(item: &IDispatch) -> AppResult<String> {
     property(item, "http://schemas.microsoft.com/mapi/proptag/0x5D01001F")
         .or_else(|_| text(item, "SenderEmailAddress", 4096))
 }
-fn recipients(item: &IDispatch) -> AppResult<Vec<String>> {
+pub(super) fn recipients(item: &IDispatch) -> AppResult<Vec<String>> {
     let recipients = object(&get(item, "Recipients", &mut [])?)?;
     let total = count(&recipients)?;
     if total > 200 {
@@ -186,7 +186,12 @@ fn check(cancel: &AtomicBool, started: Instant) -> AppResult<()> {
     Ok(())
 }
 /// 回傳經資料夾權限、身分與版本核對的郵件；呼叫期間 COM Apartment 必須仍有效。
-fn checked_item(ns: &IDispatch, reference: &Folder, snapshot: &Header) -> AppResult<IDispatch> {
+fn checked_item(
+    ns: &IDispatch,
+    reference: &Folder,
+    snapshot: &Header,
+    cancel: &AtomicBool,
+) -> AppResult<IDispatch> {
     let item = object(&get(
         ns,
         "GetItemFromID",
@@ -203,6 +208,8 @@ fn checked_item(ns: &IDispatch, reference: &Folder, snapshot: &Header) -> AppRes
         return Err("郵件已移動或身分改變，請重新列出標題。".into());
     }
     privacy::require_item(&privacy::Policy::current()?, &item)?;
+    exclusions::Exclusions::from_namespace(ns, &privacy::Policy::current()?, cancel)?
+        .require(&item)?;
     let current = header(&item, reference)?;
     if current.entry != snapshot.entry
         || current.modified != snapshot.modified
@@ -219,7 +226,7 @@ impl Source for Reader {
     fn verify(&mut self, folder: &Folder, header: &Header, cancel: &AtomicBool) -> AppResult<()> {
         batch::check_cancel(cancel)?;
         let (_apartment, app) = batch::connect()?;
-        checked_item(&namespace(&app)?, folder, header)?;
+        checked_item(&namespace(&app)?, folder, header, cancel)?;
         Ok(())
     }
 
@@ -245,6 +252,8 @@ impl Source for Reader {
         let (_apartment, app) = batch::connect()?;
         let ns = namespace(&app)?;
         let folder = folder(&ns, reference)?;
+        let hidden =
+            exclusions::Exclusions::from_namespace(&ns, &privacy::Policy::current()?, cancel)?;
         let all_items = object(&get(&folder, "Items", &mut [])?)?;
         let field = if reference.scope == "online_sent" {
             "SentOn"
@@ -302,6 +311,9 @@ impl Source for Reader {
                     return Ok((false, None));
                 }
                 privacy::require_item(&privacy::Policy::current()?, &item)?;
+                if hidden.contains(&item)? {
+                    return Ok((false, None));
+                }
                 Ok((false, Some(header(&item, reference)?)))
             })();
             match candidate {
@@ -332,7 +344,7 @@ impl Source for Reader {
         batch::check_cancel(cancel)?;
         let (_apartment, app) = batch::connect()?;
         let ns = namespace(&app)?;
-        let item = checked_item(&ns, reference, snapshot)?;
+        let item = checked_item(&ns, reference, snapshot, cancel)?;
         let body = text(&item, "Body", 256_000)?;
         if timestamp(&item, "LastModificationTime")? != snapshot.modified {
             return Err("郵件在讀取內文期間改變，此次內容未使用。".into());

@@ -51,6 +51,7 @@ struct Search<'a> {
     excluded: HashSet<(String, String)>,
     candidates: Vec<Candidate>,
     truncated: bool,
+    hidden: super::super::exclusions::Exclusions,
 }
 
 fn count(collection: &IDispatch) -> AppResult<i32> {
@@ -193,6 +194,9 @@ impl Search<'_> {
                 if day > end {
                     return Ok(false);
                 }
+                if self.hidden.contains(&mail)? {
+                    return Ok(false);
+                }
                 let key = (
                     text(folder, "StoreID", 4096)?,
                     text(&mail, "EntryID", 4096)?,
@@ -248,6 +252,11 @@ pub(super) fn list(
         excluded: HashSet::new(),
         candidates: Vec::new(),
         truncated: false,
+        hidden: super::super::exclusions::Exclusions::from_app(
+            app,
+            &super::super::privacy::Policy::current()?,
+            cancel,
+        )?,
     };
     check_cancel(cancel)?;
     let namespace = object(&get(app, "GetNamespace", &mut [VARIANT::from("MAPI")])?)?;

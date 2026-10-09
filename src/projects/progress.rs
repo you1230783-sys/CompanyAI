@@ -368,6 +368,26 @@ impl Progress {
             self.no_progress_reason = "重複使用已執行的操作 ID，僅查回原結果。".into();
             return false;
         }
+        if let Tool::RunBatch { tasks } = tool {
+            if let Some(rows) = result["result"]["tasks"]
+                .as_array()
+                .filter(|rows| rows.len() == tasks.len())
+            {
+                let mut fresh = false;
+                for (task, row) in tasks.iter().zip(rows) {
+                    if let (Ok(request), Some(operation)) =
+                        (task.request(), row["outcome"]["operation_id"].as_str())
+                    {
+                        fresh |= self.observe(operation, &request, &row["outcome"]);
+                    }
+                }
+                self.pending_history_id = Some(id.into());
+                if fresh {
+                    self.no_progress = 0;
+                }
+                return fresh;
+            }
+        }
         self.tool_outcome(
             matches!(tool, Tool::RunPython { .. }),
             result["ok"] == false,
@@ -399,7 +419,10 @@ impl Progress {
             && !matches!(tool, Tool::CompactContext { .. })
         {
             let info = &result["result"];
-            if let Tool::ReadFile { path, .. } | Tool::ReadDocumentSection { path, .. } = tool {
+            if let Tool::ReadFile { path, .. }
+            | Tool::ReadDocumentSection { path, .. }
+            | Tool::ReadCodeSection { path, .. } = tool
+            {
                 let revision = info["revision"].as_str().unwrap_or("");
                 let key = path.replace('\\', "/").to_lowercase();
                 let reading = self.readings.entry(key.clone()).or_default();

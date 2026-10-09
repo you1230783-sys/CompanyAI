@@ -7,6 +7,103 @@ use windows::Win32::Foundation::{DISP_E_MEMBERNOTFOUND, E_NOTIMPL};
 
 type Handler = Box<dyn Fn(&[VARIANT]) -> ComResult<VARIANT>>;
 
+#[test]
+fn hidden_duplicates_are_removed_across_stores_before_body_access() {
+    use crate::outlook::{
+        exclusions::Exclusions,
+        privacy::{self, Policy},
+    };
+    // 完全不提供 Body，副本 EntryID／StoreID 不同而 Message-ID 相同。
+    let identified = |number: usize, copy: bool| {
+        dispatch(vec![
+            fixed("Class", 43i32),
+            fixed(
+                "EntryID",
+                format!("{}-{number}", if copy { "copy" } else { "original" }).as_str(),
+            ),
+            fixed("Subject", "共同主旨不能單獨當作副本"),
+            fixed(
+                "PropertyAccessor",
+                dispatch(vec![fixed(
+                    "GetProperty",
+                    format!("<mail-{number}@example.test>").as_str(),
+                )]),
+            ),
+        ])
+    };
+    let hidden: Vec<_> = (0..10).map(|i| identified(i, true)).collect();
+    let visible: Vec<_> = (2..52).map(|i| identified(i, false)).collect();
+    let a = folder("pst", "A", vec![], hidden, 0);
+    let b = folder("exchange", "B", vec![], visible.clone(), 0);
+    let application = app(
+        b.clone(),
+        b.clone(),
+        vec![
+            dispatch(vec![fixed(
+                "GetRootFolder",
+                folder("pst", "root", vec![a], vec![], 0),
+            )]),
+            dispatch(vec![fixed(
+                "GetRootFolder",
+                folder("exchange", "root", vec![b], vec![], 0),
+            )]),
+        ],
+    );
+    let policy = Policy {
+        configured: true,
+        allowed: [
+            privacy::key("pst", "root"),
+            privacy::key("exchange", "root"),
+            privacy::key("exchange", "B"),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    let index = Exclusions::from_app(&application, &policy, &AtomicBool::new(false)).unwrap();
+    assert_eq!(
+        visible
+            .iter()
+            .filter(|item| !index.contains(item).unwrap())
+            .count(),
+        42
+    );
+    assert!(index.require(&visible[0]).is_err());
+    assert!(index.require(&visible[49]).is_ok());
+    assert!(Exclusions::from_app(&application, &policy, &AtomicBool::new(true)).is_err());
+    // 子資料夾即使保留舊勾選，未勾選祖先仍要排除其郵件。
+    let leaf = folder("s", "leaf", vec![], vec![identified(99, true)], 0);
+    let root = folder(
+        "s",
+        "root",
+        vec![folder("s", "parent", vec![leaf], vec![], 0)],
+        vec![],
+        0,
+    );
+    let application = app(
+        root.clone(),
+        root.clone(),
+        vec![dispatch(vec![fixed("GetRootFolder", root)])],
+    );
+    let policy = Policy {
+        configured: true,
+        allowed: [privacy::key("s", "root"), privacy::key("s", "leaf")]
+            .into_iter()
+            .collect(),
+    };
+    assert!(
+        Exclusions::from_app(&application, &policy, &AtomicBool::new(false))
+            .unwrap()
+            .contains(&identified(99, false))
+            .unwrap()
+    );
+    assert!(
+        !Exclusions::from_app(&application, &Policy::default(), &AtomicBool::new(false))
+            .unwrap()
+            .contains(&identified(99, false))
+            .unwrap()
+    );
+}
+
 #[implement(IDispatch)]
 struct FakeDispatch {
     members: Vec<(&'static str, Handler)>,

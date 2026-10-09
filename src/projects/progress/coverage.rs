@@ -145,6 +145,11 @@ impl Coverage {
                 }
                 "未讀到新的 LOG 行或區段。"
             }
+            Tool::EditCodeSection { copy_id, .. } | Tool::EditText { copy_id, .. } => {
+                fresh = data["changed"] != false
+                    && self.mark(json!(["edited-copy", copy_id, data["revision"]]));
+                "副本內容未變更；請修改下一個尚未完成的小段。"
+            }
             Tool::RunPython { .. } => {
                 // 程式／purpose 改字或換輸入別名不代表算出了不同結果。
                 let sources: Vec<_> = data["sources"]

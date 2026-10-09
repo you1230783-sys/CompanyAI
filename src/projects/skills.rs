@@ -140,7 +140,7 @@ pub fn context_for(ids: &[String], _model: &str) -> AppResult<String> {
 /// 圖片併入基本檔案閱讀，依模型能力提供方法，不需要多一輪載入技能。
 pub fn image_context_for(model: &str) -> &'static str {
     if super::vision::input::model_supported(model) {
-        "圖片：analyze_image(path,focus)讀專案JPG/JPEG/PNG；每次一張、最多20次不同要求，原圖5MB。只回文字重點，關鍵數字需核對；不讀Outlook附件或掃描PDF。"
+        "圖片：analyze_image(path,compare_path,focus)讀專案JPG/PNG/BMP/TIF/TIFF/GIF；第二路徑null為單圖。先本機轉JPG，每張5MB／雙圖合計8MB，每任務100張。TIFF多頁或動畫只讀第一幀並明示範圍。只回文字重點，關鍵數字需核對；不讀Outlook附件或掃描PDF。"
     } else {
         super::vision::input::UNSUPPORTED_MODEL
     }
@@ -170,7 +170,7 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
     let has = |id: &str| ids.iter().any(|i| i == id);
     match tool {
         "run_python" => has("python-analysis"),
-        "analyze_image" | "read_mail_notes" | "set_work_stage" => true,
+        "analyze_image" | "read_mail_notes" | "set_work_stage" | "run_batch" => true,
         "plan_excel_analysis" | "export_planned_excel" => has("excel-read"),
         "outlook_compare" => has("outlook-coverage"),
         "list_files" | "read_file" | "load_skill" | "read_skill_guide" | "ask_preference"
@@ -190,7 +190,7 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
         "outlook_folders" | "outlook_headers" | "outlook_read" | "outlook_index" => {
             has("outlook-research")
         }
-        "check_python" => has("python-edit"),
+        "check_python" | "read_code_section" | "edit_code_section" => has("python-edit"),
         "edit_chart" => has("chart-edit"),
         "inspect_chart" | "export_chart_png" => {
             has("chart-edit") || has("charts") || has("dataset-charts")

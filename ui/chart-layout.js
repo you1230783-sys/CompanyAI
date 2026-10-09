@@ -171,7 +171,10 @@ window.ChartLayout = (() => {
       };
       handle.onpointerup=event=>{
         if(!drag)return;
-        handle.releasePointerCapture(drag.id);drag=null;event.stopPropagation();commit(parseFloat(handle.style.left),parseFloat(handle.style.top));
+        handle.releasePointerCapture(drag.id);drag=null;event.stopPropagation();
+        // 單擊不重建按鈕，保留瀏覽器第二次點擊的同一目標，雙擊才能正常開啟文字編輯。
+        const x=parseFloat(handle.style.left),y=parseFloat(handle.style.top);
+        if(Math.abs(x-box.x)>.5||Math.abs(y-box.y)>.5)commit(x,y);
       };
       handle.onpointercancel=()=>{drag=null;handle.style.left=`${box.x}px`;handle.style.top=`${box.y}px`;};
       handle.ondblclick=event=>{if(box.key.startsWith("text-")){event.stopPropagation();editText?.(Number(box.key.slice(5)));}};

@@ -414,13 +414,14 @@ function renderProjectActivity(details, events, finished = false) {
   // 找出舊尾段與新開頭的重疊；新增紀錄只 append，120筆輪替時仍保留可見的節點。
   let keep = 0;
   for (let count = Math.min(previous.length, history.length); count > 0; count--) {
-    if (previous.slice(-count).every((item, index) => item.dataset.event === JSON.stringify(history[index]))) {
+    if (previous.slice(-count).every((item, index) => item.dataset.activityEvent === JSON.stringify(history[index]))) {
       keep = count; break;
     }
   }
   previous.slice(0, previous.length - keep).forEach(item => item.remove());
   history.slice(keep).forEach(event => {
-    const item=node("li");item.dataset.event=JSON.stringify(event);
+    // 活動內容不是通知 ID；不可共用通知已讀按鈕的 data-event。
+    const item=node("li");item.dataset.activityEvent=JSON.stringify(event);
     const time=localTimeNode(event.at,true);if(time)item.append(time);
     item.append(document.createTextNode(event.text));list.append(item);
   });

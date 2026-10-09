@@ -224,6 +224,16 @@ impl Manager {
         self.config = config;
         Ok(())
     }
+
+    /// 使用者明確選擇後，只重排指定分類；保留密碼、額外欄位與其他分類順序。
+    pub fn sort_group(&mut self, group: &str) -> AppResult<()> {
+        let mut machines = self.machines.clone();
+        let items = machines
+            .get_mut(group)
+            .ok_or("機台分類已不存在，請重新讀取。")?;
+        items.sort_by(|a, b| natural_cmp(&a.name, &b.name));
+        self.save_machines(machines)
+    }
 }
 
 /// server 只接受主機位址，支援 host:display、host::port 與括號 IPv6；不得夾帶選項。

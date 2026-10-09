@@ -37,9 +37,9 @@ impl Digest {
         }
         if self.summary.trim().is_empty()
             || self.rationale.trim().is_empty()
-            || (self.disposition == Disposition::Include && self.draft.trim().is_empty())
+            || (self.disposition != Disposition::Exclude && self.draft.trim().is_empty())
         {
-            return Err("郵件摘要需有 summary、rationale；include 另需 draft。未核對的主導者／日期請列 open_questions，不能自行確定。".into());
+            return Err("每次讀完內文都需 summary、rationale；include／uncertain 必須有可直接帶入的 draft，未確認內容標明待確認，不能只寫『待整理』。exclude 說明排除理由。".into());
         }
         Ok(())
     }
@@ -129,7 +129,7 @@ impl Note {
         json!({"note_id":id,"mail_id":mail["mail_id"],"subject":mail["subject"].as_str().unwrap_or("").chars().take(180).collect::<String>(),"sent_at":mail["sent_at"],"revision":mail["revision"],"disposition":self.digest.disposition,"body_complete":self.complete(),"stale":self.stale,"write_operations":self.write_operations})
     }
 }
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct State {
     pub stage: Stage,
     pub notes: BTreeMap<String, Note>,
@@ -138,6 +138,8 @@ pub struct State {
     pub review_required: bool,
     /// 只能由明確的回讀階段開啟，且每個指定版本只准回讀一次已讀區段。
     pub reread: Vec<String>,
+    #[serde(default)]
+    pub draft_path: Option<String>,
 }
 impl State {
     /// 舊 checkpoint 預設空狀態；有內容時逐份檢查，避免損壞索引在顯示時 panic。
@@ -223,9 +225,23 @@ impl State {
         Ok(())
     }
     pub fn context(&self) -> Value {
-        let selected: Vec<_> = self
-            .selected
-            .iter()
+        // 未明確選擇時也附上尚未寫入的草稿，不讓長任務只剩第一頁索引。
+        let active: Vec<_> = if self.selected.is_empty() {
+            self.notes
+                .iter()
+                .filter(|(_, n)| {
+                    !n.stale
+                        && n.digest.disposition != Disposition::Exclude
+                        && n.write_operations.is_empty()
+                })
+                .take(4)
+                .map(|(id, _)| id)
+                .collect()
+        } else {
+            self.selected.iter().collect()
+        };
+        let selected: Vec<_> = active
+            .into_iter()
             .filter_map(|id| {
                 self.notes
                     .get(id)
@@ -237,7 +253,9 @@ impl State {
             .as_ref()
             .and_then(|p| self.notes.get(&p.id()))
             .map(|n| &n.digest);
-        json!({"stage":self.stage,"total_notes":self.notes.len(),"index_preview":self.notes.iter().take(12).map(|(id,n)| n.index(id)).collect::<Vec<_>>(),"pending":self.pending,"previous_digest":previous,"selected_drafts":selected,"review_required":self.review_required})
+        json!({"stage":self.stage,"total_notes":self.notes.len(),"draft_path":self.draft_path,
+            "unwritten_count":self.notes.values().filter(|n| !n.stale && n.digest.disposition==Disposition::Include && n.write_operations.is_empty()).count(),
+            "index_preview":self.notes.iter().take(12).map(|(id,n)| n.index(id)).collect::<Vec<_>>(),"pending":self.pending,"previous_digest":previous,"selected_drafts":selected,"review_required":self.review_required})
     }
     pub fn instructions(&self) -> String {
         if self.pending.is_none() && self.notes.is_empty() {

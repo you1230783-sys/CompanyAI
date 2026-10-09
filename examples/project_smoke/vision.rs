@@ -24,7 +24,7 @@ use std::{
 };
 
 pub fn verify(root: &Path) -> AppResult<()> {
-    for case in 0..12 {
+    for case in 0..13 {
         verify_case(root, case)?;
     }
     Ok(())
@@ -41,13 +41,13 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         include_bytes!("../fixtures/vision.png")
     };
     let bytes = if case == 5 {
-        jpeg_with_comments(bytes, 5_000_000)
+        jpeg_with_comments(bytes, 6_000_000)
     } else {
         bytes.to_vec()
     };
     let name = if jpeg { "sample.jpg" } else { "sample.png" };
     std::fs::write(workspace.join(name), &bytes).map_err(|e| e.to_string())?;
-    if case == 8 {
+    if matches!(case, 8 | 9 | 12) {
         std::fs::write(workspace.join("second.png"), &bytes).map_err(|e| e.to_string())?;
     }
     if case == 4 {
@@ -109,7 +109,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                 let message = if child {
                     children += 1;
                     assert!(
-                        case < 3 || matches!(case, 5 | 7 | 8 | 9 | 10),
+                        case < 3 || matches!(case, 5 | 7 | 8 | 9 | 10 | 12),
                         "無效來源與快速模型不得送圖"
                     );
                     if case == 7 {
@@ -120,19 +120,21 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     assert_eq!(body["tools"], json!([]));
                     assert!(body["context"]["parent_request_id"].is_string());
                     let content = &body["messages"][1]["content"];
-                    assert_eq!(content.as_array().unwrap().len(), 2);
+                    assert_eq!(
+                        content.as_array().unwrap().len(),
+                        if matches!(case, 9 | 12) { 3 } else { 2 }
+                    );
                     assert_eq!(content[0]["type"], "text");
                     assert_eq!(content[1]["type"], "image_url");
                     let url = content[1]["image_url"]["url"].as_str().unwrap();
                     let (prefix, encoded) = url.split_once(',').unwrap();
-                    assert_eq!(
-                        prefix,
-                        if jpeg {
-                            "data:image/jpeg;base64"
-                        } else {
-                            "data:image/png;base64"
-                        }
-                    );
+                    assert_eq!(prefix, "data:image/jpeg;base64");
+                    if matches!(case, 9 | 12) {
+                        assert!(content[2]["image_url"]["url"]
+                            .as_str()
+                            .unwrap()
+                            .starts_with("data:image/jpeg;base64,"));
+                    }
                     // Windows 的反向解碼驗證完整來源 bytes，而不只驗證前綴。
                     use windows_sys::Win32::Security::Cryptography::*;
                     let mut decoded = vec![0u8; encoded.len()];
@@ -151,7 +153,12 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                         },
                         0
                     );
-                    assert_eq!(&decoded[..size as usize], bytes.as_slice());
+                    assert!(decoded[..size as usize].starts_with(&[0xff, 0xd8]));
+                    assert!(decoded[..size as usize].ends_with(&[0xff, 0xd9]));
+                    assert!(size as usize <= 5_000_000);
+                    if case == 5 {
+                        assert!(size < 50_000, "metadata padding is not uploaded");
+                    }
                     assert_eq!(
                         body["messages"].as_array().unwrap().len(),
                         2,
@@ -175,18 +182,21 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                             json!({"message":"圖片測試完成","artifacts":[]}),
                         )
                     } else if case == 9 {
-                        // 正常任務可逐張／逐焦點辨識，額度仍有界；第21次不得送出。
+                        // 正常任務可逐張／逐焦點辨識，額度仍有界；50次雙圖共100張，第51次不得送出。
                         match parents {
                             1 => super::native::call(&body, "list_files", json!({"path":""})),
-                            2..=22 => super::native::call(
+                            2..=52 => super::native::call(
                                 &body,
                                 "analyze_image",
-                                json!({"path":name,"focus":format!("核對第{}個細節", parents-1)}),
+                                json!({"path":name,"compare_path":"second.png","focus":format!("核對第{}個細節", parents-1)}),
                             ),
                             _ => {
                                 let result = super::native::last_result(&body);
                                 assert_eq!(result["ok"], false);
-                                assert!(result["error"].as_str().unwrap().contains("最多 20 次"));
+                                assert!(result["error"]
+                                    .as_str()
+                                    .unwrap()
+                                    .contains("最多辨識100張"));
                                 super::native::call(
                                     &body,
                                     "finish",
@@ -253,10 +263,10 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                                     let result = super::native::last_result(&body);
                                     assert_eq!(
                                         result["ok"],
-                                        case < 3 || matches!(case, 5 | 8),
+                                        case < 3 || matches!(case, 5 | 8 | 12),
                                         "{result}"
                                     );
-                                    if case < 3 || matches!(case, 5 | 8) {
+                                    if case < 3 || matches!(case, 5 | 8 | 12) {
                                         assert!(result["result"]["image"]["sha256"]
                                             .as_str()
                                             .is_some_and(|s| s.len() == 64));
@@ -272,7 +282,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                                     super::native::call(
                                         &body,
                                         "analyze_image",
-                                        json!({"path":if case==3 {"../outside.png"} else if case==8 && parents==3 {"second.png"} else {name},"focus":"描述顏色"}),
+                                        json!({"compare_path":if case==12 {Some("second.png")}else{None},"path":if case==3 {"../outside.png"} else if case==8 && parents==3 {"second.png"} else {name},"focus":"描述顏色"}),
                                     )
                                 }
                             }
@@ -361,21 +371,21 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         children,
         match case {
             8 => 2,
-            9 => 20,
+            9 => 50,
             10 => 1,
-            _ => usize::from(case < 3 || matches!(case, 5 | 7)),
+            _ => usize::from(case < 3 || matches!(case, 5 | 7 | 12)),
         },
         "快取與續接不得重送圖片"
     );
     assert_eq!(
         parents,
         if case == 9 {
-            23
+            53
         } else if case == 10 {
             4
         } else if case == 11 {
             2
-        } else if case < 3 || matches!(case, 5 | 8) {
+        } else if case < 3 || matches!(case, 5 | 8 | 12) {
             4
         } else if case == 6 {
             1
@@ -383,7 +393,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
             3
         }
     );
-    println!("PASS vision case {case}: {parents} parent POST, {children} image POST; exact bytes, cache and request identity checked.");
+    println!("PASS vision case {case}: {parents} parent POST, {children} image POST; converted JPEG, cache and request identity checked.");
     Ok(())
 }
 
