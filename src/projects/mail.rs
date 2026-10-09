@@ -46,6 +46,9 @@ pub struct Header {
     pub subject: String,
     pub sender: String,
     pub recipients: Vec<String>,
+    /// Table提供的是To/CC顯示字串，不將兩個欄位誤報成兩位收件者。
+    #[serde(default)]
+    pub recipients_are_groups: bool,
     pub sent_at: String,
     pub received_at: String,
     pub entry: String,
@@ -62,7 +65,7 @@ impl Header {
             .map(|s| s.chars().take(500).collect::<String>())
             .collect();
         json!({"mail_id":self.id,"thread_id":self.thread_id,"folder_id":self.folder_id,"subject":self.subject,
-            "sender":self.sender,"recipients":recipients,"recipient_count":self.recipients.len(),"recipients_preview_truncated":self.recipients.len()>8 || self.recipients.iter().any(|s|s.chars().count()>500),"sent_at":self.sent_at,
+            "sender":self.sender,"recipients":recipients,"recipient_count":(!self.recipients_are_groups).then_some(self.recipients.len()),"recipients_format":if self.recipients_are_groups {"Outlook To/CC顯示文字（可能截短），非解析後地址清單"}else{"addresses"},"recipients_preview_truncated":self.recipients_are_groups || self.recipients.len()>8 || self.recipients.iter().any(|s|s.chars().count()>500),"sent_at":self.sent_at,
             "received_at":self.received_at,"revision":super::text::revision(&self.modified),"dedup_available":self.duplicate_key.is_some()})
     }
 }

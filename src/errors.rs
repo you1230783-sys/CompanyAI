@@ -51,6 +51,14 @@ pub fn description(code: &str) -> (&'static str, &'static str) {
             "Office 或 Outlook 操作未完成。",
             "請確認桌面版應用程式可開啟、文件沒有提示視窗，並依原操作重試。",
         ),
+        "11" => (
+            "程式區段或副本版本不一致，未套用修改。",
+            "沿用目前copy_id及section_id；只重新讀取要修改的小段，不需重建副本。",
+        ),
+        "12" => (
+            "Outlook 本機範圍或隱藏副本比對未完成。",
+            "請確認 Classic Outlook 已開啟且郵件已載入；逾時可縮小日期範圍，未核對完成的資料不會送給AI。",
+        ),
         _ => (
             "操作未完成，原因尚無法確定。",
             "請保留畫面提示並匯出錯誤資訊，交由維護者確認。",
@@ -62,6 +70,22 @@ pub fn description(code: &str) -> (&'static str, &'static str) {
 pub fn classify(stage: &str, raw: &str) -> &'static str {
     let text = raw.to_lowercase();
     let has = |words: &[&str]| words.iter().any(|word| text.contains(word));
+    if has(&[
+        "程式區段",
+        "區段雜湊不符",
+        "py副本版本不符",
+        "有效的1起算行號",
+    ]) {
+        return "11";
+    }
+    if has(&[
+        "outlook本機處理",
+        "outlook 隱藏副本",
+        "隱藏副本索引",
+        "隱藏郵件識別",
+    ]) {
+        return "12";
+    }
     if has(&[
         "access is denied",
         "access denied",

@@ -51,7 +51,7 @@ struct Search<'a> {
     excluded: HashSet<(String, String)>,
     candidates: Vec<Candidate>,
     truncated: bool,
-    hidden: super::super::exclusions::Exclusions,
+    hidden: super::super::exclusions::Deferred<'a>,
 }
 
 fn count(collection: &IDispatch) -> AppResult<i32> {
@@ -252,7 +252,7 @@ pub(super) fn list(
         excluded: HashSet::new(),
         candidates: Vec::new(),
         truncated: false,
-        hidden: super::super::exclusions::Exclusions::from_app(
+        hidden: super::super::exclusions::Deferred::from_app(
             app,
             &super::super::privacy::Policy::current()?,
             cancel,

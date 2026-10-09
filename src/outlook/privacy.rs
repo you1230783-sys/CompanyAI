@@ -62,7 +62,11 @@ impl Policy {
     }
 
     pub fn revision(&self) -> String {
-        crate::projects::text::revision(&format!("{}:{:?}", self.configured, self.allowed))
+        // 排除規則改版時，舊快照必須重新核對，不能沿用舊四欄位可見清單。
+        crate::projects::text::revision(&format!(
+            "subject-senton-seconds-v2:{}:{:?}",
+            self.configured, self.allowed
+        ))
     }
 
     pub fn permits(&self, store: &str, entry: &str) -> bool {

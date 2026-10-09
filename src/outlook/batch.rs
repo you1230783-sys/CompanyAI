@@ -218,7 +218,7 @@ pub fn list(
         return query::list(&app, period, unread, scope, cancel);
     }
     let hidden =
-        super::exclusions::Exclusions::from_app(&app, &super::privacy::Policy::current()?, cancel)?;
+        super::exclusions::Deferred::from_app(&app, &super::privacy::Policy::current()?, cancel)?;
     let mut list = MailList {
         scope: "Outlook 目前選取".into(),
         notice: hidden.notices().join("；"),
@@ -309,7 +309,7 @@ pub fn export(
         return Err("原郵件已移動或不存在，請重新取得清單。".into());
     }
     super::privacy::require_item(&super::privacy::Policy::load(root)?, &item)?;
-    super::exclusions::Exclusions::from_app(&app, &super::privacy::Policy::load(root)?, cancel)?
+    super::exclusions::Deferred::from_app(&app, &super::privacy::Policy::load(root)?, cancel)?
         .require(&item)?;
     // 快照關鍵欄位改變時停止，不能把新內容當成先前授權的郵件。
     if text(&item, "Subject", 3000)? != mail.preview.subject

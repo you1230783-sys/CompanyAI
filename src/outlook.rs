@@ -4,7 +4,9 @@ pub mod batch;
 mod exclusions;
 pub mod msg;
 pub mod privacy;
+pub mod process;
 pub mod project;
+mod table;
 use crate::{wide, AppResult};
 use serde::Serialize;
 use windows::{
@@ -120,7 +122,7 @@ pub fn read_selected(expected_id: Option<&str>, include_body: bool) -> AppResult
     }
     let policy = privacy::Policy::current()?;
     privacy::require_item(&policy, &mail)?;
-    exclusions::Exclusions::from_app(&app, &policy, &std::sync::atomic::AtomicBool::new(false))?
+    exclusions::Deferred::from_app(&app, &policy, &std::sync::atomic::AtomicBool::new(false))?
         .require(&mail)?;
     let entry_id = text(&mail, "EntryID", 4096)?;
     if expected_id.is_some_and(|id| id != entry_id) {
@@ -163,7 +165,7 @@ fn validate_preview(mail: &MailPreview) -> AppResult<()> {
             &mut [mail.store_id.as_str().into(), mail.entry_id.as_str().into()],
         )?)?;
         privacy::require_item(&policy, &item)?;
-        exclusions::Exclusions::from_namespace(
+        exclusions::Deferred::from_namespace(
             &ns,
             &policy,
             &std::sync::atomic::AtomicBool::new(false),

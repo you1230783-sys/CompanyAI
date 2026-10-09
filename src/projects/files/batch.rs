@@ -83,7 +83,7 @@ fn pair_map<T: Sync, R: Send>(items: &[T], work: impl Fn(&T) -> R + Sync) -> Vec
 
 fn compute(
     project: &Project,
-    copies: &BTreeMap<String, (String, String)>,
+    copies: &BTreeMap<String, (String, String, Option<drafts::Draft>)>,
     request: &Tool,
     executable: &Path,
     cancel: &AtomicBool,
@@ -131,7 +131,7 @@ fn compute(
         })));
     }
     let mut broker = Broker::new(project.clone(), crate::jobs::new_id()?)?;
-    for (id, (name, text)) in copies {
+    for (id, (name, text, draft)) in copies {
         broker.copies.insert(
             id.clone(),
             Copy {
@@ -142,7 +142,8 @@ fn compute(
                 saved_revision: None,
                 python_checked_revision: None,
                 code_review: Default::default(),
-                draft: None,
+                draft: draft.clone(),
+                code_sections: vec![],
                 paths: vec![],
             },
         );
@@ -235,7 +236,12 @@ impl Broker {
             .copies
             .iter()
             .filter(|(_, c)| c.office.is_none())
-            .map(|(id, c)| (id.clone(), (c.name.clone(), c.text.clone())))
+            .map(|(id, c)| {
+                (
+                    id.clone(),
+                    (c.name.clone(), c.text.clone(), c.draft.clone()),
+                )
+            })
             .collect();
         let mut results = Vec::new();
         for (group, jobs) in requests.chunks(2).enumerate() {

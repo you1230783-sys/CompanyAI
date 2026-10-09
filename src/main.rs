@@ -23,6 +23,12 @@ fn main() {
         }
         return;
     }
+    if arguments.as_slice() == ["--outlook-worker"] {
+        if company_ai::outlook::process::run_worker().is_err() {
+            std::process::exit(1);
+        }
+        return;
+    }
     if arguments.as_slice() == ["--prepare-python-runtime"]
         || arguments.as_slice() == ["--python-self-check"]
     {

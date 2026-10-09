@@ -323,6 +323,7 @@ mod tests {
                     subject: "主題".into(),
                     sender: "a@test".into(),
                     recipients: vec!["b@test".into()],
+                    recipients_are_groups: false,
                     sent_at: format!("{i:05}"),
                     received_at: format!("{i:05}"),
                     entry: id.clone(),

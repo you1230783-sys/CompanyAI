@@ -1,7 +1,7 @@
 {
   "child_loopback_connected": false,
   "corrected": {
-    "copy_id": "b5c0553b3f289e51d7f67337465e2f39",
+    "copy_id": "7bbf0e1be2a260e8399c18b9c83fcd57",
     "revision": "0caa6a244c9cfff84615518caf204ad011dd5601260f5aed845298d5b021353b",
     "test_report": {
       "functional_tests_run": true,
@@ -65,7 +65,7 @@
     }
   },
   "detected": {
-    "copy_id": "b5c0553b3f289e51d7f67337465e2f39",
+    "copy_id": "7bbf0e1be2a260e8399c18b9c83fcd57",
     "revision": "9897c46aaffedecab689258b630c936164898c57c62c49b8ba762962f8fea81f",
     "test_report": {
       "functional_tests_run": true,
@@ -75,7 +75,7 @@
       "tests": [
         {
           "failures": [
-            "Traceback (most recent call last):\n  File \"<acceptance-test>\", line 4, in test_default\n  File \"C:\\Users\\aszx1\\AppData\\Local\\Packages\\companyai.text.9054a17ae68a0932622695e8c2bf2a99\\AC\\CodeTests\\case_0\\target.py\", line 2, in convert\nTypeError: unsupported operand type(s) for *: 'NoneType' and 'int'\n"
+            "Traceback (most recent call last):\n  File \"<acceptance-test>\", line 4, in test_default\n  File \"C:\\Users\\aszx1\\AppData\\Local\\Packages\\companyai.text.5ad77a6a5621dcdbbf1d975012c5d9d2\\AC\\CodeTests\\case_0\\target.py\", line 2, in convert\nTypeError: unsupported operand type(s) for *: 'NoneType' and 'int'\n"
           ],
           "id": "defaults",
           "mocked_dependencies": [],
@@ -90,8 +90,9 @@
       ]
     }
   },
+  "draft_path_alias": true,
   "no_evidence": {
-    "copy_id": "b5c0553b3f289e51d7f67337465e2f39",
+    "copy_id": "7bbf0e1be2a260e8399c18b9c83fcd57",
     "revision": "0caa6a244c9cfff84615518caf204ad011dd5601260f5aed845298d5b021353b",
     "test_report": {
       "functional_tests_run": true,
@@ -131,5 +132,9 @@
     }
   },
   "parent_loopback_control": true,
-  "result": "PASS"
+  "read_past_eof_clipped": true,
+  "result": "PASS",
+  "same_revision_syntax_reused": true,
+  "section_id_edit": true,
+  "stale_section_rejected": true
 }

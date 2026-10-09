@@ -676,6 +676,9 @@ struct Copy {
     code_review: super::code_review::State,
     #[serde(default)]
     draft: Option<drafts::Draft>,
+    /// 目前正在編輯／驗證的小段；與副本一起加密保存，避免查範例後遺失原文。
+    #[serde(default)]
+    code_sections: Vec<code_sections::Section>,
     paths: Vec<String>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -729,6 +732,7 @@ pub struct Broker {
     excel_plans: BTreeMap<String, super::excel_plan::Plan>,
     file_waiter: Option<super::interaction::FileWaiter>,
     outlook: super::mail::Session,
+    outlook_process: Option<crate::outlook::process::Process>,
     pub(super) mail_notes: super::mail_notes::State,
     mail_draft: Option<drafts::Draft>,
     log_cursors: BTreeMap<String, super::logs::Cursor>,
@@ -769,6 +773,7 @@ impl Broker {
             excel_plans: BTreeMap::new(),
             file_waiter: None,
             outlook: super::mail::Session::default(),
+            outlook_process: None,
             log_cursors: BTreeMap::new(),
             server_pdf: None,
             memory: None,
@@ -924,6 +929,7 @@ impl Broker {
             .iter()
             .map(|(id, copy)| json!({
                 "copy_id":id,"name":copy.name,"revision":text::revision(&copy.text),
+                "code_state":copy.name.to_ascii_lowercase().ends_with(".py").then(||code_sections::code_state(copy)),
                 "saved_revision":copy.saved_revision,"paths":copy.paths,"draft_path":copy.draft.as_ref().map(|d|&d.path),"syntax_checked":copy.python_checked_revision.as_ref()==Some(&text::revision(&copy.text)),"requirements":copy.code_review.requirements.iter().map(|r|json!({"id":r.id,"origin":r.origin,"description":r.description.chars().take(100).collect::<String>()})).collect::<Vec<_>>(),"review_current":copy.code_review.reviewed_revision.as_ref()==Some(&text::revision(&copy.text)),"test_status":copy.code_review.tests.iter().map(|t|json!({"id":t["id"],"status":t["status"]})).collect::<Vec<_>>()
             }))
             .collect::<Vec<_>>())
@@ -1363,6 +1369,9 @@ impl Broker {
         result: &Value,
     ) -> AppResult<()> {
         self.cached_result(id, tool)?;
+        if matches!(tool, Tool::ReadCodeSection { .. }) && result["ok"] == true {
+            self.retain_code_section(&result["result"]);
+        }
         // 寫入只記實際成功操作及當時選定草稿；這是可追溯關聯，不宣稱每條文字已核對。
         if result["ok"] == true
             && matches!(
@@ -1412,6 +1421,16 @@ impl Broker {
         worker: &mut Worker,
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
+        self.execute_progress(id, tool, worker, cancel, &mut |_| {})
+    }
+    pub fn execute_progress(
+        &mut self,
+        id: &str,
+        tool: &Tool,
+        worker: &mut Worker,
+        cancel: &AtomicBool,
+        notify: &mut dyn FnMut(&str),
+    ) -> AppResult<Value> {
         self.reauthorize_outlook(cancel, self.chart_deadline)?;
         crate::jobs::validate_id(id)?;
         // 連重播舊工具結果都先經本次同意；授權不隨 checkpoint 恢復。
@@ -1438,6 +1457,14 @@ impl Broker {
         let outcome = loop {
             let result = if let Tool::RunBatch { tasks } = tool {
                 self.run_batch(id, tasks, worker.executable(), cancel)
+            } else if matches!(
+                tool,
+                Tool::OutlookFolders { .. }
+                    | Tool::OutlookHeaders { .. }
+                    | Tool::OutlookCompare { .. }
+                    | Tool::OutlookRead { .. }
+            ) {
+                self.outlook_tool(tool, worker.executable(), cancel, notify)
             } else {
                 self.perform(tool, worker, cancel)
             };
@@ -1499,6 +1526,8 @@ impl Broker {
         cancel: &AtomicBool,
         worker: &mut Worker,
     ) -> AppResult<String> {
+        let canonical = self.code_copy_id(path).unwrap_or_else(|| path.into());
+        let path = canonical.as_str();
         if let Some(copy) = self.copies.get(path) {
             if extension(Path::new(&copy.name))? != "md" {
                 self.txt_context = true;
@@ -1580,6 +1609,55 @@ impl Broker {
             return Err("此Excel已建立欄位規劃，請用export_planned_excel，之後chart_dataset會核對鎖定的X/Y；不要改走未帶規劃的舊工具。".into());
         }
         Ok(())
+    }
+    fn outlook_tool(
+        &mut self,
+        tool: &Tool,
+        executable: &Path,
+        cancel: &AtomicBool,
+        notify: &mut dyn FnMut(&str),
+    ) -> AppResult<Value> {
+        if let Tool::OutlookRead { mail_id, offset } = tool {
+            self.txt_context = true;
+            if let Some(note) = self.reuse_mail_note(mail_id, *offset)? {
+                return Ok(note);
+            }
+        }
+        let mut reader = crate::outlook::process::Reader {
+            process: &mut self.outlook_process,
+            executable,
+            progress: notify,
+            deadline: crate::outlook::process::Reader::deadline(),
+        };
+        match tool {
+            Tool::OutlookFolders {
+                scope,
+                parent_id,
+                offset,
+            } => self
+                .outlook
+                .folders(&mut reader, scope, parent_id.as_deref(), *offset, cancel),
+            Tool::OutlookHeaders {
+                folder_id,
+                start_date,
+                end_date,
+                cursor,
+            } => self.outlook.headers(
+                &mut reader,
+                folder_id,
+                start_date,
+                end_date,
+                cursor.as_deref(),
+                cancel,
+            ),
+            Tool::OutlookCompare { mail_ids, offset } => {
+                self.outlook.compare(&mut reader, mail_ids, *offset, cancel)
+            }
+            Tool::OutlookRead { mail_id, offset } => {
+                self.outlook.body(&mut reader, mail_id, *offset, cancel)
+            }
+            _ => Err("不是Outlook唯讀工具。".into()),
+        }
     }
     fn perform(
         &mut self,
@@ -2302,6 +2380,8 @@ impl Broker {
                 Ok(json!({"entries":entries,"truncated":truncated}))
             }
             Tool::ReadFile { path, offset } => {
+                let canonical = self.code_copy_id(path).unwrap_or_else(|| path.clone());
+                let path = &canonical;
                 if super::vision::input::supported(Path::new(path)) {
                     // 與 LOG 的專用閱讀工具相同，回傳明確導引，不把二進位當文字。
                     // 仍驗證專案邊界、檔案與格式；此處不發出任何圖片辨識請求。
@@ -2350,20 +2430,36 @@ impl Broker {
             } => self.read_code_section(path, *first_line, *last_line, cancel, worker),
             Tool::EditCodeSection {
                 copy_id,
+                section_id,
                 revision,
                 first_line,
                 last_line,
                 section_hash,
                 replacement,
-            } => self.edit_code_section(
-                copy_id,
-                revision,
-                *first_line,
-                *last_line,
-                section_hash,
-                replacement,
-            ),
+            } => {
+                if let Some(section_id) = section_id {
+                    if !revision.is_empty()
+                        || *first_line != 0
+                        || *last_line != 0
+                        || !section_hash.is_empty()
+                    {
+                        return Err("程式區段代號模式只需copy_id、section_id、replacement，請省略另填的行號與雜湊。".into());
+                    }
+                    self.replace_code_section(copy_id, section_id, replacement)
+                } else {
+                    self.edit_code_section(
+                        copy_id,
+                        revision,
+                        *first_line,
+                        *last_line,
+                        section_hash,
+                        replacement,
+                    )
+                }
+            }
             Tool::FindText { path, text: needle } => {
+                let canonical = self.code_copy_id(path).unwrap_or_else(|| path.clone());
+                let path = &canonical;
                 if needle.is_empty() {
                     return Err("搜尋文字不可空白。".into());
                 }
@@ -2375,7 +2471,7 @@ impl Broker {
                     .map(|(index, _)| content[..index].chars().count())
                     .collect();
                 Ok(
-                    json!({"matches":matches,"total_lines":content.split_inclusive('\n').count(),"positions":positions.iter().take(100).collect::<Vec<_>>(),"truncated":positions.len()>100,"revision":text::revision(&content)}),
+                    json!({"path":path,"copy_id":self.code_copy_id(path),"source_kind":if self.copies.contains_key(path){"working_copy"}else{"original_read_only"},"matches":matches,"total_lines":content.split_inclusive('\n').count(),"positions":positions.iter().take(100).collect::<Vec<_>>(),"truncated":positions.len()>100,"revision":text::revision(&content)}),
                 )
             }
             Tool::CreateWorkingCopy { source, name } => {
@@ -2459,6 +2555,7 @@ impl Broker {
                         saved_revision: None,
                         python_checked_revision: None,
                         draft: None,
+                        code_sections: vec![],
                         paths: Vec::new(),
                     },
                 );
@@ -2915,6 +3012,7 @@ mod tests {
                 python_checked_revision: None,
                 code_review: Default::default(),
                 draft: None,
+                code_sections: vec![],
                 paths: vec![],
             },
         );

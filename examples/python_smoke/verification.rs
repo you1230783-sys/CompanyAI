@@ -71,14 +71,37 @@ pub(super) fn run(project: &Project, worker: &mut Worker) -> AppResult<()> {
         &mut broker,
         worker,
         "fix",
-        json!({"tool":"edit_code_section","copy_id":id,"revision":copy["revision"],"first_line":1,"last_line":2,"section_hash":section["section_hash"],"replacement":"def convert(value=0):\n    return value * 2\n"}),
+        json!({"tool":"edit_code_section","copy_id":id,"section_id":section["section_id"],"replacement":"def convert(value=0):\n    return value * 2\n"}),
     )?;
+    assert_eq!(fixed["state"]["draft_saved"], true);
+    let draft_path = fixed["draft_path"].as_str().unwrap();
+    let tail = call(
+        &mut broker,
+        worker,
+        "clip-eof",
+        json!({"tool":"read_code_section","path":draft_path,"first_line":4,"last_line":470}),
+    )?;
+    assert_eq!(tail["last_line"], 6);
+    assert_eq!(tail["copy_id"], id);
+    assert_eq!(tail["source_kind"], "working_copy");
+    let stale:Tool = serde_json::from_value(json!({"tool":"edit_code_section","copy_id":id,"section_id":section["section_id"],"replacement":"pass\n"})).unwrap();
+    assert_eq!(
+        broker.execute("stale-handle", &stale, worker, &AtomicBool::new(false))?["ok"],
+        false
+    );
     call(
         &mut broker,
         worker,
         "syntax-fixed",
         json!({"tool":"check_python","path":id,"revision":fixed["revision"]}),
     )?;
+    let reused = call(
+        &mut broker,
+        worker,
+        "syntax-reused",
+        json!({"tool":"check_python","path":draft_path,"revision":fixed["revision"]}),
+    )?;
+    assert_eq!(reused["reused"], true);
     let mut cases = cases.as_array().unwrap().clone();
     // AppContainer 的封鎖可能表現為逾時，而不是固定 Winsock 錯誤碼。
     // 以父程序可連線的真實 listener 作對照，並核對子程序未建立連線。
@@ -188,7 +211,7 @@ class Service(unittest.TestCase):
     std::fs::write(
         root.join("verification.json"),
         serde_json::to_vec_pretty(
-            &json!({"result":"PASS","parent_loopback_control":true,"child_loopback_connected":false,"detected":bad,"corrected":good,"no_evidence":no_evidence}),
+            &json!({"result":"PASS","parent_loopback_control":true,"child_loopback_connected":false,"section_id_edit":true,"stale_section_rejected":true,"draft_path_alias":true,"read_past_eof_clipped":true,"same_revision_syntax_reused":true,"detected":bad,"corrected":good,"no_evidence":no_evidence}),
         )
         .unwrap(),
     )

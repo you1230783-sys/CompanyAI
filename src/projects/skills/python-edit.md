@@ -2,13 +2,13 @@
 
 先create_working_copy，再plan_code_change記錄1–16項需求（id、description、origin=user/preserve/added）。使用者原始要求持續保留；不要自行加入功能後漏掉驗證。先前版本續接也要補需求。
 
-原件唯讀。find_text取得行號；read_code_section讀1起算、包含尾行的小段（最多200行／6000字）。edit_code_section帶copy_id、revision、section_hash與replacement，不重送舊全文。一次修改imports或一個函式，每次成功立即更新同一_AI_Output草稿，即使語法未完成也保留。續接沿用copies中的copy_id/draft_path，不重建副本，不反覆讀完整檔案。
+原件唯讀。find_text取得行號；read_code_section讀1起算、包含尾行的小段（最多200行／6000字）。edit_code_section優先只帶copy_id、section_id與replacement；程式會綁定正確版本、範圍與雜湊，不重送舊全文。一次修改imports或一個函式，每次成功立即更新同一_AI_Output草稿，即使語法未完成也保留。續接沿用copies中的copy_id/draft_path，不重建副本，不反覆讀完整檔案。每輪active_code保留目前版本的小段原文、區段代號與原生狀態；這是可用的原文，不需為找hash再讀。超過檔尾會自動截止，務必依回傳範圍使用。
 
 所有修改完成後check_python檢查內建Python 3.13的AST／compile與編碼，原文不執行。再review_code_change(copy_id,revision,checks=[])取得需求、真實副本差異與測試；摘要截斷時讀相關區段與呼叫處，核對預設值、輸出名稱及錯誤處理，不能只依進度筆記宣稱完成。
 
 ## 功能測試
 
-test_python傳copy_id、目前revision和1–4組tests。每組包含id、requirement_ids、code、mocked_dependencies；code最多12000 bytes，定義unittest.TestCase。工具提供unittest、mock、workspace與load_target(argv=None,as_main=False)。load_target載入完整目前副本，不能另抄一份函式測試；未載入副本、沒有案例或跳過案例不算通過。
+test_python傳copy_id、目前revision和1–4組tests。先直接提交一組最小但有意義的需求測試，取得結果後再補其他必要案例；不要等全部測試設計完才執行。同一版本語法通過不重跑check_python；讀過的測試契約已在active_code，不再查指南。每組包含id、requirement_ids、code、mocked_dependencies；code最多12000 bytes，定義unittest.TestCase。工具提供unittest、mock、workspace與load_target(argv=None,as_main=False)。load_target載入完整目前副本，不能另抄一份函式測試；未載入副本、沒有案例或跳過案例不算通過。
 
 ```python
 class Behavior(unittest.TestCase):

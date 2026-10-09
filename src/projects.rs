@@ -385,9 +385,15 @@ pub enum Tool {
     },
     EditCodeSection {
         copy_id: String,
+        #[serde(default)]
+        section_id: Option<String>,
+        #[serde(default)]
         revision: String,
+        #[serde(default)]
         first_line: usize,
+        #[serde(default)]
         last_line: usize,
+        #[serde(default)]
         section_hash: String,
         replacement: String,
     },

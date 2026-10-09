@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$TestVnc, [switch]$TestOffice, [string]$NetworkTestRoot)
 $ErrorActionPreference = 'Stop'
 if ($ValidateOnly -and $IncludeInstaller) { throw 'ValidateOnly cannot be combined with IncludeInstaller.' }
@@ -44,6 +44,30 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     & cargo build --workspace --release --frozen
     if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
     $exe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\release\company-ai.exe'
+    # 實際發行EXE的匿名管線與EOF退出也必須可用；無效要求不接觸使用者信箱。
+    $outlookProbe = New-Object Diagnostics.Process
+    $outlookProbe.StartInfo.FileName = $exe
+    $outlookProbe.StartInfo.Arguments = '--outlook-worker'
+    $outlookProbe.StartInfo.UseShellExecute = $false
+    $outlookProbe.StartInfo.CreateNoWindow = $true
+    $outlookProbe.StartInfo.WindowStyle = 'Hidden'
+    $outlookProbe.StartInfo.RedirectStandardInput = $true
+    $outlookProbe.StartInfo.RedirectStandardOutput = $true
+    try {
+        if (-not $outlookProbe.Start()) { throw 'Outlook helper did not start.' }
+        $outlookReply = $outlookProbe.StandardOutput.ReadToEndAsync()
+        $outlookProbe.StandardInput.WriteLine('{}')
+        $outlookProbe.StandardInput.Close()
+        if (-not $outlookProbe.WaitForExit(10000)) {
+            $outlookProbe.Kill()
+            throw 'Outlook helper did not exit on EOF.'
+        }
+        $outlookResult = $outlookReply.Result | ConvertFrom-Json
+        if ($outlookProbe.ExitCode -ne 0 -or -not $outlookResult.Done.Err) {
+            throw 'Outlook helper pipe protocol failed.'
+        }
+        Write-Host 'PASS Outlook helper: invalid request response and clean EOF exit; mailbox not accessed.'
+    } finally { $outlookProbe.Dispose() }
     & (Join-Path $PSScriptRoot 'Stage-Python.ps1') -ExecutableDirectory (Split-Path $exe -Parent)
     foreach ($argument in @('--prepare-python-runtime','--python-self-check')) {
         $pythonCheck = Start-Process -FilePath $exe -ArgumentList $argument -PassThru -Wait -WindowStyle Hidden
@@ -214,8 +238,8 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         resilience_checks = @('10/30/60/180/300 second production schedule and bounded retry metadata','confirmed transient upstream failure retries only inference, no repeated local edit','five retries exhausted then manual checkpoint continuation','restart during retry countdown and cancellation','unknown submission queries original ID without duplicate POST','quota/unknown-result terminal errors excluded and HTTP 401 pauses without retry','ten Outlook header pages survive compaction and restore; duplicate data warns at four and pauses at eight','local profile LM_AI_Projects same-day naming without overwriting existing files')
         analysis_checks = @('tool-derived coverage and bounded source ranges','record_analysis evidence resolves successful operation and JSON pointer','count reconciliation and zero-counterexample checks use stored numeric results','project method note deduplication and relevant recall in another conversation','goal correction marks prior conclusions stale','Big5 complete-line Python snapshots and over-77-MiB synthetic LOG','mapped drive to UNC resolution and repeated identical error notifications')
         image_read_checks = @('same owner/project/run/conversation parent binding for images and native delegation','converted JPEG 5,000,000-byte per-image and 8,000,000-byte pair limits','100-image cumulative budget exercised by fifty dual-image requests; fast-model prohibition and definite-rejection cleanup','ordinary file-list discovery, read_file metadata without upload, and basic analyze_image without loading a skill','list-only task does not submit images','native Outlook quick action and removal of image quick commands','local WIC JPEG conversion for JPEG/PNG/BMP/TIFF/GIF, first-frame scope and source preservation','same-model tool-free single or dual image child, text-only parent result and original-source hash','image cache and unknown request resume without repost','out-of-project and converted-oversize images rejected without image POST')
-        parallel_draft_checks = @('two actual isolated Python executions have overlapping measured intervals','bounded run_batch preserves child result order and independently reports failure','chart preparation plus next-file read and failed Python alongside successful Python','same batch replay reuses results without duplicate artifacts','line/section hash edits preserve CRLF and source revision','every Python edit saves the same draft before syntax validation; restore checks disk hash','later edits remove completed status until syntax is checked and saved again','hidden Outlook copies excluded by four local envelope fields without Message-ID; partial identity permits unrelated candidates, unknown identity is an error; COM fixture only')
-        code_verification_checks = @('actual source default bug detected despite valid syntax and corrected by small edit','revision-bound requirement and real-test evidence; fake passed evidence rejected','private scratch write/read; project source and loopback network denied','missing dependency reported unavailable without claiming success')
+        parallel_draft_checks = @('two actual isolated Python executions have overlapping measured intervals','bounded run_batch preserves child result order and independently reports failure','chart preparation plus next-file read and failed Python alongside successful Python','same batch replay reuses results without duplicate artifacts','line/section hash edits preserve CRLF and source revision','every Python edit saves the same draft before syntax validation; restore checks disk hash','later edits remove completed status until syntax is checked and saved again','hidden copies excluded by exact subject and SentOn seconds without address book; date Table batches and sorted fallback; COM fixture only')
+        code_verification_checks = @('section_id edit, stale handle rejection, draft path alias, EOF clipping and same-revision syntax reuse','bounded pinned source and current draft state survive history compaction and checkpoint restore','batch no-progress counted once per model round','real helper timeout and cancellation kill and reap the child','actual source default bug detected despite valid syntax and corrected by small edit','revision-bound requirement and real-test evidence; fake passed evidence rejected','private scratch write/read; project source and loopback network denied','missing dependency reported unavailable without claiming success')
         chart_transform_checks = @('locked Excel CSV keeps A/Index and D/Mean source roles while deriving Index 1','physical X/Y offset and numbering with horizontal-bar roles','all-series missing-row removal before shared numbering, zero preserved','native HTTP transform_chart and updated chart UI event','DPAPI persistence and original source preservation','PNG cache invalidation when transform changes','WebView2 editor validation, transformed plotting and PNG export','three five-point missing-value examples with unchanged choice submission')
         excel_chart_checks = @('locked source/header/time/X/Y plans, CSV schema and role enforcement','local half-open clock/elapsed filters with explicit scan limits','three actual Excel files with different column orders x five windows, fifteen exact charts','native chart style DPAPI persistence, original data and reset','six chart kinds, user axis ranges, reference lines and colors','native customized PNG callback and verified manual _AI_Output write')
         cargo_home = $env:CARGO_HOME

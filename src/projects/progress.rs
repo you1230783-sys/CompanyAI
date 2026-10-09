@@ -373,18 +373,24 @@ impl Progress {
                 .as_array()
                 .filter(|rows| rows.len() == tasks.len())
             {
+                let previous = self.no_progress;
                 let mut fresh = false;
+                let mut successful = false;
                 for (task, row) in tasks.iter().zip(rows) {
                     if let (Ok(request), Some(operation)) =
                         (task.request(), row["outcome"]["operation_id"].as_str())
                     {
+                        successful |= row["outcome"]["ok"] == true;
                         fresh |= self.observe(operation, &request, &row["outcome"]);
                     }
                 }
                 self.pending_history_id = Some(id.into());
-                if fresh {
-                    self.no_progress = 0;
-                }
+                // 子項照常記錄真實閱讀與失敗；同一輪批次最多扣一次無進展額度。
+                self.no_progress = if fresh {
+                    0
+                } else {
+                    previous + usize::from(successful)
+                };
                 return fresh;
             }
         }
@@ -424,7 +430,11 @@ impl Progress {
             | Tool::ReadCodeSection { path, .. } = tool
             {
                 let revision = info["revision"].as_str().unwrap_or("");
-                let key = path.replace('\\', "/").to_lowercase();
+                let key = info["path"]
+                    .as_str()
+                    .unwrap_or(path)
+                    .replace('\\', "/")
+                    .to_lowercase();
                 let reading = self.readings.entry(key.clone()).or_default();
                 if reading.revision != revision {
                     if !reading.revision.is_empty() {
@@ -656,6 +666,38 @@ impl Progress {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn repeated_batch_counts_one_decision_and_failed_children_do_not_consume_stall_budget() {
+        let mut state = Progress::new(vec![]);
+        let task = |i| super::super::files::batch::Task {
+            task_id: format!("child{i}"),
+            tool: "read_code_section".into(),
+            arguments_json: json!({"path":"copy","first_line":1,"last_line":10}).to_string(),
+        };
+        let tool = Tool::RunBatch {
+            tasks: (0..4).map(task).collect(),
+        };
+        for turn in 0..9 {
+            let rows:Vec<_> = (0..4).map(|i|json!({"outcome":{"operation_id":format!("op{turn}-{i}"),"ok":true,"result":{"revision":"same","offset":0,"next_offset":20,"total":20}}})).collect();
+            let fresh = state.observe(
+                &format!("batch{turn}"),
+                &tool,
+                &json!({"ok":true,"result":{"tasks":rows}}),
+            );
+            assert_eq!(fresh, turn == 0);
+            assert_eq!(state.no_progress, turn);
+        }
+        assert!(state.stalled());
+        state.resume_segment();
+        let rows:Vec<_>=(0..4).map(|i|json!({"outcome":{"operation_id":format!("failed{i}"),"ok":false,"error":"bounds"}})).collect();
+        state.observe(
+            "fail-batch",
+            &tool,
+            &json!({"ok":true,"result":{"tasks":rows}}),
+        );
+        assert_eq!(state.no_progress, 0);
+        assert_eq!(state.other_failures, 4);
+    }
     #[test]
     fn outlook_pages_are_progress_and_repeated_pages_warn_then_pause_after_reload() {
         let mut state = Progress::new(vec![Message::user("整理十頁標題")]);

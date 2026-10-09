@@ -9,11 +9,12 @@ impl Broker {
         cancel: &AtomicBool,
         worker: &mut Worker,
     ) -> AppResult<Value> {
+        let canonical = self.code_copy_id(path).unwrap_or_else(|| path.into());
+        let path = canonical.as_str();
         let (content, encoding) = if let Some(copy) = self.copies.get_mut(path) {
             if extension(Path::new(&copy.name))? != "py" {
                 return Err("語法檢查只支援PY工作副本。".into());
             }
-            copy.python_checked_revision = None;
             (copy.text.clone(), copy.encoding)
         } else {
             if extension(Path::new(path))? != "py" {
@@ -25,6 +26,15 @@ impl Broker {
             return Err("Python版本已改變，請重新讀取再檢查。".into());
         }
         let bytes = text::encode(&content, encoding)?;
+        if self
+            .copies
+            .get(path)
+            .is_some_and(|c| c.python_checked_revision.as_deref() == Some(revision))
+        {
+            return Ok(
+                json!({"path":path,"revision":revision,"syntax_valid":true,"source_executed":false,"reused":true,"notice":"同一版本語法已通過；請依需求提交功能測試，不重複檢查。"}),
+            );
+        }
         let response = super::super::python::execute(
             include_str!("../python/check_source.py"),
             json!([{"name":"source","kind":"text","text":content,"encoded_hex":super::super::python::hex(&bytes)}]),

@@ -140,6 +140,7 @@ impl Broker {
         let copy = self.copies.get_mut(id).ok_or("工作副本不存在。")?;
         copy.draft = Some(draft.clone());
         copy.text = next.into();
+        super::code_sections::refresh_sections(id, copy);
         copy.python_checked_revision = None;
         copy.code_review.invalidate();
         copy.saved_revision = None;
@@ -181,6 +182,7 @@ mod tests {
                 python_checked_revision: None,
                 code_review: Default::default(),
                 draft: None,
+                code_sections: vec![],
                 paths: vec![],
             },
         );
@@ -200,10 +202,23 @@ mod tests {
             "def unfinished(:\r\n"
         );
         assert_eq!(result["syntax_checked"], false);
+        broker.loaded_skills = vec!["python-edit".into()];
+        let before = broker.code_work_context().unwrap();
+        assert_eq!(before["active_code"][0]["state"]["draft_saved"], true);
+        assert_eq!(
+            before["active_code"][0]["sections"][0]["text"],
+            "def unfinished(:\r\n"
+        );
         let mut resumed = Broker::new(project, "run".into()).unwrap();
         resumed
             .restore(broker.saved().unwrap(), &AtomicBool::new(false))
             .unwrap();
+        assert_eq!(
+            resumed.code_work_context().unwrap(),
+            before,
+            "續接時原文與測試格式不能因工具歷史縮短而遺失"
+        );
+        assert_eq!(resumed.code_copy_id(&path).as_deref(), Some("copy"));
         // 模擬上一版已發布，接續修改必須撤回完成標記，但保留同一草稿檔。
         resumed.published.push(path.clone());
         resumed

@@ -8,6 +8,114 @@ use windows::Win32::Foundation::{DISP_E_MEMBERNOTFOUND, E_NOTIMPL};
 type Handler = Box<dyn Fn(&[VARIANT]) -> ComResult<VARIANT>>;
 
 #[test]
+fn table_dates_page_in_hundreds_and_fallback_stops_before_start() {
+    use crate::outlook::table;
+    let start = NaiveDate::from_ymd_opt(2026, 9, 1).unwrap();
+    let end = NaiveDate::from_ymd_opt(2026, 9, 30).unwrap();
+    let base = start
+        .signed_duration_since(NaiveDate::from_ymd_opt(1899, 12, 30).unwrap())
+        .num_days() as f64;
+    // 每日十封，跨整月與上下界，必須經過多次GetArray而不是只看前100封。
+    let mails: Vec<_> = (-10..40)
+        .flat_map(|day| {
+            (0..10).map(move |i| {
+                dispatch(vec![
+                    fixed("EntryID", format!("{day}-{i}").as_str()),
+                    fixed("MessageClass", "IPM.Note"),
+                    fixed("Subject", format!("主題{day}-{i}").as_str()),
+                    fixed("SentOn", base + day as f64 + i as f64 / 86400.0),
+                    fixed("LastModificationTime", base + 50.0),
+                ])
+            })
+        })
+        .collect();
+    let ns = dispatch(vec![]); // 沒有GetItemFromID或地址簿；短標題必須全部走批次。
+    for fallback in [false, true] {
+        let values = mails.clone();
+        let target = dispatch(vec![
+            fixed("StoreID", "s"),
+            (
+                "GetTable",
+                Box::new(move |args| {
+                    if fallback && !args.is_empty() {
+                        return Err(Error::from_hresult(E_NOTIMPL));
+                    }
+                    Ok(VARIANT::from(table_fixture(
+                        values.clone(),
+                        args.first().map(argument_text),
+                    )))
+                }),
+            ),
+        ]);
+        let rows = table::scan(
+            &ns,
+            &target,
+            "SentOn",
+            Some((start, end)),
+            false,
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        assert_eq!(rows.len(), 300);
+        assert!(rows
+            .iter()
+            .all(|r| r.sent.date() >= start && r.sent.date() <= end));
+        assert_eq!(rows[0].subject, "主題29-9");
+        assert_eq!(rows.last().unwrap().subject, "主題0-0");
+    }
+}
+
+#[test]
+fn hidden_index_revalidates_same_count_changes_and_sent_day_bounds() {
+    use crate::outlook::{
+        exclusions::Exclusions,
+        privacy::{self, Policy},
+    };
+    let subject = Rc::new(RefCell::new("before".to_string()));
+    let changing = subject.clone();
+    let item = dispatch(vec![
+        (
+            "Subject",
+            Box::new(move |_| Ok(changing.borrow().as_str().into())),
+        ),
+        fixed("SentOn", 46000.0),
+        fixed("EntryID", "same-id"),
+        fixed("LastModificationTime", 46001.0),
+    ]);
+    let root = folder(
+        "s",
+        "root",
+        vec![folder("s", "hidden", vec![], vec![item], 0)],
+        vec![],
+        0,
+    );
+    let app = app(
+        root.clone(),
+        root.clone(),
+        vec![dispatch(vec![fixed("GetRootFolder", root)])],
+    );
+    let ns = object(&get(&app, "GetNamespace", &mut ["MAPI".into()]).unwrap()).unwrap();
+    let policy = Policy {
+        configured: true,
+        allowed: [privacy::key("s", "root")].into_iter().collect(),
+    };
+    let day = crate::outlook::project::variant_time(&46000.0.into())
+        .unwrap()
+        .date();
+    let candidate = |name: &str| dispatch(vec![fixed("Subject", name), fixed("SentOn", 46000.0)]);
+    let load =
+        |range| Exclusions::from_range(&ns, &policy, Some(range), &AtomicBool::new(false)).unwrap();
+    assert!(load((day, day)).contains(&candidate("before")).unwrap());
+    *subject.borrow_mut() = "after".into();
+    let changed = load((day, day));
+    assert!(!changed.contains(&candidate("before")).unwrap());
+    assert!(changed.contains(&candidate("after")).unwrap());
+    assert!(!load((day.succ_opt().unwrap(), day.succ_opt().unwrap()))
+        .contains(&candidate("after"))
+        .unwrap());
+}
+
+#[test]
 fn hidden_duplicates_are_removed_across_stores_before_body_access() {
     use crate::outlook::{
         exclusions::Exclusions,
@@ -116,7 +224,7 @@ fn hidden_duplicates_are_removed_across_stores_before_body_access() {
 }
 
 #[test]
-fn partial_hidden_identity_quarantines_only_uncertain_candidates() {
+fn subject_and_sent_time_need_no_sender_or_recipient_properties() {
     use crate::outlook::{
         exclusions::Exclusions,
         privacy::{self, Policy},
@@ -146,28 +254,22 @@ fn partial_hidden_identity_quarantines_only_uncertain_candidates() {
         Exclusions::from_app(&application, &policy, &AtomicBool::new(false))
     };
     let index = index_for(partial).unwrap();
-    assert!(index.notices()[0].contains("寄件地址"));
-    assert!(index.notices()[0].contains("收件地址"));
-    assert!(!index.notices()[0].contains("隱藏主題"));
     assert!(index
         .contains(&dispatch(vec![
             fixed("Subject", "隱藏主題"),
             fixed("SentOn", 46000.0)
         ]))
-        .is_err());
+        .unwrap());
     for i in 0..31 {
         assert!(!index
-            .contains(&dispatch(vec![fixed(
-                "Subject",
-                format!("其他主題{i}").as_str()
-            )]))
+            .contains(&dispatch(vec![
+                fixed("Subject", format!("其他主題{i}").as_str()),
+                fixed("SentOn", 46000.0)
+            ]))
             .unwrap());
     }
-    // 完全無法辨識的隱藏項目仍須明確失敗，不把未知數量回傳為零。
-    let error = index_for(dispatch(vec![fixed("Class", 43i32)]))
-        .err()
-        .unwrap();
-    assert!(error.contains("郵件數量未知"));
+    // 缺少必要識別欄位必須失敗，不能把未知當作沒有信件。
+    assert!(index_for(dispatch(vec![fixed("Class", 43i32)])).is_err());
 }
 
 #[implement(IDispatch)]
@@ -294,6 +396,115 @@ fn collection(values: Vec<IDispatch>) -> IDispatch {
     ])
 }
 
+/// 真正建立二維SAFEARRAY，測試COM批次欄列方向、日期過濾與排序。
+fn table_fixture(mut rows: Vec<IDispatch>, filter: Option<String>) -> IDispatch {
+    if let Some(filter) = filter {
+        let field = filter.split(']').next().unwrap().trim_start_matches('[');
+        let dates: Vec<_> = filter.split('\'').collect();
+        let start = crate::outlook::project::variant_time(&VARIANT::from(dates[1])).unwrap();
+        let end = crate::outlook::project::variant_time(&VARIANT::from(dates[3])).unwrap();
+        rows.retain(|r| {
+            get(r, field, &mut [])
+                .ok()
+                .and_then(|v| crate::outlook::project::variant_time(&v).ok())
+                .is_none_or(|d| d >= start && d < end)
+        });
+    }
+    let rows = Rc::new(RefCell::new(rows));
+    let sorted = rows.clone();
+    let counted = rows.clone();
+    let position = Rc::new(RefCell::new(0usize));
+    let selected = Rc::new(RefCell::new(Vec::<String>::new()));
+    let added = selected.clone();
+    dispatch(vec![
+        fixed(
+            "Columns",
+            dispatch(vec![
+                fixed("RemoveAll", VARIANT::default()),
+                (
+                    "Add",
+                    Box::new(move |args| {
+                        added.borrow_mut().push(argument_text(&args[0]));
+                        Ok(VARIANT::default())
+                    }),
+                ),
+            ]),
+        ),
+        (
+            "GetRowCount",
+            Box::new(move |_| Ok((counted.borrow().len() as i32).into())),
+        ),
+        (
+            "Sort",
+            Box::new(move |args| {
+                assert!(bool::try_from(&args[0])?);
+                let field = argument_text(&args[1]);
+                sorted.borrow_mut().sort_by_key(|r| {
+                    std::cmp::Reverse(
+                        get(r, &field, &mut [])
+                            .ok()
+                            .and_then(|v| crate::outlook::project::variant_time(&v).ok()),
+                    )
+                });
+                Ok(VARIANT::default())
+            }),
+        ),
+        (
+            "GetArray",
+            Box::new(move |args| {
+                use windows::Win32::System::Ole::{SafeArrayCreate, SafeArrayPutElement};
+                assert_eq!(i32::try_from(&args[0])?, 100);
+                let rows = rows.borrow();
+                let start = *position.borrow();
+                let end = (start + 100).min(rows.len());
+                if start == end {
+                    return Ok(VARIANT::default());
+                }
+                let selected = selected.borrow();
+                let bounds = [
+                    SAFEARRAYBOUND {
+                        cElements: selected.len() as u32,
+                        lLbound: 0,
+                    },
+                    SAFEARRAYBOUND {
+                        cElements: (end - start) as u32,
+                        lLbound: 0,
+                    },
+                ];
+                let array = unsafe { SafeArrayCreate(VT_VARIANT, 2, bounds.as_ptr()) };
+                assert!(!array.is_null());
+                let mut value = VARIANT::default();
+                unsafe {
+                    (*value.Anonymous.Anonymous).vt = VARENUM(VT_ARRAY.0 | VT_VARIANT.0);
+                    (*value.Anonymous.Anonymous).Anonymous.parray = array;
+                }
+                for (j, row) in rows[start..end].iter().enumerate() {
+                    for (i, name) in selected.iter().enumerate() {
+                        let cell =
+                            get(row, name, &mut []).unwrap_or_else(|_| match name.as_str() {
+                                "MessageClass" => "IPM.Note".into(),
+                                "EntryID" => "fixture".into(),
+                                "LastModificationTime" => {
+                                    get(row, "SentOn", &mut []).unwrap_or_default()
+                                }
+                                _ => VARIANT::default(),
+                            });
+                        unsafe {
+                            SafeArrayPutElement(
+                                array,
+                                [i as i32, j as i32].as_ptr(),
+                                (&cell as *const VARIANT).cast(),
+                            )
+                        }?;
+                    }
+                }
+                *position.borrow_mut() = end;
+                Ok(value)
+            }),
+        ),
+    ])
+}
+
 fn folder(
     store: &str,
     id: &str,
@@ -307,7 +518,16 @@ fn folder(
         fixed("FolderPath", format!("{store}/{id}").as_str()),
         fixed("Name", id),
         fixed("Folders", collection(children)),
-        fixed("Items", collection(mails)),
+        fixed("Items", collection(mails.clone())),
+        (
+            "GetTable",
+            Box::new(move |args| {
+                Ok(VARIANT::from(table_fixture(
+                    mails.clone(),
+                    args.first().map(argument_text),
+                )))
+            }),
+        ),
         fixed("DefaultItemType", 0i32),
         fixed(
             "PropertyAccessor",

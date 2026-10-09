@@ -51,6 +51,7 @@ impl Source for Fixture {
                 subject: format!("工作 {index}"),
                 sender: sender.clone(),
                 recipients: recipients.clone(),
+                recipients_are_groups: false,
                 sent_at: sent.clone(),
                 received_at: sent.clone(),
                 entry: format!("PRIVATE_MAIL_{index}"),

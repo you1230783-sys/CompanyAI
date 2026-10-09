@@ -1,4 +1,4 @@
-**0.8.50：程式需求核對、Python 實際副本測試與 Outlook 四欄位隱藏副本比對。** [驗證與界線](docs/VALIDATION_0_8_50.md)
+**0.8.51：Outlook 日期批次與可中止讀取、Python 草稿區段與測試工作資料。** [驗證與界線](docs/VALIDATION_0_8_51.md)
 
 > **0.8.48：圖中文字、AI 圖表編輯與 Python 原始碼試用。** 可拖曳圖表文字並調整字型、色彩與底色；AI 可接續編輯歷史圖表。本機時間保存在對話與工具紀錄，Python 可修改副本並驗證語法。詳見 [驗證與限制](docs/VALIDATION_0_8_48.md)。
 
@@ -20,7 +20,7 @@
 
 CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供日常問答、文件整理、專案副本修訂與 Classic Outlook 郵件分析。
 
-**目前 EXE／NSIS：0.8.50** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
+**目前 EXE／NSIS：0.8.51** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
 
 ## 下載與開始使用
 
@@ -30,7 +30,7 @@ CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供�
 
 執行需要 WebView2 Runtime，不需安裝 Rust、Node 或 Python。若啟動時提示缺少 WebView2，請依 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md) 處理。正式功能需要公司服務連線與桌面帳號權限。
 
-本版 EXE 與 NSIS 都是 **0.8.50**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
+本版 EXE 與 NSIS 都是 **0.8.51**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
 
 ## 可以做什麼
 

@@ -1,3 +1,9 @@
+**0.8.51 桌面工具補充：** 不新增網站 API。`edit_code_section` 優先使用 `copy_id/section_id/replacement`；舊的 revision/first_line/last_line/section_hash 整組介面仍相容，兩種方式不能混用。`read_code_section` 回報實際範圍、next_line、eof、source_kind 與 copy_id，超出檔尾自動裁切，超過200行／6000字於完整行分頁。副本 section_id 由桌面核對版本，原件不提供可編輯代號。
+
+目前程式工作資料加入既有 messages，包含有界原文與真實 code_state；相同 section_id 及逐字內容的工具投影改為 text_ref，原始操作紀錄完整保留。網站應照 client_snapshot 傳遞，不額外補回歷史。`run_batch` 的無進展按一次呼叫計算，子項成功／失敗與資料覆蓋仍分別記錄。
+
+Outlook 專案介面日期參數不變；本機改 Table 批次與10分鐘輔助程序。副本鍵只含完整主旨與寄送時間（秒），隱藏資料不送模型；可見 To/CC 是顯示文字群組，`recipients_are_groups=true` 時 `recipient_count=null`，不把整串顯示文字算成一位收件者。授權政策版本已更新，舊的四欄比對快照不能直接重用。詳見 [本版驗證](VALIDATION_0_8_51.md)。
+
 > **0.8.45 圖片閱讀：** 移除專案圖片快捷入口與 image-read 技能公告，analyze_image 納入基本工具，支援圖片的模型第一輪可直接使用；工具總數仍50項。舊圖片子請求格式、大小／額度、快取、身分與未知結果保護不變。
 
 > **0.8.45 恢復政策：** 專案主推論及子請求依10／30／60／180／300秒恢復。已核對身分的 failed、無result，且 error_code 為 AI_BACKEND_ERROR／UPSTREAM_UNAVAILABLE／UPSTREAM_TIMEOUT 時，桌面可另建這輪推論，即使舊網站標 retryable=false；明確的內層永久錯誤仍拒絕。保留messages／tools／parent，僅更換client_request_id並遞增turn_index。未知提交只GET原ID，不重播本機工具；五次耗盡保留checkpoint。詳見 [契約補充](DESKTOP_AGENT_V1_CONTRACT.md#0845-桌面有限恢復補充)。不新增網站API，一般聊天政策不變。

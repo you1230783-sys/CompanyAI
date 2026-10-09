@@ -1,7 +1,7 @@
 //! 專案郵件讀取端。僅連接使用者已開啟的 Classic Outlook，不新增資料檔或同步設定。
 //! COM 物件全在單次呼叫的 STA 執行緒內建立及釋放；代號由桌面保存，不交給模型。
 use super::*;
-use crate::projects::mail::{self, Folder, Header, Scan, Source};
+use crate::projects::mail::{Folder, Header, Scan, Source};
 use chrono::{Duration, NaiveDate, NaiveDateTime};
 use std::{
     path::Path,
@@ -22,8 +22,11 @@ fn namespace(app: &IDispatch) -> AppResult<IDispatch> {
 }
 fn time(item: &IDispatch, name: &str) -> AppResult<NaiveDateTime> {
     let raw = get(item, name, &mut [])?;
+    variant_time(&raw)
+}
+pub(super) fn variant_time(raw: &VARIANT) -> AppResult<NaiveDateTime> {
     let mut converted = VARIANT::default();
-    unsafe { VariantChangeType(&mut converted, &raw, VAR_CHANGE_FLAGS(0), VT_DATE) }
+    unsafe { VariantChangeType(&mut converted, raw, VAR_CHANGE_FLAGS(0), VT_DATE) }
         .map_err(|_| "無法讀取郵件時間。")?;
     let days = unsafe { converted.Anonymous.Anonymous.Anonymous.date };
     if !days.is_finite() || !(1.0..2_000_000.0).contains(&days) {
@@ -43,7 +46,7 @@ pub(super) fn timestamp(item: &IDispatch, name: &str) -> AppResult<String> {
 }
 /// Jet 使用本機日期格式；OLE 的 DATE→BSTR 轉換等同 General Date，午夜只產生日期。
 /// 不硬寫美式日期，也不在查詢字串加入 Outlook 不支援的秒數。
-fn jet_day(day: NaiveDate) -> AppResult<String> {
+pub(super) fn jet_day(day: NaiveDate) -> AppResult<String> {
     let base = NaiveDate::from_ymd_opt(1899, 12, 30).ok_or("日期基準不正確。")?;
     let raw = VARIANT::from((day - base).num_days() as f64);
     let mut date = VARIANT::default();
@@ -55,52 +58,6 @@ fn jet_day(day: NaiveDate) -> AppResult<String> {
     .map_err(|_| "無法依 Windows 地區格式建立 Outlook 日期條件。")?;
     let value = unsafe { formatted.Anonymous.Anonymous.Anonymous.bstrVal.to_string() };
     Ok(value.replace('\'', "''"))
-}
-pub(super) fn property(item: &IDispatch, tag: &str) -> AppResult<String> {
-    let accessor = object(&get(item, "PropertyAccessor", &mut [])?)?;
-    let value = get(&accessor, "GetProperty", &mut [VARIANT::from(tag)])?;
-    let mut converted = VARIANT::default();
-    unsafe { VariantChangeType(&mut converted, &value, VAR_CHANGE_FLAGS(0), VT_BSTR) }
-        .map_err(|_| "郵件地址屬性無法轉成文字。")?;
-    let value = unsafe { converted.Anonymous.Anonymous.Anonymous.bstrVal.to_string() };
-    if value.len() > 4096 {
-        return Err("郵件地址過長。".into());
-    }
-    Ok(value)
-}
-/// 優先 SMTP 地址；無法解析時保留 Outlook 原地址，但去重層不猜測相同身分。
-pub(super) fn sender(item: &IDispatch) -> AppResult<String> {
-    property(item, "http://schemas.microsoft.com/mapi/proptag/0x5D01001F")
-        .or_else(|_| text(item, "SenderEmailAddress", 4096))
-}
-pub(super) fn recipients(item: &IDispatch) -> AppResult<Vec<String>> {
-    let recipients = object(&get(item, "Recipients", &mut [])?)?;
-    let total = count(&recipients)?;
-    if total > 200 {
-        return Ok(vec!["收件者超過 200 個，未展開；此封不作地址去重。".into()]);
-    }
-    let mut result = Vec::new();
-    for index in 1..=total {
-        let recipient = self::item(&recipients, index)?;
-        let address = property(
-            &recipient,
-            "http://schemas.microsoft.com/mapi/proptag/0x39FE001E",
-        )
-        .or_else(|_| text(&recipient, "Address", 4096))?;
-        let kind =
-            i32::try_from(&get(&recipient, "Type", &mut [])?).map_err(|_| "收件者類型不正確。")?;
-        let role = match kind {
-            1 => "to",
-            2 => "cc",
-            3 => "bcc",
-            _ => "other",
-        };
-        result.push(format!("{role}:{address}"));
-        if result.iter().map(String::len).sum::<usize>() > 12_000 {
-            return Ok(vec!["收件地址超過 12 KB，未展開；此封不作地址去重。".into()]);
-        }
-    }
-    Ok(result)
 }
 fn folder(ns: &IDispatch, reference: &Folder) -> AppResult<IDispatch> {
     let value = object(&get(
@@ -156,9 +113,20 @@ fn snapshot_folder(
 }
 fn header(item: &IDispatch, folder: &Folder) -> AppResult<Header> {
     let sent_at = timestamp(item, "SentOn")?;
-    let sender = sender(item)?;
-    let recipients = recipients(item)?;
-    let duplicate_key = mail::duplicate_key(&sent_at, &sender, &recipients);
+    let sender = text(item, "SenderName", 12000).unwrap_or_default();
+    let recipients = ["To", "CC"]
+        .iter()
+        .filter_map(|name| {
+            text(item, name, 12000)
+                .ok()
+                .filter(|v| !v.is_empty())
+                .map(|v| format!("{}:{v}", name.to_lowercase()))
+        })
+        .collect();
+    let duplicate_key = Some(table::key(
+        &text(item, "Subject", 32768)?,
+        time(item, "SentOn")?,
+    ));
     let conversation = text(item, "ConversationID", 4096).unwrap_or_default();
     Ok(Header {
         thread_id: if conversation.is_empty() {
@@ -168,9 +136,10 @@ fn header(item: &IDispatch, folder: &Folder) -> AppResult<Header> {
         },
         id: crate::jobs::new_id()?,
         folder_id: folder.id.clone(),
-        subject: text(item, "Subject", 3000)?,
+        subject: text(item, "Subject", 32768)?,
         sender,
         recipients,
+        recipients_are_groups: true,
         sent_at,
         received_at: timestamp(item, "ReceivedTime")?,
         entry: text(item, "EntryID", 4096)?,
@@ -208,14 +177,18 @@ fn checked_item(
         return Err("郵件已移動或身分改變，請重新列出標題。".into());
     }
     privacy::require_item(&privacy::Policy::current()?, &item)?;
-    exclusions::Exclusions::from_namespace(ns, &privacy::Policy::current()?, cancel)?
-        .require(&item)?;
+    let sent = time(&item, "SentOn")?.date();
+    exclusions::Exclusions::from_range(
+        ns,
+        &privacy::Policy::current()?,
+        Some((sent, sent)),
+        cancel,
+    )?
+    .require(&item)?;
     let current = header(&item, reference)?;
     if current.entry != snapshot.entry
         || current.modified != snapshot.modified
         || current.subject != snapshot.subject
-        || current.sender != snapshot.sender
-        || current.recipients != snapshot.recipients
         || current.sent_at != snapshot.sent_at
     {
         return Err("郵件在標題預覽後已變更，未讀取內文；請重新列出。".into());
@@ -252,90 +225,79 @@ impl Source for Reader {
         let (_apartment, app) = batch::connect()?;
         let ns = namespace(&app)?;
         let folder = folder(&ns, reference)?;
-        let hidden =
-            exclusions::Exclusions::from_namespace(&ns, &privacy::Policy::current()?, cancel)?;
-        let all_items = object(&get(&folder, "Items", &mut [])?)?;
         let field = if reference.scope == "online_sent" {
             "SentOn"
         } else {
             "ReceivedTime"
         };
-        let after = end.succ_opt().ok_or("日期範圍超出上限。")?;
-        let filter = format!(
-            "[{field}] >= '{}' AND [{field}] < '{}'",
-            jet_day(start)?,
-            jet_day(after)?
-        );
-        let items = object(&get(
-            &all_items,
-            "Restrict",
-            &mut [VARIANT::from(filter.as_str())],
-        )?)?;
-        get(
-            &items,
-            "Sort",
-            &mut [
-                VARIANT::from(true),
-                VARIANT::from(format!("[{field}]").as_str()),
-            ],
-        )?;
-        let started = Instant::now();
-        let total = count(&items)?;
-        let mut scan = Scan {
-            notices: hidden.notices(),
-            complete: true,
-            ..Default::default()
-        };
-        for index in 1..=total {
-            batch::check_cancel(cancel)?;
-            if index > 10_000
-                || scan.headers.len() >= 2000
-                || started.elapsed() >= StdDuration::from_secs(30)
-            {
-                scan.complete = false;
-                scan.notices.push(
-                    "達到 10000 個項目、2000 封郵件或 30 秒上限，未掃完；請縮小日期範圍。".into(),
+        // 先在本機取得候選寄送時間，涵蓋「上月寄出、本月才收到」的副本。
+        // 此時尚未把任何候選標題交給模型；排除索引全部完成後才組成Scan。
+        let rows = table::scan(&ns, &folder, field, Some((start, end)), true, cancel)?;
+        if rows.is_empty() {
+            return Ok(Scan {
+                complete: true,
+                ..Default::default()
+            });
+        }
+        let first = rows
+            .iter()
+            .map(|r| r.sent.date())
+            .min()
+            .ok_or("郵件日期不可讀。")?;
+        let last = rows
+            .iter()
+            .map(|r| r.sent.date())
+            .max()
+            .ok_or("郵件日期不可讀。")?;
+        let policy = privacy::Policy::current()?;
+        let hidden = exclusions::Exclusions::from_range(&ns, &policy, Some((first, last)), cancel)?;
+        if privacy::Policy::current()?.revision() != policy.revision() {
+            return Err("Outlook 隱藏副本索引期間資料夾設定已變更，未開放此批資料。".into());
+        }
+        let mut headers = Vec::new();
+        for row in rows {
+            let key = row.key();
+            if hidden.contains_key(&key) {
+                continue;
+            }
+            if headers.len() >= 4000 {
+                return Err(
+                    "Outlook 日期範圍內未隱藏的信件超過4000封，請縮小日期範圍；未傳送部分清單。"
+                        .into(),
                 );
-                break;
             }
-            let candidate = (|| -> AppResult<(bool, Option<Header>)> {
-                let item = item(&items, index)?;
-                if i32::try_from(&get(&item, "Class", &mut [])?).ok() != Some(43) {
-                    return Ok((false, None));
-                }
-                let day = time(&item, field)?.date();
-                // Restrict 後仍以原始 OLE DATE 核對日期，避免地區格式造成範圍誤判。
-                if day < start {
-                    return Ok((true, None));
-                }
-                if day > end {
-                    return Ok((false, None));
-                }
-                privacy::require_item(&privacy::Policy::current()?, &item)?;
-                if hidden.contains(&item)? {
-                    return Ok((false, None));
-                }
-                Ok((false, Some(header(&item, reference)?)))
-            })();
-            match candidate {
-                Ok((true, _)) => break,
-                Ok((false, Some(mail))) => scan.headers.push(mail),
-                Ok((false, None)) => (),
-                Err(error) => {
-                    scan.complete = false;
-                    if scan.notices.len() < 5 {
-                        scan.notices.push(error);
-                    }
-                }
-            }
+            headers.push(Header {
+                id: crate::jobs::new_id()?,
+                folder_id: reference.id.clone(),
+                thread_id: if row.conversation.is_empty() {
+                    String::new()
+                } else {
+                    crate::projects::text::revision(&format!(
+                        "{}\n{}",
+                        reference.store, row.conversation
+                    ))
+                },
+                subject: row.subject,
+                sender: row.sender,
+                recipients: row.recipients,
+                recipients_are_groups: true,
+                sent_at: row.sent.format("%Y-%m-%d %H:%M:%S%.3f").to_string(),
+                received_at: row.received,
+                entry: row.entry,
+                modified: row.modified,
+                duplicate_key: Some(key),
+            });
         }
-        if count(&items)? != total {
-            scan.complete = false;
-            scan.notices
-                .push("查詢期間郵件數量改變，請重新查詢以確認完整性。".into());
-        }
-        Ok(scan)
+        super::process::notify("Outlook日期篩選及隱藏副本比對完成（100%），準備提供標題分頁");
+        Ok(Scan {
+            headers,
+            notices: vec![
+                "副本以完整主旨及寄送時間（秒）排除；寄收件者為本機顯示文字，未解析地址簿。".into(),
+            ],
+            complete: true,
+        })
     }
+
     fn body(
         &mut self,
         reference: &Folder,
