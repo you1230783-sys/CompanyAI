@@ -13,7 +13,7 @@ fn hidden_duplicates_are_removed_across_stores_before_body_access() {
         exclusions::Exclusions,
         privacy::{self, Policy},
     };
-    // 完全不提供 Body，副本 EntryID／StoreID 不同而 Message-ID 相同。
+    // 無Message-ID／PropertyAccessor／Body；Exchange原地址可用，不要求@。
     let identified = |number: usize, copy: bool| {
         dispatch(vec![
             fixed("Class", 43i32),
@@ -21,13 +21,15 @@ fn hidden_duplicates_are_removed_across_stores_before_body_access() {
                 "EntryID",
                 format!("{}-{number}", if copy { "copy" } else { "original" }).as_str(),
             ),
-            fixed("Subject", "共同主旨不能單獨當作副本"),
+            fixed("Subject", format!("主旨-{number}").as_str()),
+            fixed("SentOn", 46000.0 + number as f64 / 86400.0),
+            fixed("SenderEmailAddress", "/o=Company/ou=Exchange/cn=Sender"),
             fixed(
-                "PropertyAccessor",
-                dispatch(vec![fixed(
-                    "GetProperty",
-                    format!("<mail-{number}@example.test>").as_str(),
-                )]),
+                "Recipients",
+                collection(vec![dispatch(vec![
+                    fixed("Type", 1i32),
+                    fixed("Address", "/o=Company/cn=Recipient"),
+                ])]),
             ),
         ])
     };
@@ -69,6 +71,15 @@ fn hidden_duplicates_are_removed_across_stores_before_body_access() {
     );
     assert!(index.require(&visible[0]).is_err());
     assert!(index.require(&visible[49]).is_ok());
+    // 同一份隱藏清單分別套用到寄件備份及收件匣，不互相扣除或耗用。
+    for (total, remaining) in [(80, 70), (120, 110)] {
+        assert_eq!(
+            (0..total)
+                .filter(|i| !index.contains(&identified(*i, false)).unwrap())
+                .count(),
+            remaining
+        );
+    }
     assert!(Exclusions::from_app(&application, &policy, &AtomicBool::new(true)).is_err());
     // 子資料夾即使保留舊勾選，未勾選祖先仍要排除其郵件。
     let leaf = folder("s", "leaf", vec![], vec![identified(99, true)], 0);
@@ -102,6 +113,61 @@ fn hidden_duplicates_are_removed_across_stores_before_body_access() {
             .contains(&identified(99, false))
             .unwrap()
     );
+}
+
+#[test]
+fn partial_hidden_identity_quarantines_only_uncertain_candidates() {
+    use crate::outlook::{
+        exclusions::Exclusions,
+        privacy::{self, Policy},
+    };
+    let partial = dispatch(vec![
+        fixed("Class", 43i32),
+        fixed("Subject", "隱藏主題"),
+        fixed("SentOn", 46000.0),
+    ]);
+    let index_for = |item: IDispatch| {
+        let root = folder(
+            "s",
+            "root",
+            vec![folder("s", "hidden", vec![], vec![item], 0)],
+            vec![],
+            0,
+        );
+        let application = app(
+            root.clone(),
+            root.clone(),
+            vec![dispatch(vec![fixed("GetRootFolder", root)])],
+        );
+        let policy = Policy {
+            configured: true,
+            allowed: [privacy::key("s", "root")].into_iter().collect(),
+        };
+        Exclusions::from_app(&application, &policy, &AtomicBool::new(false))
+    };
+    let index = index_for(partial).unwrap();
+    assert!(index.notices()[0].contains("寄件地址"));
+    assert!(index.notices()[0].contains("收件地址"));
+    assert!(!index.notices()[0].contains("隱藏主題"));
+    assert!(index
+        .contains(&dispatch(vec![
+            fixed("Subject", "隱藏主題"),
+            fixed("SentOn", 46000.0)
+        ]))
+        .is_err());
+    for i in 0..31 {
+        assert!(!index
+            .contains(&dispatch(vec![fixed(
+                "Subject",
+                format!("其他主題{i}").as_str()
+            )]))
+            .unwrap());
+    }
+    // 完全無法辨識的隱藏項目仍須明確失敗，不把未知數量回傳為零。
+    let error = index_for(dispatch(vec![fixed("Class", 43i32)]))
+        .err()
+        .unwrap();
+    assert!(error.contains("郵件數量未知"));
 }
 
 #[implement(IDispatch)]

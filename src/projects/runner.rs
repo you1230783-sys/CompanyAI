@@ -1197,7 +1197,10 @@ fn run_for(
                             if let Some((call, call_id)) = native_call {
                                 record["terminal_tool_result"] = json!({"call":call,"result":super::agent::Message::result(&call_id,&json!({"ok":true,"state":"completed"}))});
                             }
-                            return Ok(format!("{message}{locations}"));
+                            return Ok(format!(
+                                "{message}{locations}{}",
+                                broker.code_delivery_report(&paths)
+                            ));
                         }
                         Err(error) => {
                             if let Some(inbox) = &run.instructions {

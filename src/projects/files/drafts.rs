@@ -141,6 +141,7 @@ impl Broker {
         copy.draft = Some(draft.clone());
         copy.text = next.into();
         copy.python_checked_revision = None;
+        copy.code_review.invalidate();
         copy.saved_revision = None;
         // 已完成的同一路徑再次修改時，先退回草稿；不能在停止或交付時
         // 將尚未重新檢查的內容沿用上一版「完成成果」標記。
@@ -178,6 +179,7 @@ mod tests {
                 office: None,
                 saved_revision: None,
                 python_checked_revision: None,
+                code_review: Default::default(),
                 draft: None,
                 paths: vec![],
             },

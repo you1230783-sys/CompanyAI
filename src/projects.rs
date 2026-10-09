@@ -2,6 +2,7 @@
 pub(crate) mod agent;
 pub mod analysis;
 pub mod charts;
+pub mod code_review;
 pub mod context;
 pub mod datasets;
 mod delegation;
@@ -294,6 +295,20 @@ pub enum Tool {
         chart_index: usize,
         name: String,
     },
+    PlanCodeChange {
+        copy_id: String,
+        requirements: Vec<code_review::Requirement>,
+    },
+    TestPython {
+        copy_id: String,
+        revision: String,
+        tests: Vec<code_review::Test>,
+    },
+    ReviewCodeChange {
+        copy_id: String,
+        revision: String,
+        checks: Vec<code_review::Check>,
+    },
     CheckPython {
         path: String,
         revision: String,
@@ -488,6 +503,9 @@ impl Tool {
             Self::OfficeBatch { .. } => "批次編輯 Office",
             Self::CreateChart { .. } | Self::ChartFromExcel { .. } => "建立圖表",
             Self::ExportChartPng { .. } => "儲存圖表 PNG",
+            Self::PlanCodeChange { .. } => "建立程式需求清單",
+            Self::TestPython { .. } => "執行隔離Python功能測試",
+            Self::ReviewCodeChange { .. } => "核對程式需求與成果",
             Self::CheckPython { .. } => "檢查Python語法（不執行原文）",
             Self::InspectChart { .. } => "查看圖表設定",
             Self::EditChart { .. } => "編輯圖表呈現與文字",

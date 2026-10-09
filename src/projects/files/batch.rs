@@ -141,6 +141,7 @@ fn compute(
                 encoding: Encoding::Utf8(false),
                 saved_revision: None,
                 python_checked_revision: None,
+                code_review: Default::default(),
                 draft: None,
                 paths: vec![],
             },

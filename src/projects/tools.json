@@ -4154,7 +4154,7 @@
       "type": "function",
       "function": {
         "name": "check_python",
-        "description": "試用：檢查專案PY或工作副本目前revision的語法與結構，不執行原文。修改後需重查，通過才save_copy。",
+        "description": "檢查PY目前revision語法／編碼，不執行。通過後test_python功能測試、review_code_change逐項核對，再save_copy。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -4311,6 +4311,202 @@
           },
           "required": [
             "tasks",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "plan_code_change",
+        "description": "修改前保存1–16項驗收需求，區分使用者要求、保留行為與自行增加；原件唯讀。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "copy_id": {
+              "type": "string"
+            },
+            "requirements": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "origin": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "preserve",
+                      "added"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "description",
+                  "origin"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 16
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "copy_id",
+            "requirements",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "test_python",
+        "description": "語法通過後，以unittest.TestCase及load_target()測试實際PY副本。每批1–4組，60秒獨立無網路程序、私有workspace；mock明列。結果綁revision，不執行原件。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "copy_id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "tests": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "requirement_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 16
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "mocked_dependencies": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 12
+                  }
+                },
+                "required": [
+                  "id",
+                  "requirement_ids",
+                  "code",
+                  "mocked_dependencies"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 4
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "copy_id",
+            "revision",
+            "tests",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "review_code_change",
+        "description": "checks=[]讀目前副本差異、需求與測試；核對相關區段後提交各項證據。tested須引用通過測試；缺依賴可unverified並說明，incomplete保留草稿。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "copy_id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "checks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "requirement_id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "tested",
+                      "reviewed",
+                      "unverified",
+                      "incomplete"
+                    ]
+                  },
+                  "evidence": {
+                    "type": "string"
+                  },
+                  "first_line": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "last_line": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "test_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 8
+                  }
+                },
+                "required": [
+                  "requirement_id",
+                  "status",
+                  "evidence",
+                  "first_line",
+                  "last_line",
+                  "test_ids"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 16
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "copy_id",
+            "revision",
+            "checks",
             "progress_note"
           ],
           "additionalProperties": false

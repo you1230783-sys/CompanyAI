@@ -349,6 +349,26 @@ pub fn execute(code: &str, inputs: Value, cancel: &AtomicBool) -> AppResult<Valu
     Ok(response)
 }
 
+/// 固定測試驅動器使用每次獨立程序與私有暫存區；runtime／worker 指紋不變。
+pub(super) fn execute_tests(
+    code: &str,
+    mut inputs: Value,
+    cancel: &AtomicBool,
+) -> AppResult<Value> {
+    let root = runtime_root()?;
+    let _runtime = verified_runtime(&root, cancel)?;
+    let mut worker = Worker::start_python(&root.join("python.exe"), cancel)?;
+    inputs[0]["workspace"] = json!(worker.test_workspace()?);
+    let response = worker.analyze(&json!({"code":code,"inputs":inputs}), cancel)?;
+    if response["ok"] != true {
+        return Err(format!(
+            "Python測試程序未完成：{}",
+            response["error"].as_str().unwrap_or("未知錯誤")
+        ));
+    }
+    Ok(response)
+}
+
 pub fn self_check() -> AppResult<()> {
     let result = execute("assert pd.__version__ == '2.2.3'\nassert np.__version__ == '2.2.6'\nassert openpyxl.__version__ == '3.1.5'\ndf = pd.DataFrame({'批號':['001','002'], '值':[2,4]})\nemit_excel('測試.xlsx', {'資料': df})\nresult={'sum':int(df['值'].sum())}", json!([]), &AtomicBool::new(false))?;
     if result["summary"]["sum"] != 6 || result["outputs"][0]["kind"] != "xlsx" {

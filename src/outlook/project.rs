@@ -282,6 +282,7 @@ impl Source for Reader {
         let started = Instant::now();
         let total = count(&items)?;
         let mut scan = Scan {
+            notices: hidden.notices(),
             complete: true,
             ..Default::default()
         };

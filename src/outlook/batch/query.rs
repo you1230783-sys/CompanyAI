@@ -360,6 +360,7 @@ pub(super) fn list(
             search.failures
         ));
     }
+    notice.push_str(&search.hidden.notices().join("；"));
     if search.candidates.is_empty() {
         notice.push_str("此範圍內未取得符合條件的郵件；請確認資料檔已在 Outlook 開啟，並檢查查詢範圍與同步狀態。");
     }

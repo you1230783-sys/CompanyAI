@@ -389,7 +389,7 @@ impl Progress {
             }
         }
         self.tool_outcome(
-            matches!(tool, Tool::RunPython { .. }),
+            matches!(tool, Tool::RunPython { .. } | Tool::TestPython { .. }),
             result["ok"] == false,
         );
         *self.tool_usage.entry(tool.label().into()).or_default() += 1;

@@ -1,3 +1,7 @@
+## 0.8.50 桌面程式驗收補充
+
+桌面工具目錄新增 `plan_code_change`、`test_python`、`review_code_change`，按目前 python-edit 技能提供 Schema；本機完整目錄共66項，不代表每輪全部傳送。網站仍只轉接工具定義及模型回覆，不執行 Python，也不增加 API／資料表。參數核對、AppContainer 測試、revision 證據及發布資格均由桌面 broker 執行。`run_batch` 的原有允許範圍不變，修改及其驗證須依序進行。
+
 ## 0.8.45 桌面有限恢復補充
 
 此段取代下文「已接受失敗不另建推論」的全面限制，其他去重與身分規則不變。一般聊天不套用此政策。

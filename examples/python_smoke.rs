@@ -11,6 +11,8 @@ mod analysis;
 mod batch;
 #[path = "python_smoke/edit.rs"]
 mod edit;
+#[path = "python_smoke/verification.rs"]
+mod verification;
 use std::{
     collections::BTreeMap,
     path::PathBuf,
@@ -35,6 +37,17 @@ fn run() -> AppResult<()> {
     std::fs::create_dir(&root).map_err(|e| e.to_string())?;
     let started = Instant::now();
     python::prepare_runtime()?;
+    // 開發時可只驗證新的程式驗收；正式 Build.ps1 仍執行完整流程。
+    if args.iter().any(|s| s == "--verification-only") {
+        let project = Project {
+            id: "verification-only".into(),
+            name: "verification-only".into(),
+            root,
+            imports: BTreeMap::new(),
+        };
+        let mut worker = Worker::start(&exe, &AtomicBool::new(false))?;
+        return verification::run(&project, &mut worker);
+    }
     let csv = "批號,機台,值,備註\n001,A,2,NA\n002,A,4,=1+1\n003,B,9,正常\n";
     std::fs::write(root.join("input.csv"), csv).map_err(|e| e.to_string())?;
     std::fs::write(root.join("events.log"), "08:00:00 start\n08:00:05 done\n")
@@ -51,6 +64,7 @@ fn run() -> AppResult<()> {
     let mut worker = Worker::start(&exe, &cancel)?;
     analysis::run(&mut broker, &mut worker, &project)?;
     batch::run(&project, &mut worker)?;
+    verification::run(&project, &mut worker)?;
     let python_copy = edit::run(&mut broker, &mut worker, &project)?;
     call(
         &mut broker,

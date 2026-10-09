@@ -221,6 +221,7 @@ pub fn list(
         super::exclusions::Exclusions::from_app(&app, &super::privacy::Policy::current()?, cancel)?;
     let mut list = MailList {
         scope: "Outlook 目前選取".into(),
+        notice: hidden.notices().join("；"),
         ..Default::default()
     };
     check_cancel(cancel)?;
@@ -255,9 +256,17 @@ pub fn list(
         if super::privacy::folder_allowed(
             &super::privacy::Policy::current()?,
             &object(&get(&item, "Parent", &mut [])?)?,
-        )? && !hidden.contains(&item)?
-        {
-            list.mails.push(snapshot(&item)?);
+        )? {
+            match hidden.contains(&item) {
+                Ok(false) => list.mails.push(snapshot(&item)?),
+                Ok(true) => (),
+                Err(error) => {
+                    list.truncated = true;
+                    if list.notice.len() < 3000 {
+                        list.notice.push_str(&error);
+                    }
+                }
+            }
         }
     }
     if count > 10_000 {

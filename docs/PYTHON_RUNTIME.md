@@ -1,5 +1,13 @@
 # Python 執行環境與離線重建
 
+## 0.8.50：需求驗收與實際副本測試
+
+`plan_code_change`、`review_code_change` 保存需求來源、差異摘要、核對行號與證據；`test_python` 以內建標準 unittest／mock 測試完整目前副本，不能另抄一份函式當成成果驗證。測試驅動器 `src/projects/python/test_source.py` 內嵌在 EXE，透過原有 worker 傳入，無需修改 runtime 或安裝套件。
+
+每批1–4組測試、新 AppContainer／Job、60秒、1GiB、單程序；由 Windows 建立本次私有資料夾，允許合成檔案讀寫，不授權專案、使用者 TEMP、網路或子程序。缺少模組、跳過或沒有實際案例、沒有載入副本都不能標 passed。來源 hash、測試 id、需求 id 與結果由原生核對；保存／續接仍使用加密狀態。任何修改均使舊證據失效。
+
+check_python 的下述不執行保證不變；只有另行呼叫 test_python 才會執行來源，包含頂層程式。save_copy 現在同時要求當前語法通過及逐項核對，未完成需求不可發布；未具備外部測試環境可明列界線交付。實際整合案例在 `examples/python_smoke/verification.rs`，記錄見 [0.8.50 驗證](VALIDATION_0_8_50.md)。
+
 ## 0.8.49：並行與分段草稿
 
 run_batch一次2–4項、最多兩個獨立AppContainer同時運算，每個Python仍有各自1 GiB與120秒上限。父程序依序驗證／發布成果，各項結果與錯誤獨立；同批不得依賴新生成結果，同一副本不能並行修改。

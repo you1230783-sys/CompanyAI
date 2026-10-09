@@ -5,6 +5,7 @@ mod analysis;
 pub mod batch;
 mod chart_annotations;
 mod chart_preferences;
+mod code_review;
 mod code_sections;
 mod drafts;
 mod mail_notes;
@@ -672,6 +673,8 @@ struct Copy {
     #[serde(default)]
     python_checked_revision: Option<String>,
     #[serde(default)]
+    code_review: super::code_review::State,
+    #[serde(default)]
     draft: Option<drafts::Draft>,
     paths: Vec<String>,
 }
@@ -921,7 +924,7 @@ impl Broker {
             .iter()
             .map(|(id, copy)| json!({
                 "copy_id":id,"name":copy.name,"revision":text::revision(&copy.text),
-                "saved_revision":copy.saved_revision,"paths":copy.paths,"draft_path":copy.draft.as_ref().map(|d|&d.path),"syntax_checked":copy.python_checked_revision.as_ref()==Some(&text::revision(&copy.text))
+                "saved_revision":copy.saved_revision,"paths":copy.paths,"draft_path":copy.draft.as_ref().map(|d|&d.path),"syntax_checked":copy.python_checked_revision.as_ref()==Some(&text::revision(&copy.text)),"requirements":copy.code_review.requirements.iter().map(|r|json!({"id":r.id,"origin":r.origin,"description":r.description.chars().take(100).collect::<String>()})).collect::<Vec<_>>(),"review_current":copy.code_review.reviewed_revision.as_ref()==Some(&text::revision(&copy.text)),"test_status":copy.code_review.tests.iter().map(|t|json!({"id":t["id"],"status":t["status"]})).collect::<Vec<_>>()
             }))
             .collect::<Vec<_>>())
     }
@@ -2447,6 +2450,10 @@ impl Broker {
                     Copy {
                         office,
                         name: name.clone(),
+                        code_review: super::code_review::State {
+                            baseline: (ext == "py").then(|| content.clone()),
+                            ..Default::default()
+                        },
                         text: content,
                         encoding,
                         saved_revision: None,
@@ -2514,6 +2521,20 @@ impl Broker {
                 revision,
                 operation,
             } => self.office_action(copy_id, revision, *operation.clone(), cancel),
+            Tool::PlanCodeChange {
+                copy_id,
+                requirements,
+            } => self.plan_code_change(copy_id, requirements),
+            Tool::TestPython {
+                copy_id,
+                revision,
+                tests,
+            } => self.test_python(copy_id, revision, tests, cancel),
+            Tool::ReviewCodeChange {
+                copy_id,
+                revision,
+                checks,
+            } => self.review_code_change(copy_id, revision, checks),
             Tool::CheckPython { path, revision } => {
                 self.check_python(path, revision, cancel, worker)
             }
@@ -2532,6 +2553,9 @@ impl Broker {
                         "PY副本需先用check_python核對目前revision並通過語法檢查，再save_copy。"
                             .into(),
                     );
+                }
+                if extension(Path::new(&copy.name))? == "py" {
+                    copy.code_review.ready(revision)?;
                 }
                 if copy.saved_revision.as_ref() == Some(revision) {
                     return Ok(
@@ -2717,6 +2741,9 @@ impl Broker {
             if copy.saved_revision.as_deref() != Some(text::revision(&copy.text).as_str()) {
                 return Err("成果尚未成功儲存最新版本，不能交付。".into());
             }
+            if copy.name.to_ascii_lowercase().ends_with(".py") {
+                copy.code_review.ready(&text::revision(&copy.text))?;
+            }
             let path = copy.paths.last().ok_or("成果尚未儲存。")?;
             if cancel.load(std::sync::atomic::Ordering::Relaxed) {
                 return Err("成果檢查已取消。".into());
@@ -2886,6 +2913,7 @@ mod tests {
                 encoding: Encoding::Utf8(false),
                 saved_revision: None,
                 python_checked_revision: None,
+                code_review: Default::default(),
                 draft: None,
                 paths: vec![],
             },

@@ -28,6 +28,12 @@ pub(super) fn run(
         json!({"tool":"create_working_copy","source":"source.py","name":"modified.py"}),
     )?;
     let id = copy["copy_id"].as_str().ok_or("缺少副本ID")?;
+    call(
+        broker,
+        worker,
+        "py-plan",
+        json!({"tool":"plan_code_change","copy_id":id,"requirements":[{"id":"R1","description":"調整greeting，保留不執行原文的語法驗證案例","origin":"user"}]}),
+    )?;
     // 未檢查的版本不可被發布為已完成；失敗不建立輸出檔。
     let save: Tool = serde_json::from_value(
         json!({"tool":"save_copy","copy_id":id,"revision":copy["revision"]}),
@@ -110,6 +116,18 @@ pub(super) fn run(
         )?["syntax_valid"],
         true
     );
+    call(
+        broker,
+        worker,
+        "py-inspect-review",
+        json!({"tool":"review_code_change","copy_id":id,"revision":changed["revision"],"checks":[]}),
+    )?;
+    call(
+        broker,
+        worker,
+        "py-review",
+        json!({"tool":"review_code_change","copy_id":id,"revision":changed["revision"],"checks":[{"requirement_id":"R1","status":"unverified","evidence":"此案例刻意包含缺少模組及頂層例外；僅驗證語法，不宣稱功能通過。","first_line":1,"last_line":2,"test_ids":[]}]}),
+    )?;
     let saved = call(
         broker,
         worker,

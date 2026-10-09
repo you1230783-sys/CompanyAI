@@ -150,6 +150,46 @@ impl Coverage {
                     && self.mark(json!(["edited-copy", copy_id, data["revision"]]));
                 "副本內容未變更；請修改下一個尚未完成的小段。"
             }
+            Tool::PlanCodeChange { .. } => "需求清單已保存；規劃本身不代表程式已修改。",
+            Tool::ReviewCodeChange {
+                copy_id,
+                revision,
+                checks,
+            } => {
+                fresh = self.mark(json!([
+                    "code-review",
+                    copy_id,
+                    revision,
+                    checks
+                        .iter()
+                        .map(|c| json!([c.requirement_id, c.status, c.test_ids]))
+                        .collect::<Vec<_>>()
+                ]));
+                "目前版本已核對；改寫證據文字不算新增成果。"
+            }
+            Tool::TestPython {
+                copy_id, revision, ..
+            } => {
+                fresh = data["test_report"]["functional_tests_run"] == true
+                    && self.mark(json!([
+                        "code-tests",
+                        copy_id,
+                        revision,
+                        // traceback 含每次隨機暫存目錄，不可據此假造新進度。
+                        data["test_report"]["tests"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .map(|t| json!([
+                                t["id"],
+                                t["requirement_ids"],
+                                t["status"],
+                                t["tests_run"]
+                            ]))
+                            .collect::<Vec<_>>()
+                    ]));
+                "本次副本的相同測試結果已記錄；請修正失敗案例或核對成果。"
+            }
             Tool::RunPython { .. } => {
                 // 程式／purpose 改字或換輸入別名不代表算出了不同結果。
                 let sources: Vec<_> = data["sources"]

@@ -122,6 +122,31 @@ fn pipe() -> AppResult<(File, File)> {
 }
 
 impl Worker {
+    /// 系統為每次隨機 AppContainer 建立並配置 ACL 的私有資料夾。
+    /// 只將此路徑交給功能測試，不授權專案或使用者 TEMP；Profile drop 負責清理。
+    pub(super) fn test_workspace(&mut self) -> AppResult<String> {
+        let mut sid_text = ptr::null_mut();
+        if unsafe { Authorization::ConvertSidToStringSidW(self._profile.sid, &mut sid_text) } == 0 {
+            return Err(error("無法取得測試隔離身分"));
+        }
+        let mut folder = ptr::null_mut();
+        let status = unsafe { GetAppContainerFolderPath(sid_text, &mut folder) };
+        unsafe {
+            LocalFree(sid_text.cast());
+        }
+        if status < 0 || folder.is_null() {
+            return Err("無法取得測試私有資料夾。".into());
+        }
+        let path = unsafe { windows::core::PCWSTR(folder).to_string() };
+        unsafe {
+            windows::Win32::System::Com::CoTaskMemFree(Some(folder.cast()));
+        }
+        let path = std::path::PathBuf::from(path.map_err(|e| e.to_string())?).join("CodeTests");
+        std::fs::create_dir(&path).map_err(|e| format!("無法建立測試私有資料夾：{e}"))?;
+        self.timeout = Duration::from_secs(60);
+        Ok(path.to_string_lossy().into_owned())
+    }
+
     pub(super) fn executable(&self) -> &std::path::Path {
         &self.executable
     }

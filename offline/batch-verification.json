@@ -5,7 +5,7 @@
     "notice": "每項獨立成功或失敗；成功項目不重做，只另提失敗項目。不能把整批已回傳當作每項均成功。",
     "tasks": [
       {
-        "finished_local": "2026-10-09 11:33:41",
+        "finished_local": "2026-10-09 14:56:14",
         "outcome": {
           "ok": true,
           "operation_id": "274cfd6b2a8cae8f16cb9072c469a7d570af3363311406388b2be891e9a84cda",
@@ -15,12 +15,12 @@
             "displayed_in_conversation": true
           }
         },
-        "started_local": "2026-10-09 11:33:41",
+        "started_local": "2026-10-09 14:56:14",
         "task_id": "chart",
         "tool": "chart_dataset"
       },
       {
-        "finished_local": "2026-10-09 11:33:41",
+        "finished_local": "2026-10-09 14:56:14",
         "outcome": {
           "ok": true,
           "operation_id": "68f15359d0e85383ff44e484d27f933e1e25c193112a43c1f7a3044524d2341a",
@@ -37,24 +37,24 @@
             "working_copy": false
           }
         },
-        "started_local": "2026-10-09 11:33:41",
+        "started_local": "2026-10-09 14:56:14",
         "task_id": "read",
         "tool": "read_file"
       },
       {
-        "finished_local": "2026-10-09 11:33:44",
+        "finished_local": "2026-10-09 14:56:16",
         "outcome": {
           "error": "Python 分析失敗：Traceback (most recent call last):\n  File \"Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\examples\\python\\lm_worker.py\", line 169, in main\n    response = analyze(json.loads(payload))\n  File \"Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\examples\\python\\lm_worker.py\", line 149, in analyze\n    exec(compile(request[\"code\"], \"<company-ai-analysis>\", \"exec\"), scope)\n    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<company-ai-analysis>\", line 1, in <module>\nValueError: fixture\n",
           "ok": false,
           "operation_id": "b8982fca0bbed132e25f35200e0c89cd8b9fbdb5923b0d00c4ba4d6255f4005b",
           "retry_same_operation": false
         },
-        "started_local": "2026-10-09 11:33:41",
+        "started_local": "2026-10-09 14:56:14",
         "task_id": "fail",
         "tool": "run_python"
       },
       {
-        "finished_local": "2026-10-09 11:33:44",
+        "finished_local": "2026-10-09 14:56:16",
         "outcome": {
           "ok": true,
           "operation_id": "fb3466d51a7542be3be34cc0a6e8398408e1d119453e12a2516bf404df04e539",
@@ -76,7 +76,7 @@
             }
           }
         },
-        "started_local": "2026-10-09 11:33:41",
+        "started_local": "2026-10-09 14:56:14",
         "task_id": "valid",
         "tool": "run_python"
       }
@@ -88,7 +88,7 @@
     "notice": "每項獨立成功或失敗；成功項目不重做，只另提失敗項目。不能把整批已回傳當作每項均成功。",
     "tasks": [
       {
-        "finished_local": "2026-10-09 11:33:41",
+        "finished_local": "2026-10-09 14:56:14",
         "outcome": {
           "ok": true,
           "operation_id": "32b6f00c1a6937d31536dfc3a2838c7dc50bdb9298cb1e3e42e3bcae3d6fa0c1",
@@ -100,7 +100,7 @@
                     "x",
                     "y"
                   ],
-                  "path": "_AI_Output/20261009_113341/a.csv",
+                  "path": "_AI_Output/20261009_145614/a.csv",
                   "revision": "410d92526dfe528a2d51035201100fa527b257740daec3093657154e4c2e4413",
                   "rows": 3
                 },
@@ -184,8 +184,8 @@
             "sources": [],
             "stdout": "",
             "summary": {
-              "end": 1791516821.4625528,
-              "start": 1791516813.4611733,
+              "end": 1791528973.9267504,
+              "start": 1791528965.9258828,
               "value": 42
             },
             "versions": {
@@ -196,12 +196,12 @@
             }
           }
         },
-        "started_local": "2026-10-09 11:33:31",
+        "started_local": "2026-10-09 14:56:04",
         "task_id": "a",
         "tool": "run_python"
       },
       {
-        "finished_local": "2026-10-09 11:33:41",
+        "finished_local": "2026-10-09 14:56:14",
         "outcome": {
           "ok": true,
           "operation_id": "4741e9f1c15440acaff49b1587a45dfa55cd00b2312a1073683fad0e48cdbf62",
@@ -213,7 +213,7 @@
                     "x",
                     "y"
                   ],
-                  "path": "_AI_Output/20261009_113341/b.csv",
+                  "path": "_AI_Output/20261009_145614/b.csv",
                   "revision": "2969143639d63f9518fe9b0cae70f86cb79cc7a9db4998e3615a93e364cda812",
                   "rows": 2
                 },
@@ -281,8 +281,8 @@
             "sources": [],
             "stdout": "",
             "summary": {
-              "end": 1791516821.4625487,
-              "start": 1791516813.4612422,
+              "end": 1791528973.927156,
+              "start": 1791528965.9264128,
               "value": 84
             },
             "versions": {
@@ -293,7 +293,7 @@
             }
           }
         },
-        "started_local": "2026-10-09 11:33:31",
+        "started_local": "2026-10-09 14:56:04",
         "task_id": "b",
         "tool": "run_python"
       }

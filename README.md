@@ -1,4 +1,4 @@
-**0.8.49：獨立工具並行、Python小段修改即保存、讀信草稿、跨資料夾隱藏副本、雙圖比較與介面修正。** [驗證與界線](docs/VALIDATION_0_8_49.md)
+**0.8.50：程式需求核對、Python 實際副本測試與 Outlook 四欄位隱藏副本比對。** [驗證與界線](docs/VALIDATION_0_8_50.md)
 
 > **0.8.48：圖中文字、AI 圖表編輯與 Python 原始碼試用。** 可拖曳圖表文字並調整字型、色彩與底色；AI 可接續編輯歷史圖表。本機時間保存在對話與工具紀錄，Python 可修改副本並驗證語法。詳見 [驗證與限制](docs/VALIDATION_0_8_48.md)。
 
@@ -20,7 +20,7 @@
 
 CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供日常問答、文件整理、專案副本修訂與 Classic Outlook 郵件分析。
 
-**目前 EXE／NSIS：0.8.49** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
+**目前 EXE／NSIS：0.8.50** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
 
 ## 下載與開始使用
 
@@ -30,7 +30,7 @@ CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供�
 
 執行需要 WebView2 Runtime，不需安裝 Rust、Node 或 Python。若啟動時提示缺少 WebView2，請依 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md) 處理。正式功能需要公司服務連線與桌面帳號權限。
 
-本版 EXE 與 NSIS 都是 **0.8.49**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
+本版 EXE 與 NSIS 都是 **0.8.50**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
 
 ## 可以做什麼
 
@@ -41,7 +41,7 @@ CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供�
 | 專案圖片閱讀 | JPG／PNG／BMP／TIFF／GIF 本機轉 JPEG，每任務100張；單張5 MB、可同時比較雙圖合計8 MB，後續保留文字重點；快速模型不支援。 |
 | 生成週報 | 建立素材資料夾、設定日期與補充、再次確認後整理文件及授權郵件；可參考上週格式。 |
 | 專案技能與圖表 | 論文證據、週報增量、Excel 抽取、跨文件搜尋、批次 Office、離線圖表與快速模型摘要委派。 |
-| Python 原始碼（試用） | 分段修訂 .py，每次修改更新同一份輸出草稿；以內建 Python 檢查語法與編碼後標為完成。 |
+| Python 原始碼（試用） | 分段修訂 .py 並更新同一草稿，依需求核對實際成果、語法及隔離功能測試；明列模擬依賴與未驗證範圍。 |
 | Python 分析 | 本機 pandas 分組、合併、事件分析；輸出追蹤 CSV 及多工作表 XLSX，模型只接收精簡結論。 |
 | LOG 分析 | 支援只有時間的紀錄；以近似時間定位事件，分批回讀前後文並附來源行號。 |
 | 執行中傳送 | 主輸入框選下一輪提示、停止後新任務或完成後新任務；待送訊息可取消。 |

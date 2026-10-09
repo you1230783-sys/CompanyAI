@@ -1,6 +1,6 @@
 {
-  "recorded_at": "2026-10-09T11:54:46.5250654+08:00",
-  "version": "0.8.49.0",
+  "recorded_at": "2026-10-09T15:18:20.9804423+08:00",
+  "version": "0.8.50.0",
   "result": "PASS",
   "msvc": "14.29.30133",
   "compiler_report": [
@@ -47,7 +47,13 @@
     "line/section hash edits preserve CRLF and source revision",
     "every Python edit saves the same draft before syntax validation; restore checks disk hash",
     "later edits remove completed status until syntax is checked and saved again",
-    "hidden Outlook folder copies excluded across stores using Message-ID and conservative missing-ID fallback; COM fixture only"
+    "hidden Outlook copies excluded by four local envelope fields without Message-ID; partial identity permits unrelated candidates, unknown identity is an error; COM fixture only"
+  ],
+  "code_verification_checks": [
+    "actual source default bug detected despite valid syntax and corrected by small edit",
+    "revision-bound requirement and real-test evidence; fake passed evidence rejected",
+    "private scratch write/read; project source and loopback network denied",
+    "missing dependency reported unavailable without claiming success"
   ],
   "chart_transform_checks": [
     "locked Excel CSV keeps A/Index and D/Mean source roles while deriving Index 1",
@@ -67,7 +73,7 @@
     "six chart kinds, user axis ranges, reference lines and colors",
     "native customized PNG callback and verified manual _AI_Output write"
   ],
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-48c4ae40ac794a2cb603994d32bbf6c1",
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-82b7bbfeaed944db99ca82f875cd55c8",
   "checks": [
     "weekly wizard prepare/confirm/cancel and conversation binding",
     "online inbox COM fixture",
@@ -101,7 +107,7 @@
     "Outlook folder picker, DPAPI policy and ancestor enforcement, native forged/stale selection rejection",
     "local mail coverage with 1000-message limit, no raw-body tool output, independent 50-message AI limit, branches and gaps"
   ],
-  "exe_sha256": "08d5794e66d6bad8bdd15dc110482f563b59de5f839f3173bbbd1331efd30174",
+  "exe_sha256": "ffe8aa76da7372929ada4f23871390fab2e0850070667a870ca5c93b2490e80b",
   "installer_built": true,
   "real_vnc_tested": false,
   "real_office_tested": true,

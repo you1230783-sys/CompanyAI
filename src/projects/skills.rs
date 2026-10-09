@@ -5,7 +5,7 @@ mod core;
 const SKILLS: &[(&str, &str, &str)] = &[
     (
         "python-edit",
-        "試用：Python原始碼閱讀、修改副本與語法檢查",
+        "Python分段修改、需求核對與隔離功能測試",
         include_str!("skills/python-edit.md"),
     ),
     (
@@ -190,7 +190,8 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
         "outlook_folders" | "outlook_headers" | "outlook_read" | "outlook_index" => {
             has("outlook-research")
         }
-        "check_python" | "read_code_section" | "edit_code_section" => has("python-edit"),
+        "plan_code_change" | "test_python" | "review_code_change" | "check_python"
+        | "read_code_section" | "edit_code_section" => has("python-edit"),
         "edit_chart" => has("chart-edit"),
         "inspect_chart" | "export_chart_png" => {
             has("chart-edit") || has("charts") || has("dataset-charts")

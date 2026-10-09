@@ -1,0 +1,135 @@
+{
+  "child_loopback_connected": false,
+  "corrected": {
+    "copy_id": "b5c0553b3f289e51d7f67337465e2f39",
+    "revision": "0caa6a244c9cfff84615518caf204ad011dd5601260f5aed845298d5b021353b",
+    "test_report": {
+      "functional_tests_run": true,
+      "notice": "測試只涵蓋所列案例；模擬依賴不代表真實服務已驗證。檔案位於隔離暫存區，不發布為專案成果。",
+      "python_version": "3.13.12",
+      "source_sha256": "0caa6a244c9cfff84615518caf204ad011dd5601260f5aed845298d5b021353b",
+      "tests": [
+        {
+          "failures": [],
+          "id": "defaults",
+          "mocked_dependencies": [],
+          "requirement_ids": [
+            "R1"
+          ],
+          "skipped": 0,
+          "status": "passed",
+          "target_loads": 2,
+          "tests_run": 2
+        },
+        {
+          "failures": [],
+          "id": "isolation",
+          "mocked_dependencies": [],
+          "requirement_ids": [
+            "R2"
+          ],
+          "skipped": 0,
+          "status": "passed",
+          "target_loads": 1,
+          "tests_run": 1
+        },
+        {
+          "failures": [
+            "Traceback (most recent call last):\n  File \"<acceptance-test>\", line 4, in test_missing\nModuleNotFoundError: No module named 'lmai_absent_dependency_fixture'\n"
+          ],
+          "id": "missing",
+          "mocked_dependencies": [],
+          "requirement_ids": [
+            "R1"
+          ],
+          "skipped": 0,
+          "status": "unavailable",
+          "target_loads": 1,
+          "tests_run": 1
+        },
+        {
+          "failures": [],
+          "id": "service",
+          "mocked_dependencies": [
+            "external_service：僅模擬回傳與錯誤，未連線"
+          ],
+          "requirement_ids": [
+            "R3"
+          ],
+          "skipped": 0,
+          "status": "passed",
+          "target_loads": 1,
+          "tests_run": 1
+        }
+      ]
+    }
+  },
+  "detected": {
+    "copy_id": "b5c0553b3f289e51d7f67337465e2f39",
+    "revision": "9897c46aaffedecab689258b630c936164898c57c62c49b8ba762962f8fea81f",
+    "test_report": {
+      "functional_tests_run": true,
+      "notice": "測試只涵蓋所列案例；模擬依賴不代表真實服務已驗證。檔案位於隔離暫存區，不發布為專案成果。",
+      "python_version": "3.13.12",
+      "source_sha256": "9897c46aaffedecab689258b630c936164898c57c62c49b8ba762962f8fea81f",
+      "tests": [
+        {
+          "failures": [
+            "Traceback (most recent call last):\n  File \"<acceptance-test>\", line 4, in test_default\n  File \"C:\\Users\\aszx1\\AppData\\Local\\Packages\\companyai.text.9054a17ae68a0932622695e8c2bf2a99\\AC\\CodeTests\\case_0\\target.py\", line 2, in convert\nTypeError: unsupported operand type(s) for *: 'NoneType' and 'int'\n"
+          ],
+          "id": "defaults",
+          "mocked_dependencies": [],
+          "requirement_ids": [
+            "R1"
+          ],
+          "skipped": 0,
+          "status": "failed",
+          "target_loads": 2,
+          "tests_run": 2
+        }
+      ]
+    }
+  },
+  "no_evidence": {
+    "copy_id": "b5c0553b3f289e51d7f67337465e2f39",
+    "revision": "0caa6a244c9cfff84615518caf204ad011dd5601260f5aed845298d5b021353b",
+    "test_report": {
+      "functional_tests_run": true,
+      "notice": "測試只涵蓋所列案例；模擬依賴不代表真實服務已驗證。檔案位於隔離暫存區，不發布為專案成果。",
+      "python_version": "3.13.12",
+      "source_sha256": "0caa6a244c9cfff84615518caf204ad011dd5601260f5aed845298d5b021353b",
+      "tests": [
+        {
+          "failures": [
+            "沒有實際測試、未載入交付副本或存在跳過項目，不能標示通過。"
+          ],
+          "id": "no-source",
+          "mocked_dependencies": [],
+          "requirement_ids": [
+            "R1"
+          ],
+          "skipped": 0,
+          "status": "unavailable",
+          "target_loads": 0,
+          "tests_run": 1
+        },
+        {
+          "failures": [
+            "沒有實際測試、未載入交付副本或存在跳過項目，不能標示通過。"
+          ],
+          "id": "no-cases",
+          "mocked_dependencies": [],
+          "requirement_ids": [
+            "R1"
+          ],
+          "skipped": 0,
+          "status": "unavailable",
+          "target_loads": 1,
+          "tests_run": 0
+        }
+      ]
+    }
+  },
+  "parent_loopback_control": true,
+  "result": "PASS"
+}

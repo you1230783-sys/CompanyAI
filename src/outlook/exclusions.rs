@@ -7,54 +7,96 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// 全欄位指紋走集合查詢；缺欄位項目只在本機保留部分指紋。
 #[derive(Default)]
 pub(super) struct Exclusions {
-    message_ids: BTreeSet<String>,
-    envelopes: BTreeSet<String>,
-    missing_id_envelopes: BTreeSet<String>,
+    complete: BTreeSet<String>,
+    identities: Vec<Identity>,
+    partial: Vec<Identity>,
+    issues: BTreeSet<String>,
 }
 
-/// Internet Message-ID 可跨 Store／EntryID 識別副本。額外保存完整信封指紋，
-/// 支援匯入後遺失 Message-ID 的郵件；不使用主旨單獨判定，也不作模糊比對。
+#[derive(Clone)]
 struct Identity {
-    message_id: Option<String>,
-    envelope: Option<String>,
+    // 固定順序：主旨、寄送時間、寄件地址、To/CC 地址集合。不存在不等於空字串。
+    fields: [Option<String>; 4],
 }
-fn identities(item: &IDispatch) -> AppResult<Identity> {
-    let mut message_id = None;
-    for tag in ["0x1035001F", "0x1035001E"] {
-        if let Ok(id) = project::property(
-            item,
-            &format!("http://schemas.microsoft.com/mapi/proptag/{tag}"),
-        ) {
-            if !id.trim().is_empty() {
-                message_id = Some(crate::projects::text::revision(&format!(
-                    "message-id:{}",
-                    id.trim()
-                )));
-                break;
+impl Identity {
+    fn fingerprint(&self) -> Option<String> {
+        self.fields.iter().all(Option::is_some).then(|| {
+            crate::projects::text::revision(
+                &serde_json::to_string(&self.fields).unwrap_or_default(),
+            )
+        })
+    }
+    /// 只有共同存在且不同的欄位，才足以證明與隱藏郵件無關。
+    fn conflicts(&self, other: &Self) -> bool {
+        self.fields
+            .iter()
+            .zip(&other.fields)
+            .any(|(a, b)| matches!((a, b), (Some(a), Some(b)) if a != b))
+    }
+}
+
+/// 不讀 Message-ID、Body 或附件，也不為取得 SMTP 額外向地址簿查詢。
+/// 同型別的 Exchange 原始地址可以直接比較，不能因沒有 @ 而視為失敗。
+fn identities(item: &IDispatch) -> (Identity, Vec<String>) {
+    let recipients = || -> AppResult<String> {
+        let collection = object(&get(item, "Recipients", &mut [])?)?;
+        let total = i32::try_from(&get(&collection, "Count", &mut [])?)
+            .map_err(|_| "收件者數量無法讀取。")?;
+        if !(0..=200).contains(&total) {
+            return Err("收件者數量超出200個上限。".into());
+        }
+        let mut addresses = BTreeSet::new();
+        for index in 1..=total {
+            let recipient = object(&get(&collection, "Item", &mut [index.into()])?)?;
+            let kind = i32::try_from(&get(&recipient, "Type", &mut [])?)
+                .map_err(|_| "收件者類型無法讀取。")?;
+            // BCC 不在收件端完整呈現；共同指紋只包含 To/CC。
+            if kind == 3 {
+                continue;
             }
+            if !matches!(kind, 1 | 2) {
+                return Err("未知收件者類型。".into());
+            }
+            let address = text(&recipient, "Address", 4096)?
+                .trim()
+                .to_ascii_lowercase();
+            if address.is_empty() {
+                return Err("收件地址為空。".into());
+            }
+            addresses.insert(format!("{kind}:{address}"));
+        }
+        serde_json::to_string(&addresses).map_err(|e| e.to_string())
+    };
+    let sender = || -> AppResult<String> {
+        let address = text(item, "SenderEmailAddress", 4096)?
+            .trim()
+            .to_ascii_lowercase();
+        if address.is_empty() {
+            return Err("寄件地址為空。".into());
+        }
+        Ok(address)
+    };
+    let values = [
+        text(item, "Subject", 3000),
+        project::timestamp(item, "SentOn"),
+        sender(),
+        recipients(),
+    ];
+    let mut fields = [None, None, None, None];
+    let mut issues = Vec::new();
+    for (index, value) in values.into_iter().enumerate() {
+        match value {
+            Ok(value) => fields[index] = Some(crate::projects::text::revision(&value)),
+            Err(error) => issues.push(format!(
+                "{}：{error}",
+                ["主旨", "寄送時間", "寄件地址", "收件地址"][index]
+            )),
         }
     }
-    let envelope = (|| -> AppResult<String> {
-        let sent = project::timestamp(item, "SentOn")?;
-        let sender = project::sender(item)?;
-        let recipients = project::recipients(item)?;
-        let key = crate::projects::mail::duplicate_key(&sent, &sender, &recipients)
-            .ok_or("郵件缺少可比對的完整寄收件地址。")?;
-        Ok(crate::projects::text::revision(&format!(
-            "envelope:{key}:{}",
-            text(item, "Subject", 3000)?
-        )))
-    })();
-    let envelope = envelope.ok();
-    if message_id.is_none() && envelope.is_none() {
-        return Err("無法核對隱藏資料夾的郵件副本；未開放此批 Outlook 資料。請確認 Outlook 已完整載入郵件。".into());
-    }
-    Ok(Identity {
-        message_id,
-        envelope,
-    })
+    (Identity { fields }, issues)
 }
 
 impl Exclusions {
@@ -145,7 +187,12 @@ impl Exclusions {
                     .map_err(|_| "無法核對隱藏項目類型。")?
                     == 43
                 {
-                    result.insert(identities(&item)?);
+                    let (identity, issues) = identities(&item);
+                    if identity.fields.iter().all(Option::is_none) {
+                        return Err(format!("隱藏郵件的四個識別欄位皆無法讀取，無法界定排除範圍；查詢失敗，郵件數量未知。{}", issues.join("；")));
+                    }
+                    result.issues.extend(issues);
+                    result.insert(identity);
                 }
             }
             if count(&items)? != total {
@@ -156,41 +203,54 @@ impl Exclusions {
     }
 
     fn insert(&mut self, identity: Identity) {
-        if let Some(envelope) = identity.envelope {
-            if identity.message_id.is_none() {
-                self.missing_id_envelopes.insert(envelope.clone());
-            }
-            self.envelopes.insert(envelope);
-        }
-        if let Some(id) = identity.message_id {
-            self.message_ids.insert(id);
-        }
-    }
-    fn matches(&self, identity: &Identity) -> bool {
-        if let Some(id) = &identity.message_id {
-            // 兩邊都有不同 Message-ID 時，不因相同主旨／寄收時間而誤判副本。
-            self.message_ids.contains(id)
-                || identity
-                    .envelope
-                    .as_ref()
-                    .is_some_and(|key| self.missing_id_envelopes.contains(key))
+        if let Some(key) = identity.fingerprint() {
+            self.complete.insert(key);
         } else {
-            identity
-                .envelope
-                .as_ref()
-                .is_some_and(|key| self.envelopes.contains(key))
+            self.partial.push(identity.clone());
         }
-    }
-    pub fn contains(&self, item: &IDispatch) -> AppResult<bool> {
-        if self.message_ids.is_empty() && self.envelopes.is_empty() {
-            return Ok(false);
-        }
-        Ok(self.matches(&identities(item)?))
+        self.identities.push(identity);
     }
 
+    fn matches(&self, identity: &Identity) -> AppResult<bool> {
+        if let Some(key) = identity.fingerprint() {
+            if self.complete.contains(&key) {
+                return Ok(true);
+            }
+            if self.partial.iter().all(|hidden| hidden.conflicts(identity)) {
+                return Ok(false);
+            }
+        } else if self
+            .identities
+            .iter()
+            .all(|hidden| hidden.conflicts(identity))
+        {
+            return Ok(false);
+        }
+        Err("此候選郵件與隱藏郵件有識別欄位不足且無法排除關聯，已暫時排除此候選；其他可確認無關的郵件仍可讀取。".into())
+    }
+
+    pub fn notices(&self) -> Vec<String> {
+        if self.partial.is_empty() {
+            return vec![];
+        }
+        vec![format!("隱藏副本索引含{}封欄位不足的郵件；以可用欄位排除無關候選，無法判定的候選不開放。欄位診斷：{}", self.partial.len(), self.issues.iter().take(6).cloned().collect::<Vec<_>>().join("；"))]
+    }
+    pub fn contains(&self, item: &IDispatch) -> AppResult<bool> {
+        if self.identities.is_empty() {
+            return Ok(false);
+        }
+        let (identity, issues) = identities(item);
+        self.matches(&identity).map_err(|error| {
+            if issues.is_empty() {
+                error
+            } else {
+                format!("{error} 候選欄位診斷：{}", issues.join("；"))
+            }
+        })
+    }
     pub fn require(&self, item: &IDispatch) -> AppResult<()> {
         if self.contains(item)? {
-            return Err("此郵件在隱藏資料夾中另有副本，已一併隱藏，未讀取或匯出。".into());
+            return Err("此郵件的主旨、寄送時間、寄件地址與To/CC指紋符合隱藏郵件，已一併隱藏，未讀取或匯出。".into());
         }
         Ok(())
     }
@@ -200,17 +260,26 @@ impl Exclusions {
 mod tests {
     use super::*;
     #[test]
-    fn distinct_message_ids_win_over_same_envelope_and_missing_ids_have_fallback() {
-        let identity = |id: Option<&str>| Identity {
-            message_id: id.map(String::from),
-            envelope: Some("same-envelope".into()),
+    fn complete_and_partial_fingerprints_do_not_block_unrelated_mail() {
+        let mail = |subject: &str| Identity {
+            fields: [
+                Some(subject.into()),
+                Some("time".into()),
+                Some("/o=exchange".into()),
+                Some("recipients".into()),
+            ],
         };
         let mut index = Exclusions::default();
-        index.insert(identity(Some("original")));
-        assert!(index.matches(&identity(Some("original"))));
-        assert!(!index.matches(&identity(Some("different"))));
-        assert!(index.matches(&identity(None)));
-        index.insert(identity(None));
-        assert!(index.matches(&identity(Some("lost-in-copy"))));
+        index.insert(mail("hidden"));
+        assert_eq!(index.matches(&mail("hidden")), Ok(true));
+        assert_eq!(index.matches(&mail("other")), Ok(false));
+        let mut partial = mail("partial");
+        partial.fields[2] = None;
+        index.insert(partial.clone());
+        assert!(index.matches(&mail("partial")).is_err());
+        assert_eq!(index.matches(&mail("other")), Ok(false));
+        assert!(index.matches(&partial).is_err());
+        partial.fields[0] = Some("unrelated".into());
+        assert_eq!(index.matches(&partial), Ok(false));
     }
 }

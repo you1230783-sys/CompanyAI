@@ -26,6 +26,18 @@ pub(super) fn system_prompt() -> AppResult<String> {
         match value {
             Value::Object(map) => {
                 map.remove("description");
+                // 舊文字協定一次含完整目錄；數量／長度界線由 broker 執行，
+                // 不重複傳 JSON Schema 提示，避免超過單則訊息的 64 KB。
+                for key in [
+                    "minLength",
+                    "maxLength",
+                    "minItems",
+                    "maxItems",
+                    "minimum",
+                    "maximum",
+                ] {
+                    map.remove(key);
+                }
                 for child in map.values_mut() {
                     compact_schema(child);
                 }
@@ -589,6 +601,12 @@ mod tests {
                 "y":{"mode":"original","offset":0,"start":1,"step":1},"drop_empty":true}}),
             ),
         ];
+        let mut samples = samples.to_vec();
+        samples.extend([
+            ("plan_code_change", json!({"copy_id":"c","requirements":[{"id":"R1","description":"需求","origin":"user"}]})),
+            ("test_python", json!({"copy_id":"c","revision":"r","tests":[{"id":"T1","requirement_ids":["R1"],"code":"pass","mocked_dependencies":[]}]})),
+            ("review_code_change", json!({"copy_id":"c","revision":"r","checks":[]})),
+        ]);
         let definitions: Value = serde_json::from_str(DEFINITIONS).unwrap();
         assert_eq!(
             definitions["tools"].as_array().unwrap().len(),
