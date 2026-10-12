@@ -7,7 +7,8 @@ use windows::Win32::Foundation::{DISP_E_MEMBERNOTFOUND, E_INVALIDARG, E_NOTIMPL}
 
 type Handler = Box<dyn Fn(&[VARIANT]) -> ComResult<VARIANT>>;
 
-/// 模擬公司 Outlook 在 Columns.Add 拒絕 ConversationID；跨批次核對欄位沒有錯位。
+/// 模擬公司 Outlook 拒絕 ConversationID，且原生陣列第一維為列、第二維為欄。
+/// 跨批次核對完整標題與各欄位，不能只驗證下載數量。
 #[test]
 fn visible_table_keeps_headers_when_conversation_column_is_unsupported() {
     use crate::outlook::table;
@@ -552,11 +553,11 @@ fn table_fixture_rejecting_column(
                 let selected = selected.borrow();
                 let bounds = [
                     SAFEARRAYBOUND {
-                        cElements: selected.len() as u32,
+                        cElements: (end - start) as u32,
                         lLbound: 0,
                     },
                     SAFEARRAYBOUND {
-                        cElements: (end - start) as u32,
+                        cElements: selected.len() as u32,
                         lLbound: 0,
                     },
                 ];
@@ -581,7 +582,7 @@ fn table_fixture_rejecting_column(
                         unsafe {
                             SafeArrayPutElement(
                                 array,
-                                [i as i32, j as i32].as_ptr(),
+                                [j as i32, i as i32].as_ptr(),
                                 (&cell as *const VARIANT).cast(),
                             )
                         }?;

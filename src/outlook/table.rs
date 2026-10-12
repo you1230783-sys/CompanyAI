@@ -53,18 +53,23 @@ fn string(value: &VARIANT) -> AppResult<String> {
     Ok(unsafe { result.Anonymous.Anonymous.Anonymous.bstrVal.to_string() })
 }
 
-/// GetArray的第一維是欄，第二維是列。VARIANT擁有SAFEARRAY，借用期间不自行釋放。
+/// 原生 SAFEARRAY 的第一維是郵件列、第二維是欄位（已由公司 Outlook 實測確認）。
+/// 維度查詢與 GetElement 索引採相同順序，不套用 VBA 範例的陣列索引慣例。
+/// VARIANT 擁有 SAFEARRAY；借用期間不自行釋放。
 fn cells(value: &VARIANT, width: usize) -> AppResult<Vec<Vec<VARIANT>>> {
     let vt = unsafe { value.Anonymous.Anonymous.vt };
     if vt == VT_EMPTY {
         return Ok(vec![]);
     }
     if vt.0 != VT_ARRAY.0 | VT_VARIANT.0 {
-        return Err("Outlook Table陣列型別不符。".into());
+        return Err(format!(
+            "Outlook Table陣列型別不符（VARIANT={:#x}）。",
+            vt.0
+        ));
     }
     let array = unsafe { value.Anonymous.Anonymous.Anonymous.parray };
     if array.is_null() {
-        return Err("Outlook Table陣列維度不符。".into());
+        return Err("Outlook Table陣列為空指標。".into());
     }
     let bounds = |dim| unsafe {
         Ok::<_, String>((
@@ -80,15 +85,19 @@ fn cells(value: &VARIANT, width: usize) -> AppResult<Vec<Vec<VARIANT>>> {
         }
     }
     if dimensions != 2 {
-        return Err("Outlook Table陣列維度不符。".into());
+        return Err(format!(
+            "Outlook Table陣列維度不符（實際{dimensions}維，預期2維、{width}欄）。"
+        ));
     }
-    let (col, last_col) = bounds(1)?;
-    let (row, last_row) = bounds(2)?;
-    if last_row < row {
-        return Ok(vec![]);
-    }
-    if last_col - col + 1 != width as i32 || last_row - row + 1 > 100 {
-        return Err("Outlook Table批次大小不符。".into());
+    let (row, last_row) = bounds(1)?;
+    let (col, last_col) = bounds(2)?;
+    // 先核對尺寸再讀取；用 i64 避免異常邊界相減時溢位。
+    let row_count = (i64::from(last_row) - i64::from(row) + 1).max(0);
+    let col_count = (i64::from(last_col) - i64::from(col) + 1).max(0);
+    if col_count != width as i64 || row_count > 100 {
+        return Err(format!(
+            "Outlook Table批次大小不符（實際{row_count}列×{col_count}欄；D1={row}..{last_row}、D2={col}..{last_col}；預期{width}欄、最多100列）。"
+        ));
     }
     let mut rows = Vec::new();
     for j in row..=last_row {
@@ -96,7 +105,7 @@ fn cells(value: &VARIANT, width: usize) -> AppResult<Vec<Vec<VARIANT>>> {
         for i in col..=last_col {
             let mut cell = VARIANT::default();
             unsafe {
-                SafeArrayGetElement(array, [i, j].as_ptr(), (&mut cell as *mut VARIANT).cast())
+                SafeArrayGetElement(array, [j, i].as_ptr(), (&mut cell as *mut VARIANT).cast())
             }
             .map_err(|e| e.to_string())?;
             values.push(cell);
@@ -264,22 +273,4 @@ pub(super) fn scan(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn identity_preserves_subject_and_compares_whole_seconds() {
-        let date = NaiveDate::from_ymd_opt(2026, 9, 30)
-            .unwrap()
-            .and_hms_milli_opt(23, 59, 59, 100)
-            .unwrap();
-        assert_eq!(
-            key("主題", date),
-            key("主題", date + chrono::Duration::milliseconds(700))
-        );
-        assert_ne!(key("主題", date), key("RE: 主題", date));
-        assert_ne!(
-            key("主題", date),
-            key("主題", date + chrono::Duration::seconds(1))
-        );
-    }
-}
+mod tests;

@@ -10,40 +10,41 @@
 
 Outlook Table的ConversationID改為選用；不支援時留空，必要欄位仍須成功，GetArray按實際欄數解析。新增205封跨三批支援／拒絕該欄位、必要欄位失敗案例。沒有額外讀取正文、附件或地址簿；隱藏副本鍵仍是完整主旨與寄送時間秒數。
 
+### 同版修正：Outlook Table 原生陣列方向
+
+使用者以唯讀小程式在公司Outlook16.0.0.17932／64位元實測，確認原生SAFEARRAY的D1為郵件列、D2為欄位。GetArray(1)回傳1×5及1×9，GetArray(100)回傳100×5及100×9；Columns.Count與必要欄位一致，ConversationID確實不支援。原解析器把維度判反，因此將100列誤認為100欄，觸發「Table批次大小不符」。先前COM fixture也採相反排列，造成測試未能找出此錯誤。
+
+修正維度查詢及GetElement索引為「列、欄」，維持每批100列，並在尺寸異常時回報兩維邊界、實際列欄數與預期欄數。回歸測試使用公司實測方向，涵蓋5／9／10欄、1至100列、正方形批次、非零下界、空批次、異常型別／維度／尺寸，以及205封跨批次的逐欄內容核對。未增加逐封郵件讀取或依郵件內容猜測排列。
+
+診斷工具：`scripts/Test-OutlookTable.ps1`，使用Windows PowerShell5.1與內建.NET，直接檢查IDispatch回傳的原生SAFEARRAY，只輸出欄位狀態及尺寸。`-SelfTest`以合成COM物件核對兩種排列，不接觸Outlook。公司回報確認的是陣列方向；修正版完整郵件讀取仍需公司實測。
+
 沒有加入通用PowerShell／CMD執行器、實際Office頁面預覽、逐項接受／拒絕，沒有改動Python runtime／worker及歷史Rust離線ZIP。
 
-## 驗證狀態
+## 本次修正版驗證與交付狀態
 
-2026-10-12 13:59（Asia/Taipei）完整發行建置與安裝驗證通過。
+2026-10-12T15:23:40+08:00：維持0.8.52，已完成v142編譯與NSIS封裝；依使用者最新指示停止剩餘驗證並發布。**本次不是完整整合與安裝驗證通過的版本紀錄。**
 
-- Rust 1.98.1、MSVC v142 14.29.30133、SDK 10.0.19041.0；實際 `_MSC_FULL_VER=192930159 x64`。Cargo.lock、vendor與專案 `.cargo/config.toml` 搭配空Cargo快取及 `--frozen`。
-- fmt、Clippy（警告視為錯誤）、314項單元測試及release編譯通過。正式EXE與正式NSIS安裝後的WebView2／Python自檢通過。
-- 新功能20項Edge互動與亮色／深色／窄視窗三種版面檢查通過；同組互動案例也在WebView2自檢執行。原生AppContainer／broker實測搜尋失敗與截斷、Unicode原文、兩次成果版本、原件改變後固定基準與LOG原文配對。
-- 單元測試涵蓋Office格式索引、舊資料缺基準、checkpoint／DPAPI歷史還原與錯誤成果路徑拒絕、部分／失敗範圍、LOG配對歧義及專案方法隔離。
-- Outlook COM fixture的205封跨三批支援／拒絕ConversationID與必要欄位失敗通過；正式EXE輔助程序的無效要求／EOF退出通過，不接觸信箱。
-- 26個原生代理、9個恢復、13個圖片案例及兩組68輪長任務通過；PDF、加密記憶／中斷續接與30份約10MiB LOG分頁通過。這些是本機合成案例。
-- 真實Python副本功能驗收、兩程序並行、超過77MiB的Big5 LOG、檔案／網路／程序隔離、取消與120秒逾時通過。
-- Word／Excel／PowerPoint十種既有格式、新建三種格式、15個Excel規劃圖表、大型xls／xlsx的10000點圖表及六份文件移除外部PNG後重開通過。
-- localhost SMB的UNC／映射磁碟通過。完整NSIS安裝、更新、PID交接重啟、失敗回復、Python損壞修復、使用者資料保留及解除安裝通過；測試安裝已清除。
+- Rust1.98.1、MSVC v14214.29.30133、SDK10.0.19041.0；實際`_MSC_FULL_VER=192930159 x64`。Cargo.lock、vendor及專案.cargo/config.toml搭配空Cargo快取／--frozen。
+- fmt、Clippy、319項單元測試與release編譯通過；其中Outlook專項30項通過，含本次新增五項陣列測試。
+- 新EXE的Outlook輔助程序協定／EOF、WebView2及Python啟動自檢通過。實際AppContainer副本、來源搜尋／比較／LOG事件、30份約10MiB LOG及原生案例0–21（含兩組68輪）已通過。
+- 使用者要求停止後，不再執行剩餘整合案例、Office／SMB及完整NSIS安裝／更新／回復／解除安裝驗證。沒有把尚未完成的項目列為通過。
+- 使用這次release執行檔製作NSIS，產生兩份相同的簽署更新清單；正式EXE的更新器已核對安裝包與簽章。
 
-報告：[本版新增功能](../offline/review-verification.json)、[EXE](../offline/exe-verification.json)、[Python](../offline/python-verification.json)、[Office](../offline/office-verification.json)、[SMB](../offline/network-verification.json)、[NSIS](../offline/installer-verification.json)、[環境](../offline/environment.txt)。本機完整日誌：`.build/release-0.8.52-final.log`。
-
-```powershell
-./scripts/Build.ps1 -EmptyCargoCache -TestOffice -NetworkTestRoot '\\localhost\Y$\Rust\Project\CompanyAI\.build' -IncludeInstaller
-```
-
-本輪首次完整流程在安裝後的串流閱讀位置自檢失敗，未發布該次產物。檢查發現新增方法重用測試未等待250ms草稿防抖，結束後仍可能把測試草稿送回原生狀態；已修正為攔截並核對實際draft命令、清除殘留計時器後才恢復測試環境，保留閱讀位置斷言。修正後獨立Edge的20項互動與三種版面檢查通過，完整發行流程重跑後全部通過。
-
+本次報告：[Outlook修正](../offline/outlook-table-verification.json)、[EXE](../offline/exe-verification.json)、[NSIS封裝](../offline/installer-verification.json)。本機日誌：`.build/release-0.8.52-outlook-layout.log`（依指示中止）、`.build/package-0.8.52-outlook-layout.log`（封裝成功）。
 
 ## 交付產物
 
 | 檔案 | 版本 | Bytes | SHA256 |
 | --- | --- | ---: | --- |
-| `dist/LM_AI.exe` | 0.8.52.0 | 17,821,184 | `33f2dc6438e63e94f42f7972c761c6d2084718f271c296b7d5865071d115d8f9` |
-| `dist/LM_AI_Setup.exe` | 0.8.52.0 | 28,711,353 | `1652c5903692094a421add21f3ace1eac578ef771732f0d0fa402f910a8a7f56` |
+| `dist/LM_AI.exe` | 0.8.52.0 | 17,796,096 | `d69316d650100ed0164159fd7efc59d3f464d1f2076f73182becd1a635e7a08e` |
+| `dist/LM_AI_Setup.exe` | 0.8.52.0 | 28,689,782 | `06cec6e7aeb299f8e6efd1e0f8891a77fdeaf4060f3c46ecb29fd82116ff4a53` |
 
-兩份更新清單完全相同，簽章已由原生更新器驗證，均指向上述NSIS。Python worker／runtime、icon.png與歷史Rust離線ZIP未改動。
+此修正版仍為0.8.52，測試時須重新取得這次NSIS，不以畫面版本號判斷是否已換成修正版。Python worker／runtime、icon.png與歷史Rust離線ZIP未改動。
+
+## 先前完整驗證紀錄
+
+2026-10-12 13:59的314項單元測試、完整Office／SMB／NSIS與五項審閱功能驗證，對應初次0.8.52的舊產物，不能套用為本次修正版完整驗收。原始紀錄見[初次發行提交](https://github.com/you1230783-sys/CompanyAI/blob/31b0f3bc298e877a1aad23a9a9cf94eaa640fbac/docs/VALIDATION_0_8_52.md)；`offline/review-verification.json`及未更新的Office／Python／SMB等報告保留當時時間與範圍。
 
 ## 公司實測界線
 
-本機COM fixture不代表公司Outlook資料提供者已實測；本機合成模型測試不代表真實模型會選到正確事件／原因，也不能代替公司加密與網路環境驗收。Git發布不代表公司內網網站已部署。
+公司實測已確認原生陣列方向與ConversationID不支援；修正版的完整信件讀取及速度仍待公司驗收。本機合成模型測試不能代替公司加密、網路及真實模型品質測試。Git發布不代表公司內網網站已部署。

@@ -91,5 +91,6 @@
     "network-verification.json",
     "python-verification.json"
   ],
-  "local_build_log": ".build/release-0.8.52-final.log"
+  "local_build_log": ".build/release-0.8.52-final.log",
+  "artifact_history_note": "Historical initial 0.8.52 full-validation snapshot. The later Outlook hotfix has different artifacts and partial validation; see outlook-table-verification.json."
 }

@@ -1,0 +1,108 @@
+{
+  "result": "PARTIAL_VALIDATION_RELEASED_AT_USER_REQUEST",
+  "recorded_at": "2026-10-12T15:23:40+08:00",
+  "version": "0.8.52.0",
+  "msvc": "14.29.30133",
+  "compiler_report": [
+    "Verified _MSC_FULL_VER=192930159 x64"
+  ],
+  "empty_cargo_cache": true,
+  "cargo_frozen": true,
+  "fmt_clippy": "PASS",
+  "unit_tests": 319,
+  "outlook_focused_tests": 30,
+  "release_build": "PASS",
+  "outlook_worker_protocol": "PASS",
+  "release_webview2_self_check": "PASS",
+  "release_python_self_check": "PASS",
+  "completed_integration_checks": [
+    "AppContainer source protection, Unicode edit, replay, publish/readback, file/network isolation",
+    "Source search/cap/errors, fixed comparison baseline, saved versions, source-bound LOG events",
+    "30 approximately 10 MiB LOG files with paging and source revision checks",
+    "Native cases 0 through 21, including both 68-round cases"
+  ],
+  "native_agent_cases_passed": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21
+  ],
+  "remaining_integration_checks": "STOPPED_BY_USER",
+  "office_smb_tests": "NOT_RERUN",
+  "installer_tests": "NOT_RERUN",
+  "reason": "User requested skipping remaining validation and directly publishing NSIS after the confirmed row/column fix.",
+  "installer_built": true,
+  "manifest_native_verification": "PASS",
+  "artifacts": {
+    "dist/LM_AI.exe": {
+      "bytes": 17796096,
+      "sha256": "d69316d650100ed0164159fd7efc59d3f464d1f2076f73182becd1a635e7a08e"
+    },
+    "dist/LM_AI_Setup.exe": {
+      "bytes": 28689782,
+      "sha256": "06cec6e7aeb299f8e6efd1e0f8891a77fdeaf4060f3c46ecb29fd82116ff4a53"
+    }
+  },
+  "local_build_log": ".build/release-0.8.52-outlook-layout.log",
+  "local_package_log": ".build/package-0.8.52-outlook-layout.log",
+  "scope": "v142 build, required Outlook regressions and packaging passed. Full integration/installation was not completed. Company Outlook end-to-end reading remains pending.",
+  "company_diagnosis": {
+    "source": "User-ran native IDispatch/SAFEARRAY probe",
+    "outlook_version": "16.0.0.17932",
+    "process_bits": 64,
+    "row_count": 3677,
+    "layout": "D1=ROWS, D2=COLUMNS",
+    "common_columns": 5,
+    "visible_columns": 9,
+    "conversation_id": "UNSUPPORTED",
+    "get_array_shapes": [
+      [
+        1,
+        5
+      ],
+      [
+        100,
+        5
+      ],
+      [
+        1,
+        9
+      ],
+      [
+        100,
+        9
+      ]
+    ]
+  },
+  "regressions": [
+    "5/9/10 columns and 1/2/37/100 rows, every cell checked",
+    "Square batches retain column order",
+    "Nonzero/negative lower bounds",
+    "Empty batches; unexpected type/rank/width and oversized batches remain errors",
+    "205 rows across three batches with optional ConversationID accepted/rejected; mandatory columns still fail closed"
+  ],
+  "source_sha256": {
+    "src/outlook/table.rs": "ea239cc7b68dc081e2327a50d20df85ac6a7221f80d02314fa419a87965c818b",
+    "src/outlook/table/tests.rs": "ba5628964d796694b2d42154f0a85a4c504799193421ff9951d6bfa8cb8bad15",
+    "src/outlook/batch/query_tests.rs": "6f686259a4590b55fc40a064edda8a7f156afaf28e032a2aa1d58917e7099d92",
+    "scripts/Test-OutlookTable.ps1": "2fac789d7a43a0fb84ae7deb87e5c36d4e951035b37ec948722faeb570a85280"
+  }
+}
