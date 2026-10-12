@@ -15,6 +15,8 @@ mod pause;
 mod pdf;
 #[path = "project_smoke/resilience.rs"]
 mod resilience;
+#[path = "project_smoke/review.rs"]
+mod review;
 #[path = "project_smoke/roundtrip.rs"]
 mod roundtrip;
 #[path = "project_smoke/server_pdf.rs"]
@@ -165,6 +167,7 @@ fn run() -> AppResult<()> {
     assert_eq!(paths.len(), 1);
     println!("PASS: AppContainer handshake, OS file/network isolation, Unicode edit, replay, source protection, publish/readback, path escape and hardlink rejection. Fixture: {}", root.display());
     drop(worker);
+    review::verify(&exe, &root)?;
     logs::verify(&exe, &root)?;
     native::verify(&root)?;
     resilience::verify(&root)?;

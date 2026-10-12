@@ -114,6 +114,17 @@ fn accessible(note: &Note, conversation: &str) -> bool {
 }
 
 impl Memory {
+    /// 只列本專案的分析方法；使用者選取後填入可編輯草稿，不自動執行舊操作。
+    pub fn analysis_methods(&self) -> AppResult<Value> {
+        let index: Index = self
+            .vault
+            .transaction()?
+            .read("project", "index")?
+            .unwrap_or_default();
+        let methods: Vec<_> = index.notes.iter().filter(|n|n.scope=="project" && !n.deleted && n.title.starts_with("分析方法："))
+            .map(|n|json!({"id":n.id,"revision":n.revision.to_string(),"title":n.title,"body":n.body})).collect();
+        Ok(json!(methods))
+    }
     /// 分析方法是 project 範圍的可修訂筆記；同標題沿用版本，不累積重複條目。
     /// 保存來源任務以便查回程式與工具紀錄，不把模型的「已確認」升格成事實。
     pub(super) fn save_analysis_method(

@@ -583,6 +583,7 @@ function renderMessages() {
       content.append(details);
     }
     content.append(bubble);
+    if(message.request_id)window.ReviewUI?.attach(bubble,{conversation:state.active_id,message_index:index,request_id:message.request_id});
     if (message.project_analysis) {
       const analysis = node("div");
       AnalysisUI.render(analysis,message.project_analysis,true); content.append(analysis);
@@ -1199,6 +1200,7 @@ if (bridge) {
       window.ProjectQuickUI?.receive(event.data);
       window.ProjectComposer?.receive(event.data);
       window.WorkUI?.receive(event.data);
+      window.ReviewUI?.receive(event.data);
       window.VncUI?.receive(event.data);
     }
   });

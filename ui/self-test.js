@@ -25,6 +25,7 @@ window.runSelfTest = async (structuredFixture) => {
   try {
     // 原生 ready 訊息可能早於後續 script；先等全部介面入口就緒再驗證動態節點。
     await waitFor(() => !!window.ProjectUI && !!window.AuthUI, "UI modules initialized");
+    await window.runReviewTests(check);
     check(!!$("project-default-profile") && !$("project-default-desktop") && !$("project-default-downloads"),"default project uses one local profile action");
     check($("project-default-dialog").textContent.includes("LM_AI_Projects"),"default project location is explained");
     {
@@ -339,7 +340,7 @@ window.runSelfTest = async (structuredFixture) => {
     await frame();
     check(
       Math.abs(transcript.scrollTop - streamTop) < 5,
-      "stream preserves reading position",
+      `stream preserves reading position: before=${streamTop}, after=${transcript.scrollTop}, height=${transcript.scrollHeight}, viewport=${transcript.clientHeight}, follow=${LMUI.getFollow()}`,
     );
     LMUI.bottom();
     fixture.work.tasks[0].partial += "\n\n回覆完成。";

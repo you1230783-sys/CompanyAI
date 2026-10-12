@@ -21,6 +21,7 @@ mod pdf;
 mod progress;
 pub mod python;
 pub mod reply;
+pub mod review;
 pub mod runner;
 pub mod sandbox;
 mod server_pdf;
@@ -28,6 +29,7 @@ pub mod setup;
 mod skills;
 pub mod steering;
 pub mod text;
+pub mod timeline;
 mod tool_calls;
 pub(crate) mod vision;
 
@@ -104,6 +106,9 @@ impl Store {
 pub enum Tool {
     RunBatch {
         tasks: Vec<files::batch::Task>,
+    },
+    RecordLogEvents {
+        events: Vec<timeline::Event>,
     },
     RecordAnalysis {
         report: Box<analysis::Report>,
@@ -482,6 +487,7 @@ impl Tool {
     pub fn label(&self) -> &'static str {
         match self {
             Self::RunBatch { .. } => "並行處理獨立工作",
+            Self::RecordLogEvents { .. } => "整理有原文依據的 LOG 事件",
             Self::RecordAnalysis { .. } => "保存分析狀態、證據與核對結果",
             Self::RunPython { .. } => "Python 本機資料分析",
             Self::OutlookFolders { .. } => "列出授權的 Outlook 資料夾",

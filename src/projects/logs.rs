@@ -440,6 +440,11 @@ struct Stamp {
     millis: u32,
 }
 
+/// 事件時間表只沿用原生時間解析；沒有完整日期時明示未知，不憑檔案順序補日期。
+pub(super) fn event_stamp(line: &str) -> Value {
+    stamp(line).map(|s|json!({"date":s.date.map(|d|d.to_string()),"time_millis":s.millis,"inherited":false})).unwrap_or(Value::Null)
+}
+
 fn time(value: &str, end: bool) -> AppResult<u32> {
     let minute = value.len() == 5;
     let parsed = if minute {

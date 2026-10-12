@@ -603,6 +603,7 @@ mod tests {
         ];
         let mut samples = samples.to_vec();
         samples.extend([
+            ("record_log_events", json!({"events":[{"label":"起點","group":"A/1","phase":"start","evidence":{"operation_id":"read","pointer":"/lines/0"}}]})),
             ("plan_code_change", json!({"copy_id":"c","requirements":[{"id":"R1","description":"需求","origin":"user"}]})),
             ("test_python", json!({"copy_id":"c","revision":"r","tests":[{"id":"T1","requirement_ids":["R1"],"code":"pass","mocked_dependencies":[]}]})),
             ("review_code_change", json!({"copy_id":"c","revision":"r","checks":[]})),

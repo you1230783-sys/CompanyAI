@@ -312,3 +312,44 @@ fn pdf_cache_survives_reopen_checks_hash_and_has_a_bounded_index() {
         21
     );
 }
+
+#[test]
+fn reusable_methods_are_project_scoped_versioned_and_exclude_deleted_notes() {
+    let memory = Memory::open(fixture(), "method-chat").unwrap();
+    memory
+        .create_note("conversation", "分析方法：私人", "不可公開")
+        .unwrap();
+    memory
+        .create_note("project", "一般筆記", "不是方法")
+        .unwrap();
+    let method = super::super::analysis::Method {
+        title: "時間配對".into(),
+        applicability: "LOG有日期時間".into(),
+        steps: "先看樣本".into(),
+        validation: "核對未配對筆數".into(),
+        limitations: "時間倒退不配對".into(),
+    };
+    let saved = memory
+        .save_analysis_method(&method, &[], "source-run")
+        .unwrap();
+    let methods = memory.analysis_methods().unwrap();
+    assert_eq!(methods.as_array().unwrap().len(), 1);
+    assert!(methods[0]["body"]
+        .as_str()
+        .unwrap()
+        .contains("無核對不代表通過"));
+    memory
+        .change_note(
+            saved["id"].as_str().unwrap(),
+            saved["revision"].as_str().unwrap(),
+            None,
+            false,
+        )
+        .unwrap();
+    assert!(memory
+        .analysis_methods()
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .is_empty());
+}

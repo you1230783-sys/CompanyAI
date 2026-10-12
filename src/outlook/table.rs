@@ -14,7 +14,7 @@ const COMMON: &[&str] = &[
     "SentOn",
     "LastModificationTime",
 ];
-const VISIBLE: &[&str] = &["ReceivedTime", "SenderName", "To", "CC", "ConversationID"];
+const VISIBLE: &[&str] = &["ReceivedTime", "SenderName", "To", "CC"];
 
 #[derive(Clone)]
 pub(super) struct Row {
@@ -141,6 +141,13 @@ pub(super) fn scan(
     {
         get(&columns, "Add", &mut [(*name).into()])?;
     }
+    // ConversationID 是選用的前文分組提示，部分 Outlook 資料提供者不支援
+    // 以此名稱加入 Table（0x80070057）。失敗時沿用既有主旨／顯示對象分組，
+    // 不增加逐封 COM 呼叫；隱藏副本仍只以完整主旨與寄送秒數判定。
+    // 必要欄位在上方照常傳回錯誤，不能把識別或日期讀取失敗當作沒有郵件。
+    let has_conversation = visible && get(&columns, "Add", &mut ["ConversationID".into()]).is_ok();
+    let width =
+        COMMON.len() + if visible { VISIBLE.len() } else { 0 } + usize::from(has_conversation);
     // 隱藏範圍只依寄送時間；可見收件資料依ReceivedTime排序。
     get(&table, "Sort", &mut [true.into(), field.into()])?;
     let count = i32::try_from(&get(&table, "GetRowCount", &mut [])?)
@@ -151,10 +158,7 @@ pub(super) fn scan(
     let store = text(folder, "StoreID", 4096)?;
     loop {
         batch::check_cancel(cancel)?;
-        let block = cells(
-            &get(&table, "GetArray", &mut [100i32.into()])?,
-            if visible { 10 } else { 5 },
-        )?;
+        let block = cells(&get(&table, "GetArray", &mut [100i32.into()])?, width)?;
         if block.is_empty() {
             break;
         }
@@ -234,8 +238,8 @@ pub(super) fn scan(
                 } else {
                     vec![]
                 },
-                conversation: if visible {
-                    string(&row[9]).unwrap_or_default()
+                conversation: if has_conversation {
+                    string(&row[COMMON.len() + VISIBLE.len()]).unwrap_or_default()
                 } else {
                     String::new()
                 },

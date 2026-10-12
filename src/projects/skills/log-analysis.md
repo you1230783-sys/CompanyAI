@@ -25,3 +25,12 @@ search_logs(query,cursor) 搜尋最多 30 個明確檔案。query.terms 是任�
 重要事件可用 notes 保存有來源的摘要，或 text-edit/office-edit 產出報告；不要把整天 LOG 反覆放進模型上下文。
 
 多檔調查按階段使用 record_analysis 保存重要發現、待確認、原文操作引用與筆數核對。搜尋結果 coverage 是每檔在目前 query 的實際狀態；列出檔案不是已掃描。大檔要交給 Python 時載入 python-analysis，使用 log_range 接續；不要為繞過大小限制把整批 LOG 轉成 CSV。
+
+
+## 事件時間表
+
+調查重要開始／完成／取消／重試／錯誤／恢復事件時，使用 record_log_events，每次1–50筆，整個任務最多500筆或1.5MB。每筆只填 label、group、phase、evidence；evidence.operation_id 引用本任務成功 read_log／search_logs，pointer 指向 `/lines/N` 或 `/matches/N` 的整筆原文。程式從工具結果取得時間、版本及行號，不接受自行編寫時間或原文。截斷行先回讀完整行；未知日期不可捏造。
+
+group 是同一機台／批次／階段的配對鍵。明確單一起點才配對；缺少起終點、多個起點、相同時間、日期不明、沿用時間、來源版本混用或時間倒退均需核對。事件分類與group仍是AI判斷，時間先後不能證明原因。更新同一來源版本／行號會替換註記，不新增重複事件。來源改變須重新核對，舊版本保留可追溯，不能互相拼接。
+
+完成前以record_analysis保存筆數核對、未配對與失敗情況。原生completion只表示實際工具處理範圍，不能代表因果驗證或整份資料已完成。

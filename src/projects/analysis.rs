@@ -161,6 +161,15 @@ pub struct Coverage {
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct State {
+    #[serde(default)]
+    pub completion: Value,
+    /// 命中的原文段落留在本機歷史，與模型的結論分開。
+    #[serde(default)]
+    pub sources: Vec<Value>,
+    #[serde(default)]
+    pub sources_truncated: bool,
+    #[serde(default)]
+    pub timeline: Vec<Value>,
     /// 每個檔案／查詢分開，不因另一次查詢成功就抹除尚未完成的搜尋。
     pub coverage: BTreeMap<String, Coverage>,
     pub coverage_truncated: bool,
@@ -169,6 +178,30 @@ pub struct State {
 }
 
 impl State {
+    /// 計數單位是不同條件的處理範圍，不把一項成功擴大為整份文件完成。
+    pub fn completion_summary(&self) -> Value {
+        let mut counts = BTreeMap::<String, usize>::new();
+        let mut paths = std::collections::BTreeSet::new();
+        for item in self.coverage.values() {
+            *counts.entry(item.status.clone()).or_default() += 1;
+            paths.insert(item.path.replace('\\', "/").to_lowercase());
+        }
+        let checks = self.report.as_ref().and_then(|r| r["checks"].as_array());
+        let failed_checks = checks.map_or(0, |items| {
+            items.iter().filter(|c| c["passed"] != true).count()
+        });
+        let unresolved = self
+            .coverage
+            .values()
+            .filter(|c| matches!(c.status.as_str(), "failed" | "partial" | "pending"))
+            .count();
+        json!({"files":paths.len(),"scopes":self.coverage.len(),"counts":counts,
+            "checks":checks.map_or(0,Vec::len),"failed_checks":failed_checks,"unresolved_scopes":unresolved,
+            "sources_truncated":self.sources_truncated,
+            "requires_attention":unresolved>0 || failed_checks>0 || self.coverage_truncated || self.review_required,
+            "coverage_truncated":self.coverage_truncated,
+            "notice":"依實際工具紀錄計算；僅列出、交給計算及條件完成均不等於整份資料已驗收。排除與解析失敗筆數請查看下方核對。"})
+    }
     /// 合併同版本實際取得的區間；只讀檔尾或重疊分段不能冒充全文完成。
     fn range(
         &mut self,
@@ -264,6 +297,9 @@ impl State {
             if let Tool::RunPython { inputs, .. } = tool {
                 paths.extend(inputs.iter().map(|i| i.path.clone()));
             }
+            if let Tool::SearchFiles { paths: files, .. } = tool {
+                paths.extend(files.clone());
+            }
             if let Tool::SearchLogs { query, .. } = tool {
                 paths.extend(query.paths.clone());
             }
@@ -299,6 +335,64 @@ impl State {
             });
         };
         match tool {
+            Tool::SearchFiles { query, .. } => {
+                if let Some(entries) = value["coverage"].as_array() {
+                    for entry in entries {
+                        if let Some(path) = entry["path"].as_str() {
+                            put(
+                                self,
+                                path,
+                                format!("文件搜尋：{query}"),
+                                entry["status"].as_str().unwrap_or("partial"),
+                                &entry["revision"],
+                                format!(
+                                    "命中 {} 處；{}",
+                                    entry["matches"],
+                                    entry["detail"].as_str().unwrap_or("")
+                                ),
+                            );
+                        }
+                    }
+                }
+                for hit in value["matches"].as_array().into_iter().flatten() {
+                    if !self.sources.iter().any(|old| old == hit) {
+                        if self.sources.len() < 200 {
+                            self.sources.push(hit.clone());
+                        } else {
+                            self.sources_truncated = true;
+                        }
+                    }
+                }
+            }
+            Tool::ReadDocumentSection { path, .. } => put(
+                self,
+                path,
+                "文件區段閱讀".into(),
+                "partial",
+                &value["revision"],
+                "已讀取指定區段；不代表全文。".into(),
+            ),
+            Tool::ExportPlannedExcel { plan_id, .. } => {
+                if let Some(path) = value["source_path"].as_str() {
+                    let query =
+                        super::text::revision(&serde_json::to_string(tool).unwrap_or_default());
+                    put(
+                        self,
+                        path,
+                        format!("Excel規劃 {plan_id} 條件 {query}"),
+                        if value["scan_complete"] == true {
+                            "complete"
+                        } else {
+                            "partial"
+                        },
+                        &value["source_revision"],
+                        format!(
+                            "掃描 {} 列，選取 {} 列；下一來源列 {}。此範圍不代表整本。",
+                            value["scanned_rows"], value["selected_rows"], value["next_source_row"]
+                        ),
+                    );
+                }
+            }
             Tool::ListFiles { path: directory }
             | Tool::ListLogs {
                 path: directory, ..
@@ -465,7 +559,7 @@ impl State {
             .filter(|v| matches!(v.status.as_str(), "failed" | "partial" | "pending"))
             .take(15)
             .collect();
-        let mut summary = json!({"tracked_scopes":self.coverage.len(),"coverage_truncated":self.coverage_truncated,"attention":pending,
+        let mut summary = json!({"completion":self.completion_summary(),"timeline_events":self.timeline.len(),"tracked_scopes":self.coverage.len(),"coverage_truncated":self.coverage_truncated,"attention":pending,
             "report":self.report.as_ref().map(|r| json!({"goal":r["goal"],"current_step":r["current_step"],"open_questions":r["open_questions"],"superseded":r["superseded"],
                 "findings":r["findings"].as_array().map(|items|items.iter().map(|f|json!({"claim":f["claim"],"status":f["status"],"evidence_operations":f["evidence"].as_array().map(|e|e.iter().map(|e|e["operation_id"].clone()).collect::<Vec<_>>())})).collect::<Vec<_>>()),
                 "checks":r["checks"].as_array().map(|items|items.iter().map(|c|json!({"label":c["label"],"operation_id":c["operation_id"],"passed":c["passed"],"total":c["total"]})).collect::<Vec<_>>()),"method_note":r["method_note"]})),"review_required":self.review_required,
@@ -522,6 +616,36 @@ mod tests {
             state.summary()["report"]["findings"][0]["claim"],
             "保留重要發現"
         );
+    }
+    #[test]
+    fn completion_keeps_partial_failures_and_search_caps_visible() {
+        let mut state = State::default();
+        state.range("a.log", "LOG原文", &json!("r1"), 5, 10, true);
+        state.report = Some(json!({"checks":[{"passed":false},{"passed":true}]}));
+        let summary = state.completion_summary();
+        assert_eq!(summary["files"], 1);
+        assert_eq!(summary["unresolved_scopes"], 1);
+        assert_eq!(summary["failed_checks"], 1);
+        assert_eq!(summary["requires_attention"], true);
+        let hits: Vec<_> = (0..205)
+            .map(|line| json!({"path":"a.txt","revision":"r","line":line,"excerpt":"命中"}))
+            .collect();
+        let tool = super::super::Tool::SearchFiles {
+            paths: vec!["a.txt".into()],
+            query: "命中".into(),
+        };
+        state.observe(
+            &tool,
+            &json!({"ok":true,"result":{"matches":hits,"coverage":[]}}),
+        );
+        assert_eq!(state.sources.len(), 200);
+        assert!(state.sources_truncated);
+        let mut old = serde_json::to_value(&state).unwrap();
+        for key in ["completion", "sources", "sources_truncated", "timeline"] {
+            old.as_object_mut().unwrap().remove(key);
+        }
+        let restored: State = serde_json::from_value(old).unwrap();
+        assert!(restored.timeline.is_empty() && restored.sources.is_empty());
     }
     #[test]
     fn checks_use_recorded_counts_and_reject_duplicate_parts() {

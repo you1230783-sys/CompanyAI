@@ -1,3 +1,9 @@
+**0.8.52 桌面工具補充：** 不新增網站API。新增 `record_log_events(events)`，由log-analysis／python-analysis按需公告，參數以當次tools Schema為準；網站只轉發，事件時間與原文引用由桌面核對。每筆evidence使用本次成功read_log的`/lines/N`或search_logs的`/matches/N`，N為零基索引；operation_id是桌面工具結果代號。
+
+`search_files`增加coverage、complete、omitted與來源原文預覽。Office命中回傳block_id／label，offset與line是該區塊內的位置，`offset_basis=block_text`；純文字是全文位置（document_text）。不要把區塊offset當成read_file的全文位置。需要更多內容用區塊標籤／list_document_sections定位再read_document_section，並核對revision。
+
+模型只接收精簡completion及事件數索引；完整左右比較快照、來源預覽與事件表保存在既有本機DPAPI紀錄。重用方法只產生普通提問草稿，沒有自動執行端點。Outlook ConversationID修正保持既有權限與參數。詳見[0.8.52](VALIDATION_0_8_52.md)。
+
 **0.8.51 桌面工具補充：** 不新增網站 API。`edit_code_section` 優先使用 `copy_id/section_id/replacement`；舊的 revision/first_line/last_line/section_hash 整組介面仍相容，兩種方式不能混用。`read_code_section` 回報實際範圍、next_line、eof、source_kind 與 copy_id，超出檔尾自動裁切，超過200行／6000字於完整行分頁。副本 section_id 由桌面核對版本，原件不提供可編輯代號。
 
 目前程式工作資料加入既有 messages，包含有界原文與真實 code_state；相同 section_id 及逐字內容的工具投影改為 text_ref，原始操作紀錄完整保留。網站應照 client_snapshot 傳遞，不額外補回歷史。`run_batch` 的無進展按一次呼叫計算，子項成功／失敗與資料覆蓋仍分別記錄。
@@ -613,3 +619,7 @@ read_work_log目錄offset按筆數，每頁20筆固定快照；指定operation_i
 成功 `outlook_read` 後，下一請求在各工具參數動態增加 `mail_note` 字串。字串內為JSON，包含 source_operation、summary、draft、disposition(include/exclude/uncertain)、rationale、open_questions。詳細契約在system只說一次，避免複製每工具的大型schema。必須搭配下一操作提交，不另外推論摘要；`read_mail_notes` 可用null先查本地來源，其餘操作需先提交摘要。非待摘要回合只在兩個筆記管理工具提供可空的修訂欄位。桌面將該欄位與工具參數分離，核對來源後才執行；網站不處理或保存應用程式筆記。未知／待查請求仍使用原Schema與原ID。
 
 階段read載入Outlook、organize載入notes、write載入office-edit、chart載入dataset-charts；切換不刪來源、圖表或副本。寫入選最多4份草稿，下輪帶摘要與原文操作索引；實際成功寫入另記關聯，階段不是完成證據。完整內容沿用加密broker與journal。摘要不能取代授權或精確事實核對。
+
+### 2026-10-12 Outlook 標題相容性修正（併0.8.52）
+
+桌面將 Table 的 ConversationID 改為選用欄位；資料提供者拒絕加入時仍可讀取標題，thread_id 留空，沿用既有候選分組。必要識別／日期欄位失敗仍回報查詢錯誤，不回傳假零封。此修正不變更網站路由、工具 Schema、資料夾權限或隱藏副本判定。實作與驗證紀錄見 [開發文件](DEVELOPMENT.md)。

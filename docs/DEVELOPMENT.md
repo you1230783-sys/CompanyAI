@@ -1,3 +1,7 @@
+**0.8.52 維護位置：** `projects/review.rs`轉換固定快照，`files/review.rs`保存各成果的原始基準與選定版本，`runner::recover_review`只從DPAPI恢復；`ui/review.js`處理唯讀差異與來源／方法視窗，原生ui/projects驗證目前對話、訊息和request_id。`timeline.rs`核對來源行並保守配對，`files/analysis.rs`綁定已成功操作。`analysis.rs`產生完成摘要及搜尋預覽，`memory::analysis_methods`僅列同專案未刪除的方法筆記。
+
+回歸入口：`scripts/Test-Review.cjs`實際Edge畫面與互動、`ui/review-self-test.js`同樣在正式WebView2自檢執行、`examples/project_smoke/review.rs`真正AppContainer／broker原文與兩次成果版本測試。其他單元測試涵蓋舊資料、格式索引、保存恢復、原文證據拒絕和LOG配對歧義。完整發行狀態以[0.8.52驗證紀錄](VALIDATION_0_8_52.md)為準。
+
 > **0.8.49 維護位置：** `files/batch.rs`管理白名單、最多兩項計算並行及逐項提交，`sandbox::Worker`保存實際執行器路徑；`files/code_sections.rs`以行號／雜湊編輯，`files/drafts.rs`核對並更新任務草稿。`outlook/exclusions.rs`管理本機隱藏副本識別，`files/mail_notes.rs`保存可寫入草稿。`vision/jpeg.rs`使用WIC轉JPEG，`vision.rs`保留圖片額度／待查／快取，`agent.rs`組雙圖content parts。UI活動使用activityEvent屬性，與通知data-event分開；文字雙擊使用實際繪製框命中。詳見[0.8.49驗證](VALIDATION_0_8_49.md)。
 
 > **0.8.48 維護位置：** `ui/chart-layout.js`共用文字量測、避讓、比例位置與拖曳；`ui/chart-text.js`管理新增文字表單；`ui/chart-appearance.js`管理色票。Rust的`charts/style.rs`驗證相同受控欄位，`files/chart_annotations.rs`處理歷史圖索引及另建樣式版本。`calendar::Activity`相容舊字串並保存本機時間，Message／工具事件只在本機顯示時間。`files/python_edit.rs`與固定`python/check_source.py`驗證.py當前副本的編碼、AST及compile，原文不執行。完整結果見 [0.8.48](VALIDATION_0_8_48.md)。
@@ -198,3 +202,13 @@ EXE／ZIP 由 Git LFS 管理。更新簽署私鑰位於 `.private/`，不提交�
 使用既有 loopback SMB 分享下的專用測試子目錄，例如 `scripts/Build.ps1 -EmptyCargoCache -TestOffice -NetworkTestRoot '\\localhost\Y$\Rust\Project\CompanyAI\.build'`。腳本不建立分享；只暫時使用空閒磁碟代號，最後核對並移除自己的映射。`offline/network-verification.json` 分別記錄本機分享通過與公司分享尚未驗證。
 
 無效模型回覆的恢復在 runner 先 `archive_results`，再由 Progress 精簡舊 assistant 歷史及工具結果，保留一組近期結果、原始 user 指示及真實狀態。兩次普通＋兩次恢復，每段累計 30；有進展只重設連續計數，不清除累計。HTTP continuation 測試核對恢復後副本不重複編輯。詳見 [驗證](VALIDATION_0_8_38.md)。
+
+## 2026-10-12：Outlook ConversationID 相容性修正（前置紀錄，後併0.8.52）
+
+公司回報 `Columns.Add("ConversationID")` 失敗，HRESULT `0x80070057`、應用程式代碼4096。`src/outlook/table.rs` 原先將對話識別碼當作必要欄位，加入失敗就中止整批標題讀取。Table 可用屬性與 MailItem 不完全相同，參考 [Microsoft 的 Table 屬性限制](https://learn.microsoft.com/en-us/office/vba/outlook/how-to/search-and-filter/unsupported-properties-in-a-table-object-or-table-filter)。
+
+改為在必要欄位之後嘗試加入選用的 ConversationID，依實際加入結果計算 GetArray 欄數。支援時保留對話識別碼，不支援時使用空值，交由既有主旨／顯示對象候選分組；仍須全文包含才判定前文涵蓋。不增加逐封 COM 讀取，不讀地址簿、正文或附件。隱藏副本仍只使用完整主旨及寄送時間精確到秒；必要欄位加入失敗仍拒絕查詢。
+
+`src/outlook/batch/query_tests.rs` 的 Table fixture 預設拒絕 ConversationID，避免模擬物件無條件接受欄位而漏測。新增205封、跨三批的可見標題案例，分別驗證支援／拒絕該欄位時的主旨、寄件人、To／CC、順序及副本鍵；另驗證 Subject、SentOn、ReceivedTime 加入失敗不能冒充零封。
+
+已執行 `scripts/Build.ps1 -ValidateOnly -EmptyCargoCache -TestOffice -NetworkTestRoot '\\localhost\Y$\Rust\Project\CompanyAI\.build'`：MSVC v142 14.29.30133、實際 `_MSC_FULL_VER=192930159 x64`，格式、Clippy及307項單元測試通過。使用專案 Cargo.lock、vendor、.cargo/config.toml及空 Cargo 快取／`--frozen`。停止前 release 編譯已產生 target 內測試用 EXE，Outlook 輔助程序的無效要求／EOF自檢通過。使用者要求等待 Python 測試結果後再一起進版、編譯與推送，因此中止後續驗證；完整 Office／SMB及封裝驗證未完成，不宣稱建置完成。日誌位於 `.build/outlook-conversation-validation.log`。既有0.8.51發行產物與清單未更新，沒有進版或推送；本機 COM fixture 不代表公司 Outlook 實機已驗收。

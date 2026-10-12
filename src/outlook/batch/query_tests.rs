@@ -3,9 +3,85 @@
 use super::*;
 use std::{cell::RefCell, rc::Rc};
 use windows::core::{implement, Error, Result as ComResult};
-use windows::Win32::Foundation::{DISP_E_MEMBERNOTFOUND, E_NOTIMPL};
+use windows::Win32::Foundation::{DISP_E_MEMBERNOTFOUND, E_INVALIDARG, E_NOTIMPL};
 
 type Handler = Box<dyn Fn(&[VARIANT]) -> ComResult<VARIANT>>;
+
+/// 模擬公司 Outlook 在 Columns.Add 拒絕 ConversationID；跨批次核對欄位沒有錯位。
+#[test]
+fn visible_table_keeps_headers_when_conversation_column_is_unsupported() {
+    use crate::outlook::table;
+    for rejected in [None, Some("ConversationID")] {
+        let mails = (0..205)
+            .map(|i| {
+                dispatch(vec![
+                    fixed("EntryID", format!("mail-{i}").as_str()),
+                    fixed("Subject", format!("主旨{i}").as_str()),
+                    fixed("SentOn", 46000.0 + i as f64 / 86400.0),
+                    fixed("ReceivedTime", 46001.0 + i as f64 / 86400.0),
+                    fixed("SenderName", "寄件人"),
+                    fixed("To", "收件群組"),
+                    fixed("CC", "副本群組"),
+                    fixed("ConversationID", "thread-1"),
+                ])
+            })
+            .collect();
+        let target = dispatch(vec![
+            fixed("StoreID", "s"),
+            fixed(
+                "GetTable",
+                table_fixture_rejecting_column(mails, None, rejected),
+            ),
+        ]);
+        // 不提供逐封讀取、地址簿、正文或附件，所有標題必須透過 Table 完成。
+        let rows = table::scan(
+            &dispatch(vec![]),
+            &target,
+            "ReceivedTime",
+            None,
+            true,
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        assert_eq!(rows.len(), 205);
+        for (row, i) in rows.iter().zip((0..205).rev()) {
+            assert_eq!(row.entry, format!("mail-{i}"));
+            assert_eq!(row.subject, format!("主旨{i}"));
+            assert_eq!(row.sender, "寄件人");
+            assert_eq!(row.recipients, ["to:收件群組", "cc:副本群組"]);
+            assert!(!row.received.is_empty());
+            assert_eq!(
+                row.conversation,
+                if rejected.is_some() { "" } else { "thread-1" }
+            );
+            assert_eq!(row.key(), table::key(&format!("主旨{i}"), row.sent));
+        }
+    }
+}
+
+#[test]
+fn required_table_column_failure_is_not_treated_as_empty_mail() {
+    for rejected in ["Subject", "SentOn", "ReceivedTime"] {
+        let target = dispatch(vec![
+            fixed("StoreID", "s"),
+            fixed(
+                "GetTable",
+                table_fixture_rejecting_column(vec![], None, Some(rejected)),
+            ),
+        ]);
+        let error = crate::outlook::table::scan(
+            &dispatch(vec![]),
+            &target,
+            "ReceivedTime",
+            None,
+            true,
+            &AtomicBool::new(false),
+        )
+        .err()
+        .expect("必要欄位不可讀時必須拒絕查詢");
+        assert!(error.contains("0x80070057"), "{error}");
+    }
+}
 
 #[test]
 fn table_dates_page_in_hundreds_and_fallback_stops_before_start() {
@@ -397,7 +473,16 @@ fn collection(values: Vec<IDispatch>) -> IDispatch {
 }
 
 /// 真正建立二維SAFEARRAY，測試COM批次欄列方向、日期過濾與排序。
-fn table_fixture(mut rows: Vec<IDispatch>, filter: Option<String>) -> IDispatch {
+fn table_fixture(rows: Vec<IDispatch>, filter: Option<String>) -> IDispatch {
+    // 預設重現實際資料提供者限制，不再讓 fixture 接受所有欄位而漏掉相容性錯誤。
+    table_fixture_rejecting_column(rows, filter, Some("ConversationID"))
+}
+
+fn table_fixture_rejecting_column(
+    mut rows: Vec<IDispatch>,
+    filter: Option<String>,
+    rejected: Option<&'static str>,
+) -> IDispatch {
     if let Some(filter) = filter {
         let field = filter.split(']').next().unwrap().trim_start_matches('[');
         let dates: Vec<_> = filter.split('\'').collect();
@@ -424,7 +509,11 @@ fn table_fixture(mut rows: Vec<IDispatch>, filter: Option<String>) -> IDispatch 
                 (
                     "Add",
                     Box::new(move |args| {
-                        added.borrow_mut().push(argument_text(&args[0]));
+                        let name = argument_text(&args[0]);
+                        if rejected == Some(name.as_str()) {
+                            return Err(Error::from_hresult(E_INVALIDARG));
+                        }
+                        added.borrow_mut().push(name);
                         Ok(VARIANT::default())
                     }),
                 ),

@@ -1560,3 +1560,23 @@ dialog button.icon-button { padding:6px; }
 .chart-text-row button { flex-shrink:0; }
 
 .local-time { display:inline-block; color:var(--muted); font-size:12px; font-weight:normal; font-variant-numeric:tabular-nums; margin-inline:8px; white-space:nowrap; }
+
+/* 比較視窗與來源快照使用既有深淺色變數，文字不作為 HTML。 */
+.review-window {width:min(1200px,94vw);max-width:98vw;height:85vh;max-height:96vh;padding:14px;resize:both;overflow:hidden;}
+.review-window.review-maximized {width:98vw;height:96vh;}
+.review-window[open] {display:flex;flex-direction:column;gap:10px;}
+.review-header,.review-toolbar {display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.review-header strong {flex:1;}.review-toolbar input[type=search] {min-width:200px;flex:1;}
+.review-summary {max-height:22vh;overflow:auto;font-size:13px;}.review-summary p {margin:4px 0;}
+.review-body {overflow:auto;flex:1;min-height:120px;font-size:16px;}
+.review-row {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);border-bottom:1px solid #80808055;}
+.review-heading {position:sticky;top:0;z-index:1;background:var(--panel,#f5f5f5);padding:10px;}
+.review-cell {padding:8px 12px;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;border-right:1px solid #80808055;}
+.review-cell small {display:block;opacity:.7;font-size:12px;}.review-cell del {background:#cf30304d;text-decoration:line-through;}
+.review-cell ins {background:#24944955;text-decoration:underline;}.review-removed {background:#cf303015;}.review-added {background:#24944918;}
+.review-open {margin:3px 8px;font-size:12px;}.source-window {width:min(1000px,90vw);max-height:88vh;overflow:auto;}
+.source-window pre {white-space:pre-wrap;overflow-wrap:anywhere;max-height:60vh;overflow:auto;}
+.source-window textarea {display:block;box-sizing:border-box;width:100%;margin:12px 0;}
+.analysis-completion {padding:10px;border:1px solid #80808055;border-radius:8px;margin:8px 0;}
+.analysis-source-list {max-height:420px;overflow:auto;}.analysis-timeline {overflow:auto;max-height:500px;}
+.analysis-timeline table {border-collapse:collapse;width:100%;}.analysis-timeline td,.analysis-timeline th {padding:7px;border:1px solid #80808055;text-align:left;}

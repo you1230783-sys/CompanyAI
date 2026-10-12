@@ -210,6 +210,7 @@ impl Coverage {
             }
             Tool::CompactContext { .. }
             | Tool::RecordAnalysis { .. }
+            | Tool::RecordLogEvents { .. }
             | Tool::CreateNote { .. }
             | Tool::UpdateNote { .. }
             | Tool::UpdateDocumentNote { .. } => {

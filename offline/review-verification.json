@@ -1,0 +1,95 @@
+{
+  "result": "PASS",
+  "recorded_at": "2026-10-12T13:59:28.3143958+08:00",
+  "version": "0.8.52.0",
+  "toolset": "14.29.30133",
+  "compiler_report": [
+    "v142.c",
+    "Verified _MSC_FULL_VER=192930159 x64"
+  ],
+  "empty_cargo_cache": true,
+  "cargo_frozen": true,
+  "unit_tests": 314,
+  "integration_case_counts": {
+    "native_agent": 26,
+    "resilience": 9,
+    "vision": 13
+  },
+  "edge_checks": [
+    "comparison preserves changed/deleted/added Unicode lines",
+    "Office format-only change remains visible",
+    "large comparison is bounded without dropping rows",
+    "comparison opens red deletion and green insertion sides",
+    "comparison treats source HTML as plain text",
+    "before and after remain side by side",
+    "comparison search filters both sides",
+    "only changes hides unchanged rows",
+    "comparison font size is adjustable",
+    "comparison maximizes within app",
+    "legacy artifact never invents a baseline",
+    "review request binds artifact to conversation message and run",
+    "foreign conversation response cannot open review",
+    "matching response opens fixed snapshot",
+    "conversation switch closes private review",
+    "method supports editable steps and new input conditions",
+    "method reuse saves the actual draft without executing or sending a chat",
+    "completion keeps partial failures and failed checks visible",
+    "timeline preserves uncertainty",
+    "source cap is explicit and preview text is inert",
+    "visual light",
+    "visual dark",
+    "visual narrow"
+  ],
+  "webview2_release_and_installed_self_checks": true,
+  "native_review_checks": [
+    "Real AppContainer source search, Unicode context, cap and failed-file coverage",
+    "Two saved artifact snapshots retain their original baseline after the source changes",
+    "Source-bound LOG event pairing from successful native read_log results",
+    "DPAPI journal review lookup validates request id and exact artifact path",
+    "Office format indices resolve to actual formatting; missing legacy baseline stays unavailable",
+    "Partial and failed scopes stay visible; no-success summary cannot claim completion",
+    "Project method selector excludes deleted notes and other projects",
+    "Unknown dates, conflicting times/versions and ambiguous starts do not invent LOG pairs"
+  ],
+  "outlook_checks": [
+    "205-row COM fixtures accept and reject optional ConversationID across three batches",
+    "Required column failure remains an error",
+    "Release helper rejects malformed requests and exits cleanly on EOF without mailbox access"
+  ],
+  "ui_test_isolation_fix": "Wait for the real debounced draft command while send is intercepted, then clear pending timer before restoring native state; retain stream position assertion.",
+  "artifacts": {
+    "dist/LM_AI.exe": {
+      "bytes": 17821184,
+      "sha256": "33f2dc6438e63e94f42f7972c761c6d2084718f271c296b7d5865071d115d8f9"
+    },
+    "dist/LM_AI_Setup.exe": {
+      "bytes": 28711353,
+      "sha256": "1652c5903692094a421add21f3ace1eac578ef771732f0d0fa402f910a8a7f56"
+    }
+  },
+  "source_sha256": {
+    "src/outlook/table.rs": "04e97e929438ed3f51247f92f2760cc573d78296894e8d1b23f7f5c080229bc6",
+    "src/projects/review.rs": "566119fa1e2e6cb6f02a170032e6cf90d7f580978ba2772a76b5b8bd7e875fec",
+    "src/projects/files/review.rs": "a6f7a3beaed80b865ab523637162e762aa13f7f4a93d57b2d9e656fcf887164c",
+    "src/projects/analysis.rs": "f46adeef3da3c9b3765926f2f905fb7847756fdf407b88a8a10a63da0a7ae4ab",
+    "src/projects/timeline.rs": "0733f474d221c39d55de78d6d617c04ff549af2e9e5e8cdb878de290a9c87e1d",
+    "src/projects/files/analysis.rs": "3239d1551ba980acf4c610e2208e3478c6d2960f56177a5fd293b0060b7d6401",
+    "src/projects/runner.rs": "133502fbd87f5e3d2f5d678295512ba692ca70d7f3bfa6458b43da22f0d3c4ec",
+    "src/ui/projects.rs": "8918db371bb34181ba143d404fd6550e3f7d867386d25018d10d8eeec40be461",
+    "ui/review.js": "ce85a83f4059313276dd65b5860de2b1e670913637de2017d253f9d2b83098ef",
+    "ui/review-self-test.js": "0880f25f63872f10262acb2ee3b3521dc7de095e0ceac0eb1a98628498119f6a",
+    "ui/analysis.js": "46783a8a427f5bd71ba00ca2c08650f323a992581284a6a7c6e8227a0b3d669b",
+    "ui/self-test.js": "bdc739a282e3153eca78a17961c2fb1555f2d9dee9b7d66c8b1cd25ebaf041fe",
+    "scripts/Test-Review.cjs": "5fce56d0369401f888d7e140ef614f018321b91403620cd00ad381e40073e9b2",
+    "examples/project_smoke/review.rs": "637ed547435d6d47f4d2c6bc197e97ef358957da2a58ad3456837f9c784c3941"
+  },
+  "scope": "Local synthetic source/model/COM tests plus real Office, Python, loopback SMB and NSIS. Corporate Outlook, encryption, network and model quality still require company testing. Office comparison is content/format/structure, not rendered pages.",
+  "reports": [
+    "exe-verification.json",
+    "installer-verification.json",
+    "office-verification.json",
+    "network-verification.json",
+    "python-verification.json"
+  ],
+  "local_build_log": ".build/release-0.8.52-final.log"
+}

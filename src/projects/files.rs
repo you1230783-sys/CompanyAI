@@ -11,6 +11,7 @@ mod drafts;
 mod mail_notes;
 mod python;
 mod python_edit;
+mod review;
 use super::{
     office,
     sandbox::{Edit, Worker},
@@ -664,6 +665,11 @@ fn render_office(
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Copy {
+    /// 建立副本時的固定基準；舊紀錄缺少時維持 None。
+    #[serde(default)]
+    baseline: Option<String>,
+    #[serde(default)]
+    reviews: BTreeMap<String, super::review::Snapshot>,
     office: Option<OfficeCopy>,
     name: String,
     text: String,
@@ -1268,6 +1274,7 @@ impl Broker {
         }
         let mut matches = Vec::new();
         let mut errors = Vec::new();
+        let mut coverage = Vec::new();
         let mut truncated = false;
         for path in paths {
             if cancel.load(std::sync::atomic::Ordering::Relaxed) {
@@ -1276,22 +1283,50 @@ impl Broker {
             match self.content(path, cancel, worker) {
                 Ok(content) => {
                     let revision = text::revision(&content);
-                    for (byte, _) in content.match_indices(query) {
-                        if matches.len() >= 60 {
-                            truncated = true;
-                            break;
+                    let blocks: Vec<(String, String, Option<String>)> =
+                        if let Ok(snapshot) = serde_json::from_str::<office::Snapshot>(&content) {
+                            snapshot
+                                .blocks
+                                .into_iter()
+                                .map(|b| (b.label, b.text, Some(b.id)))
+                                .collect()
+                        } else {
+                            vec![("文件原文".into(), content.clone(), None)]
+                        };
+                    let mut total = 0usize;
+                    let mut omitted = 0usize;
+                    for (label, body, block_id) in blocks {
+                        let body_chars = body.chars().count();
+                        for (byte, _) in body.match_indices(query) {
+                            total += 1;
+                            if matches.len() >= 60 {
+                                truncated = true;
+                                omitted += 1;
+                                continue;
+                            }
+                            let offset = body[..byte].chars().count();
+                            let start = offset.saturating_sub(500);
+                            let context: String = body.chars().skip(start).take(2000).collect();
+                            matches.push(json!({"path":path,"revision":revision,"offset":offset,"label":label,
+                                "context_start":start,"excerpt":context,"query":query,"block_id":block_id,
+                                "offset_basis":if block_id.is_some(){"block_text"}else{"document_text"},
+                                "excerpt_truncated":start>0 || body_chars>start+2000,
+                                "line":body[..byte].bytes().filter(|b|*b==b'\n').count()+1}));
                         }
-                        let offset = content[..byte].chars().count();
-                        let start = offset.saturating_sub(100);
-                        matches.push(json!({"path":path,"revision":revision,"offset":offset,"excerpt":content.chars().skip(start).take(300).collect::<String>()}));
                     }
+                    coverage.push(json!({"path":path,"revision":revision,"matches":total,"omitted":omitted,
+                        "status":if omitted>0 {"partial"}else{"complete"},"detail":if omitted>0 {"已掃描，但部分命中未列出；縮小搜尋範圍可查回。"}else{"此查詢掃描完成；零命中不代表其他用詞不存在。"}}));
                 }
                 Err(error) if error.contains(super::interaction::DEFERRED) => return Err(error),
-                Err(error) => errors.push(json!({"path":path,"error":error})),
+                Err(error) => {
+                    coverage
+                        .push(json!({"path":path,"status":"failed","matches":null,"detail":error}));
+                    errors.push(json!({"path":path,"error":error}));
+                }
             }
         }
         Ok(
-            json!({"matches":matches,"errors":errors,"truncated":truncated,"complete":errors.is_empty()&&!truncated}),
+            json!({"matches":matches,"coverage":coverage,"errors":errors,"truncated":truncated,"complete":errors.is_empty()&&!truncated}),
         )
     }
     pub fn published(&self) -> &[String] {
@@ -1516,6 +1551,7 @@ impl Broker {
         };
         if result["result"]["waiting_for_user"] != true {
             self.analysis.observe(tool, &result);
+            self.analysis.completion = self.analysis.completion_summary();
             self.results.insert(id.into(), (request, result.clone()));
         }
         Ok(result)
@@ -1677,6 +1713,7 @@ impl Broker {
                 note_ids,
                 reason,
             } => self.set_work_stage(*stage, note_ids, reason),
+            Tool::RecordLogEvents { events } => self.record_log_events(events),
             Tool::RecordAnalysis { report } => self.record_analysis(report),
             Tool::PlanExcelAnalysis { proposal } => {
                 let columns = proposal.columns()?;
@@ -1728,12 +1765,18 @@ impl Broker {
                     &plan.proposal.path,
                     &plan.proposal.revision,
                 )?;
+                let source_path = plan.proposal.path.clone();
+                let source_revision = plan.proposal.revision.clone();
                 if let Some(metadata) = table.excel.as_mut() {
                     metadata.plan = Some(plan);
                     metadata.filter = window.clone();
                     metadata.scanned_rows = scanned;
                 }
                 let mut result = self.save_dataset(name, &table, cancel)?;
+                result["source_path"] = json!(source_path);
+                result["source_revision"] = json!(source_revision);
+                result["selected_rows"] = json!(table.rows.len());
+                result["scanned_rows"] = json!(scanned);
                 result["next_source_row"] = json!(page.next_row);
                 result["scan_complete"] = json!(page.next_row.is_none());
                 Ok(result)
@@ -2544,6 +2587,8 @@ impl Broker {
                 self.copies.insert(
                     id.clone(),
                     Copy {
+                        baseline: Some(content.clone()),
+                        reviews: BTreeMap::new(),
                         office,
                         name: name.clone(),
                         code_review: super::code_review::State {
@@ -2756,6 +2801,8 @@ impl Broker {
                 }
                 copy.saved_revision = Some(revision.clone());
                 copy.paths.push(relative.clone());
+                copy.reviews
+                    .insert(relative.clone(), copy.comparison(&relative, false));
                 Ok(json!({"copy_id":copy_id,"path":relative,"revision":revision,"verified":true}))
             }
             Tool::DeleteCopy { copy_id } => {
@@ -3004,6 +3051,8 @@ mod tests {
         broker.copies.insert(
             "c".into(),
             Copy {
+                baseline: None,
+                reviews: BTreeMap::new(),
                 office: None,
                 name: "a.txt".into(),
                 text: String::new(),

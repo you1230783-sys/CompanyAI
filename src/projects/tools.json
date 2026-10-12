@@ -4225,7 +4225,9 @@
             "copy_id": {
               "type": "string"
             },
-            "section_id": {"type": "string"},
+            "section_id": {
+              "type": "string"
+            },
             "revision": {
               "type": "string"
             },
@@ -4504,6 +4506,77 @@
             "copy_id",
             "revision",
             "checks",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "record_log_events",
+        "description": "保存有原文依據的LOG事件時間表，核對來源版本並標示缺失或歧義配對；不是因果認定。 每筆evidence.pointer指向read_log的/lines/N或search_logs的/matches/N完整行，N從0起算；group用同一機台／批次，事件分類不明時phase=other。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "events": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "group": {
+                    "type": "string"
+                  },
+                  "phase": {
+                    "type": "string",
+                    "enum": [
+                      "start",
+                      "end",
+                      "cancel",
+                      "retry",
+                      "error",
+                      "recovery",
+                      "other"
+                    ]
+                  },
+                  "evidence": {
+                    "type": "object",
+                    "properties": {
+                      "operation_id": {
+                        "type": "string"
+                      },
+                      "pointer": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "operation_id",
+                      "pointer"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "label",
+                  "group",
+                  "phase",
+                  "evidence"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
+            }
+          },
+          "required": [
+            "events",
             "progress_note"
           ],
           "additionalProperties": false

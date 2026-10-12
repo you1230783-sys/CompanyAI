@@ -1055,6 +1055,7 @@ fn run_for(
                     broker.remember_result(&operation_id, &request, &result)?;
                     record["mail_notes"] = json!(broker.mail_notes);
                     record["analysis"] = json!(broker.analysis);
+                    record["reviews"] = json!(broker.review_snapshots());
                     record["charts"] = json!(broker.charts());
                     charts(broker.charts().to_vec());
                     if let Some(callback) = analysis.as_mut() {
@@ -1287,6 +1288,7 @@ fn run_for(
     });
     record["mail_notes"] = json!(broker.mail_notes);
     record["analysis"] = json!(broker.analysis);
+    record["reviews"] = json!(broker.review_snapshots());
     record["charts"] = json!(broker.charts());
     record["outputs"] = json!(broker.published());
     record["result"] = json!(result);
@@ -1483,7 +1485,23 @@ fn trim_journal(record: &mut Value) {
     }
 }
 
-/// 只還原原生保存的分析快照；舊紀錄沒有欄位時維持空白。
+/// 只還原選定成果的固定比較快照，不重新讀取現在的原件。
+pub fn recover_review(root: &Path, id: &str, path: &str) -> AppResult<super::review::Snapshot> {
+    jobs::validate_id(id)?;
+    let file = root.join("project-runs").join(format!("{id}.dpapi"));
+    if std::fs::metadata(&file).map_err(|e| e.to_string())?.len() > 64_000_000 {
+        return Err("任務紀錄過大，無法開啟比較。".into());
+    }
+    let bytes = storage::protect(&std::fs::read(file).map_err(|e| e.to_string())?, false)?;
+    let record: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    let snapshots: Vec<super::review::Snapshot> = serde_json::from_value(record["reviews"].clone())
+        .map_err(|_| "此舊成果沒有保存比較基準，無法還原修改前內容。")?;
+    snapshots
+        .into_iter()
+        .find(|s| s.path.replace('\\', "/") == path.replace('\\', "/"))
+        .ok_or("此成果沒有可用的比較快照。".into())
+}
+
 pub fn recover_analysis(root: &Path, id: &str) -> Option<super::analysis::State> {
     jobs::validate_id(id).ok()?;
     let path = root.join("project-runs").join(format!("{id}.dpapi"));
@@ -1525,6 +1543,38 @@ mod pause_tests {
         assert!(!quota_reached(79, 59));
         assert!(quota_reached(80, 59));
         assert!(quota_reached(79, 60));
+    }
+    #[test]
+    fn review_journal_restores_only_the_selected_encrypted_artifact() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(".build")
+            .join(format!("review-journal-{}", jobs::new_id().unwrap()));
+        std::fs::create_dir_all(root.join("project-runs")).unwrap();
+        let id = jobs::new_id().unwrap();
+        let path = root.join("project-runs").join(format!("{id}.dpapi"));
+        let snapshot = super::super::review::Snapshot {
+            name: "test.txt".into(),
+            path: "_AI_Output/run/test.txt".into(),
+            before: Some("PRIVATE ORIGINAL TEXT".into()),
+            after: "固定成果".into(),
+            before_revision: Some("r1".into()),
+            after_revision: "r2".into(),
+            office: false,
+            draft: false,
+        };
+        checkpoint(&path, &json!({"reviews":[snapshot]})).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(!String::from_utf8_lossy(&bytes).contains("PRIVATE ORIGINAL TEXT"));
+        let recovered = recover_review(&root, &id, "_AI_Output\\run\\test.txt").unwrap();
+        assert_eq!(recovered.before.as_deref(), Some("PRIVATE ORIGINAL TEXT"));
+        assert_eq!(recovered.after, "固定成果");
+        assert!(recover_review(&root, &id, "_AI_Output/run/other.txt").is_err());
+        assert!(recover_review(&root, "../other", "_AI_Output/run/test.txt").is_err());
+        checkpoint(&path, &json!({"analysis":{}})).unwrap();
+        assert!(recover_review(&root, &id, "_AI_Output/run/test.txt")
+            .err()
+            .unwrap()
+            .contains("舊成果"));
     }
     #[test]
     fn recovery_never_replays_unknown_writes() {

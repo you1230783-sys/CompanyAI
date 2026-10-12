@@ -294,6 +294,10 @@
     },
     render() {
     const projects = state.projects || {items:[]};
+    const methodsButton=$("project-methods");
+    methodsButton.hidden=!state.logged_in||!state.conversations.some(c=>c.id===state.active_id&&c.project_id);
+    methodsButton.onclick=()=>send({type:"project",command:{action:"methods",conversation:state.active_id}});
+    window.ReviewUI?.sync();
     const showActivity = state.logged_in && projects.running && projects.running_conversation === state.active_id;
     renderSupplements(projects,showActivity);
     renderReview(projects,showActivity);

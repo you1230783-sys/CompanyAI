@@ -174,6 +174,8 @@ mod tests {
         broker.copies.insert(
             "copy".into(),
             Copy {
+                baseline: None,
+                reviews: BTreeMap::new(),
                 name: "draft.py".into(),
                 text: "pass\r\n".into(),
                 encoding: Encoding::Utf8(false),

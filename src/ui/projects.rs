@@ -10,6 +10,15 @@ mod weekly;
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(super) enum ProjectCommand {
+    Review {
+        conversation: String,
+        message_index: usize,
+        request_id: String,
+        path: String,
+    },
+    Methods {
+        conversation: String,
+    },
     ChartCustomize {
         target: chart_edit::Target,
         style: Option<Box<projects::charts::style::Style>>,
@@ -405,6 +414,50 @@ impl App {
             "running":self.projects.running.is_some(),"running_id":self.projects.running.as_ref().map(|r|&r.id),"activity":self.projects.running.as_ref().map(|r|&r.activity),"charts":self.projects.running.as_ref().map(|r|&r.charts),"analysis":self.projects.running.as_ref().and_then(|r|r.analysis.as_ref()),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
     }
     pub(super) fn project_command(&mut self, command: ProjectCommand) -> AppResult<()> {
+        if let ProjectCommand::Review {
+            conversation,
+            message_index,
+            request_id,
+            path,
+        } = &command
+        {
+            if !self.logged_in()
+                || self.versions.blocked()
+                || self.active_id.as_deref() != Some(conversation)
+                || self.projects.store.project_for(conversation).is_none()
+                || !self
+                    .messages
+                    .get(*message_index)
+                    .is_some_and(|m| m.request_id.as_deref() == Some(request_id))
+            {
+                return Err("請在原專案對話選擇成果。".into());
+            }
+            let result =
+                projects::runner::recover_review(&self.root, request_id, path).map(|s| s.display());
+            self.view.post(&json!({"type":"project_review","conversation":conversation,"request_id":request_id,"path":path,
+                "data":result.as_ref().ok(),"error":result.as_ref().err()}))?;
+            return Ok(());
+        }
+        if let ProjectCommand::Methods { conversation } = &command {
+            if !self.logged_in()
+                || self.versions.blocked()
+                || self.active_id.as_deref() != Some(conversation)
+            {
+                return Err("請在已登入的原專案選擇分析方法。".into());
+            }
+            let project = self
+                .projects
+                .store
+                .project_for(conversation)
+                .ok_or("此對話不屬於專案。")?
+                .clone();
+            let methods =
+                projects::memory::Memory::open(project, conversation)?.analysis_methods()?;
+            self.view.post(
+                &json!({"type":"project_methods","conversation":conversation,"methods":methods}),
+            )?;
+            return Ok(());
+        }
         match self.chart_edit_command(&command) {
             Ok(true) => return Ok(()),
             Err(error) if matches!(command, ProjectCommand::ChartSave { .. }) => {
@@ -872,7 +925,9 @@ impl App {
                 self.projects.store = store;
                 self.toast("已清除匯入文字");
             }
-            ProjectCommand::Reveal { .. } => unreachable!("已於上方處理成果定位"),
+            ProjectCommand::Reveal { .. }
+            | ProjectCommand::Review { .. }
+            | ProjectCommand::Methods { .. } => unreachable!("已於上方處理專案審閱"),
             ProjectCommand::AnswerPreference { .. }
             | ProjectCommand::SetDebug { .. }
             | ProjectCommand::Diagnostics { .. } => {

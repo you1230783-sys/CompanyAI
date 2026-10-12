@@ -3,6 +3,54 @@ use super::*;
 use crate::projects::analysis;
 
 impl Broker {
+    pub(super) fn record_log_events(
+        &mut self,
+        events: &[super::super::timeline::Event],
+    ) -> AppResult<Value> {
+        if events.is_empty() || events.len() > 50 {
+            return Err("每次需提交1–50筆事件。".into());
+        }
+        let mut timeline = self.analysis.timeline.clone();
+        for event in events {
+            let (request, result) = self
+                .recorded_operation(&event.evidence.operation_id)?
+                .ok_or("事件證據不存在於本次任務。")?;
+            let row = super::super::timeline::from_evidence(event, &request, &result)?;
+            if let Some(old) = timeline.iter_mut().find(|old| old["id"] == row["id"]) {
+                *old = row;
+            } else {
+                timeline.push(row);
+            }
+        }
+        if timeline.len() > 500
+            || serde_json::to_vec(&timeline)
+                .map_err(|e| e.to_string())?
+                .len()
+                > 1_500_000
+        {
+            return Err("事件時間表超過500筆或1.5MB，請縮小調查範圍。".into());
+        }
+        super::super::timeline::reconcile(&mut timeline);
+        let attention = timeline
+            .iter()
+            .filter(|e| !matches!(e["pair_status"].as_str(), Some("paired" | "not_applicable")))
+            .count();
+        // 僅回傳有界的待查索引，完整原文留在本機面板及既有操作紀錄。
+        let unresolved: Vec<_> = timeline
+            .iter()
+            .filter(|e| !matches!(e["pair_status"].as_str(), Some("paired" | "not_applicable")))
+            .take(20)
+            .map(|e| {
+                json!({"label":e["label"],"group":e["group"],"path":e["path"],
+                "revision":e["revision"],"line":e["line"],"status":e["pair_status"]})
+            })
+            .collect();
+        self.analysis.timeline = timeline;
+        Ok(
+            json!({"events":self.analysis.timeline.len(),"needs_review":attention,"attention":unresolved,"attention_truncated":attention>20,"notice":"已保存原文事件；AI分類與時間先後均不代表已證明原因。"}),
+        )
+    }
+
     pub(super) fn record_analysis(&mut self, report: &analysis::Report) -> AppResult<Value> {
         report.validate()?;
         let mut findings = Vec::new();
@@ -85,6 +133,7 @@ impl Broker {
             "open_questions":report.open_questions,"superseded":report.superseded,"findings":findings,"checks":checks,"method_note":method_note}),
         );
         self.analysis.review_required = false;
+        self.analysis.completion = self.analysis.completion_summary();
         Ok(self.analysis.summary())
     }
 }

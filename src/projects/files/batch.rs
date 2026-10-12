@@ -135,6 +135,8 @@ fn compute(
         broker.copies.insert(
             id.clone(),
             Copy {
+                baseline: None,
+                reviews: BTreeMap::new(),
                 office: None,
                 name: name.clone(),
                 text: text.clone(),
