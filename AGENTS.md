@@ -1,5 +1,12 @@
 # 專案級開發指引
 
+## 2026-10-14：0.8.53 補做完整驗證（最新授權）
+
+- 使用者回報測試 OK，要求接續完整驗證；取代下方暫緩完整驗證的安排。維持 0.8.53，使用既有 `scripts/Build.ps1 -EmptyCargoCache -TestOffice -NetworkTestRoot '\\localhost\Y$\Rust\Project\CompanyAI\.build' -IncludeInstaller`，指定 v142 x64 並核對實際編譯器。
+- 補跑完整 workspace、專案／Python 隔離與長流程、Office／本機 SMB，以及 NSIS 安裝／更新／回復／解除安裝。依實際結果更新驗證紀錄；使用者的「測試 OK」不擴大解讀為所有公司環境與 PDF 格式均已驗收。
+- 沿用既有 Git main 推送授權；保留 icon.png、共享環境、Python runtime 指紋及歷史離線 ZIP。
+- 2026-10-14 16:05 完整流程通過：v142 x64／空 Cargo 快取／--frozen、326 項單元測試、原生與長任務／Python／Office／本機 SMB、正式 NSIS 安裝更新回復解除安裝。前端 8 組圖表與 31 項分析／比較重跑通過。沒有修改功能程式碼，EXE／NSIS 雜湊與使用者測試包完全相同，維持 0.8.53；詳見 docs/VALIDATION_0_8_53.md。
+
 ## 2026-10-14：0.8.53 基礎驗證測試包（最新授權）
 
 - 使用者提供網站調查：疑似POST413在建任務前拒絕，桌面續查by-request才衍生404；415網站已放寬PDF開頭判斷，實際加密封裝原因仍未確認。

@@ -16,11 +16,11 @@
 
 # 開發與維護說明
 
-## 0.8.53：聊天拒絕與基礎驗證交付
+## 0.8.53：聊天拒絕與驗證交付
 
 `src/jobs/submission.rs` 保留 HTTP 狀態並判定是否明確拒絕；`src/jobs/polling.rs` 管理連續錯誤計數。`src/ui/work.rs` 等提交結果再查任務，在第三次相同錯誤時查模型端點；自動停止先保存 DPAPI 狀態與部分回答，沒有額外取消或查詢。`src/ui/work_smoke.rs` 在正式 EXE 自檢中核對停止、重啟恢復及晚到事件。
 
-本次依使用者要求使用 `scripts/Build.ps1 -EmptyCargoCache -BasicValidation -IncludeInstaller`。此選項保留 v142、fmt／Clippy、聊天契約測試、release、Python runtime／WebView2 自檢與 NSIS 清單核對；報告標示 `PASS_BASIC`。完整流程仍是預設值，後續補驗證時移除 `-BasicValidation` 並帶入原有 Office／SMB 選項。實際結果及未驗證項目見 [0.8.53 驗證紀錄](VALIDATION_0_8_53.md)。
+初次依使用者要求使用 `scripts/Build.ps1 -EmptyCargoCache -BasicValidation -IncludeInstaller`。此選項保留 v142、fmt／Clippy、聊天契約測試、release、Python runtime／WebView2 自檢與 NSIS 清單核對；報告標示 `PASS_BASIC`。完整流程仍是預設值，後續補驗證時移除 `-BasicValidation` 並帶入原有 Office／SMB 選項。2026-10-14 使用者回報測試 OK 後，已用完整預設流程加 Office／SMB／NSIS 補驗證通過，產物雜湊不變。實際結果及界線見 [0.8.53 驗證紀錄](VALIDATION_0_8_53.md)。
 
 ## 0.8.45：分析可靠度與映射磁碟
 

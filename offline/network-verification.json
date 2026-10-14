@@ -1,16 +1,16 @@
-{
-  "version": "0.8.52.0",
-  "result": "PASS",
-  "fixture": "\\\\localhost\\Y$\\Rust\\Project\\CompanyAI\\.build\\network-bc3df1c9dcce46159af6ba1ab35c7194",
-  "checks": [
-    "existing localhost SMB UNC",
-    "temporary mapped drive",
-    "unique project directories",
-    "TXT read and publish",
-    "DPAPI note reload",
-    "Word and Excel create/save/reopen",
-    "path escape rejection",
-    "original unchanged"
-  ],
-  "company_share_tested": false
+﻿{
+    "version":  "0.8.53.0",
+    "result":  "PASS",
+    "fixture":  "\\\\localhost\\Y$\\Rust\\Project\\CompanyAI\\.build\\network-0f04d26218a846dabd77c5d33125b90c",
+    "checks":  [
+                   "existing localhost SMB UNC",
+                   "temporary mapped drive",
+                   "unique project directories",
+                   "TXT read and publish",
+                   "DPAPI note reload",
+                   "Word and Excel create/save/reopen",
+                   "path escape rejection",
+                   "original unchanged"
+               ],
+    "company_share_tested":  false
 }

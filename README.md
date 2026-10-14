@@ -1,4 +1,4 @@
-**0.8.53 基礎驗證測試包：修正聊天拒絕後持續查任務、連續錯誤停止追蹤，並整理分析摺疊與圖中文字編輯。** 本次交付基礎驗證測試包，完整驗證待公司實測後補做。[驗證與界線](docs/VALIDATION_0_8_53.md)
+**0.8.53：修正聊天拒絕後持續查任務、連續錯誤停止追蹤，並整理分析摺疊與圖中文字編輯。** 使用者測試 OK 後，已補完完整開發環境與 NSIS 驗證。[驗證與界線](docs/VALIDATION_0_8_53.md)
 
 **0.8.52：分析完成摘要、LOG事件時間表、左右內容比較、方法重用與文件來源預覽，並修正Outlook ConversationID相容性。** [驗證與界線](docs/VALIDATION_0_8_52.md)
 
@@ -24,17 +24,17 @@
 
 CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供日常問答、文件整理、專案副本修訂與 Classic Outlook 郵件分析。
 
-**目前 EXE／NSIS：0.8.53（基礎驗證）** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
+**目前 EXE／NSIS：0.8.53（完整驗證通過）** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
 
 ## 下載與開始使用
 
-1. [下載 0.8.53 完整 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從系統托盤選「離開」，再以一般權限安裝至 `C:\largan\LM_AI`；Python 會放在旁邊的 `python` 子目錄。此版本為基礎驗證測試包，完整驗證待公司實測後補做。
+1. [下載 0.8.53 完整 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從系統托盤選「離開」，再以一般權限安裝至 `C:\largan\LM_AI`；Python 會放在旁邊的 `python` 子目錄。本版已完成完整開發環境與 NSIS 安裝驗證。
 2. 開啟程式，按「登入」，在瀏覽器核對短碼並允許授權。
 3. 選擇模型後開始對話；需要讀取或修改資料夾內的文件時，先建立「專案」。
 
 執行需要 WebView2 Runtime，不需安裝 Rust、Node 或 Python。若啟動時提示缺少 WebView2，請依 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md) 處理。正式功能需要公司服務連線與桌面帳號權限。
 
-本版 EXE 與 NSIS 都是 **0.8.53**，僅完成基礎驗證。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
+本版 EXE 與 NSIS 都是 **0.8.53**，已完成完整開發環境驗證。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
 
 ## 可以做什麼
 
