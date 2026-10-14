@@ -25,14 +25,29 @@ window.AnalysisUI = (() => {
   function render(container, state, finished = false) {
     const signature = JSON.stringify([state,finished]);
     if (container.dataset.signature === signature) return;
+    const previous = container.querySelector(".analysis-disclosure");
+    // 執行中預設展開；第一次交付答案時收起，之後重繪保留使用者的選擇。
+    const open = previous && container.dataset.finished === String(finished)
+      ? previous.open : !finished;
     const opened = new Set([...container.querySelectorAll("details[open][data-key]")].map(e=>e.dataset.key));
     const scroll = container.scrollTop;
-    container.dataset.signature = signature; container.replaceChildren();
+    container.dataset.signature = signature;
+    container.dataset.finished = String(finished); container.replaceChildren();
     const coverage = Object.values(state?.coverage || {}), report = state?.report;
     container.hidden = !coverage.length && !report && !state?.timeline?.length && !state?.sources?.length;
     if (container.hidden) return;
     container.classList.add("analysis-panel");
-    container.append(el("strong",finished ? "分析依據與處理範圍" : "分析概況"));
+    const disclosure = el("details", "", "analysis-disclosure");
+    disclosure.open = open;
+    disclosure.append(el("summary", finished ? "分析依據與處理範圍" : "分析概況"));
+    const content = el("div", "", "analysis-content");
+    disclosure.append(content); container.append(disclosure);
+    // 下方各區段仍共用原有渲染，整份內容由外層 details 一次展開／收起。
+    renderContent(content, state, finished, coverage, report);
+    for (const details of container.querySelectorAll("details[data-key]")) details.open=opened.has(details.dataset.key);
+    container.scrollTop=scroll;
+  }
+  function renderContent(container, state, finished, coverage, report) {
     const completion=state.completion;
     if(completion?.scopes) {
       const card=el("section","","analysis-completion");
@@ -116,8 +131,6 @@ window.AnalysisUI = (() => {
       details.append(list);container.append(details);
     }
     if (state.coverage_truncated) container.append(el("p","概況超過保存上限；不能視為完整清單，請查閱工具紀錄。","analysis-attention"));
-    for (const details of container.querySelectorAll("details[data-key]")) details.open=opened.has(details.dataset.key);
-    container.scrollTop=scroll;
   }
   return {render,excerpt};
 })();

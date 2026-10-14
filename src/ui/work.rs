@@ -7,6 +7,9 @@ use crate::{
 use serde_json::Value;
 use std::collections::HashSet;
 
+#[path = "work_smoke.rs"]
+mod smoke;
+
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(super) enum WorkCommand {
@@ -57,8 +60,15 @@ pub(super) enum WorkEvent {
     Attachment(String, AppResult<AttachmentStatus>),
     Progress(String, u64),
     Update(String, jobs::StreamUpdate),
-    Submitted(String, AppResult<()>),
+    Submitted(String, Result<(), jobs::submission::SubmitFailure>),
+    /// 取消或 Outlook 提交的回覆沿用原處理；只有 TaskPoll 的 GET 才累計查詢失敗。
     Polled(String, AppResult<TaskStatus>),
+    TaskPoll {
+        id: String,
+        remote_id: Option<String>,
+        result: Result<TaskStatus, jobs::polling::PollFailure>,
+        models_healthy: bool,
+    },
     PollFinished,
 }
 pub(super) struct WorkRuntime {
@@ -79,6 +89,8 @@ pub(super) struct WorkRuntime {
     pub task_balloon: bool,
     /// 僅在本次執行保存最新工具進度，不寫入對話或加密任務檔。
     pub tool_status: std::collections::HashMap<String, jobs::ToolStatus>,
+    /// 依本機 request ID 分開計數，成功或改用另一查詢 ID 時歸零。
+    poll_failures: std::collections::HashMap<String, jobs::polling::PollFailures>,
 }
 impl Default for WorkRuntime {
     fn default() -> Self {
@@ -99,6 +111,7 @@ impl Default for WorkRuntime {
             storage_error: false,
             task_balloon: false,
             tool_status: Default::default(),
+            poll_failures: Default::default(),
         }
     }
 }
@@ -154,8 +167,8 @@ impl App {
         }
         Ok(())
     }
-    /// 本機停止不依賴取消 API 成功；404／離線也能解除對話鎖定。
-    fn stop_local_task(&mut self, id: &str, remove: bool) -> AppResult<()> {
+    /// 先保存已收到的文字及停止狀態，再解除本機等待；本函式不發網路請求。
+    fn persist_stopped_task(&mut self, id: &str, remove: bool, message: &str) -> AppResult<Task> {
         let task = self
             .work
             .store
@@ -170,6 +183,7 @@ impl App {
             next.tasks.retain(|t| t.request_id != id);
         } else if let Some(saved) = next.tasks.iter_mut().find(|t| t.request_id == id) {
             saved.stop_tracking();
+            saved.message = message.into();
         }
         next.save(&self.root, &self.config)?;
         self.work.store = next;
@@ -178,6 +192,13 @@ impl App {
         }
         self.work.streams.remove(id);
         self.work.tool_status.remove(id);
+        self.work.poll_failures.remove(id);
+        Ok(task)
+    }
+    /// 手動停止另外嘗試取消；自動停止只保存本機狀態，避免多送一次失敗查詢。
+    fn stop_local_task(&mut self, id: &str, remove: bool) -> AppResult<()> {
+        let task =
+            self.persist_stopped_task(id, remove, "已停止本機追蹤；不保證伺服器工作已取消。")?;
         if task.active() {
             if let Some(session) = self.session.clone() {
                 let config = self.config.clone();
@@ -689,6 +710,7 @@ impl App {
             self.tx.clone(),
             self.generation,
         );
+        self.work.poll_failures.remove(&task.request_id);
         self.work.streams.insert(task.request_id.clone());
         let cancel = Arc::new(AtomicBool::new(false));
         self.work
@@ -716,7 +738,8 @@ impl App {
         let principal = self.work.store.principal_id.clone();
         thread::spawn(move || {
             let id = task.request_id.clone();
-            let result = (|| {
+            let mut chat_started = false;
+            let result = (|| -> Result<(), jobs::submission::SubmitFailure> {
                 let mut task = task;
                 // 快捷操作／標題可能使用另一模型，須重新驗證其能力與附件規則。
                 let requested = task.request["model"].as_str().ok_or("缺少模型。")?;
@@ -745,13 +768,21 @@ impl App {
                 };
                 let remote = jobs::conversation(&config, &session, server_conversation)?;
                 task.request["conversation_id"] = json!(remote);
-                jobs::submit_cancellable(&config, &session, &task, &cancel, |update| {
+                chat_started = true;
+                jobs::submit_tracked(&config, &session, &task, &cancel, |update| {
                     let _ = tx.send(Event::Work(
                         generation,
                         WorkEvent::Update(id.clone(), update),
                     ));
                 })
-            })();
+            })()
+            .map_err(|mut failure| {
+                // 建立對話或能力預檢失敗時，聊天 POST 尚未送出，不應查詢不存在的任務。
+                if !chat_started {
+                    failure.rejected = true;
+                }
+                failure
+            });
             let _ = tx.send(Event::Work(generation, WorkEvent::Submitted(id, result)));
         });
         Ok(())
@@ -809,7 +840,8 @@ impl App {
             .store
             .tasks
             .iter()
-            .filter(|t| t.active())
+            // 尚未取得任務 ID 的提交先等 POST 回應；重新啟動或傳輸失聯則查原 ID。
+            .filter(|t| t.can_poll(self.work.streams.contains(&t.request_id)))
             .cloned()
             .collect();
         let files: Vec<_> = self
@@ -832,13 +864,33 @@ impl App {
             self.tx.clone(),
             self.generation,
         );
+        let poll_failures = self.work.poll_failures.clone();
         if let Some(session) = session {
             thread::spawn(move || {
+                // 同一輪多個任務失敗時共用一次模型端點檢查；不用舊模型快取判定健康。
+                let mut models_healthy = None;
                 for task in tasks {
-                    let result = jobs::task_status(&config, &session, &task);
+                    let result = jobs::polling::task_status(&config, &session, &task);
+                    let needs_check = result.as_ref().err().is_some_and(|failure| {
+                        poll_failures
+                            .get(&task.request_id)
+                            .cloned()
+                            .unwrap_or_default()
+                            .needs_service_check(failure)
+                    });
+                    if needs_check && models_healthy.is_none() {
+                        // fetch_models 僅在 HTTP 200 且模型清單有效時成功。
+                        models_healthy =
+                            Some(service::fetch_models(&config, Some(&session)).is_ok());
+                    }
                     let _ = tx.send(Event::Work(
                         generation,
-                        WorkEvent::Polled(task.request_id, result),
+                        WorkEvent::TaskPoll {
+                            id: task.request_id,
+                            remote_id: task.remote.map(|remote| remote.task_id),
+                            result,
+                            models_healthy: needs_check && models_healthy == Some(true),
+                        },
                     ));
                 }
                 for a in files {
@@ -870,6 +922,7 @@ impl App {
                             self.work.store =
                                 WorkStore::load(&self.root, &self.config, &cap.principal_id)?;
                             self.work.storage_error = false;
+                            self.work.poll_failures.clear();
                             // 完整接收的附件可重新上傳；未完整接收的只能重新選取。
                             for a in &mut self.work.store.attachments {
                                 if !a.removed
@@ -1077,7 +1130,12 @@ impl App {
                 };
                 match update {
                     jobs::StreamUpdate::Status(status) => {
+                        let changed_id = task.remote.as_ref().map(|remote| &remote.task_id)
+                            != Some(&status.task_id);
                         task.apply_status(*status)?;
+                        if changed_id {
+                            self.work.poll_failures.remove(&id);
+                        }
                         if task.title_generation
                             && self
                                 .projects
@@ -1113,9 +1171,38 @@ impl App {
                 }
             }
             WorkEvent::Submitted(id, result) => {
-                let result = result.map_err(|e| self.friendly_error("chat_submission", &e));
                 self.work.streams.remove(&id);
                 self.work.cancellations.remove(&id);
+                if !self
+                    .work
+                    .store
+                    .tasks
+                    .iter()
+                    .any(|task| task.request_id == id && task.active())
+                {
+                    return Ok(());
+                }
+                if let Err(failure) = &result {
+                    let accepted = self
+                        .work
+                        .store
+                        .tasks
+                        .iter()
+                        .any(|task| task.request_id == id && task.remote.is_some());
+                    if failure.rejected && !accepted {
+                        // 原始 HTTP 狀態／伺服器訊息留在卡片，不能再被後續 404 蓋掉。
+                        let _ = self.friendly_error("chat_submission", &failure.message);
+                        let message = format!("聊天未受理，已停止追蹤。\n{}", failure.message);
+                        let task = self.persist_stopped_task(&id, false, &message)?;
+                        if !task.title_generation {
+                            self.status = message.clone();
+                            self.toast(&message);
+                        }
+                        return Ok(());
+                    }
+                }
+                let result = result
+                    .map_err(|failure| self.friendly_error("chat_submission", &failure.message));
                 if result.is_err() {
                     if let Some(task) = self
                         .work
@@ -1160,6 +1247,57 @@ impl App {
                 }
                 self.poll_work(true);
             }
+            WorkEvent::TaskPoll {
+                id,
+                remote_id,
+                result,
+                models_healthy,
+            } => {
+                let Some(task) = self
+                    .work
+                    .store
+                    .tasks
+                    .iter()
+                    .find(|task| task.request_id == id && task.active())
+                else {
+                    return Ok(());
+                };
+                // SSE 可能先取得 task ID；舊 by-request 查詢的晚到 404 不算新路由的失敗。
+                if task.remote.as_ref().map(|remote| &remote.task_id) != remote_id.as_ref() {
+                    return Ok(());
+                }
+                match result {
+                    Ok(status) => {
+                        self.work.poll_failures.remove(&id);
+                        self.work_event(WorkEvent::Polled(id, Ok(status)))?;
+                    }
+                    Err(failure) => {
+                        let failures = self.work.poll_failures.entry(id.clone()).or_default();
+                        failures.record(&failure);
+                        if failures.should_stop(models_healthy) {
+                            let message = format!(
+                                "任務狀態連續 3 次查詢回報相同錯誤，模型清單服務正常，已自動停止追蹤。已收到的內容保留；不代表伺服器工作已取消。\n{}",
+                                failure.message
+                            );
+                            self.persist_stopped_task(&id, false, &message)?;
+                            self.status =
+                                "任務查詢持續失敗，已自動停止追蹤；可在工作任務查看原因。".into();
+                        } else {
+                            if let Some(task) = self
+                                .work
+                                .store
+                                .tasks
+                                .iter_mut()
+                                .find(|task| task.request_id == id)
+                            {
+                                task.message = failure.message;
+                            }
+                            self.work.poll_delay = (self.work.poll_delay * 2).min(30);
+                            self.work_save()?;
+                        }
+                    }
+                }
+            }
             WorkEvent::Polled(id, result) => {
                 if let Some(task) = self
                     .work
@@ -1171,6 +1309,7 @@ impl App {
                     match result {
                         Ok(status) => {
                             task.apply_status(status)?;
+                            self.work.poll_failures.remove(&id);
                             if task.title_generation
                                 && self
                                     .projects
@@ -1264,6 +1403,7 @@ impl App {
                 saved.request = json!({});
             }
             self.work.tool_status.remove(&task.request_id);
+            self.work.poll_failures.remove(&task.request_id);
             self.work_save()?;
             let label = if remote.state == "completed" {
                 "回覆完成"

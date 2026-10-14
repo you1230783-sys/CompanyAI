@@ -1,7 +1,8 @@
 ﻿[CmdletBinding()]
-param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$TestVnc, [switch]$TestOffice, [string]$NetworkTestRoot)
+param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$BasicValidation, [switch]$TestVnc, [switch]$TestOffice, [string]$NetworkTestRoot)
 $ErrorActionPreference = 'Stop'
 if ($ValidateOnly -and $IncludeInstaller) { throw 'ValidateOnly cannot be combined with IncludeInstaller.' }
+if ($BasicValidation -and ($TestOffice -or $TestVnc -or $NetworkTestRoot)) { throw 'BasicValidation cannot be combined with full Office, VNC or network checks.' }
 # 統一載入 v142 與指定 SDK，讓手動執行及未來網頁呼叫使用相同編譯環境。
 . (Join-Path $PSScriptRoot 'Enter-DevShell.ps1')
 # 空快取驗證直接讀取專案 vendor，不依賴開發機已有的 registry 下載。
@@ -39,8 +40,16 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     & cargo clippy --workspace --all-targets --frozen -- -D warnings
     if ($LASTEXITCODE -ne 0) { throw 'Clippy failed.' }
     # 測試涵蓋登入兌換、重複登入碼、API Header 與 Windows 憑證加密。
-    & cargo test --workspace --frozen
-    if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
+    if ($BasicValidation) {
+        # 本次使用者要求先測聊天／附件相關契約；不把局部測試記成完整驗收。
+        foreach ($filter in @('jobs::', 'demo::work::tests::')) {
+            & cargo test --lib $filter --frozen
+            if ($LASTEXITCODE -ne 0) { throw "Basic contract tests failed: $filter" }
+        }
+    } else {
+        & cargo test --workspace --frozen
+        if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
+    }
     & cargo build --workspace --release --frozen
     if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
     $exe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\release\company-ai.exe'
@@ -75,6 +84,8 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     }
     $composerReport = Join-Path ([IO.Path]::GetTempPath()) 'CompanyAI-ui-smoke\composer-verification.json'
     if (Test-Path -LiteralPath $composerReport) { Remove-Item -LiteralPath $composerReport }
+    $trackingReport = Join-Path ([IO.Path]::GetTempPath()) 'CompanyAI-ui-smoke\task-tracking-verification.json'
+    if (Test-Path -LiteralPath $trackingReport) { Remove-Item -LiteralPath $trackingReport }
     # GUI 程式以隱藏的自我檢查模式驗證控制項，避免編譯腳本停在主視窗。
     $smokeCheck = New-Object Diagnostics.Process
     $smokeCheck.StartInfo.FileName = $exe
@@ -95,6 +106,57 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     $composerCheck = Get-Content -LiteralPath $composerReport -Raw | ConvertFrom-Json
     if ($composerCheck.result -ne 'PASS' -or $composerCheck.cases.Count -lt 14) {
         throw 'Native project composer verification failed.'
+    }
+    $trackingCheck = Get-Content -LiteralPath $trackingReport -Raw | ConvertFrom-Json
+    if ($trackingCheck.result -ne 'PASS' -or $trackingCheck.cases.Count -lt 5) {
+        throw 'Native task tracking verification failed.'
+    }
+    if ($BasicValidation) {
+        # 基礎交付在此結束；下方長流程及完整PASS報告只供完整驗證使用。
+        $dependencies = & $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER /dump /dependents $exe
+        if ($LASTEXITCODE -ne 0) { throw 'DLL inspection failed.' }
+        $basic = [ordered]@{
+            recorded_at = (Get-Date -Format o)
+            version = (Get-Item $exe).VersionInfo.FileVersion
+            result = 'PASS_BASIC'
+            validation_scope = 'basic; full validation deferred by user'
+            msvc = $env:VCToolsVersion
+            compiler = $compiler
+            compiler_report = $compilerReport
+            linker = $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER
+            windows_sdk = $env:WindowsSDKVersion
+            empty_cargo_cache = [bool]$EmptyCargoCache
+            cargo_home = $env:CARGO_HOME
+            checks = @('v142 x64 actual compiler probe','fmt','Clippy all targets','jobs and demo work contract tests','cargo build --release --frozen','Outlook helper pipe/EOF without mailbox access','Python runtime self-check','WebView2 UI and native composer self-check','native task rejection, repeated error, DPAPI restore and late event checks','DLL dependency inspection')
+            task_tracking_cases = $trackingCheck.cases
+            exe_sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+            installer_built = $false
+            installer_installation_tested = $false
+            full_validation_completed = $false
+            company_service_tested = $false
+            deferred = @('full workspace tests','project and Python isolation/long-task integration','Office and SMB integration','NSIS install/update/rollback/uninstall integration','company PDF and chat service acceptance')
+        }
+        if ($ValidateOnly) {
+            $basic | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $projectRoot '.build\basic-verification.json') -Encoding UTF8
+            Write-Host 'Basic source validation passed; no release artifacts updated.'
+            return
+        }
+        $dist = Join-Path $projectRoot 'dist'
+        New-Item -ItemType Directory -Path $dist -Force | Out-Null
+        Copy-Item -LiteralPath $exe -Destination (Join-Path $dist 'LM_AI.exe') -Force
+        if ($IncludeInstaller) {
+            & (Join-Path $PSScriptRoot 'Build-Installer.ps1')
+            Copy-Item -LiteralPath (Join-Path $dist 'update-manifest.json') -Destination (Join-Path $dist 'update-manifest-exe.json') -Force
+            $basic.installer_built = $true
+            $basic['installer_sha256'] = (Get-FileHash (Join-Path $dist 'LM_AI_Setup.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+            $basic.checks += 'NSIS packaging and native signed manifest/package verification'
+        }
+        Copy-Item -LiteralPath $composerReport -Destination (Join-Path $projectRoot 'offline\composer-verification.json') -Force
+        Copy-Item -LiteralPath $trackingReport -Destination (Join-Path $projectRoot 'offline\task-tracking-verification.json') -Force
+        $basic | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $projectRoot 'offline\exe-verification.json') -Encoding UTF8
+        @("Scope: basic validation; full validation pending", "MSVC: $env:VCToolsVersion", "Compiler: $compiler", $compilerReport, "Linker: $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER", "SDK: $env:WindowsSDKVersion", "Cargo home: $env:CARGO_HOME", (& rustc -vV), (& cargo -V), $dependencies) | Set-Content -LiteralPath (Join-Path $projectRoot 'offline\environment.txt') -Encoding UTF8
+        Write-Host "Basic validation passed. Test package: $dist\LM_AI_Setup.exe. Full validation remains pending."
+        return
     }
     # 真正啟動隔離 EXE，驗證 OS 邊界及副本編輯；失敗不可發布看似可用的文件功能。
     & cargo build --example project_smoke --frozen

@@ -16,6 +16,12 @@
 
 # 開發與維護說明
 
+## 0.8.53：聊天拒絕與基礎驗證交付
+
+`src/jobs/submission.rs` 保留 HTTP 狀態並判定是否明確拒絕；`src/jobs/polling.rs` 管理連續錯誤計數。`src/ui/work.rs` 等提交結果再查任務，在第三次相同錯誤時查模型端點；自動停止先保存 DPAPI 狀態與部分回答，沒有額外取消或查詢。`src/ui/work_smoke.rs` 在正式 EXE 自檢中核對停止、重啟恢復及晚到事件。
+
+本次依使用者要求使用 `scripts/Build.ps1 -EmptyCargoCache -BasicValidation -IncludeInstaller`。此選項保留 v142、fmt／Clippy、聊天契約測試、release、Python runtime／WebView2 自檢與 NSIS 清單核對；報告標示 `PASS_BASIC`。完整流程仍是預設值，後續補驗證時移除 `-BasicValidation` 並帶入原有 Office／SMB 選項。實際結果及未驗證項目見 [0.8.53 驗證紀錄](VALIDATION_0_8_53.md)。
+
 ## 0.8.45：分析可靠度與映射磁碟
 
 - src/projects/analysis.rs 保存實際範圍、區間聯集及有界模型索引；files/analysis.rs 只引用成功工具原文，數量由結果取回，語意判斷仍標示為 AI 判斷。runner／protocol／ui/analysis.js 讓概況隨執行、暫停及歷史保存；一般聊天不帶這份本機資料。

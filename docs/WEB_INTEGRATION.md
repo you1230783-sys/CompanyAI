@@ -1,3 +1,7 @@
+**0.8.53，2026-10-14：** 一般聊天POST等待回應、尚無task_id時不先GET；明確413／415等4xx拒絕直接保存原HTTP錯誤並停止。408／網路失聯／未明示拒絕的5xx保留原ID查回；若提供 `task_accepted` 布林值則優先採用，已取得任務ID者仍核對原任務。
+
+一般任務GET連續三次相同錯誤，且當輪 `GET /lm_server/api/desktop/models` 回HTTP200與有效模型清單時，自動停止本機追蹤，保存已收到文字與停止狀態。HTTP錯誤比較狀態碼；非HTTP錯誤比較本機訊息。成功或查詢ID改變歸零，正式failed／cancelled照原流程立即收尾。健康檢查每輪最多一次，不新增路由；自動停止不另發取消、補查或POST重送，不代表伺服器工作已取消。本次依使用者要求只做基礎驗證與NSIS測試包，完整驗證待補，詳見[0.8.53驗證範圍](VALIDATION_0_8_53.md)。
+
 **0.8.52 桌面工具補充：** 不新增網站API。新增 `record_log_events(events)`，由log-analysis／python-analysis按需公告，參數以當次tools Schema為準；網站只轉發，事件時間與原文引用由桌面核對。每筆evidence使用本次成功read_log的`/lines/N`或search_logs的`/matches/N`，N為零基索引；operation_id是桌面工具結果代號。
 
 `search_files`增加coverage、complete、omitted與來源原文預覽。Office命中回傳block_id／label，offset與line是該區塊內的位置，`offset_basis=block_text`；純文字是全文位置（document_text）。不要把區塊offset當成read_file的全文位置。需要更多內容用區塊標籤／list_document_sections定位再read_document_section，並核對revision。

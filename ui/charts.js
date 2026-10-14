@@ -153,28 +153,19 @@ window.ChartUI = (() => {
     for (const [chart_index,data] of (values || []).entries()) {
       let style=context?.styles?.[chart_index] || null;
       let layoutMode=false, beforeLayout=null, layoutBoxes=[], persistText=()=>{};
-      const textPanel=document.createElement("div");textPanel.className="chart-text-panel";textPanel.hidden=true;
+      const addText=document.createElement("button");
+      addText.type="button";addText.textContent="新增文字";addText.hidden=true;
+      addText.onclick=()=>editText(null);
       function editText(index) {
         const current=(style || ChartEditor.defaults(data)).layout?.annotations?.[index];
         ChartText.open(current,annotation=>{
           style=structuredClone(style || ChartEditor.defaults(data));style.layout ??= ChartLayout.empty();style.layout.annotations ??= [];
           if(index==null) style.layout.annotations.push(annotation);else style.layout.annotations[index]=annotation;
-          renderTextPanel();refreshLayout();if(!layoutMode)persistText();
+          refreshLayout();if(!layoutMode)persistText();
         },()=>{
           style=structuredClone(style || ChartEditor.defaults(data));style.layout.annotations.splice(index,1);
-          renderTextPanel();refreshLayout();if(!layoutMode)persistText();
+          refreshLayout();if(!layoutMode)persistText();
         });
-      }
-      function renderTextPanel() {
-        textPanel.replaceChildren();
-        const annotations=(style || ChartEditor.defaults(data)).layout?.annotations || [];
-        const add=document.createElement("button");add.type="button";add.textContent="新增文字";add.disabled=annotations.length>=20;add.onclick=()=>editText(null);textPanel.append(add);
-        for(const [index,annotation] of annotations.entries()) {
-          const row=document.createElement("div"),label=document.createElement("span"),edit=document.createElement("button");
-          row.className="chart-text-row";label.textContent=annotation.text;edit.textContent="編輯文字";edit.type="button";
-          edit.onclick=()=>editText(index);label.ondblclick=()=>editText(index);
-          row.append(label,edit);textPanel.append(row);
-        }
       }
       const card = document.createElement("section"); card.className = "chart-card";
       const title = document.createElement("h3"); title.textContent = data.title;title.className="chart-accessible-title";
@@ -182,11 +173,12 @@ window.ChartUI = (() => {
       plot.setAttribute("role", "img"); plot.setAttribute("aria-label", `${data.title}：${data.x_label} / ${data.y_label}`);
       const layoutHint=document.createElement("p");layoutHint.className="chart-layout-hint";layoutHint.setAttribute("role","status");layoutHint.hidden=true;
       function refreshLayout() {
+        addText.disabled=((style || ChartEditor.defaults(data)).layout?.annotations?.length || 0)>=20;
         const instance=charts.get(plot);if(!instance)return;
         const result=ChartLayout.draw(instance,style || ChartEditor.defaults(data));
         layoutBoxes=result.boxes;
         layoutHint.hidden=!layoutMode&&!result.crowded;
-        layoutHint.textContent=[layoutMode?"拖曳框線移動標題、圖例、參考線及自訂文字；方向鍵微調，Shift加速。按完成排版保存，取消則還原。":"",
+        layoutHint.textContent=[layoutMode?"拖曳框線移動標題、圖例、參考線及自訂文字；方向鍵微調，Shift加速。雙擊圖中文字可編輯或刪除。按完成排版保存，取消則還原。":"",
           result.crowded?"文字空間不足，請放大圖表或縮短標籤。":""].filter(Boolean).join(" ");
         if(layoutMode) ChartLayout.handles(plot,result,(key,point)=>{
           style=structuredClone(style || ChartEditor.defaults(data));style.layout=ChartLayout.update(style.layout,key,point);
@@ -219,7 +211,7 @@ window.ChartUI = (() => {
         layout.textContent="調整排版";cancelLayout.textContent="取消排版";autoLayout.textContent="自動排版";
         cancelLayout.hidden=autoLayout.hidden=true;
         function toggleLayout(enabled) {
-          layoutMode=enabled;textPanel.hidden=!enabled;if(enabled)renderTextPanel();layout.textContent=enabled?"完成排版":"調整排版";
+          layoutMode=enabled;addText.hidden=!enabled;layout.textContent=enabled?"完成排版":"調整排版";
           plot.setAttribute("role",enabled?"group":"img");
           cancelLayout.hidden=autoLayout.hidden=!enabled;edit.disabled=reset.disabled=save.disabled=enabled;
           refreshLayout();
@@ -237,7 +229,8 @@ window.ChartUI = (() => {
           // 登出或關閉頁面可能收不到ack；不永久鎖住按鈕，也不把逾時當作成功。
           setTimeout(()=>{if(pendingSave===pending){pendingSave=null;save.disabled=false;toast("尚未收到存圖結果，請先查看專案輸出資料夾。");}},65000);
         };
-        toolbar.append(edit,layout,cancelLayout,autoLayout,reset,save);
+        // 文字只在圖內呈現，雙擊開啟同一編輯／刪除對話框；工具列只保留新增入口。
+        toolbar.append(edit,layout,addText,cancelLayout,autoLayout,reset,save);
       }
       const details = document.createElement("details"), summary = document.createElement("summary"); summary.textContent = "查看原始資料表";
       const table = document.createElement("table");
@@ -258,7 +251,7 @@ window.ChartUI = (() => {
       next.onclick = () => { if ((page + 1) * 100 < data.x.length) { page++; showPage(); } };
       details.ontoggle = () => { if (details.open) showPage(); };
       controls.append(previous, label, next);
-      details.append(summary, controls, table); card.append(title, toolbar, textPanel, layoutHint, plot, source, details);
+      details.append(summary, controls, table); card.append(title, toolbar, layoutHint, plot, source, details);
       let issueDetails=renderIssues(ChartQuality.view(data,(style || data.style)?.quality_policy));card.append(issueDetails); container.append(card);
       requestAnimationFrame(() => {
         if (!plot.isConnected) return;

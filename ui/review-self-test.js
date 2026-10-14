@@ -66,6 +66,33 @@ window.runReviewTests = async (check) => {
     check(panel.textContent.includes("2 個範圍待處理")&&panel.textContent.includes("1 項筆數核對未通過"),"completion keeps partial failures and failed checks visible");
     check(panel.textContent.includes("日期未知")&&panel.textContent.includes("時間／分組待確認"),"timeline preserves uncertainty");
     check(panel.textContent.includes("200處上限")&&!panel.querySelector("img,script"),"source cap is explicit and preview text is inert");
+    check(!panel.querySelector('.analysis-disclosure').open,"completed analysis defaults to collapsed");
+
+    // 同一份分析由執行中轉成完成時收起；之後由使用者決定展開，更新不搶走狀態。
+    const analysis={coverage:{one:{path:"A.log",scope:"LOG 原文",status:"partial",detail:"已讀取 2 行"}}};
+    AnalysisUI.render(panel,analysis);
+    check(panel.querySelector('.analysis-disclosure').open,"running analysis starts expanded");
+    panel.querySelector('.analysis-disclosure > summary').click();
+    AnalysisUI.render(panel,{...analysis,review_required:true});
+    check(!panel.querySelector('.analysis-disclosure').open,"running analysis respects manual collapse on update");
+    panel.querySelector('.analysis-disclosure > summary').click();
+    AnalysisUI.render(panel,analysis,true);
+    check(!panel.querySelector('.analysis-disclosure').open,"finishing analysis collapses previously expanded content");
+    panel.querySelector('.analysis-disclosure > summary').click();
+    AnalysisUI.render(panel,{...analysis,review_required:true},true);
+    check(panel.querySelector('.analysis-disclosure').open,"completed analysis preserves manual expansion on update");
+
+    // 訊息整區重建也要保留目前閱讀狀態；切換對話則重新採用完成後收起的預設。
+    const reply={role:"assistant",content:"完成答案",project_analysis:analysis};
+    LMUI.receive({...LMUI.getState(),active_id:"review-chat",messages:[reply]});
+    const disclosure=document.querySelector('#messages .analysis-disclosure');
+    check(!disclosure.open,"saved answer analysis starts collapsed");
+    disclosure.querySelector('summary').click();
+    document.querySelector('#messages details[data-key="coverage"]').open=true;
+    LMUI.receive({...LMUI.getState(),messages:[{...reply,content:"完成答案更新"}]});
+    check(document.querySelector('#messages .analysis-disclosure').open && document.querySelector('#messages details[data-key="coverage"]').open,"message redraw preserves analysis and evidence expansion");
+    LMUI.receive({...LMUI.getState(),active_id:"another-chat",messages:[reply]});
+    check(!document.querySelector('#messages .analysis-disclosure').open,"another conversation defaults to collapsed analysis");
   } finally {
     clearTimeout(draftTimer);
     document.querySelectorAll(".review-window[open],.source-window[open]").forEach(d=>d.close());await frame();

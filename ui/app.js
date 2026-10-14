@@ -536,6 +536,14 @@ function renderMessages() {
   const expanded = new Set(changed ? [] : [...container.querySelectorAll(".answer-details[open]")].map((details) => details.closest("article").dataset.index));
   const activityExpanded = new Set(changed ? [] : [...container.querySelectorAll(".project-activity[open]")].map(details => details.closest("article").dataset.index));
   const activityScroll = new Map(changed ? [] : [...container.querySelectorAll(".project-activity-history")].map(list => [list.closest("article").dataset.index, list.scrollTop]));
+  // 完成答案的分析依據預設收起；同一對話重繪時保留手動展開及內層證據狀態。
+  const analysisExpanded = new Map(changed ? [] : [...container.querySelectorAll(".analysis-panel")].map(panel => [
+    panel.closest("article").dataset.index,
+    {
+      open: panel.querySelector(".analysis-disclosure")?.open,
+      evidence: [...panel.querySelectorAll("details[open][data-key]")].map(details => details.dataset.key),
+    },
+  ]));
   container.replaceChildren();
   if (!state.messages.length && state.busy !== "chat") {
     const welcome = node("div", "welcome");
@@ -587,6 +595,14 @@ function renderMessages() {
     if (message.project_analysis) {
       const analysis = node("div");
       AnalysisUI.render(analysis,message.project_analysis,true); content.append(analysis);
+      const previous = analysisExpanded.get(String(index));
+      if (previous) {
+        const disclosure = analysis.querySelector(".analysis-disclosure");
+        if (disclosure) disclosure.open = previous.open;
+        for (const details of analysis.querySelectorAll("details[data-key]")) {
+          details.open = previous.evidence.includes(details.dataset.key);
+        }
+      }
     }
     if (message.project_charts?.length) {
       const charts = node("div", "project-charts"); content.append(charts);

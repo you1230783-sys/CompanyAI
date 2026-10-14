@@ -16,6 +16,9 @@ use std::{
 };
 pub const PREFIX: &str = "/lm_server/api/desktop";
 
+pub(crate) mod polling;
+pub(crate) mod submission;
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Capabilities {
     pub contract_version: u32,
@@ -163,16 +166,18 @@ impl Task {
     pub fn active(&self) -> bool {
         !self.applied
     }
+    /// POST 尚在等待且沒有任務 ID 時先不查詢；失聯／重啟後仍可用原 request ID 查回。
+    pub(crate) fn can_poll(&self, submitting: bool) -> bool {
+        self.active() && (self.remote.is_some() || !submitting)
+    }
     pub fn stop_tracking(&mut self) {
         self.applied = true;
         self.partial.clear();
         self.request = json!({});
         self.message = "已停止本機追蹤；不保證伺服器工作已取消。".into();
     }
-    pub fn apply_status(&mut self, status: TaskStatus) -> AppResult<()> {
-        if !self.active() {
-            return Ok(());
-        }
+    /// 網路執行緒與 UI 套用前共用相同核對，錯誤回應不得變更任務身分。
+    pub(crate) fn validate_status(&self, status: &TaskStatus) -> AppResult<()> {
         status.validate()?;
         if status.client_request_id != self.request_id
             || self
@@ -182,6 +187,13 @@ impl Task {
         {
             return Err("任務回應識別碼不一致。".into());
         }
+        Ok(())
+    }
+    pub fn apply_status(&mut self, status: TaskStatus) -> AppResult<()> {
+        if !self.active() {
+            return Ok(());
+        }
+        self.validate_status(&status)?;
         // 已確認終態不能被較早的輪詢回應退回執行中。
         if self.remote.as_ref().is_some_and(TaskStatus::terminal) {
             return Ok(());
@@ -718,17 +730,39 @@ pub fn submit_cancellable(
     session: &Session,
     task: &Task,
     cancel: &std::sync::atomic::AtomicBool,
-    mut update: impl FnMut(StreamUpdate),
+    update: impl FnMut(StreamUpdate),
 ) -> AppResult<()> {
+    submit_tracked(config, session, task, cancel, update).map_err(|failure| failure.message)
+}
+
+/// UI 使用結構化拒絕狀態；既有呼叫者仍可透過 submit_cancellable 取得顯示訊息。
+pub(crate) fn submit_tracked(
+    config: &Config,
+    session: &Session,
+    task: &Task,
+    cancel: &std::sync::atomic::AtomicBool,
+    mut update: impl FnMut(StreamUpdate),
+) -> Result<(), submission::SubmitFailure> {
+    use submission::SubmitFailure;
     if cancel.load(std::sync::atomic::Ordering::Relaxed) {
-        return Err("已停止本機接收。".into());
+        return Err(SubmitFailure::rejected("已停止本機接收。"));
     }
     if !session.valid_for(config) {
-        return Err("請重新登入後接續任務。".into());
+        return Err(SubmitFailure::rejected("請重新登入後接續任務。"));
     }
     if task.mode != "stream" {
-        let status: TaskStatus = post(config, session, CHAT_PATH, &task.request)?;
-        status.validate()?;
+        let response = transport::request(
+            &config.endpoint(CHAT_PATH)?,
+            "application/json",
+            &task.request.to_string(),
+            Some(("Authorization", &format!("Bearer {}", session.access_token))),
+            30_000,
+        )?;
+        if !(200..300).contains(&response.status) {
+            return Err(SubmitFailure::from_response(&response, session));
+        }
+        let status: TaskStatus = decode(response, session)?;
+        task.validate_status(&status)?;
         update(StreamUpdate::Status(Box::new(status)));
         return Ok(());
     }
@@ -755,7 +789,7 @@ pub fn submit_cancellable(
                         status.state = "running".into();
                         status.result = None;
                     }
-                    status.validate()?;
+                    task.validate_status(&status)?;
                     update(StreamUpdate::Status(Box::new(status)));
                 }
                 "error" => return Err("串流服務回報錯誤，將查詢任務狀態。".into()),
@@ -795,11 +829,7 @@ pub fn submit_cancellable(
         Some(&mut callback),
     )?;
     if response.status != 200 {
-        return Err(protocol::api_error(
-            response.status,
-            &response.body,
-            &session.access_token,
-        ));
+        return Err(SubmitFailure::from_response(&response, session));
     }
     if !parser.done {
         return Err("串流中斷，保留已收到文字並查詢任務。".into());
