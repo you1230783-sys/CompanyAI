@@ -53,7 +53,7 @@ def build(inputs, output):
             raise RuntimeError(arch + " runtime自檢失敗：" + process.stderr + process.stdout)
         checks.append(json.loads(process.stdout))
     report = dict(result="PASS_LOCAL_SELF_CHECK", actual_cad_tested=False,
-                  tool_version="0.1.0", runtime_checks=checks, binary_origin=lock["binary_origin"])
+                  tool_version="0.1.1", runtime_checks=checks, binary_origin=lock["binary_origin"])
     (stage / "local-verification.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     files = {str(p.relative_to(stage)).replace("\\", "/"): digest(p) for p in stage.rglob("*") if p.is_file()}
     (stage / "files-sha256.json").write_text(json.dumps(files, indent=2), encoding="utf-8")

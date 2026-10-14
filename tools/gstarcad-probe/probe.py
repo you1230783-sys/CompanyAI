@@ -22,7 +22,7 @@ def write_json(path, data):
 def worker(request_path):
     request = json.loads(Path(request_path).read_text(encoding="utf-8"))
     report_path = Path(request["report"])
-    report = dict(tool_version="0.1.0", status="RUNNING", mode=request["mode"],
+    report = dict(tool_version="0.1.1", status="RUNNING", mode=request["mode"],
                   selected=request["selected"], python_bits=struct.calcsize("P") * 8,
                   python=sys.version, events=[], existing_documents_targeted=False)
 
@@ -86,6 +86,24 @@ def self_check():
     assert registry.year_from("GStarCAD.Application.27") == 0
     assert registry.year_from(r"C:\Program Files\GstarCAD2022\gcad.exe") == 2022
     assert registry.executable('"C:\\CAD 2022\\gcad.exe" /automation') == r"C:\CAD 2022\gcad.exe"
+    # 使用去識別的實機身份資料驗證判斷；不連接 CAD 或聲稱繪圖已成功。
+    path = r"C:\CAD\佑達ICAD 2008 專業版\icad.exe"
+    selected = dict(progid="Icad.Application.1", clsid="{8011C111-7E36-11D1-BC5A-0060089608A4}",
+                    registry_bits=32, year=2008, server=path)
+    identity = dict(Name="ICAD", Version="5.0.20.0", FullName=path)
+    assert cad.identify_product(selected, identity) == "yoda_icad_2008"
+    for field, value in [("Name", "Other CAD"), ("Version", "6.0"), ("FullName", "unavailable")]:
+        assert cad.identify_product(selected, dict(identity, **{field: value})) == "unknown"
+    for field, value in [("clsid", "other"), ("progid", "Icad.Application.2"), ("year", 2022)]:
+        assert cad.identify_product(dict(selected, **{field: value}), identity) == "unknown"
+    try:
+        cad.identify_product(selected, dict(identity, FullName=r"C:\Other\icad.exe"))
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("不同程式路徑未拒絕")
+    assert cad.identify_product(dict(server=r"C:\CAD\gcad.exe"),
+                                dict(Name="GstarCAD", FullName=r"C:\CAD\gcad.exe")) == "gstarcad"
     corners = [(0, 0, 0), (200, 0, 0), (200, 100, 0), (0, 100, 0)]
     shapes = [dict(kind="line", start=corners[i], end=corners[(i + 1) % 4]) for i in range(4)]
     shapes += [dict(kind="circle", center=(x, y, 0), radius=5) for x, y in [(15, 15), (185, 15), (185, 85), (15, 85)]]
@@ -101,7 +119,8 @@ def self_check():
             raise AssertionError("異常幾何未拒絕")
     print(json.dumps(dict(result="PASS_LOCAL_SELF_CHECK", bits=struct.calcsize("P") * 8,
                          cad_tested=False, checks=["pywin32 imports", "newest-year ordering", "no inferred year from ProgID",
-                                                  "quoted executable path", "geometry and dimension verification", "invalid geometry rejected"])))
+                                                  "quoted executable path", "geometry and dimension verification", "invalid geometry rejected", "reported ICAD identity accepted",
+                                                  "unknown identities and mismatched paths rejected", "GstarCAD identity retained"])))
     return 0
 
 
@@ -124,10 +143,10 @@ def main():
     root.mkdir(exist_ok=True)
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:8]
     inventory = root / ("inventory_" + stamp + ".json")
-    write_json(inventory, dict(tool_version="0.1.0", python_bits=struct.calcsize("P") * 8,
+    write_json(inventory, dict(tool_version="0.1.1", python_bits=struct.calcsize("P") * 8,
                               candidates=candidates, registry_errors=errors,
                               actual_cad_tested=False, default="newest confirmed year, then internal version"))
-    print("浩辰 CAD 2008／2022 相容性測試（新版優先；不預先宣稱相容）")
+    print("CAD 相容性測試 0.1.1（浩辰／佑達 ICAD 2008；新版優先）")
     print("目前Python位元數：", struct.calcsize("P") * 8)
     print("註冊清單：", inventory)
     if args.inventory:

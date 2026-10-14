@@ -47,3 +47,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/Build.ps1 -Empty
 | `offline/GstarCAD-Probe.zip` | 78280532 | `a6c540ce523f00e65b008f26033eb180a91af957b83496f580c7e46275046a34` |
 
 既有 Python runtime 指紋、icon.png 與歷史 Rust 離線 ZIP 未修改。offline/installer-verification.json 是上一版完整安裝紀錄，不代表本版已完成安裝流程驗證。
+
+
+## 2026-10-14：獨立 CAD 工具 0.1.1 修正
+
+使用者回報佑達 ICAD 2008（Icad.Application.1、ICAD 5.0.20.0）已由 x64 Python 成功連上 32 位元 COM。模式 2／3 在新建文件前被舊有浩辰名稱檢查拒絕，不能解讀成繪圖 API 不相容。新增此產品的明確身份組合與相同路徑核對，報告以 yoda_icad_2008 區分，不冒稱浩辰。
+
+工具版本 0.1.1；CompanyAI EXE／NSIS 維持 0.8.54，本輪沒有 Rust/C++ 編譯或重製 NSIS。兩種位元數的身份接受／未知身份及路徑拒絕、既有浩辰識別、排序與幾何合成自檢通過；ZIP 內容與來源逐項核對。這次沒有在開發機操作 CAD，真實新建／標註／DWG 重開仍待公司測試，完整驗證仍暫緩。
+
+最新 `offline/GstarCAD-Probe.zip` SHA256：`183c3c321d535be420c95015336545891e042a5fed0ed031ab2d406bff91e363`（78281899 bytes）。上方產物表的 CAD 雜湊保留為 0.1.0 歷史紀錄；最新報告見 offline/cad-probe-verification.json。

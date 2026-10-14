@@ -49,6 +49,37 @@ def verify_geometry(rows, dimensions):
     assert len(dims) == len(expected_dims) and all(close_enough(a, b) for a, b in zip(sorted(dims), expected_dims)), "標註量測值不符"
 
 
+
+def identify_product(selected, identity):
+    """產品識別只控制是否可開始繪圖，不代表繪圖 API 已通過相容性測試。
+
+    ICAD 規則依使用者實機報告建立，不能只憑通用 Icad ProgID 放行所有產品。
+    另外保留登錄與實際應用路徑一致檢查，避免多版本連到另一套 CAD。
+    """
+    actual = identity.get("FullName", "")
+    registered = selected.get("server", "")
+    known_path = bool(actual and actual != "unavailable" and registered)
+    if known_path:
+        actual = os.path.normcase(os.path.abspath(actual))
+        registered = os.path.normcase(os.path.abspath(registered))
+        if actual != registered:
+            raise RuntimeError("連接程式路徑與所選COM登錄不同，拒絕操作；請分別開啟版本後診斷。")
+    if re.search(r"gstar|浩辰", " ".join(identity.values()), re.I):
+        return "gstarcad"
+    # 這是報告中的佑達 ICAD 身份，不將它重新標示成浩辰產品。
+    if (known_path
+            and identity.get("Name", "").casefold() == "icad"
+            and identity.get("Version") == "5.0.20.0"
+            and selected.get("progid", "").casefold() == "icad.application.1"
+            and selected.get("clsid", "").upper() == "{8011C111-7E36-11D1-BC5A-0060089608A4}"
+            and selected.get("registry_bits") == 32
+            and selected.get("year") == 2008
+            and os.path.basename(actual) == "icad.exe"
+            and os.path.basename(os.path.dirname(actual)) == "佑達icad 2008 專業版"):
+        return "yoda_icad_2008"
+    return "unknown"
+
+
 def run(request, update):
     """連接指定 CLSID，不用通用 ProgID 偷換版本；不接管目前作用中的圖面。"""
     pythoncom.CoInitialize()
@@ -70,22 +101,17 @@ def run(request, update):
             except (pythoncom.com_error, AttributeError):
                 identity[field] = "unavailable"
         update("identity", application=identity)
-        # 舊版可能用Intellicad登錄；只有實際程式身份明確為浩辰才容許新建圖面。
-        identity_text = " ".join(identity.values()).lower()
-        confirmed = bool(re.search(r"gstar|浩辰", identity_text))
-        actual_exe = identity.get("FullName", "")
-        registered_exe = selected["server"]
-        if actual_exe and actual_exe != "unavailable" and registered_exe:
-            if os.path.normcase(os.path.abspath(actual_exe)) != os.path.normcase(os.path.abspath(registered_exe)):
-                raise RuntimeError("連接程式路徑與所選COM登錄不同，拒絕操作；請分別開啟版本後診斷。")
+        product_family = identify_product(selected, identity)
+        confirmed = product_family != "unknown"
         docs = app.Documents
-        update("diagnose", document_count=int(docs.Count), gstar_identity_confirmed=confirmed,
+        update("diagnose", document_count=int(docs.Count), gstar_identity_confirmed=product_family == "gstarcad",
+               product_family=product_family, drawing_identity_confirmed=confirmed,
                units="診斷不讀取圖面內容，不變更單位或視圖")
         if request["mode"] == "diagnose":
             update("complete", status="PASS_DIAGNOSTIC", cad_versions_tested=[identity])
             return
         if not confirmed:
-            raise RuntimeError("可連接COM，但無法從實際應用名稱／路徑確認為浩辰；僅完成診斷，不新建圖面。")
+            raise RuntimeError("可連接COM，但無法確認為浩辰或已核對的佑達 ICAD 2008；僅完成診斷，不新建圖面。")
         app.Visible = True
         update("create_document")
         doc = docs.Add()
