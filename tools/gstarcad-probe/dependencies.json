@@ -1,0 +1,11 @@
+{
+  "python": "3.13.12",
+  "pywin32": "311",
+  "binary_origin": "Official CPython embeddable and upstream PyPI wheels; not locally built with MSVC v142",
+  "inputs": [
+    {"name":"python-3.13.12-embeddable-amd64.zip","arch":"x64","kind":"python","sha256":"f0b5a8e2662f51cfedefaf7cc0b8c22f05b776efa4a392042946422662e3a23c","url":"https://www.python.org/ftp/python/3.13.12/python-3.13.12-embeddable-amd64.zip"},
+    {"name":"python-3.13.12-embed-win32.zip","arch":"x86","kind":"python","sha256":"51ec4c741212f9488d678033bd2c8a67fc27cf7d36abffee7cb9f4481c9fb52b","url":"https://www.python.org/ftp/python/3.13.12/python-3.13.12-embed-win32.zip"},
+    {"name":"pywin32-311-cp313-cp313-win_amd64.whl","arch":"x64","kind":"wheel","sha256":"718a38f7e5b058e76aee1c56ddd06908116d35147e133427e59a3983f703a20d","url":"https://files.pythonhosted.org/packages/e3/28/e0a1909523c6890208295a29e05c2adb2126364e289826c0a8bc7297bd5c/pywin32-311-cp313-cp313-win_amd64.whl"},
+    {"name":"pywin32-311-cp313-cp313-win32.whl","arch":"x86","kind":"wheel","sha256":"f95ba5a847cba10dd8c4d8fefa9f2a6cf283b8b88ed6178fa8a6c1ab16054d0d","url":"https://files.pythonhosted.org/packages/a5/be/3fd5de0979fcb3994bfee0d65ed8ca9506a8a1260651b86174f6a86f52b3/pywin32-311-cp313-cp313-win32.whl"}
+  ]
+}

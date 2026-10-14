@@ -1,0 +1,49 @@
+{
+  "result": "PASS_LOCAL_SELF_CHECK",
+  "actual_cad_tested": false,
+  "tool_version": "0.1.0",
+  "runtime_checks": [
+    {
+      "result": "PASS_LOCAL_SELF_CHECK",
+      "bits": 64,
+      "cad_tested": false,
+      "checks": [
+        "pywin32 imports",
+        "newest-year ordering",
+        "no inferred year from ProgID",
+        "quoted executable path",
+        "geometry and dimension verification",
+        "invalid geometry rejected"
+      ]
+    },
+    {
+      "result": "PASS_LOCAL_SELF_CHECK",
+      "bits": 32,
+      "cad_tested": false,
+      "checks": [
+        "pywin32 imports",
+        "newest-year ordering",
+        "no inferred year from ProgID",
+        "quoted executable path",
+        "geometry and dimension verification",
+        "invalid geometry rejected"
+      ]
+    }
+  ],
+  "binary_origin": "Official CPython embeddable and upstream PyPI wheels; not locally built with MSVC v142",
+  "recorded_at": "2026-10-14T17:28:37.286304+08:00",
+  "bundle": "GstarCAD-Probe.zip",
+  "sha256": "a6c540ce523f00e65b008f26033eb180a91af957b83496f580c7e46275046a34",
+  "source_version": "0.8.54",
+  "archive_hashes_verified": true,
+  "source_matches_archive": true,
+  "registry_inventory": {
+    "x64": "PASS; no installed candidate",
+    "x86": "PASS; no installed candidate"
+  },
+  "worker_failure_report": {
+    "x64": "PASS; unknown CLSID, no launch",
+    "x86": "PASS; unknown CLSID, no launch"
+  },
+  "full_validation_completed": false
+}

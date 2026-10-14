@@ -4183,7 +4183,7 @@
       "type": "function",
       "function": {
         "name": "read_code_section",
-        "description": "讀PY小段，回傳section_id與實際範圍；超過檔尾自動截止，超過200行/6000字分頁。修改／驗證請讀copy_id，原件只供對照。",
+        "description": "唯讀程式／設定檔區段（C/C++、PY、Rust、HTML、JS/TS、CSS等），每段200行/6000字，單檔4MiB，回傳行號與revision。新格式不開放修改或執行；既有PY副本仍可用copy_id讀取並取得section_id。",
         "parameters": {
           "type": "object",
           "properties": {

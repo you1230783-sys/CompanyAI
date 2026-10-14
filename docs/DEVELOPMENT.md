@@ -1,3 +1,11 @@
+## 0.8.54 維護位置
+
+`files/source_code.rs` 分開管理可讀格式與排除目錄；`readable_extension` 不擴大既有 `extension` 寫入白名單。`text::decode_with_limit` 僅替原始碼開放 4 MiB，有界讀取後解碼；既有文字修改仍限 200 KB。新格式禁止建立工作副本；PY 沿用原有修改流程。`read_code_section` 與 `find_text` 是基本讀取工具，來源以 revision 與行號識別，不把未讀區段宣稱為已讀。程式來源不進入文件全文摘要快取。
+
+`scripts/Build.ps1 -EmptyCargoCache -BasicValidation -IncludeInstaller` 執行本輪基礎驗證；新增 `project_smoke --source-code-only` 透過正式 EXE 的原生 worker 驗證讀取與副本拒絕。完整驗證依使用者本輪指示暫緩。
+
+CAD 工具位於 `tools/gstarcad-probe`，獨立 Python 子程序執行 COM、逐步保存報告，逾時只停止自己的子程序，不自動重試可能已生效的操作。版本年份以登錄／產品／路徑判斷，未知年份不猜；不以最新版失敗作為自動改用舊版的理由。`dependencies.json` 鎖定上游檔案雜湊；執行 `python tools/gstarcad-probe/build_bundle.py --inputs <輸入目錄> --output <ZIP>` 重建，交付 ZIP 內含 rebuild-inputs。使用上游 CPython／pywin32 二進位，未以本機 v142 重編。
+
 **0.8.52 維護位置：** `projects/review.rs`轉換固定快照，`files/review.rs`保存各成果的原始基準與選定版本，`runner::recover_review`只從DPAPI恢復；`ui/review.js`處理唯讀差異與來源／方法視窗，原生ui/projects驗證目前對話、訊息和request_id。`timeline.rs`核對來源行並保守配對，`files/analysis.rs`綁定已成功操作。`analysis.rs`產生完成摘要及搜尋預覽，`memory::analysis_methods`僅列同專案未刪除的方法筆記。
 
 回歸入口：`scripts/Test-Review.cjs`實際Edge畫面與互動、`ui/review-self-test.js`同樣在正式WebView2自檢執行、`examples/project_smoke/review.rs`真正AppContainer／broker原文與兩次成果版本測試。其他單元測試涵蓋舊資料、格式索引、保存恢復、原文證據拒絕和LOG配對歧義。完整發行狀態以[0.8.52驗證紀錄](VALIDATION_0_8_52.md)為準。

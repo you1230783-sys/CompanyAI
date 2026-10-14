@@ -175,7 +175,8 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
         "plan_excel_analysis" | "export_planned_excel" => has("excel-read"),
         "outlook_compare" => has("outlook-coverage"),
         "list_files" | "read_file" | "load_skill" | "read_skill_guide" | "ask_preference"
-        | "ask_user" | "finish" | "read_work_log" | "read_task_result" | "compact_context" => true,
+        | "ask_user" | "finish" | "read_work_log" | "read_task_result" | "compact_context"
+        | "read_code_section" | "find_text" => true,
         "record_analysis" => {
             has("log-analysis")
                 || has("python-analysis")
@@ -192,7 +193,7 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
             has("outlook-research")
         }
         "plan_code_change" | "test_python" | "review_code_change" | "check_python"
-        | "read_code_section" | "edit_code_section" => has("python-edit"),
+        | "edit_code_section" => has("python-edit"),
         "edit_chart" => has("chart-edit"),
         "inspect_chart" | "export_chart_png" => {
             has("chart-edit") || has("charts") || has("dataset-charts")
@@ -206,7 +207,7 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
         "create_working_copy" | "save_copy" | "delete_copy" => {
             has("text-edit") || has("office-edit") || has("python-edit")
         }
-        "find_text" | "edit_text" => has("text-edit") || has("python-edit"),
+        "edit_text" => has("text-edit") || has("python-edit"),
         "edit_office" | "office_action" | "office_batch" => has("office-edit"),
         "search_files" => has("research") || has("text-edit") || has("python-edit"),
         "list_document_sections" | "read_document_section" | "summarize_document" => {

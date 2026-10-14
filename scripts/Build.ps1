@@ -42,7 +42,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     # 測試涵蓋登入兌換、重複登入碼、API Header 與 Windows 憑證加密。
     if ($BasicValidation) {
         # 本次使用者要求先測聊天／附件相關契約；不把局部測試記成完整驗收。
-        foreach ($filter in @('jobs::', 'demo::work::tests::')) {
+        foreach ($filter in @('jobs::', 'demo::work::tests::', 'projects::files::source_code::', 'projects::text::')) {
             & cargo test --lib $filter --frozen
             if ($LASTEXITCODE -ne 0) { throw "Basic contract tests failed: $filter" }
         }
@@ -113,6 +113,11 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     }
     if ($BasicValidation) {
         # 基礎交付在此結束；下方長流程及完整PASS報告只供完整驗證使用。
+        & cargo build --example project_smoke --frozen
+        if ($LASTEXITCODE -ne 0) { throw 'Source-code read harness build failed.' }
+        $sourceProbe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\project_smoke.exe'
+        & $sourceProbe $exe (Join-Path $projectRoot '.build\source-code-smoke') --source-code-only
+        if ($LASTEXITCODE -ne 0) { throw 'Read-only source-code verification failed.' }
         $dependencies = & $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER /dump /dependents $exe
         if ($LASTEXITCODE -ne 0) { throw 'DLL inspection failed.' }
         $basic = [ordered]@{
@@ -127,7 +132,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
             windows_sdk = $env:WindowsSDKVersion
             empty_cargo_cache = [bool]$EmptyCargoCache
             cargo_home = $env:CARGO_HOME
-            checks = @('v142 x64 actual compiler probe','fmt','Clippy all targets','jobs and demo work contract tests','cargo build --release --frozen','Outlook helper pipe/EOF without mailbox access','Python runtime self-check','WebView2 UI and native composer self-check','native task rejection, repeated error, DPAPI restore and late event checks','DLL dependency inspection')
+            checks = @('v142 x64 actual compiler probe','fmt','Clippy all targets','jobs, demo work, source code and text contract tests','cargo build --release --frozen','Outlook helper pipe/EOF without mailbox access','Python runtime self-check','WebView2 UI and native composer self-check','native task rejection, repeated error, DPAPI restore and late event checks','read-only source formats, native worker, paging, revision and copy rejection','DLL dependency inspection')
             task_tracking_cases = $trackingCheck.cases
             exe_sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
             installer_built = $false

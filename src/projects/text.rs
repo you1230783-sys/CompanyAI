@@ -35,8 +35,13 @@ pub(super) fn validate_content(text: &str) -> AppResult<()> {
 }
 
 pub fn decode(bytes: &[u8]) -> AppResult<(String, Encoding)> {
-    if bytes.len() > MAX_TEXT {
-        return Err("第一版文件上限為 200 KB，請分成較小文件。".into());
+    decode_with_limit(bytes, MAX_TEXT)
+}
+
+/// 唯讀程式檔可採用較大的有界快照；不改變既有編輯／編碼輸出的200KB限制。
+pub(super) fn decode_with_limit(bytes: &[u8], limit: usize) -> AppResult<(String, Encoding)> {
+    if bytes.len() > limit {
+        return Err(format!("文字超過 {limit} bytes 上限，請分成較小文件。"));
     }
     if bytes.starts_with(&[0xff, 0xfe]) || bytes.starts_with(&[0xfe, 0xff]) {
         let little = bytes[0] == 0xff;
@@ -56,12 +61,15 @@ pub fn decode(bytes: &[u8]) -> AppResult<(String, Encoding)> {
             })
             .collect();
         let text = String::from_utf16(&words).map_err(|_| "UTF-16 內容無法辨識。")?;
-        validate(&text)?;
+        validate_content(&text)?;
+        if text.len() > limit {
+            return Err("解碼後文字超過讀取上限。".into());
+        }
         return Ok((text, Encoding::Utf16(little)));
     }
     let bom = bytes.starts_with(&[0xef, 0xbb, 0xbf]);
     if let Ok(text) = std::str::from_utf8(if bom { &bytes[3..] } else { bytes }) {
-        validate(text)?;
+        validate_content(text)?;
         return Ok((text.into(), Encoding::Utf8(bom)));
     }
     if bom {
@@ -75,10 +83,14 @@ pub fn decode(bytes: &[u8]) -> AppResult<(String, Encoding)> {
             continue;
         }
         if let Ok(text) = decode_cp(bytes, codepage) {
-            if validate(&text).is_err() {
+            if text.len() > limit || validate_content(&text).is_err() {
                 continue;
             }
-            if encode(&text, Encoding::CodePage(codepage)).ok().as_deref() != Some(bytes) {
+            if encode_content(&text, Encoding::CodePage(codepage))
+                .ok()
+                .as_deref()
+                != Some(bytes)
+            {
                 continue;
             }
             if candidate
@@ -116,6 +128,11 @@ pub(super) fn decode_cp(bytes: &[u8], codepage: u32) -> AppResult<String> {
 
 pub fn encode(text: &str, encoding: Encoding) -> AppResult<Vec<u8>> {
     validate(text)?;
+    encode_content(text, encoding)
+}
+
+/// 只在上層已完成大小與內容驗證後使用；供唯讀解碼核對無損往返。
+fn encode_content(text: &str, encoding: Encoding) -> AppResult<Vec<u8>> {
     match encoding {
         Encoding::Utf8(bom) => {
             let mut result = if bom {

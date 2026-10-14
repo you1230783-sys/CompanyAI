@@ -23,6 +23,8 @@ mod roundtrip;
 mod server_pdf;
 #[path = "project_smoke/skills.rs"]
 mod skills;
+#[path = "project_smoke/source_code.rs"]
+mod source_code;
 #[path = "project_smoke/vision.rs"]
 mod vision;
 
@@ -38,6 +40,12 @@ fn run() -> AppResult<()> {
     let root =
         PathBuf::from(args.get(2).ok_or("需要測試根目錄。")?).join(company_ai::jobs::new_id()?);
     std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+    if args
+        .get(3)
+        .is_some_and(|value| value == "--source-code-only")
+    {
+        return source_code::verify(&exe, &root);
+    }
     if args.get(3).is_some_and(|v| v == "--resilience-only") {
         return resilience::verify(&root);
     }
@@ -168,6 +176,7 @@ fn run() -> AppResult<()> {
     println!("PASS: AppContainer handshake, OS file/network isolation, Unicode edit, replay, source protection, publish/readback, path escape and hardlink rejection. Fixture: {}", root.display());
     drop(worker);
     review::verify(&exe, &root)?;
+    source_code::verify(&exe, &root)?;
     logs::verify(&exe, &root)?;
     native::verify(&root)?;
     resilience::verify(&root)?;

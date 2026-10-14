@@ -12,6 +12,7 @@ mod mail_notes;
 mod python;
 mod python_edit;
 mod review;
+mod source_code;
 use super::{
     office,
     sandbox::{Edit, Worker},
@@ -186,6 +187,21 @@ fn extension(path: &Path) -> AppResult<String> {
     Ok(ext)
 }
 
+/// 閱讀與寫入刻意使用不同檢查；extension 保留原本的可寫副本格式。
+fn readable_extension(path: &Path) -> AppResult<String> {
+    if source_code::excluded(path) {
+        return Err("此路徑屬於預設排除的版本庫、產物、依賴或機密設定，未讀取內容。".into());
+    }
+    if source_code::supported(path) {
+        return Ok(path
+            .extension()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_ascii_lowercase());
+    }
+    extension(path)
+}
+
 pub fn read(project: &Project, path: &str) -> AppResult<(String, Encoding)> {
     read_cancel(project, path, &AtomicBool::new(false), None, None)
 }
@@ -197,7 +213,7 @@ fn read_cancel(
     server_pdf: Option<&mut super::server_pdf::Reader>,
 ) -> AppResult<(String, Encoding)> {
     let rel = relative(path)?;
-    let ext = extension(&rel)?;
+    let ext = readable_extension(&rel)?;
     let target = project.root.join(&rel);
     let _guards = pin(target.parent().ok_or("缺少來源資料夾。")?)?;
     let mut file = OpenOptions::new()
@@ -268,12 +284,19 @@ fn read_cancel(
         };
         return Ok((content, Encoding::Utf8(true)));
     }
-    if file.metadata().map_err(|e| e.to_string())?.len() > text::MAX_TEXT as u64 {
-        return Err("文件超過第一版 200 KB 上限。".into());
+    let limit = if source_code::supported(&rel) {
+        source_code::MAX_BYTES
+    } else {
+        text::MAX_TEXT
+    };
+    if file.metadata().map_err(|e| e.to_string())?.len() > limit as u64 {
+        return Err(format!("文件超過讀取上限 {limit} bytes，請縮小來源檔案。"));
     }
     let mut data = Vec::new();
-    file.read_to_end(&mut data).map_err(|e| e.to_string())?;
-    text::decode(&data)
+    file.take((limit + 1) as u64)
+        .read_to_end(&mut data)
+        .map_err(|e| e.to_string())?;
+    text::decode_with_limit(&data, limit)
 }
 
 /// 用獨立暫存副本協調 Outlook 的開檔需求，原件仍維持拒絕寫入的 handle。
@@ -1570,12 +1593,15 @@ impl Broker {
             }
             return Ok(copy.text.clone());
         }
-        if extension(Path::new(path))? != "md" {
+        if readable_extension(Path::new(path))? != "md" {
             self.txt_context = true;
         }
+        // 程式檔以分頁原文及 revision 查閱，不把整個程式庫複製到200份文件摘要快取。
+        let is_source = source_code::supported(Path::new(path));
         let stamp = self
             .memory
             .as_ref()
+            .filter(|_| !is_source)
             .map(|m| m.source_stamp(path))
             .transpose()?;
         let content = loop {
@@ -2390,6 +2416,9 @@ impl Broker {
                     .enumerate()
                 {
                     let entry = entry.map_err(|e| e.to_string())?;
+                    if source_code::excluded(&entry.path()) {
+                        continue;
+                    }
                     if entry
                         .file_name()
                         .to_string_lossy()
@@ -2406,11 +2435,17 @@ impl Broker {
                         continue;
                     }
                     if metadata.is_dir()
-                        || extension(&entry.path()).is_ok()
+                        || readable_extension(&entry.path()).is_ok()
                         || super::logs::supported(&entry.path())
                         || super::vision::input::supported(&entry.path())
                     {
                         let mut info = json!({"name":entry.file_name().to_string_lossy(),"directory":metadata.is_dir()});
+                        if !metadata.is_dir() && source_code::supported(&entry.path()) {
+                            info["kind"] = json!("source_text");
+                            info["bytes"] = json!(metadata.len());
+                            info["read_tool"] = json!("read_code_section");
+                            info["read_only"] = json!(source_code::read_only(&entry.path()));
+                        }
                         // 圖片與文件一起列出，但只公告類型及讀取工具；列目錄不會送圖。
                         if !metadata.is_dir() && super::vision::input::supported(&entry.path()) {
                             info["kind"] = json!("image");
@@ -2420,7 +2455,9 @@ impl Broker {
                         entries.push(info);
                     }
                 }
-                Ok(json!({"entries":entries,"truncated":truncated}))
+                Ok(
+                    json!({"entries":entries,"truncated":truncated,"default_exclusions":"版本庫、依賴、編譯產物與常見機密設定已排除；本層清單不代表已讀取子目錄或全文。"}),
+                )
             }
             Tool::ReadFile { path, offset } => {
                 let canonical = self.code_copy_id(path).unwrap_or_else(|| path.clone());
@@ -2454,14 +2491,15 @@ impl Broker {
                 }
                 let text: String = content.chars().skip(*offset).take(6000).collect();
                 let next = offset + text.chars().count();
-                let document = if self.copies.contains_key(path) {
-                    Value::Null
-                } else if let Some(memory) = self.memory.as_mut() {
-                    memory.record_read(path, *offset, next);
-                    memory.read_info(path, *offset, next)?
-                } else {
-                    Value::Null
-                };
+                let document =
+                    if self.copies.contains_key(path) || source_code::supported(Path::new(path)) {
+                        Value::Null
+                    } else if let Some(memory) = self.memory.as_mut() {
+                        memory.record_read(path, *offset, next);
+                        memory.read_info(path, *offset, next)?
+                    } else {
+                        Value::Null
+                    };
                 Ok(
                     json!({"path":path,"working_copy":self.copies.contains_key(path),"text":text,"offset":offset,"next_offset":next,"total":total,"truncated":next<total,"revision":text::revision(&content),"document":document,"imported_snapshot":self.project.imports.contains_key(&path.replace('\\', "/"))}),
                 )
@@ -2522,6 +2560,13 @@ impl Broker {
                     return Err("本次工作副本已達 20 份。".into());
                 }
                 let rel = relative(name)?;
+                if source_code::read_only(&rel)
+                    || source
+                        .as_ref()
+                        .is_some_and(|path| source_code::read_only(Path::new(path)))
+                {
+                    return Err("此程式／設定檔目前僅支援唯讀，不開放建立或修改工作副本。".into());
+                }
                 if rel.components().count() != 1 {
                     return Err("工作副本只填檔名，不含資料夾。".into());
                 }
@@ -2565,6 +2610,10 @@ impl Broker {
                         );
                     }
                 };
+                if ext == "py" {
+                    // 放寬的是唯讀容量；PY副本仍維持既有編輯上限。
+                    text::validate(&content)?;
+                }
                 let office = if office::supported(&rel) {
                     let original: office::Snapshot =
                         serde_json::from_str(&content).map_err(|e| e.to_string())?;

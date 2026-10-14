@@ -315,21 +315,26 @@ impl Broker {
             .get(&canonical)
             .map(|c| c.name.as_str())
             .unwrap_or(path);
-        if extension(Path::new(name))? != "py" {
-            return Err("程式區段工具目前只支援PY。".into());
+        if !source_code::supported(Path::new(name)) {
+            return Err("程式區段工具需要支援的程式或設定檔。".into());
         }
+        let read_only = source_code::read_only(Path::new(name));
         let content = self.content(&canonical, cancel, worker)?;
         let (first, actual_last) = read_bounds(&content, first, last)?;
         let (start, end) = section(&content, first, actual_last)?;
         let value = &content[start..end];
         let copy_id = self.code_copy_id(path);
         let revision = text::revision(&content);
-        let result = json!({"path":canonical,"copy_id":copy_id,"source_kind":if copy_id.is_some(){"working_copy"}else{"original_read_only"},"revision":revision,"first_line":first,"last_line":actual_last,
+        let mut result = json!({"path":canonical,"copy_id":copy_id,"source_kind":if copy_id.is_some(){"working_copy"}else{"original_read_only"},"revision":revision,"first_line":first,"last_line":actual_last,
             "requested_last_line":last,"next_line":(end<content.len()).then_some(actual_last+1),"truncated":actual_last<last && end<content.len(),"eof":end==content.len(),
             "section_id":copy_id.as_ref().map(|id|section_id(id,&revision,first,actual_last)),
             "total_lines":content.split_inclusive('\n').count(),"section_hash":text::revision(value),"text":value,
             "offset":content[..start].chars().count(),"next_offset":content[..end].chars().count(),"total":content.chars().count(),
             "guidance":"副本修改優先傳copy_id、section_id、replacement。若用舊介面，範圍須等於實際first_line/last_line，不能拿大段hash改小段。原件只供對照；修改與測試讀copy_id。"});
+        if read_only {
+            result["read_only"] = json!(true);
+            result["guidance"] = json!("此程式／設定檔只讀取原文，不開放修改或執行。依next_line續讀；每段核對revision一致，變更時重新讀取。不可把部分區段說成整個專案已讀完。");
+        }
         self.retain_code_section(&result);
         Ok(result)
     }
