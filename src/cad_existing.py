@@ -1,4 +1,4 @@
-"""既有 DWG 的固定副本操作。來源檔由 Rust 保護，本程序只接收私有副本路徑。"""
+"""共用圖元讀取／修改引擎；磁碟入口只接收 Rust 建立的私有副本路徑。"""
 from collections import Counter
 from pathlib import Path
 import math
@@ -22,7 +22,7 @@ def describe(entity, api):
     kind = next((key for key in ("mtext", "text", "circle", "polyline", "line", "arc", "dimension", "blockreference")
                  if key in lower), "unknown")
     row = {"handle": str(entity.Handle).upper(), "type": name, "kind": kind, "properties": {}}
-    for field in ("Layer", "Color", "TextString", "Height", "Radius", "Rotation", "Measurement", "Name"):
+    for field in ("Layer", "Color", "TextString", "Height", "Radius", "Rotation", "Measurement", "Name", "StartAngle", "EndAngle", "Thickness"):
         value = optional(entity, field)
         if isinstance(value, (str, int, float, bool)):
             if isinstance(value, float) and not math.isfinite(value):
@@ -31,7 +31,7 @@ def describe(entity, api):
                 row.setdefault("unavailable_properties", []).append(field)
             else:
                 row["properties"][field] = value
-    for field in ("StartPoint", "EndPoint", "Center", "InsertionPoint"):
+    for field in ("StartPoint", "EndPoint", "Center", "InsertionPoint", "Normal"):
         value = optional(entity, field)
         if value is not None:
             try:
@@ -98,12 +98,15 @@ def execute_existing(app, legacy, request, report, api):
         index = dict(result, entities=before)
         output.with_name("cad-index.json").write_text(json.dumps(index, ensure_ascii=False), encoding="utf-8")
         return result
+    return edit_document(app, doc, legacy, request, report, api, entities, before, output)
+
+
+def edit_document(app, doc, legacy, request, report, api, entities, before, output=None, guard=None):
+    """目前文件與磁碟副本共用同一驗證／修改引擎；output=None 絕不儲存或關閉。"""
     report["step"] = "validate_edit"
     edits = request["edits"]
     api.require(isinstance(edits, list) and len(edits) <= 100, "每次最多修改 100 個圖元")
     additions = api.prepare(request["operations"]) if request["operations"] else []
-    api.require(all(op["kind"] in ("line", "circle", "text", "leader") for op in additions),
-                "副本初版只新增線、圓、文字及引線")
     api.require(edits or additions, "請提供修改或新增操作")
     # 先驗證整份修改計畫；同一 Handle 只能一項修改，避免順序歧義。
     rows = {row["handle"]: row for row in before}
@@ -123,48 +126,99 @@ def execute_existing(app, legacy, request, report, api):
             api.require(rows[handle]["kind"] in ("line", "circle", "text", "mtext"), "初版移動支援線／圓／文字")
             api.point_value(value)
             api.require(any(p in rows[handle]["properties"] for p in ("StartPoint", "Center", "InsertionPoint")), "缺少可核對的位置")
+        elif kind in ("radius", "height"):
+            field = "Radius" if kind == "radius" else "Height"
+            allowed = ("circle", "arc") if kind == "radius" else ("text", "mtext")
+            api.require(rows[handle]["kind"] in allowed and field in rows[handle]["properties"], "缺少可核對的尺寸屬性")
+            api.require(api.number(value) > 0, "尺寸必須大於零")
+            if kind == "radius" and rows[handle]["kind"] == "arc":
+                api.require(rows[handle]["properties"]["Radius"] > 0
+                            and "Center" in rows[handle]["properties"], "缺少弧的中心／有效半徑")
+        elif kind == "delete":
+            api.require(value is None, "刪除的 value 需為 null")
         else:
-            raise ValueError("初版只支援 text/color/move")
+            raise ValueError("只支援 text/color/move/radius/height/delete")
         api.require(not bool(doc.Layers.Item(rows[handle]["properties"]["Layer"]).Lock), "圖元所在圖層已鎖定")
     drawing = api.Drawing.__new__(api.Drawing)
     drawing.app, drawing.doc, drawing.model = app, doc, doc.ModelSpace
     drawing.legacy, drawing.expected = legacy, []
-    for index, edit in enumerate(edits):
-        report.update(step="edit_entity", operation_index=index)
-        entity, row = entities[edit["handle"]], rows[edit["handle"]]
-        kind, value = edit["kind"], edit["value"]
-        if kind == "text":
-            entity.TextString = api.cad_text(value)
-            row["properties"]["TextString"] = api.cad_text(value)
-        elif kind == "color":
-            entity.Color = value
-            row["properties"]["Color"] = value
-        else:
-            delta = api.point_value(value)
-            entity.Move(drawing.point([0., 0., 0.]), drawing.point(delta))
-            for field in ("StartPoint", "EndPoint", "Center", "InsertionPoint"):
-                if field in row["properties"]:
-                    row["properties"][field] = [a+b for a,b in zip(row["properties"][field], delta)]
-        report["completed_operations"] += 1
-    for index, op in enumerate(additions):
-        report.update(step=op["kind"], operation_index=len(edits)+index)
-        drawing.draw(op)
-        report["completed_operations"] += 1
-    expected = {row["handle"]: row["properties"] for row in before}
+    deleted = set()
+    # 目前圖面必須支援 Undo 群組才寫入；不透過 SendCommand 猜測指令完成。
+    if guard:
+        guard()
+        doc.StartUndoMark()
+        report["undo_group_started"] = True
+    try:
+        for index, edit in enumerate(edits):
+            if guard:
+                guard()
+            report["drawing_started"] = True
+            report.update(step="edit_entity", operation_index=index)
+            entity, row = entities[edit["handle"]], rows[edit["handle"]]
+            kind, value = edit["kind"], edit["value"]
+            if kind == "text":
+                entity.TextString = api.cad_text(value)
+                row["properties"]["TextString"] = api.cad_text(value)
+            elif kind == "color":
+                entity.Color = value
+                row["properties"]["Color"] = value
+            elif kind in ("radius", "height"):
+                field = "Radius" if kind == "radius" else "Height"
+                if kind == "radius" and row["kind"] == "arc":
+                    # 弧的唯讀端點也隨半徑改變；依中心與原向量同比縮放，保留所在平面。
+                    old_radius = row["properties"]["Radius"]
+                    api.require(old_radius > 0 and "Center" in row["properties"], "缺少弧的中心／有效半徑")
+                    center = row["properties"]["Center"]
+                    for endpoint in ("StartPoint", "EndPoint"):
+                        if endpoint in row["properties"]:
+                            row["properties"][endpoint] = [c + (v-c)*value/old_radius
+                                for c,v in zip(center,row["properties"][endpoint])]
+                setattr(entity, field, api.number(value))
+                row["properties"][field] = api.number(value)
+            elif kind == "delete":
+                entity.Delete()
+                deleted.add(edit["handle"])
+            else:
+                delta = api.point_value(value)
+                entity.Move(drawing.point([0., 0., 0.]), drawing.point(delta))
+                for field in ("StartPoint", "EndPoint", "Center", "InsertionPoint"):
+                    if field in row["properties"]:
+                        row["properties"][field] = [a+b for a,b in zip(row["properties"][field], delta)]
+            report["completed_operations"] += 1
+        for index, op in enumerate(additions):
+            if guard:
+                guard()
+            report["drawing_started"] = True
+            report.update(step=op["kind"], operation_index=len(edits)+index)
+            drawing.draw(op)
+            report["completed_operations"] += 1
+    finally:
+        if guard and report.get("undo_group_started"):
+            doc.EndUndoMark()
+            report["undo_group_closed"] = True
+    expected = {row["handle"]: row["properties"] for row in before if row["handle"] not in deleted}
     expected.update({row["handle"]: row["properties"] for row in drawing.expected})
 
     def verify(target):
         actual, _ = snapshot(target, api)
-        api.require(set(actual) == set(expected), "副本 Handle 集合不符，不能宣稱保存完整")
+        api.require(set(actual) == set(expected), "圖面 Handle 集合不符，不能宣稱操作完成")
         for handle, properties in expected.items():
             for field, value in properties.items():
                 compare = api.text_equal if field == "TextString" else api.equal
-                api.require(compare(getattr(actual[handle], field), value), f"副本屬性核對失敗：{handle}.{field}")
+                api.require(compare(getattr(actual[handle], field), value), f"圖面屬性核對失敗：{handle}.{field}")
         return {"handles_verified": len(actual), "available_properties_verified": True,
                 "unavailable_properties_not_verified": True}
 
     report["step"] = "verify_before_save"
+    if guard:
+        guard()
+    doc.Regen() if legacy else doc.Regen(1)
     before_save = verify(doc)
+    if output is None:
+        return {"status": "EDITED_UNSAVED", "saved": False, "verification": before_save,
+                "modified_handles": sorted(used), "deleted_handles": sorted(deleted),
+                "added_entities": len(drawing.expected), "visual_check_required": True,
+                "advice": "修改完成，尚未儲存。請查看 CAD；可用一次 Undo 撤銷本輪，儲存由使用者決定。"}
     report["step"] = "save"
     doc.Save()
     report["saved"] = True

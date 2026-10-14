@@ -35,7 +35,8 @@
     for (const button of cadDialog.querySelectorAll("button")) button.disabled=true;
   }
   cadDialog.addEventListener("cancel",event=>{event.preventDefault();replyCad("cancel");});
-  cadDialog.addEventListener("close",()=>replyCad("cancel"));
+    // close 事件可能在下一個提示已重開後才送達；不能取消新的 request_id。
+    cadDialog.addEventListener("close",()=>{if(!cadDialog.open)replyCad("cancel");});
   function renderCadConnect(project,visible) {
     const pending=visible && !project.stopping ? project.cad_connect : null;
     const key=pending ? `${project.running_id}:${pending.request_id}` : "";
@@ -44,11 +45,11 @@
     if (!pending) return;
     cadTarget={conversation:state.active_id,run_id:project.running_id,request_id:pending.request_id};
     const prompt=pending.prompt,selected=prompt.selected||{};
-    cadDialog.append(node("h2","",prompt.partial ? "CAD 連線中斷" : "請開啟 CAD"),
-      node("p","",`${selected.description||"CAD"} ${selected.year||""}（${selected.progid||""}）`),
+    cadDialog.append(node("h2","",prompt.confirm_document ? "確認修改目前圖面" : prompt.partial ? "CAD 連線中斷" : "請開啟 CAD"),
+      node("p","",prompt.confirm_document ? `${prompt.document.name}（${prompt.document.full_name||"尚未儲存"}）` : `${selected.description||"CAD"} ${selected.year||""}（${selected.progid||""}）`),
       node("p","",prompt.message),node("p","","本任務會保留原計畫；等待最多十分鐘，可隨時取消。"));
     const buttons=node("div","dialog-actions");
-    const choices=prompt.partial ? [["rebuild","另建新副本重做"],["cancel","取消"]] : [["launch","開啟 CAD"],["retry","已開啟，重新連線"],["cancel","取消繪圖"]];
+    const choices=prompt.confirm_document ? [["confirm","修改此圖面，不儲存"],["cancel","取消"]] : prompt.partial ? [["rebuild","另建新副本重做"],["cancel","取消"]] : [["launch","開啟 CAD"],["retry","已開啟，重新連線"],["cancel","取消繪圖"]];
     for(const [choice,label] of choices){const button=node("button","",label);button.onclick=()=>replyCad(choice);buttons.append(button);}
     cadDialog.append(buttons);cadDialog.showModal();
   }

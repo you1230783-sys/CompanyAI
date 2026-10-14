@@ -1,37 +1,43 @@
 {
-  "version": "0.8.57",
+  "version": "0.8.58",
   "result": "PASS_BASIC",
-  "recorded_at": "2026-10-14T21:58:48.8076400+08:00",
-  "rust_selected_tests": 43,
-  "python_synthetic_contracts": 17,
+  "recorded_at": "2026-10-15T07:39:32.016106+08:00",
+  "rust_selected_tests": 48,
+  "python_synthetic_contracts": 26,
   "native_runtime_inventory_pipe": true,
   "delivered_runtime_self_check": true,
   "source_copy_and_read_lock_verified": true,
   "existing_copy_synthetic_roundtrip": true,
-  "connection_dialog_synthetic_checks": true,
+  "active_unsaved_synthetic_checks": true,
+  "active_confirmation_native_webview_checks": true,
+  "excel_coordinate_synthetic_checks": true,
   "cad_drawing_tested_locally": false,
   "company_ai_service_tested": false,
   "installer_packaged_and_manifest_verified": true,
   "installer_install_update_rollback_uninstall_tested": false,
   "full_validation_completed": false,
-  "runtime_manifest_sha256": "58e2fe25e54aad580573a789b2d807728357d8f9793766d7ea329ad3679a1b37",
+  "runtime_manifest_sha256": "8e9c4ff5b5747be2718b33dc0adb6c2fab4d36d640a7359d2a80d23d075d2418",
   "binary_origin": "Official CPython 3.13.12 and pywin32 311 wheels; not locally compiled with v142",
   "artifacts": [
     {
-      "Path": "Y:\\Rust\\Project\\CompanyAI\\dist\\LM_AI.exe",
-      "Hash": "3386FF4C7587D88A2D98D7E91FB5DBA09CDF266463FD2468E59BFB1862D65D65"
+      "path": "dist/LM_AI.exe",
+      "bytes": 18597888,
+      "sha256": "5a916a6123c1fd19a584d1ca5ee1e7830c42daa0cb519ca523bbbe026a870ba6"
     },
     {
-      "Path": "Y:\\Rust\\Project\\CompanyAI\\dist\\LM_AI_Setup.exe",
-      "Hash": "E3E5EF54FFD8F543B90B0490DD83E7309E5B82137C5A990D59E1551FA95B1CED"
+      "path": "dist/LM_AI_Setup.exe",
+      "bytes": 36096332,
+      "sha256": "2f3d88b795e3b8e65c4d5d53c5f9ca8bce08120c9026c8c66a55acfaa416b480"
     },
     {
-      "Path": "Y:\\Rust\\Project\\CompanyAI\\dist\\update-manifest.json",
-      "Hash": "D7C0C22CCF192EDA66690AE19A0AC03154ACB9E8040D6A7DF00C41524E251B5B"
+      "path": "dist/update-manifest.json",
+      "bytes": 1050,
+      "sha256": "ea8f55284443f709a24bb36c2fe1ea589f75183bb7994106ce9763888f83a9c3"
     },
     {
-      "Path": "Y:\\Rust\\Project\\CompanyAI\\dist\\update-manifest-exe.json",
-      "Hash": "D7C0C22CCF192EDA66690AE19A0AC03154ACB9E8040D6A7DF00C41524E251B5B"
+      "path": "dist/update-manifest-exe.json",
+      "bytes": 1050,
+      "sha256": "ea8f55284443f709a24bb36c2fe1ea589f75183bb7994106ce9763888f83a9c3"
     }
   ]
 }

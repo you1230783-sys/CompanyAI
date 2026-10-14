@@ -4,7 +4,9 @@
 mod analysis;
 pub mod batch;
 mod cad;
+mod cad_active;
 mod cad_copy;
+mod cad_excel;
 mod chart_annotations;
 mod chart_preferences;
 mod code_review;
@@ -773,6 +775,7 @@ pub struct Broker {
     excel_plans: BTreeMap<String, super::excel_plan::Plan>,
     file_waiter: Option<super::interaction::FileWaiter>,
     cad_waiter: Option<crate::cad::Waiter>,
+    cad_active: Option<Value>,
     outlook: super::mail::Session,
     outlook_process: Option<crate::outlook::process::Process>,
     pub(super) mail_notes: super::mail_notes::State,
@@ -820,6 +823,7 @@ impl Broker {
             excel_plans: BTreeMap::new(),
             file_waiter: None,
             cad_waiter: None,
+            cad_active: None,
             outlook: super::mail::Session::default(),
             outlook_process: None,
             log_cursors: BTreeMap::new(),
@@ -2103,6 +2107,20 @@ impl Broker {
                 result["date_1904"] = json!(page.date_1904);
                 Ok(result)
             }
+            Tool::CadActiveRead { version, offset } => {
+                self.read_active_cad(version, *offset, cancel)
+            }
+            Tool::CadActiveEdit {
+                revision,
+                edits,
+                operations,
+            } => self.edit_active_cad(revision, edits, operations, cancel),
+            Tool::CadExcelPlan {
+                path,
+                revision,
+                settings,
+            } => self.plan_cad_excel(path, revision, settings, cancel),
+            Tool::CadExcelApply { .. } => self.apply_cad_excel(tool, cancel),
             Tool::CadInventory {} => crate::cad::inventory(cancel),
             Tool::CadRead {
                 path,

@@ -106,6 +106,31 @@ impl Store {
 pub enum Tool {
     /// 列出本機 CAD 註冊；不啟動應用程式。
     CadInventory {},
+    /// 讀取目前文件的未儲存狀態；每次修改前需重新取得快照。
+    CadActiveRead {
+        version: String,
+        #[serde(default)]
+        offset: usize,
+    },
+    CadActiveEdit {
+        revision: String,
+        edits: Vec<serde_json::Value>,
+        operations: Vec<serde_json::Value>,
+    },
+    /// Excel 座標先本機生成計畫，再由另一工具套用，不讓模型手抄整批數列。
+    CadExcelPlan {
+        path: String,
+        revision: String,
+        settings: serde_json::Value,
+    },
+    CadExcelApply {
+        plan_id: String,
+        target: String,
+        path: Option<String>,
+        revision: Option<String>,
+        name: String,
+        version: String,
+    },
     /// 來源先複製；僅讀取副本的 ModelSpace 分頁，不將整張大圖送入模型。
     CadRead {
         path: String,
@@ -510,6 +535,10 @@ impl Tool {
     /// 使用者可讀的操作名稱，避免將 JSON 或文件全文當進度訊息。
     pub fn label(&self) -> &'static str {
         match self {
+            Self::CadActiveRead { .. } => "讀取 CAD 目前圖面",
+            Self::CadActiveEdit { .. } => "修改 CAD 目前圖面（不儲存）",
+            Self::CadExcelPlan { .. } => "預覽 Excel 座標繪圖計畫",
+            Self::CadExcelApply { .. } => "套用 Excel 座標至 CAD",
             Self::CadInventory {} => "查看已安裝 CAD 版本",
             Self::CadRead { .. } => "讀取 DWG 工作副本",
             Self::CadEdit { .. } => "修改 DWG 新副本並核對",

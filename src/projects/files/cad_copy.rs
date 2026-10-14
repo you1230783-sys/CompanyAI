@@ -160,6 +160,7 @@ impl Broker {
                 .with_file_name("cad-index.json")
                 .to_string_lossy());
             entry["index_hash"] = json!(format!("{:x}", hash.finalize()));
+            entry["units_code"] = result["units_code"].clone();
             entry["version"] = result["selected"]["progid"].clone();
             self.remember_cad_handles(path, &result)?;
             result["instructions"] = json!("僅讀取工作副本的 ModelSpace。來源未修改；不是視覺辨識。修改須使用本 revision 與已讀取 Handle。圖塊僅摘要，讀取副本不是驗證完成的修改成果。");

@@ -1,6 +1,6 @@
 # CAD 二維繪圖測試版
 
-使用者要求 CAD 繪圖時使用本技能。cad_inventory 唯讀列出 COM 版本，由新到舊排序。cad_draw 建立新圖；cad_read 讀取既有 DWG 的工作副本；cad_edit 修改全新副本。原始檔案不交給 CAD 開啟、不修改。連線失敗由桌面提示使用者開啟／重試／取消，保留原計畫，不要要求使用者另開任務或自行反覆送出工具。
+使用者要求 CAD 繪圖時使用本技能。cad_inventory 唯讀列出 COM 版本，由新到舊排序。cad_draw 建立新圖；cad_read 讀取既有 DWG 的工作副本；cad_edit 修改全新副本。磁碟副本模式不開啟或修改原檔；使用者要求編輯目前圖面時改走 cad_active_read/cad_active_edit，原生確認後直接修改記憶體，不儲存。連線失敗由桌面提示使用者開啟／重試／取消，保留原計畫，不要要求使用者另開任務或自行反覆送出工具。
 
 支援產品包含浩辰 GstarCAD 與已辨識的佑達 iCAD 2008（Icad.Application.1）。佑達 iCAD 不必含「浩辰」字樣；不要因品牌名稱不同拒絕使用者已指定的版本，也不要將兩者說成同一產品。以掃描結果及實際身份核對為準，不能擴大宣稱所有 IntelliCAD 皆相容。
 
@@ -24,7 +24,7 @@
 1. 使用者指定專案內 DWG 路徑；list_files 會列出 cad_dwg。cad_read(path,version,offset=0,revision=null) 先複製後讀取，回傳 source/revision、類型／圖層統計與第一頁 100 個圖元。讀取只涵蓋 ModelSpace，非整張工程圖視覺理解。
 2. 按 next_offset 與相同 revision 續讀。本機索引只建立一次，不每頁重新複製大檔；來源或索引變更就需從第一頁重讀。初版限制 512 MB、200000 圖元、64 MB 索引。圖塊提供名稱、位置與可讀屬性，不展開定義／巢狀內容；圖紙空間不在範圍。
 3. 依實際回傳的 handle、Layer、座標與文字定位。只能修改 editable=true 且已讀取的 Handle；位置描述不明確時先列出候選問使用者，不猜。
-4. cad_edit(path,revision,name,edits,operations) 建立另一份新副本。edits 格式 {handle,kind,value}，kind=text 時 value 是文字（限文字圖元）；color 時為 ACI 1–255；move 時為 [dx,dy]（限線／圓／文字）。同 Handle 每次僅一項修改，圖層鎖定即停止。可用 operations 新增 line/circle/text/leader，無新增時填 []。
+4. cad_edit(path,revision,name,edits,operations) 建立另一份新副本。edits 格式 {handle,kind,value}，kind=text 時 value 是文字（限文字圖元）；color 時為 ACI 1–255；move 時為 [dx,dy]（限線／圓／文字）。radius 時正數半徑（圓／弧）；height 時正數文字高度（text/mtext）；delete 時 value=null（限 editable=true 的簡單圖元）。同 Handle 每次僅一項修改，圖層鎖定即停止。可用 operations 新增上列全部固定繪圖類型，無新增時填 []。
 5. 修改成功會儲存／重開、核對 Handle 集合與可讀屬性，交付 path。未實作屬性、圖塊定義／外部參照／圖紙空間不宣稱驗證完整。若要繼續修改成果，重新 cad_read 該成果取得新 revision，再產生另一份副本。
 
 回傳 DATA_VERIFIED_VISUAL_PENDING 表示存檔重開及指定屬性核對完成，外觀仍需人工確認。2008 部分標註 Measurement 未實作，需人工核對。不要把獨立測試成功宣稱為所有版本／所有計畫驗收。finish 的 artifacts 僅列既有工作副本 ID，DWG 由桌面自動加入成果，不把 DWG 路徑放入 artifacts。
@@ -32,3 +32,21 @@
 失敗必須先讀診斷的 recovery：correct_and_retry 可補正參數；revised_new_document 可修改新建圖計畫另畫，不把替代線段說成原生引線；user_requested_new_document 表示使用者已透過桌面選擇另建副本重做，可重新呼叫一次工具，不能接續舊半成品；manual_check 或 blocked_after_error=true 必須停止。每任務最多六次執行，不以換檔名規避相同失敗計畫限制。取消後不自動重送。部分圖面留在 CAD 供人工查看，不修改或關閉。
 
 intended_path 只是預定路徑；file_exists=false 不能稱「磁碟上已有部分成品」，saved=false 表示未完成 SaveAs。completed_operations 只表示呼叫返回，並非已驗證幾何。只有成功且有 path 的結果才可交付 DWG；無檔案時請使用者查看 CAD 中未儲存的新圖面，不要求開啟不存在的檔案。新任務不保證連線或存檔成功。
+
+## 0.8.58 目前圖面（不儲存）
+
+- 使用者說「目前開著的圖／不要儲存／一步一步修改」時，用 cad_active_read(version,offset=0)。它讀取 ActiveDocument 的未儲存內容，回傳 document、revision、units_code、Handle 及 next_offset。續頁 offset 使用回傳值；切換或修改文件會要求重讀。
+- 定位目標後 cad_active_edit(revision,edits,operations)。編輯能力與副本共用；原生視窗顯示文件名、路徑，使用者確認後才寫入。操作期間應暫停手動編輯／切換文件。
+- 每輪重新讀取目前圖面才能再修改；不要沿用前一輪 revision，不從舊任務還原授權。文件 HWND／程序建立時間／名稱路徑與可讀屬性都需符合。無法辨識文件視窗或不支援 StartUndoMark/EndUndoMark 的 CAD 暫不支援目前圖面寫入，可改用副本。
+- 每次修改為一組 Undo。失敗不自動撤銷、不重送；保留當前畫面讓使用者檢查。程式不提供 CAD 指令。
+- EDITED_UNSAVED 才能回報「修改完成，尚未儲存」，提醒使用者在 CAD 檢查、Undo 或自行存檔。沒有 DWG 交付路徑，不使用 save_copy、不要求手動存好才能完成任務。
+- 每任務至多六次修改。使用者下一次對話可開始新任務，先重新讀取目前圖面，連續修改同一張圖而不必存檔。
+
+## 0.8.58 Excel 座標繪圖
+
+1. 載入 excel-read，先 inspect_excel 取得 Excel revision／表頭／樣本，確認 X/Y、半徑或標籤欄、列範圍、來源單位及目標單位。不能由列號或欄名猜測實際數值。
+2. cad_excel_plan(path,revision,settings) 在本機讀取原資料並產生計畫，模型不手抄數列。settings 全部欄位如下：sheet/header_row/start_row/row_count、x_column/y_column、radius_column（無則 null）、label_column（無則 null）、kind="circles" 或 "lines"、radius（無半徑欄時預設半徑）、scale、origin=[x,y]、color、height、closed、units_code。
+3. 座標 = Excel 數值 × scale + origin；半徑同乘 scale，height 已為目標圖面單位。units_code 1英吋/4mm/5cm/6m；新圖固定4。初版不接受未知單位0，請使用者先在 CAD 設定並重讀。circles 不可 closed；lines 不用 radius_column，依列順序連線，可 closed=true 首尾閉合。
+4. 每次至多100列，展開後至多100個操作（圓+標籤為每列2項）；無效、空白、重複相鄰點、負半徑或超額時整批拒絕，不補0或暗中略過。標籤位於座標點，需依需求另行排版；目前不提供自動避讓。
+5. 先向使用者說明欄位與轉換預覽，需求已明確時可直接套用。cad_excel_apply(plan_id,target,path,revision,name,version)：target=new 時 path/revision=null；target=active 時先 cad_active_read，revision 為圖面版本、path=null；target=copy 時先 cad_read，提供該 DWG path/revision。name 為副本單一.dwg檔名，active 不使用名稱可填空字串；version=latest 或確切 ProgID。
+6. apply 再核對 Excel 原檔版本與目標圖面單位；一次性消耗計畫，失敗不可直接重播。new/copy 會保存新檔；active 僅修改目前圖面、不儲存。圖面與來源版本變更需重新讀取／預覽。單位、欄位與原點由使用者意圖確認，工具不猜測。

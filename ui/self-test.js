@@ -1358,6 +1358,11 @@ window.runSelfTest = async (structuredFixture) => {
       check(cadDialog.querySelectorAll("button").length===2 && cadDialog.textContent.includes("另建新副本"),"partial CAD never offers resume on unknown document");
       cadDialog.dispatchEvent(new Event("cancel",{cancelable:true}));
       check(retryCommands.at(-1).command.choice==="cancel","CAD Escape cancels instead of retrying");
+      fixture.projects.cad_connect={request_id:"cad-confirm-1",prompt:{confirm_document:true,document:{name:"<Drawing1>",full_name:""},message:"不儲存"}};
+      LMUI.receive(fixture);await frame();
+      check(cadDialog.open && cadDialog.textContent.includes("<Drawing1>") && cadDialog.querySelectorAll("button").length===2,"active CAD confirmation shows exact document as text");
+      cadDialog.querySelector("button").click();
+      check(retryCommands.at(-1).command.choice==="confirm","active CAD write requires local confirmation");
       fixture.projects.cad_connect=null;fixture.projects.running=false;LMUI.receive(fixture);
       const options=ChartUI.option({kind:"line",title:"t",source:"s",x_label:"X",y_label:"Y",x:["001","002","003","004"],series:[{name:"a",values:[1,null,null,4],skip_indices:[1]},{name:"b",values:[1,2,3,4]}]});
       check(JSON.stringify(options.series[0].data)===JSON.stringify([[0,1],[2,null],[3,4]]),"skip keeps original X and genuine blank breaks");

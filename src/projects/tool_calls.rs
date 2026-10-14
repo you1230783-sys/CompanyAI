@@ -29,6 +29,7 @@ pub(super) fn system_prompt() -> AppResult<String> {
                 // 舊文字協定一次含完整目錄；數量／長度界線由 broker 執行，
                 // 不重複傳 JSON Schema 提示，避免超過單則訊息的 64 KB。
                 for key in [
+                    "additionalProperties",
                     "minLength",
                     "maxLength",
                     "minItems",
@@ -228,6 +229,11 @@ mod tests {
             reply::parse(&value.to_string()).unwrap(),
             reply::ParseOutcome::Repair(_)
         ));
+    }
+
+    #[test]
+    fn legacy_tool_catalog_fits_message_limit() {
+        assert!(system_prompt().unwrap().len() < 64_000);
     }
 
     #[test]
@@ -614,6 +620,10 @@ mod tests {
             ("test_python", json!({"copy_id":"c","revision":"r","tests":[{"id":"T1","requirement_ids":["R1"],"code":"pass","mocked_dependencies":[]}]})),
             ("review_code_change", json!({"copy_id":"c","revision":"r","checks":[]})),
             ("cad_inventory", json!({})),
+            ("cad_active_read",json!({"version":"latest","offset":0})),
+            ("cad_active_edit",json!({"revision":"r","edits":[{"handle":"AB","kind":"delete","value":null}],"operations":[]})),
+            ("cad_excel_plan",json!({"path":"a.xlsx","revision":"r","settings":{"sheet":1,"header_row":1,"start_row":2,"row_count":2,"x_column":"A","y_column":"B","radius_column":null,"label_column":null,"kind":"circles","radius":5,"scale":1,"origin":[0,0],"color":1,"height":3,"closed":false,"units_code":4}})),
+            ("cad_excel_apply",json!({"plan_id":"p","target":"new","path":null,"revision":null,"name":"a.dwg","version":"latest"})),
             ("cad_read", json!({"path":"a.dwg","version":"latest","offset":0,"revision":null})),
             ("cad_edit", json!({"path":"a.dwg","revision":"r","name":"copy.dwg","edits":[{"handle":"AB","kind":"color","value":1}],"operations":[]})),
             ("cad_draw", json!({"name":"測試.dwg","version":"latest","operations":[{"kind":"circle","center":[0,0],"radius":5,"color":1}]})),

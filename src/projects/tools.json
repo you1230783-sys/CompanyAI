@@ -5105,7 +5105,7 @@
       "type": "function",
       "function": {
         "name": "cad_edit",
-        "description": "依 cad_read 的 revision 與已讀取 Handle，另建副本修改；來源不變。初版支援文字／顏色／移動及新增圖元，圖塊不展開不修改。",
+        "description": "讀取後修改全新 DWG 副本；共用操作支援文字、顏色、移動、半徑、文字高度、刪除及所有新增繪圖類型。原檔不改。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -5194,6 +5194,75 @@
                         "minItems": 2,
                         "maxItems": 2,
                         "description": "位移 [dx,dy]，沿用原圖單位"
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "radius"
+                        ]
+                      },
+                      "value": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "height"
+                        ]
+                      },
+                      "value": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "delete"
+                        ]
+                      },
+                      "value": {
+                        "type": "null"
                       }
                     },
                     "required": [
@@ -5330,6 +5399,49 @@
                       "kind": {
                         "type": "string",
                         "enum": [
+                          "mtext"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "position": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "height": {
+                        "type": "number"
+                      },
+                      "width": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "position",
+                      "text",
+                      "height",
+                      "width"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
                           "leader"
                         ]
                       },
@@ -5367,6 +5479,218 @@
                       "height"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "aligned_dimension"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "start": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "end": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "location": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "start",
+                      "end",
+                      "location"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "diameter_dimension"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "start": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "end": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "leader_length": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "start",
+                      "end",
+                      "leader_length"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "hatch"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "boundary": {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "minItems": 3,
+                        "maxItems": 100
+                      },
+                      "holes": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "center": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 2,
+                              "maxItems": 2
+                            },
+                            "radius": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "center",
+                            "radius"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 20
+                      },
+                      "seed": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "scale": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "boundary",
+                      "holes",
+                      "seed",
+                      "scale"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "curve"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "x": {
+                        "type": "string"
+                      },
+                      "y": {
+                        "type": "string"
+                      },
+                      "t_start": {
+                        "type": "number"
+                      },
+                      "t_end": {
+                        "type": "number"
+                      },
+                      "segments": {
+                        "type": "integer",
+                        "minimum": 2,
+                        "maximum": 1000
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "x",
+                      "y",
+                      "t_start",
+                      "t_end",
+                      "segments"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               },
@@ -5385,6 +5709,803 @@
             "name",
             "edits",
             "operations"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "cad_active_read",
+        "description": "讀取目前 CAD 圖面含未儲存內容。修改前必須重讀；只涵蓋 ModelSpace。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "version",
+            "offset"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "cad_active_edit",
+        "description": "修改已讀取的目前圖面，桌面確認後執行一組 Undo；絕不儲存或關閉。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "revision": {
+              "type": "string"
+            },
+            "edits": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "text"
+                        ]
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "color"
+                        ]
+                      },
+                      "value": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "move"
+                        ]
+                      },
+                      "value": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2,
+                        "description": "位移 [dx,dy]，沿用原圖單位"
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "radius"
+                        ]
+                      },
+                      "value": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "height"
+                        ]
+                      },
+                      "value": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "delete"
+                        ]
+                      },
+                      "value": {
+                        "type": "null"
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "operations": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "line"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "start": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "end": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "start",
+                      "end"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "circle"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "center": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "radius": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "center",
+                      "radius"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "text"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "position": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "position",
+                      "text",
+                      "height"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "mtext"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "position": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "height": {
+                        "type": "number"
+                      },
+                      "width": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "position",
+                      "text",
+                      "height",
+                      "width"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "leader"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "points": {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "points",
+                      "text",
+                      "height"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "aligned_dimension"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "start": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "end": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "location": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "start",
+                      "end",
+                      "location"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "diameter_dimension"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "start": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "end": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "leader_length": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "start",
+                      "end",
+                      "leader_length"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "hatch"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "boundary": {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "minItems": 3,
+                        "maxItems": 100
+                      },
+                      "holes": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "center": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 2,
+                              "maxItems": 2
+                            },
+                            "radius": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "center",
+                            "radius"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 20
+                      },
+                      "seed": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "scale": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "boundary",
+                      "holes",
+                      "seed",
+                      "scale"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "curve"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "x": {
+                        "type": "string"
+                      },
+                      "y": {
+                        "type": "string"
+                      },
+                      "t_start": {
+                        "type": "number"
+                      },
+                      "t_end": {
+                        "type": "number"
+                      },
+                      "segments": {
+                        "type": "integer",
+                        "minimum": 2,
+                        "maximum": 1000
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "x",
+                      "y",
+                      "t_start",
+                      "t_end",
+                      "segments"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "minItems": 0,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "revision",
+            "edits",
+            "operations"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "cad_excel_plan",
+        "description": "從 Excel 指定欄列生成本機座標繪圖計畫；先 inspect_excel 取得 revision。預覽後再 apply。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "settings": {
+              "type": "object",
+              "properties": {
+                "sheet": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "header_row": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "start_row": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "row_count": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "x_column": {
+                  "type": "string"
+                },
+                "y_column": {
+                  "type": "string"
+                },
+                "radius_column": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "label_column": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "circles",
+                    "lines"
+                  ]
+                },
+                "radius": {
+                  "type": "number"
+                },
+                "scale": {
+                  "type": "number"
+                },
+                "origin": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "color": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 255
+                },
+                "height": {
+                  "type": "number"
+                },
+                "closed": {
+                  "type": "boolean"
+                },
+                "units_code": {
+                  "type": "integer",
+                  "enum": [
+                    1,
+                    4,
+                    5,
+                    6
+                  ]
+                }
+              },
+              "required": [
+                "sheet",
+                "header_row",
+                "start_row",
+                "row_count",
+                "x_column",
+                "y_column",
+                "radius_column",
+                "label_column",
+                "kind",
+                "radius",
+                "scale",
+                "origin",
+                "color",
+                "height",
+                "closed",
+                "units_code"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "path",
+            "revision",
+            "settings"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "cad_excel_apply",
+        "description": "套用已預覽的 Excel 座標計畫到新圖、目前圖面或 DWG 副本；來源與圖面單位必須符合。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "plan_id": {
+              "type": "string"
+            },
+            "target": {
+              "type": "string",
+              "enum": [
+                "new",
+                "active",
+                "copy"
+              ]
+            },
+            "path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "revision": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "plan_id",
+            "target",
+            "path",
+            "revision",
+            "name",
+            "version"
           ],
           "additionalProperties": false
         }

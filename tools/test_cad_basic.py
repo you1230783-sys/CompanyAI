@@ -9,9 +9,122 @@ import hashlib
 
 import worker
 import cad_existing
+import cad_active
+from unittest.mock import patch
 
 
 class BasicTests(unittest.TestCase):
+    def active_fixture(self):
+        entity = SimpleNamespace(Handle="A", ObjectName="AcDbCircle", Center=[0.,0.,0.], Radius=5., Layer="0", Color=1)
+        calls=[]
+        class Space(list):
+            Count=1
+        doc=SimpleNamespace(Name="Drawing1", FullName="", _oleobj_=object(), ModelSpace=Space([entity]),
+            GetVariable=lambda key:4, Layers=SimpleNamespace(Item=lambda name:SimpleNamespace(Lock=False)),
+            StartUndoMark=lambda:calls.append("begin"),EndUndoMark=lambda:calls.append("end"),
+            Regen=lambda *args:calls.append("regen"), Save=lambda: self.fail("active must not save"),
+            Close=lambda *args:self.fail("active must not close"))
+        entity.Delete=lambda:doc.ModelSpace.remove(entity)
+        app=SimpleNamespace(ActiveDocument=doc)
+        return app,doc,entity,calls
+
+    def active_request(self, app, doc, edits):
+        _,rows=cad_existing.snapshot(doc,worker)
+        return dict(action="active_edit",document={"name":"Drawing1"},revision=cad_active.revision(doc,rows),edits=edits,operations=[])
+
+    def test_active_edit_unsaved_undo_and_radius(self):
+        app,doc,entity,calls=self.active_fixture()
+        request=self.active_request(app,doc,[dict(handle="A",kind="radius",value=10)])
+        with patch.object(cad_active,"identity",return_value=request["document"]):
+            result=cad_active.execute_active(app,False,request,{"completed_operations":0},worker)
+        self.assertEqual(result["status"],"EDITED_UNSAVED")
+        self.assertFalse(result["saved"])
+        self.assertEqual(entity.Radius,10)
+        self.assertEqual(calls,["begin","end","regen"])
+
+    def test_arc_radius_recomputes_readonly_endpoints(self):
+        app,doc,_,calls=self.active_fixture()
+        class Arc:
+            Handle="A"
+            ObjectName="AcDbArc"
+            Layer="0"
+            Color=1
+            Center=[10.,20.,0.]
+            Radius=5.
+            @property
+            def StartPoint(self): return [10.+self.Radius,20.,0.]
+            @property
+            def EndPoint(self): return [10.,20.+self.Radius,0.]
+        entity=Arc()
+        doc.ModelSpace[:]=[entity]
+        request=self.active_request(app,doc,[dict(handle="A",kind="radius",value=10)])
+        with patch.object(cad_active,"identity",return_value=request["document"]):
+            result=cad_active.execute_active(app,False,request,{"completed_operations":0},worker)
+        self.assertEqual(result["status"],"EDITED_UNSAVED")
+        self.assertEqual(entity.StartPoint,[20.,20.,0.])
+
+    def test_active_rejects_stale_revision_before_undo(self):
+        app,doc,entity,calls=self.active_fixture()
+        request=self.active_request(app,doc,[dict(handle="A",kind="color",value=3)])
+        entity.Radius=8
+        with patch.object(cad_active,"identity",return_value=request["document"]),self.assertRaises(ValueError):
+            cad_active.execute_active(app,False,request,{"completed_operations":0},worker)
+        self.assertEqual(calls,[])
+        self.assertEqual(entity.Color,1)
+
+    def test_active_rejects_different_document(self):
+        app,doc,entity,calls=self.active_fixture()
+        request=self.active_request(app,doc,[dict(handle="A",kind="color",value=3)])
+        with patch.object(cad_active,"identity",return_value={"name":"Drawing2"}),self.assertRaises(ValueError):
+            cad_active.execute_active(app,False,request,{"completed_operations":0},worker)
+        self.assertEqual(calls,[])
+
+    def test_active_delete_verifies_remaining_handles(self):
+        app,doc,entity,calls=self.active_fixture()
+        request=self.active_request(app,doc,[dict(handle="A",kind="delete",value=None)])
+        with patch.object(cad_active,"identity",return_value=request["document"]):
+            result=cad_active.execute_active(app,False,request,{"completed_operations":0},worker)
+        self.assertEqual(result["deleted_handles"],["A"])
+        self.assertEqual(len(doc.ModelSpace),0)
+
+    def test_active_invalid_plan_does_not_start_undo(self):
+        app,doc,entity,calls=self.active_fixture()
+        request=self.active_request(app,doc,[dict(handle="A",kind="radius",value=-2)])
+        with patch.object(cad_active,"identity",return_value=request["document"]),self.assertRaises(ValueError):
+            cad_active.execute_active(app,False,request,{"completed_operations":0},worker)
+        self.assertEqual(calls,[])
+
+    def test_active_requires_undo_support_before_mutation(self):
+        app,doc,entity,calls=self.active_fixture()
+        del doc.StartUndoMark
+        request=self.active_request(app,doc,[dict(handle="A",kind="color",value=3)])
+        report={"completed_operations":0,"drawing_started":False}
+        with patch.object(cad_active,"identity",return_value=request["document"]),self.assertRaises(AttributeError):
+            cad_active.execute_active(app,False,request,report,worker)
+        self.assertFalse(report["drawing_started"])
+        self.assertEqual(entity.Color,1)
+
+    def test_active_failure_closes_undo_and_keeps_document(self):
+        app,doc,entity,calls=self.active_fixture()
+        def fail(): raise RuntimeError("COM failure")
+        entity.Delete=fail
+        report={"completed_operations":0}
+        request=self.active_request(app,doc,[dict(handle="A",kind="delete",value=None)])
+        with patch.object(cad_active,"identity",return_value=request["document"]),self.assertRaises(RuntimeError):
+            cad_active.execute_active(app,False,request,report,worker)
+        self.assertEqual(calls,["begin","end"])
+        self.assertTrue(report["undo_group_closed"])
+        self.assertEqual(len(doc.ModelSpace),1)
+
+    def test_active_read_no_save_close_or_undo(self):
+        app,doc,entity,calls=self.active_fixture()
+        request=dict(action="active_read",offset=0)
+        with patch.object(cad_active,"identity",return_value={"name":"Drawing1"}):
+            result=cad_active.execute_active(app,False,request,{},worker)
+        self.assertEqual(result["status"],"READ_ACTIVE")
+        self.assertEqual(result["entities"][0]["handle"],"A")
+        self.assertEqual(calls,[])
+
     def test_diameter_codes_preserve_other_text(self):
         self.assertEqual(worker.cad_text("孔 Ø10、Φ20、⌀5；Φ 是符號"), "孔 %%c10、%%c20、%%c5；Φ 是符號")
         self.assertTrue(worker.text_equal("%%C10", "%%c10"))
@@ -42,7 +155,7 @@ class BasicTests(unittest.TestCase):
             calls = []
             doc = SimpleNamespace(FullName=str(path), ModelSpace=Space([entity]), GetVariable=lambda key:4,
                                   Layers=SimpleNamespace(Item=lambda name:SimpleNamespace(Lock=False)),
-                                  Close=lambda save:calls.append(("close",save)), Save=lambda:calls.append(("save",True)))
+                                  Regen=lambda *args:None, Close=lambda save:calls.append(("close",save)), Save=lambda:calls.append(("save",True)))
             class Documents(list):
                 def Open(self, filename): return doc
             app = SimpleNamespace(Documents=Documents())

@@ -53,7 +53,10 @@ pub fn execute_interactive(
                 // 保留實際失敗，無 UI 的呼叫者也不能收到先前的 CONNECTED 成功狀態。
                 connected = result;
             } else {
-                if result["connection_lost"] == true && result["drawing_started"] == true {
+                if result["connection_lost"] == true
+                    && result["drawing_started"] == true
+                    && request["action"] != "active_edit"
+                {
                     if let Some(ask) = waiter.as_mut() {
                         let decision = ask(
                             &json!({"partial":true,"selected":result["selected"],

@@ -5,7 +5,7 @@ mod core;
 const SKILLS: &[(&str, &str, &str)] = &[
     (
         "cad-drawing",
-        "CAD新建圖面、標註、公式曲線與顏色（測試版）",
+        "CAD圖面／副本編輯與Excel座標（測試版）",
         include_str!("skills/cad-drawing.md"),
     ),
     (
@@ -174,7 +174,8 @@ pub fn activate(ids: &mut Vec<String>, id: &str) -> AppResult<()> {
 pub fn enabled(tool: &str, ids: &[String]) -> bool {
     let has = |id: &str| ids.iter().any(|i| i == id);
     match tool {
-        "cad_inventory" | "cad_draw" | "cad_read" | "cad_edit" => has("cad-drawing"),
+        "cad_active_read" | "cad_active_edit" | "cad_excel_plan" | "cad_excel_apply"
+        | "cad_inventory" | "cad_draw" | "cad_read" | "cad_edit" => has("cad-drawing"),
         "record_log_events" => has("log-analysis") || has("python-analysis"),
         "run_python" => has("python-analysis"),
         "analyze_image" | "read_mail_notes" | "set_work_stage" | "run_batch" => true,

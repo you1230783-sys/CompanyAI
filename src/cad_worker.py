@@ -312,6 +312,10 @@ def execute(request, report):
         if request["action"] == "launch":
             app.Visible = True
         return {"status": "CONNECTED", "selected": selected, "application": identity}
+    if request["action"] in ("active_read", "active_edit"):
+        from cad_active import execute_active
+        report["application"] = identity
+        return execute_active(app, family == "yoda_icad_2008", request, report, sys.modules[__name__])
     if request["action"] in ("read", "edit"):
         from cad_existing import execute_existing
         report["application"] = identity

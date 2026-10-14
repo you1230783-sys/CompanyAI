@@ -566,7 +566,9 @@ impl App {
                 .as_ref()
                 .filter(|p| p.id == *request_id)
                 .ok_or("CAD 提示已失效。")?;
-            let allowed = if pending.prompt["partial"] == true {
+            let allowed = if pending.prompt["confirm_document"] == true {
+                &["confirm", "cancel"][..]
+            } else if pending.prompt["partial"] == true {
                 &["rebuild", "cancel"][..]
             } else {
                 &["launch", "retry", "cancel"][..]
