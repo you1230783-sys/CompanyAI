@@ -759,6 +759,10 @@ pub(super) struct SavedBroker {
     cad_artifacts: Vec<super::python::Artifact>,
     #[serde(default)]
     cad_failed: bool,
+    #[serde(default)]
+    cad_attempts: u32,
+    #[serde(default)]
+    cad_partial_plans: Vec<String>,
 }
 pub struct Broker {
     task_id: String,
@@ -789,6 +793,8 @@ pub struct Broker {
     python_artifacts: Vec<super::python::Artifact>,
     cad_artifacts: Vec<super::python::Artifact>,
     cad_failed: bool,
+    cad_attempts: u32,
+    cad_partial_plans: Vec<String>,
     png_renderer: Option<super::charts::png::Renderer>,
     chart_chooser: Option<super::charts::quality::Chooser>,
     preferences: Option<super::steering::Inbox>,
@@ -828,6 +834,8 @@ impl Broker {
             python_artifacts: vec![],
             cad_artifacts: vec![],
             cad_failed: false,
+            cad_attempts: 0,
+            cad_partial_plans: vec![],
             png_renderer: None,
             chart_chooser: None,
             preferences: None,
@@ -840,7 +848,7 @@ impl Broker {
         // 經序列化建立不含程序資源的快照；授權與執行中的 COM 物件不保存。
         serde_json::from_value(
             json!({"analysis":self.analysis,"mail_notes":self.mail_notes,"mail_draft":self.mail_draft,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
-            "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts,"cad_artifacts":self.cad_artifacts,"cad_failed":self.cad_failed}),
+            "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts,"cad_artifacts":self.cad_artifacts,"cad_failed":self.cad_failed,"cad_attempts":self.cad_attempts,"cad_partial_plans":self.cad_partial_plans}),
         )
         .map_err(|e| e.to_string())
     }
@@ -921,6 +929,8 @@ impl Broker {
         }
         self.cad_artifacts = state.cad_artifacts;
         self.cad_failed = state.cad_failed;
+        self.cad_attempts = state.cad_attempts;
+        self.cad_partial_plans = state.cad_partial_plans;
         self.python_artifacts = state.python_artifacts;
         self.datasets = state.datasets;
         self.chart_exports = state.chart_exports;

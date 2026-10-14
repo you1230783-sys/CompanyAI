@@ -163,9 +163,9 @@ class Drawing:
             return VARIANT(pythoncom.VT_ARRAY | pythoncom.VT_R8, tuple(v for p in points for v in p))
         result = self.app.Library.CreatePoints()
         for values in points:
-            result.Add()
-            point = result.Item(result.Count - 1)
-            point.x, point.y, point.z = values
+            # IntelliCAD Points.Add 接受座標；不假設 Item 是零起始索引。
+            # 亦供舊版剖面線種子點使用，不能只修正引線呼叫處。
+            result.Add(*values)
         return result
 
     def remember(self, entity, color, **properties):
@@ -263,6 +263,8 @@ class Drawing:
 
 
 def execute(request, report):
+    report.update(step="validate", drawing_started=False, completed_operations=0,
+                  saved=False, file_exists=False)
     found, errors = registry.discover()
     if request["action"] == "inventory":
         return {"status": "INVENTORY", "versions": found, "errors": errors}
@@ -278,17 +280,21 @@ def execute(request, report):
     except pythoncom.com_error:
         raw = pythoncom.CoCreateInstance(clsid, None, pythoncom.CLSCTX_LOCAL_SERVER, pythoncom.IID_IDispatch)
     app = dynamic.Dispatch(raw)
+    report["step"] = "identity"
     identity = {key: str(getattr(app, key)) for key in ("Name", "Version", "FullName")}
     require(os.path.normcase(os.path.abspath(identity["FullName"])) == os.path.normcase(os.path.abspath(selected["server"])), "連接的 CAD 路徑不符合所選版本")
     family = identify_product(selected, identity)
     require(family != "unknown", "此 CAD 身份尚未核對，不建立文件")
     report.update(application=identity, step="create_document")
     app.Visible = True
+    # 呼叫 Documents.Add 前先標記；即使 COM 回覆遺失，也不能當作未建立文件。
+    report["drawing_started"] = True
     drawing = Drawing(app, family == "yoda_icad_2008")
     report["owned_document_created"] = True
     for index, op in enumerate(operations):
         report.update(step=op["kind"], operation_index=index)
         drawing.draw(op)
+        report["completed_operations"] = index + 1
     report["step"] = "verify_before_save"
     drawing.doc.Regen() if drawing.legacy else drawing.doc.Regen(1)
     before = drawing.verify(drawing.doc)
@@ -296,6 +302,7 @@ def execute(request, report):
     require(output.is_absolute() and output.suffix.lower() == ".dwg" and not os.path.lexists(output), "輸出位置不合法或已存在")
     report["step"] = "save"
     drawing.doc.SaveAs(str(output), 9) if drawing.legacy else drawing.doc.SaveAs(str(output))
+    report["saved"] = True
     require(output.is_file() and output.stat().st_size > 0, "未產生 DWG")
     report["step"] = "reopen"
     drawing.doc.Close(False)
@@ -310,6 +317,22 @@ def execute(request, report):
             "application": identity}
 
 
+def failure_details(report, exc):
+    """只允許有明確證據的復原；逾時／未知 COM 結果仍交由人工確認。"""
+    info = getattr(exc, "excepinfo", None)
+    code = info[5] if info and len(info) > 5 else getattr(exc, "hresult", None)
+    before_drawing = report.get("drawing_started") is False
+    known_partial = (report.get("owned_document_created") is True
+                     and code == -2147024809 and report.get("step") not in ("save", "reopen"))
+    recovery = "correct_and_retry" if before_drawing else "revised_new_document" if known_partial else "manual_check"
+    advice = {
+        "correct_and_retry": "尚未建立圖面；補正參數或確認指定 CAD 已就緒後，可在本任務有限次重試。",
+        "revised_new_document": "本次新圖面有未完成內容，未必已存檔。可提交修改後的計畫另建新圖面；不重播相同計畫、不修改或關閉部分圖面。",
+        "manual_check": "CAD 結果未確認；停止後續繪圖，請人工檢查 CAD 與輸出目錄。",
+    }[recovery]
+    return dict(recovery=recovery, advice=advice)
+
+
 def main():
     report = {"status": "FAILED", "existing_documents_targeted": False}
     pythoncom.CoInitialize()
@@ -318,8 +341,11 @@ def main():
         report.update(execute(request, report))
     except Exception as exc:
         report.update(status="FAILED", error=str(exc), traceback=traceback.format_exc(),
-                      advice="可能已部分繪圖；不自動重試，請先檢查 CAD 與輸出目錄。")
+                      **failure_details(report, exc))
     finally:
+        # 預定輸出路徑不等於已存在檔案，更不等於已通過驗證的成果。
+        if "request" in locals() and request.get("output"):
+            report["file_exists"] = Path(request["output"]).is_file()
         pythoncom.CoUninitialize()
     sys.stdout.buffer.write(json.dumps(report, ensure_ascii=False).encode("utf-8"))
 

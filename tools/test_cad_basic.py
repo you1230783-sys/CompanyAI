@@ -9,6 +9,41 @@ import worker
 
 
 class BasicTests(unittest.TestCase):
+    def test_legacy_points_append_coordinates_without_indexing(self):
+        class Points:
+            def __init__(self):
+                self.rows = []
+            def Add(self, x, y, z):
+                self.rows.append((x, y, z))
+            def Item(self, index):
+                raise AssertionError("不能假設舊版集合的索引基準")
+        collection = Points()
+        drawing = worker.Drawing.__new__(worker.Drawing)
+        drawing.legacy = True
+        drawing.app = SimpleNamespace(Library=SimpleNamespace(CreatePoints=lambda: collection))
+        values = [[25., 20., 0.], [50., 45., 0.], [100., 45., 0.]]
+        self.assertIs(drawing.points(values), collection)
+        self.assertEqual(collection.rows, [tuple(p) for p in values])
+
+    def test_failure_recovery_requires_known_state(self):
+        exc = ValueError("缺少欄位")
+        self.assertEqual(worker.failure_details({"drawing_started": False}, exc)["recovery"], "correct_and_retry")
+        self.assertEqual(worker.failure_details({}, exc)["recovery"], "manual_check")
+        invalid = worker.pythoncom.com_error(-2147352567, "invalid", (0,None,None,None,0,-2147024809), None)
+        report = dict(drawing_started=True, owned_document_created=True, step="leader")
+        self.assertEqual(worker.failure_details(report, invalid)["recovery"], "revised_new_document")
+        for step in ("save", "reopen"):
+            self.assertEqual(worker.failure_details(dict(report, step=step), invalid)["recovery"], "manual_check")
+        unknown = worker.pythoncom.com_error(-2147023174, "RPC", None, None)
+        self.assertEqual(worker.failure_details(report, unknown)["recovery"], "manual_check")
+
+    def test_icad_identity_does_not_require_brand_in_install_folder(self):
+        selected = dict(server=r"C:\CAD\icad.exe", progid="Icad.Application.1",
+                        clsid="{8011C111-7E36-11D1-BC5A-0060089608A4}", registry_bits=32, year=2008)
+        identity = dict(FullName=selected["server"], Name="ICAD", Version="5.0.20.0")
+        self.assertEqual(worker.identify_product(selected, identity), "yoda_icad_2008")
+        self.assertEqual(worker.identify_product(dict(selected, clsid="unknown"), identity), "unknown")
+
     def test_formula_examples(self):
         self.assertAlmostEqual(worker.Formula("10*sin(2*pi*t/100)").at(25), 10)
         self.assertAlmostEqual(worker.Formula("(5+2*t)*cos(t)").at(0), 5)

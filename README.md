@@ -1,3 +1,5 @@
+**0.8.56：佑達 iCAD 引線、錯誤復原與成果狀態修正。** 基礎驗證與 NSIS 測試包，完整驗證延後。[驗證紀錄](docs/VALIDATION_0_8_56.md)
+
 **0.8.55：專案 AI CAD 繪圖與顏色測試版。** 對話中可要求新建 DWG、尺寸、中文文字、引線、剖面、公式曲線與 ACI 顏色；修改時另建新圖面。NSIS 隨附獨立 CAD runtime，僅做基礎驗證，完整驗證與本版公司實測待補。[使用範例](docs/CAD_DRAWING.md) · [驗證範圍](docs/VALIDATION_0_8_55.md)
 
 **0.8.54：專案程式碼唯讀與浩辰 CAD 獨立測試包。** [歷史驗證與界線](docs/VALIDATION_0_8_54.md) · [獨立工具說明](tools/gstarcad-probe/README.md)

@@ -4588,7 +4588,7 @@
       "type": "function",
       "function": {
         "name": "cad_inventory",
-        "description": "唯讀列出本機 CAD 版本，年份新版優先，不啟動 CAD。",
+        "description": "唯讀列出本機浩辰 GstarCAD／佑達 iCAD 版本，年份新版優先，不啟動 CAD。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -4609,7 +4609,7 @@
       "type": "function",
       "function": {
         "name": "cad_draw",
-        "description": "測試版：新建2D DWG並存檔重開核對，不修改現有文件。color為ACI；公式為分段直線近似，外觀待人工確認。",
+        "description": "測試版：浩辰 GstarCAD／佑達 iCAD 新建2D DWG並存檔重開核對，不修改現有文件。color為ACI；公式為分段直線近似，外觀待人工確認。",
         "parameters": {
           "type": "object",
           "properties": {

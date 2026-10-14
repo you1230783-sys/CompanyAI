@@ -74,8 +74,7 @@ def identify_product(selected, identity):
             and selected.get("clsid", "").upper() == "{8011C111-7E36-11D1-BC5A-0060089608A4}"
             and selected.get("registry_bits") == 32
             and selected.get("year") == 2008
-            and os.path.basename(actual) == "icad.exe"
-            and os.path.basename(os.path.dirname(actual)) == "佑達icad 2008 專業版"):
+            and os.path.basename(actual) == "icad.exe"):
         return "yoda_icad_2008"
     return "unknown"
 

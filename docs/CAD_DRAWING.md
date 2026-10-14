@@ -30,6 +30,14 @@
 
 ## 執行與成果保護
 
+0.8.56：浩辰 GstarCAD 與佑達 iCAD 是分別辨識的支援產品，不要求佑達程式名稱或安裝資料夾含「浩辰」。無副檔名的輸出名稱會補 .dwg；引線必須提供 text 與正數 height。
+
+錯誤依 recovery 分類：correct_and_retry 是尚未建立文件，可補正後重試；revised_new_document 僅用於新文件內明確回報 E_INVALIDARG 的操作，可修改計畫另建新圖面；相同計畫即使換名稱也不重播。每任務最多六次執行。manual_check、程序中斷、取消與逾時仍停止；舊版已保存的未知鎖定不自動解除，升級後請開新任務測試。
+
+intended_path 只是預定輸出位置，file_exists 是工作結束時實際存在檢查，saved 表示 SaveAs 已返回，completed_operations 表示操作呼叫返回數。失敗檔案即使存在也不是驗證通過成果；未儲存的新圖面可能只在 CAD 記憶體中。部分圖面不自動關閉或修改，另建圖面亦不代表修復舊圖面。
+
+舊版點集合使用 Add(x,y,z)，避免對 Item 索引基準的假設。參考 [IntelliCAD Points.Add 官方介面](https://www.progesoft.com/products/progecad-professional/manual?mp=developer-reference/api-reference/objects/points-collection/methods/add-method)；該文件為較新版本，2008 實際相容性仍須公司測試。
+
 - 只接受固定 JSON，不執行模型 Python、Shell、LISP、任意 COM 名稱或外部檔案路徑。
 - CAD 專用 runtime 位於 EXE 旁內容指紋命名的 `cad-<指紋>`，與分析用 Python 分離；啟動前逐檔雜湊核對並保留唯讀 handle。
 - 以原登錄 CLSID 連接並核對實際應用程式路徑。佑達 ICAD 2008 身份依實機資料精確匹配，不把所有 Icad ProgID 都當成同產品。

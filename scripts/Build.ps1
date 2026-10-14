@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$BasicValidation, [switch]$TestVnc, [switch]$TestOffice, [string]$NetworkTestRoot)
 $ErrorActionPreference = 'Stop'
 if ($ValidateOnly -and $IncludeInstaller) { throw 'ValidateOnly cannot be combined with IncludeInstaller.' }
@@ -138,7 +138,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
             windows_sdk = $env:WindowsSDKVersion
             empty_cargo_cache = [bool]$EmptyCargoCache
             cargo_home = $env:CARGO_HOME
-            checks = @('v142 x64 actual compiler probe','fmt','Clippy all targets','jobs, demo work, source code, text, skills, schema, CAD broker and tool contract tests','cargo build --release --frozen','CAD 10 synthetic contracts and native runtime/inventory pipe without drawing','Outlook helper pipe/EOF without mailbox access','Python runtime self-check','WebView2 UI and native composer self-check','native task rejection, repeated error, DPAPI restore and late event checks','read-only source formats, native worker, paging, revision and copy rejection','DLL dependency inspection')
+            checks = @('v142 x64 actual compiler probe','fmt','Clippy all targets','jobs, demo work, source code, text, skills, schema, CAD broker and tool contract tests','cargo build --release --frozen','CAD synthetic contracts and native runtime/inventory pipe without drawing','Outlook helper pipe/EOF without mailbox access','Python runtime self-check','WebView2 UI and native composer self-check','native task rejection, repeated error, DPAPI restore and late event checks','read-only source formats, native worker, paging, revision and copy rejection','DLL dependency inspection')
             task_tracking_cases = $trackingCheck.cases
             exe_sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
             installer_built = $false

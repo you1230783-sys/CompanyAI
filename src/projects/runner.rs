@@ -490,7 +490,7 @@ fn run_for(
                 || cad_artifacts["blocked_after_error"] == true
             {
                 messages.push(super::agent::Message::user(&format!(
-                    "CAD 成果（自動加入交付；外觀仍需人工核對；改色請查回原計畫另建新DWG，錯誤後不得重播）：{cad_artifacts}"
+                    "CAD 成果（自動加入交付；外觀仍需人工核對；改色另建新DWG。錯誤請依診斷 recovery；blocked_after_error=true 才停止。intended_path 不是成果，未存檔部分圖面可能只在 CAD 記憶體）：{cad_artifacts}"
                 )));
             }
             if python_artifacts.as_array().is_some_and(|v| !v.is_empty()) {
