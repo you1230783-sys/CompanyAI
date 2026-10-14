@@ -12,6 +12,34 @@ if (-not (Test-Path (Join-Path $tools 'nsis-3.12\makensis.exe'))) {
 }
 $compiler = Join-Path $tools 'nsis-3.12\makensis.exe'
 & (Join-Path $PSScriptRoot 'Stage-Python.ps1') -ExecutableDirectory (Join-Path $root 'dist')
+& (Join-Path $PSScriptRoot 'Stage-Cad.ps1') -ExecutableDirectory (Join-Path $root 'dist')
+# CAD 以內容指紋命名，更新不覆寫舊版依賴；只移除本版清單中的已知檔案。
+$cadHash = (Get-Content (Join-Path $root 'assets\cad-runtime-sha256.txt') -Raw).Trim()
+$cadName = 'cad-' + $cadHash.Substring(0,16)
+$cadRoot = Join-Path $root ('dist\' + $cadName)
+$cadEntries = Get-ChildItem -LiteralPath $cadRoot -Recurse
+$cadLines = New-Object 'System.Collections.Generic.List[string]'
+$cadLines.Add('!define CAD_DIRECTORY "' + $cadName + '"')
+$cadLines.Add('!macro CadCheckTree')
+$cadLines.Add('  !insertmacro CheckInstallDirectory "$INSTDIR\${CAD_DIRECTORY}"')
+foreach ($entry in $cadEntries | Where-Object { $_.PSIsContainer }) {
+    $relative = $entry.FullName.Substring($cadRoot.Length + 1)
+    $cadLines.Add('  !insertmacro CheckInstallDirectory "$INSTDIR\${CAD_DIRECTORY}\' + $relative + '"')
+}
+$cadLines.Add('!macroend')
+$cadLines.Add('!macro CadRemove')
+$cadLines.Add('  !insertmacro CadCheckTree')
+foreach ($entry in $cadEntries | Where-Object { -not $_.PSIsContainer }) {
+    $relative = $entry.FullName.Substring($cadRoot.Length + 1)
+    $cadLines.Add('  Delete "$INSTDIR\${CAD_DIRECTORY}\' + $relative + '"')
+}
+foreach ($entry in $cadEntries | Where-Object { $_.PSIsContainer } | Sort-Object { $_.FullName.Length } -Descending) {
+    $relative = $entry.FullName.Substring($cadRoot.Length + 1)
+    $cadLines.Add('  RMDir "$INSTDIR\${CAD_DIRECTORY}\' + $relative + '"')
+}
+$cadLines.Add('  RMDir "$INSTDIR\${CAD_DIRECTORY}"')
+$cadLines.Add('!macroend')
+[IO.File]::WriteAllLines((Join-Path $root '.build\cad-files.nsh'), $cadLines, (New-Object Text.UTF8Encoding($false)))
 # 刪除清單由本版 runtime 產生，只移除已知檔案；未知使用者檔案永不遞迴刪除。
 $pythonRoot = Join-Path $root 'dist\python'
 $entries = Get-ChildItem -LiteralPath $pythonRoot -Recurse

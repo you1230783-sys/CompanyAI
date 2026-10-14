@@ -104,6 +104,14 @@ impl Store {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "tool", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Tool {
+    /// 列出本機 CAD 註冊；不啟動應用程式。
+    CadInventory {},
+    /// 只建立新 DWG，完整幾何計畫由固定 Python adapter 驗證及執行。
+    CadDraw {
+        name: String,
+        version: String,
+        operations: Vec<serde_json::Value>,
+    },
     RunBatch {
         tasks: Vec<files::batch::Task>,
     },
@@ -486,6 +494,8 @@ impl Tool {
     /// 使用者可讀的操作名稱，避免將 JSON 或文件全文當進度訊息。
     pub fn label(&self) -> &'static str {
         match self {
+            Self::CadInventory {} => "查看已安裝 CAD 版本",
+            Self::CadDraw { .. } => "CAD 新建圖面、顏色及存檔核對",
             Self::RunBatch { .. } => "並行處理獨立工作",
             Self::RecordLogEvents { .. } => "整理有原文依據的 LOG 事件",
             Self::RecordAnalysis { .. } => "保存分析狀態、證據與核對結果",

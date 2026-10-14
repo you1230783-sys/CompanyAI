@@ -1,0 +1,34 @@
+{
+  "version": "0.8.55",
+  "result": "PASS_BASIC",
+  "recorded_at": "2026-10-14T19:47:21.1019321+08:00",
+  "rust_selected_tests": 41,
+  "python_synthetic_contracts": 10,
+  "native_runtime_inventory_pipe": true,
+  "delivered_runtime_self_check": true,
+  "cad_drawing_tested_locally": false,
+  "company_ai_service_tested": false,
+  "installer_packaged_and_manifest_verified": true,
+  "installer_install_update_rollback_uninstall_tested": false,
+  "full_validation_completed": false,
+  "runtime_manifest_sha256": "a147602918d0087cd7ab371afddc5de7ed9c53642c4a119a6c2ba059da5eb1e8",
+  "binary_origin": "Official CPython 3.13.12 and pywin32 311 wheels; not locally compiled with v142",
+  "artifacts": [
+    {
+      "Path": "Y:\\Rust\\Project\\CompanyAI\\dist\\LM_AI.exe",
+      "Hash": "F7D591E8539F533ABDA5DCBBA23828C7F6E8BD412A38C907E3CB8881107A0702"
+    },
+    {
+      "Path": "Y:\\Rust\\Project\\CompanyAI\\dist\\LM_AI_Setup.exe",
+      "Hash": "4264B52E319A9D2B6A2D0941778D1E874A381E0B53622448F7ECE3D98B79C341"
+    },
+    {
+      "Path": "Y:\\Rust\\Project\\CompanyAI\\dist\\update-manifest.json",
+      "Hash": "F8D3F0E066B4BE99E6AD64370A0C6482DA15C21325790DDD67660CDBF7EEEA56"
+    },
+    {
+      "Path": "Y:\\Rust\\Project\\CompanyAI\\dist\\update-manifest-exe.json",
+      "Hash": "F8D3F0E066B4BE99E6AD64370A0C6482DA15C21325790DDD67660CDBF7EEEA56"
+    }
+  ]
+}

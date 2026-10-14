@@ -4,6 +4,11 @@ use serde_json::{json, Value};
 mod core;
 const SKILLS: &[(&str, &str, &str)] = &[
     (
+        "cad-drawing",
+        "CAD新建圖面、標註、公式曲線與顏色（測試版）",
+        include_str!("skills/cad-drawing.md"),
+    ),
+    (
         "python-edit",
         "Python分段修改、需求核對與隔離功能測試",
         include_str!("skills/python-edit.md"),
@@ -169,6 +174,7 @@ pub fn activate(ids: &mut Vec<String>, id: &str) -> AppResult<()> {
 pub fn enabled(tool: &str, ids: &[String]) -> bool {
     let has = |id: &str| ids.iter().any(|i| i == id);
     match tool {
+        "cad_inventory" | "cad_draw" => has("cad-drawing"),
         "record_log_events" => has("log-analysis") || has("python-analysis"),
         "run_python" => has("python-analysis"),
         "analyze_image" | "read_mail_notes" | "set_work_stage" | "run_batch" => true,

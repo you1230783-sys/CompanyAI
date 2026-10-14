@@ -2,6 +2,7 @@
 *.rs text eol=lf
 *.py text eol=lf
 assets/python-runtime-manifest.json -text
+assets/cad-runtime-manifest.json -text
 *.md text eol=lf
 *.toml text eol=lf
 *.ps1 text eol=crlf

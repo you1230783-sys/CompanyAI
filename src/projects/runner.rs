@@ -483,6 +483,16 @@ fn run_for(
             }
             let datasets = broker.dataset_index();
             let python_artifacts = broker.python_artifact_index();
+            let cad_artifacts = broker.cad_artifact_index();
+            if cad_artifacts["artifacts"]
+                .as_array()
+                .is_some_and(|v| !v.is_empty())
+                || cad_artifacts["blocked_after_error"] == true
+            {
+                messages.push(super::agent::Message::user(&format!(
+                    "CAD 成果（自動加入交付；外觀仍需人工核對；改色請查回原計畫另建新DWG，錯誤後不得重播）：{cad_artifacts}"
+                )));
+            }
             if python_artifacts.as_array().is_some_and(|v| !v.is_empty()) {
                 messages.push(super::agent::Message::user(&format!(
                     "已保存的 Python XLSX 成果（自動加入交付，不必重建）：{python_artifacts}"

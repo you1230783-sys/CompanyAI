@@ -3,6 +3,7 @@
 //! 原始文件從未取得可寫 handle。
 mod analysis;
 pub mod batch;
+mod cad;
 mod chart_annotations;
 mod chart_preferences;
 mod code_review;
@@ -517,7 +518,7 @@ pub fn reveal(project: &Project, value: &str) -> AppResult<()> {
 }
 
 /// 固定開啟方式同時保護原檔、發布暫存，拒絕連結及操作期間的替換。
-pub(super) fn checked_file(path: &Path) -> AppResult<File> {
+pub(crate) fn checked_file(path: &Path) -> AppResult<File> {
     let file = OpenOptions::new()
         .read(true)
         .share_mode(FILE_SHARE_READ)
@@ -754,6 +755,10 @@ pub(super) struct SavedBroker {
     datasets: Vec<super::datasets::Reference>,
     #[serde(default)]
     python_artifacts: Vec<super::python::Artifact>,
+    #[serde(default)]
+    cad_artifacts: Vec<super::python::Artifact>,
+    #[serde(default)]
+    cad_failed: bool,
 }
 pub struct Broker {
     task_id: String,
@@ -782,6 +787,8 @@ pub struct Broker {
     chart_exports: Vec<ChartExport>,
     datasets: Vec<super::datasets::Reference>,
     python_artifacts: Vec<super::python::Artifact>,
+    cad_artifacts: Vec<super::python::Artifact>,
+    cad_failed: bool,
     png_renderer: Option<super::charts::png::Renderer>,
     chart_chooser: Option<super::charts::quality::Chooser>,
     preferences: Option<super::steering::Inbox>,
@@ -819,6 +826,8 @@ impl Broker {
             chart_exports: vec![],
             datasets: vec![],
             python_artifacts: vec![],
+            cad_artifacts: vec![],
+            cad_failed: false,
             png_renderer: None,
             chart_chooser: None,
             preferences: None,
@@ -831,7 +840,7 @@ impl Broker {
         // 經序列化建立不含程序資源的快照；授權與執行中的 COM 物件不保存。
         serde_json::from_value(
             json!({"analysis":self.analysis,"mail_notes":self.mail_notes,"mail_draft":self.mail_draft,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
-            "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts}),
+            "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts,"cad_artifacts":self.cad_artifacts,"cad_failed":self.cad_failed}),
         )
         .map_err(|e| e.to_string())
     }
@@ -907,6 +916,11 @@ impl Broker {
         for artifact in &state.python_artifacts {
             self.verify_python_artifact(artifact)?;
         }
+        for artifact in &state.cad_artifacts {
+            self.verify_cad_artifact(artifact)?;
+        }
+        self.cad_artifacts = state.cad_artifacts;
+        self.cad_failed = state.cad_failed;
         self.python_artifacts = state.python_artifacts;
         self.datasets = state.datasets;
         self.chart_exports = state.chart_exports;
@@ -970,6 +984,10 @@ impl Broker {
     /// 生成的 XLSX 不是工作副本；精簡／續接仍需提供其確定的路徑。
     pub(super) fn python_artifact_index(&self) -> Value {
         json!(self.python_artifacts)
+    }
+    pub(super) fn cad_artifact_index(&self) -> Value {
+        json!({"artifacts":self.cad_artifacts,"blocked_after_error":self.cad_failed,
+            "visual_check_required":true})
     }
     /// 精簡上下文後仍提供確定的欄位角色，不附原始資料。
     pub(super) fn excel_plan_index(&self) -> Value {
@@ -2064,6 +2082,12 @@ impl Broker {
                 result["date_1904"] = json!(page.date_1904);
                 Ok(result)
             }
+            Tool::CadInventory {} => crate::cad::inventory(cancel),
+            Tool::CadDraw {
+                name,
+                version,
+                operations,
+            } => self.draw_cad(name, version, operations, cancel),
             Tool::RunPython {
                 purpose,
                 code,
@@ -2956,6 +2980,10 @@ impl Broker {
         for dataset in &self.datasets {
             super::datasets::load(&self.project, &dataset.path, &dataset.revision, cancel)?;
             paths.push(dataset.path.clone());
+        }
+        for artifact in &self.cad_artifacts {
+            self.verify_cad_artifact(artifact)?;
+            paths.push(artifact.path.clone());
         }
         for artifact in &self.python_artifacts {
             self.verify_python_artifact(artifact)?;

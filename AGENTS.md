@@ -1,3 +1,13 @@
+## 2026-10-14：0.8.55 AI CAD 繪圖測試版（最新授權）
+
+- 使用者確認獨立測試的 2022 引線箭頭正常，要求直接整合專案 AI 對話繪圖並加入顏色；進版、v142 x64 編譯與 NSIS 打包，只做基礎驗證，完整驗證延後。
+- 新增 cad-drawing 技能、cad_inventory 與 cad_draw。只新建 DWG，修改需求重建另一份成果；不操作使用者目前文件、不做 Solid Edge。年份新版優先，不明年份不猜測，失敗不偷換版本。
+- 支援線、圓、尺寸、文字、多行文字、帶箭頭引線、ANSI31 剖面線、受限數學公式取樣線段，以及每項 ACI 1–255 顏色。新增的顏色與應用整合尚待公司實機驗收，不把獨立工具的成功擴大為新版全部功能已通過。
+- CAD 工作程序採獨立鎖定 CPython／pywin32，固定 JSON 操作，不執行模型 Python／任意 COM。原分析 Python 與 AppContainer 不變。上游預編譯品不宣稱為本機 v142 編譯。
+- 以 Build.ps1 -EmptyCargoCache -BasicValidation -IncludeInstaller 交付；新增 CAD runtime 完整性與唯讀管線自檢。完整 Office／SMB／NSIS 安裝回復驗證延後。保留 icon.png、歷史離線包與既有 Git 遠端；交付後使用者追加授權推送既有 main。
+- 詳見 docs/CAD_DRAWING.md 與 docs/VALIDATION_0_8_55.md。
+- 2026-10-14 19:48 基礎交付完成：v142 x64／空快取／--frozen、41 項選定 Rust 測試、10 項 CAD 合成契約、正式及 dist CAD runtime／唯讀管線、既有基礎 UI／Python／程式唯讀、NSIS 打包與簽署清單核對通過。公司 CAD 繪圖、AI 實際規劃及完整安裝驗證仍待實測；交付後追加授權提交／推送。
+
 ## 2026-10-14：CAD 0.1.1 實機回報修正
 
 - 使用者回報佑達 ICAD 2008 已連接，繪圖在產品身份檢查停止；只更新獨立工具身份規則與 ZIP，沿用 Git 交付及基礎自檢範圍。CompanyAI 0.8.54 EXE／NSIS 不變，不重編 Rust。實際繪圖仍待使用者重測。

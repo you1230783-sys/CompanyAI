@@ -64,6 +64,7 @@ Var InstanceLock
 Var HadPrevious
 Var HadPython
 Var PythonSwapped
+Var CadCreated
 
 ; 同時檢查父目錄與產品目錄，避免固定路徑被 junction/symlink 導向別處。
 ; 安裝及解除安裝都先檢查，再進行檔案操作。
@@ -79,6 +80,7 @@ Var PythonSwapped
     ${EndIf}
 !macroend
 !include "..\.build\python-files.nsh"
+!include "..\.build\cad-files.nsh"
 
 Function SkipUpdatePage
     StrCmp $UpdatePid "" +2
@@ -131,6 +133,7 @@ Function .onInit
 FunctionEnd
 
 Section "安裝 LM_AI"
+    StrCpy $CadCreated "no"
     !insertmacro CheckInstallDirectory "${INSTALL_ROOT}"
     !insertmacro CheckInstallDirectory "$INSTDIR"
     InitPluginsDir
@@ -192,6 +195,23 @@ Section "安裝 LM_AI"
     Goto rollback_python
     python_ready:
 !endif
+!ifndef TEST_PAYLOAD
+    ; 內容指紋目錄已存在時只驗證，絕不覆寫舊程式可能使用的檔案。
+    !insertmacro CadCheckTree
+    IfFileExists "$INSTDIR\${CAD_DIRECTORY}" cad_validate
+    StrCpy $CadCreated "yes"
+    ClearErrors
+    SetOutPath "$INSTDIR\${CAD_DIRECTORY}"
+    File /r "..\dist\${CAD_DIRECTORY}\*.*"
+    IfErrors rollback_python
+    cad_validate:
+    SetOutPath "$INSTDIR"
+    ClearErrors
+    ExecWait '"$INSTDIR\LM_AI.pending.exe" --cad-self-check' $0
+    IfErrors rollback_python
+    StrCmp $0 0 +2
+    Goto rollback_python
+!endif
     ; 沿用 runtime 時兩個 Python 回復旗標仍為 no；主程式替換失敗不動原環境。
     StrCpy $HadPrevious "no"
     IfFileExists "$INSTDIR\LM_AI.exe" 0 replace_app
@@ -244,6 +264,8 @@ Section "安裝 LM_AI"
     StrCmp $HadPython "yes" 0 failed
     Rename "$INSTDIR\python.previous" "$INSTDIR\python"
     failed:
+    StrCmp $CadCreated "yes" 0 +2
+    Call RemoveNewCad
     !insertmacro PythonRemove "$INSTDIR\python.pending"
     Delete "$INSTDIR\LM_AI.pending.exe"
     Delete "$INSTDIR\Uninstall.pending.exe"
@@ -252,6 +274,10 @@ Section "安裝 LM_AI"
     Abort
     finished:
 SectionEnd
+
+Function RemoveNewCad
+    !insertmacro CadRemove
+FunctionEnd
 
 Function .onInstSuccess
     System::Call 'kernel32::CloseHandle(p $InstanceLock)'
@@ -283,6 +309,7 @@ Function un.onInit
 FunctionEnd
 
 Section "Uninstall"
+    !insertmacro CadCheckTree
     !insertmacro PythonCheckTree "$INSTDIR\python"
     ClearErrors
     Delete "$INSTDIR\LM_AI.exe"
@@ -294,6 +321,7 @@ Section "Uninstall"
     Delete "$INSTDIR\LM_AI_Uninstall.exe"
     Delete "$INSTDIR\Uninstall.exe"
     !insertmacro PythonRemove "$INSTDIR\python"
+    !insertmacro CadRemove
     RMDir "$INSTDIR"
     Delete "$SMPROGRAMS\${PRODUCT_DIR}.lnk"
     Delete "$DESKTOP\${PRODUCT_DIR}.lnk"

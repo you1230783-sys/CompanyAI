@@ -42,7 +42,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     # 測試涵蓋登入兌換、重複登入碼、API Header 與 Windows 憑證加密。
     if ($BasicValidation) {
         # 本次使用者要求先測聊天／附件相關契約；不把局部測試記成完整驗收。
-        foreach ($filter in @('jobs::', 'demo::work::tests::', 'projects::files::source_code::', 'projects::text::')) {
+        foreach ($filter in @('jobs::', 'demo::work::tests::', 'projects::files::source_code::', 'projects::text::', 'projects::skills::', 'projects::agent::schema::', 'projects::files::cad::', 'projects::tool_calls::')) {
             & cargo test --lib $filter --frozen
             if ($LASTEXITCODE -ne 0) { throw "Basic contract tests failed: $filter" }
         }
@@ -53,6 +53,12 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     & cargo build --workspace --release --frozen
     if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
     $exe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\release\company-ai.exe'
+    & (Join-Path $PSScriptRoot 'Stage-Cad.ps1') -ExecutableDirectory (Split-Path $exe -Parent)
+    $cadStage = (Get-Content (Join-Path $projectRoot '.build\cad-runtime-stage.txt') -Raw).Trim()
+    & (Join-Path $cadStage 'runtime\python.exe') -I -B (Join-Path $projectRoot 'tools\test_cad_basic.py')
+    if ($LASTEXITCODE -ne 0) { throw 'CAD basic contract tests failed.' }
+    $cadCheck = Start-Process -FilePath $exe -ArgumentList '--cad-self-check' -PassThru -Wait -WindowStyle Hidden
+    if ($cadCheck.ExitCode -ne 0) { throw 'CAD runtime self-check failed.' }
     # 實際發行EXE的匿名管線與EOF退出也必須可用；無效要求不接觸使用者信箱。
     $outlookProbe = New-Object Diagnostics.Process
     $outlookProbe.StartInfo.FileName = $exe
@@ -132,7 +138,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
             windows_sdk = $env:WindowsSDKVersion
             empty_cargo_cache = [bool]$EmptyCargoCache
             cargo_home = $env:CARGO_HOME
-            checks = @('v142 x64 actual compiler probe','fmt','Clippy all targets','jobs, demo work, source code and text contract tests','cargo build --release --frozen','Outlook helper pipe/EOF without mailbox access','Python runtime self-check','WebView2 UI and native composer self-check','native task rejection, repeated error, DPAPI restore and late event checks','read-only source formats, native worker, paging, revision and copy rejection','DLL dependency inspection')
+            checks = @('v142 x64 actual compiler probe','fmt','Clippy all targets','jobs, demo work, source code, text, skills, schema, CAD broker and tool contract tests','cargo build --release --frozen','CAD 10 synthetic contracts and native runtime/inventory pipe without drawing','Outlook helper pipe/EOF without mailbox access','Python runtime self-check','WebView2 UI and native composer self-check','native task rejection, repeated error, DPAPI restore and late event checks','read-only source formats, native worker, paging, revision and copy rejection','DLL dependency inspection')
             task_tracking_cases = $trackingCheck.cases
             exe_sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
             installer_built = $false

@@ -1,11 +1,11 @@
-﻿Scope: basic validation; full validation pending
+Scope: basic validation; full validation pending
 MSVC: 14.29.30133
 Compiler: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\cl.exe
 v142.c
 Verified _MSC_FULL_VER=192930159 x64
 Linker: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\link.exe
 SDK: 10.0.19041.0\
-Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-1e1420977f1b4a2381d05e594a5b41b8
+Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-8f7d14b6a8da4b8ba3f19f4ffd895b04
 rustc 1.98.1 (48a229cea 2026-09-01)
 binary: rustc
 commit-hash: 48a229ceaefd4985c50990b14116b6d856af0985
@@ -28,21 +28,21 @@ File Type: EXECUTABLE IMAGE
     user32.dll
     kernel32.dll
     oleaut32.dll
-    ole32.dll
-    combase.dll
     shell32.dll
+    combase.dll
+    ole32.dll
     propsys.dll
     shlwapi.dll
     api-ms-win-core-winrt-error-l1-1-0.dll
-    gdi32.dll
     bcrypt.dll
+    gdi32.dll
     crypt32.dll
     dwmapi.dll
     advapi32.dll
     userenv.dll
+    mpr.dll
     api-ms-win-core-synch-l1-2-0.dll
     winhttp.dll
-    mpr.dll
     ADVAPI32.dll
     KERNEL32.dll
     ntdll.dll
@@ -51,9 +51,9 @@ File Type: EXECUTABLE IMAGE
   Summary
 
         3000 .data
-       68000 .pdata
-      621000 .rdata
+       69000 .pdata
+      66A000 .rdata
         9000 .reloc
        3D000 .rsrc
-      A1F000 .text
+      A3A000 .text
         1000 _RDATA

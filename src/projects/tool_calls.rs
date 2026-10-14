@@ -52,6 +52,12 @@ pub(super) fn system_prompt() -> AppResult<String> {
     }
     for tool in definitions["tools"].as_array_mut().into_iter().flatten() {
         compact_schema(&mut tool["function"]["parameters"]);
+        // 舊文字協定必須一次帶完整目錄；名稱、參數與技能方法已保留，
+        // 不再逐工具重複用途說明，避免加入 CAD 後突破單則 64 KB。
+        // 原生 agent Schema 直接讀 tools.json，完整說明不受此精簡影響。
+        if let Some(function) = tool["function"].as_object_mut() {
+            function.remove("description");
+        }
     }
     Ok(format!(
         "{}\n\n工具定義（OpenAI Chat Completions tools 形狀，僅為文字契約）：\n{}",
@@ -607,6 +613,8 @@ mod tests {
             ("plan_code_change", json!({"copy_id":"c","requirements":[{"id":"R1","description":"需求","origin":"user"}]})),
             ("test_python", json!({"copy_id":"c","revision":"r","tests":[{"id":"T1","requirement_ids":["R1"],"code":"pass","mocked_dependencies":[]}]})),
             ("review_code_change", json!({"copy_id":"c","revision":"r","checks":[]})),
+            ("cad_inventory", json!({})),
+            ("cad_draw", json!({"name":"測試.dwg","version":"latest","operations":[{"kind":"circle","center":[0,0],"radius":5,"color":1}]})),
         ]);
         let definitions: Value = serde_json::from_str(DEFINITIONS).unwrap();
         assert_eq!(

@@ -1,5 +1,6 @@
 /target/
 /dist/python/
+/dist/cad-*/
 __pycache__/
 /.tools/
 /offline/downloads/

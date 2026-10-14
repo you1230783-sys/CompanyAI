@@ -1,4 +1,6 @@
-**0.8.54 桌面程式碼唯讀：** 專案基本工具 read_code_section／find_text 可讀新程式與設定格式；工具 Schema 由桌面提供，網站不需增加 API。來源分段有 revision、行號與範圍限制。一般對話的附件白名單／轉檔路由沒有隨此功能放寬。浩辰 CAD 為獨立人工測試程式，不是模型可呼叫的新工具。
+**0.8.55 CAD 對話繪圖測試版：** 新增按需載入的 `cad-drawing` 技能，以及 `cad_inventory`／`cad_draw(name,version,operations)`。沿用 desktop-agent-v1 原生工具轉發，不新增網站路由。工具參數 Schema 由桌面提供，operations 使用非根位置 oneOf（傳送時轉 anyOf）區分固定幾何操作與 ACI 顏色；網站不執行 CAD。模型不得把工具成功誤解為外觀已驗收；結果 `DATA_VERIFIED_VISUAL_PENDING` 表示指定屬性／存檔重開核對通過，仍需人工檢查。DWG 由桌面保存於專案並自動加入成果，不上傳網站轉檔。失敗不自動重播，既有圖面不修改。詳見 [CAD 說明](CAD_DRAWING.md)。
+
+**0.8.54 桌面程式碼唯讀：** 專案基本工具 read_code_section／find_text 可讀新程式與設定格式；工具 Schema 由桌面提供，網站不需增加 API。來源分段有 revision、行號與範圍限制。一般對話的附件白名單／轉檔路由沒有隨此功能放寬。當時 CAD 為獨立人工測試程式，0.8.55 才加入上述模型工具。
 
 **0.8.53，2026-10-14：** 一般聊天POST等待回應、尚無task_id時不先GET；明確413／415等4xx拒絕直接保存原HTTP錯誤並停止。408／網路失聯／未明示拒絕的5xx保留原ID查回；若提供 `task_accepted` 布林值則優先採用，已取得任務ID者仍核對原任務。
 

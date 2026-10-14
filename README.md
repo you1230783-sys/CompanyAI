@@ -1,4 +1,6 @@
-**0.8.54：專案程式碼唯讀與浩辰 CAD 獨立測試包。** 先交付基礎驗證版本，完整驗證與 2008／2022 實機測試待補。[驗證與界線](docs/VALIDATION_0_8_54.md) · [CAD 工具說明](tools/gstarcad-probe/README.md)
+**0.8.55：專案 AI CAD 繪圖與顏色測試版。** 對話中可要求新建 DWG、尺寸、中文文字、引線、剖面、公式曲線與 ACI 顏色；修改時另建新圖面。NSIS 隨附獨立 CAD runtime，僅做基礎驗證，完整驗證與本版公司實測待補。[使用範例](docs/CAD_DRAWING.md) · [驗證範圍](docs/VALIDATION_0_8_55.md)
+
+**0.8.54：專案程式碼唯讀與浩辰 CAD 獨立測試包。** [歷史驗證與界線](docs/VALIDATION_0_8_54.md) · [獨立工具說明](tools/gstarcad-probe/README.md)
 
 **0.8.53：修正聊天拒絕後持續查任務、連續錯誤停止追蹤，並整理分析摺疊與圖中文字編輯。** 使用者測試 OK 後，已補完完整開發環境與 NSIS 驗證。[驗證與界線](docs/VALIDATION_0_8_53.md)
 

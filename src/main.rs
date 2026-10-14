@@ -43,6 +43,13 @@ fn main() {
         }
         return;
     }
+    if arguments.as_slice() == ["--cad-self-check"] {
+        if let Err(error) = company_ai::cad::self_check() {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     let smoke = arguments.iter().any(|argument| argument == "--self-check");
     let result: AppResult<()> = (|| {
         if arguments
