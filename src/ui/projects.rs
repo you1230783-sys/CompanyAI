@@ -10,6 +10,12 @@ mod weekly;
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(super) enum ProjectCommand {
+    CadReady {
+        conversation: String,
+        run_id: String,
+        request_id: String,
+        choice: String,
+    },
     Review {
         conversation: String,
         message_index: usize,
@@ -170,6 +176,8 @@ pub(super) enum ProjectCommand {
     },
 }
 pub(super) enum ProjectEvent {
+    CadClosed(String, String),
+    CadConnect(String, String, serde_json::Value, mpsc::Sender<String>),
     UserChartSaved(String, AppResult<String>),
     FileBusy(String, String, String, mpsc::Sender<bool>),
     OutlookConsent(
@@ -205,12 +213,18 @@ struct PendingOutlook {
     folders: Vec<crate::outlook::privacy::Choice>,
     reply: mpsc::Sender<Option<Vec<String>>>,
 }
+struct PendingCad {
+    id: String,
+    prompt: serde_json::Value,
+    reply: mpsc::Sender<String>,
+}
 struct PendingFile {
     id: String,
     message: String,
     reply: mpsc::Sender<bool>,
 }
 pub(super) struct Running {
+    pending_cad: Option<PendingCad>,
     pending_file: Option<PendingFile>,
     pending_outlook: Option<PendingOutlook>,
     instructions: projects::steering::Inbox,
@@ -407,6 +421,7 @@ impl App {
             "preferences":self.projects.running.as_ref().and_then(|r|r.instructions.questions().ok()),
             "chart_review":self.projects.running.as_ref().and_then(|r|r.pending_chart.as_ref().map(|p|json!({"request_id":p.id,"review":p.review}))),
             "outlook_consent":self.projects.running.as_ref().and_then(|r|r.pending_outlook.as_ref().map(|p|json!({"request_id":p.id,"folders":p.folders}))),
+            "cad_connect":self.projects.running.as_ref().and_then(|r|r.pending_cad.as_ref().map(|p|json!({"request_id":p.id,"prompt":p.prompt}))),
             "file_busy":self.projects.running.as_ref().and_then(|r|r.pending_file.as_ref().map(|p|json!({"request_id":p.id,"message":p.message}))),
             "supplements":self.projects.running.as_ref().and_then(|r|r.instructions.entries().ok()),
             "queued":self.archive.conversations.iter().find(|c| Some(&c.id)==self.active_id.as_ref()).and_then(|c| c.project_queued.as_ref()).map(|q| json!({"id":q.id,"text":q.text,"after_run":q.after_run,"interrupt":q.interrupt,"auto_start":q.auto_start})),
@@ -522,6 +537,51 @@ impl App {
                 return self.start_queued_project(conversation, id);
             }
             _ => (),
+        }
+        if let ProjectCommand::CadReady {
+            conversation,
+            run_id,
+            request_id,
+            choice,
+        } = &command
+        {
+            if !self.logged_in()
+                || self.versions.blocked()
+                || self.active_id.as_deref() != Some(conversation.as_str())
+            {
+                return Err("請在原專案對話處理 CAD 連線。".into());
+            }
+            let run = self
+                .projects
+                .running
+                .as_mut()
+                .filter(|r| {
+                    r.id == *run_id
+                        && r.conversation == *conversation
+                        && !r.cancel.load(Ordering::Relaxed)
+                })
+                .ok_or("CAD 等待已結束。")?;
+            let pending = run
+                .pending_cad
+                .as_ref()
+                .filter(|p| p.id == *request_id)
+                .ok_or("CAD 提示已失效。")?;
+            let allowed = if pending.prompt["partial"] == true {
+                &["rebuild", "cancel"][..]
+            } else {
+                &["launch", "retry", "cancel"][..]
+            };
+            if !allowed.contains(&choice.as_str()) {
+                return Err("CAD 回覆不合法。".into());
+            }
+            run.pending_cad
+                .take()
+                .ok_or("CAD 提示已失效。")?
+                .reply
+                .send(choice.clone())
+                .map_err(|_| "CAD 等待已結束。")?;
+            self.projects.status = "正在處理 CAD 連線選擇…".into();
+            return Ok(());
         }
         if let ProjectCommand::FileReady {
             conversation,
@@ -952,7 +1012,8 @@ impl App {
             | ProjectCommand::CancelQueued { .. }
             | ProjectCommand::SendQueued { .. }
             | ProjectCommand::Supplement { .. }
-            | ProjectCommand::WithdrawSupplement { .. } => (),
+            | ProjectCommand::WithdrawSupplement { .. }
+            | ProjectCommand::CadReady { .. } => (),
         }
         Ok(())
     }
@@ -1110,6 +1171,35 @@ impl App {
         };
         let cancel = Arc::new(AtomicBool::new(false));
         let instructions = projects::steering::Inbox::open(&self.root, &id)?;
+        let cad_tx = self.tx.clone();
+        let cad_run = id.clone();
+        let cad_waiter: crate::cad::Waiter = Box::new(move |prompt, cancel, deadline| {
+            let (reply, response) = mpsc::channel();
+            let request_id = crate::jobs::new_id()?;
+            cad_tx
+                .send(Event::Project(ProjectEvent::CadConnect(
+                    cad_run.clone(),
+                    request_id.clone(),
+                    prompt.clone(),
+                    reply,
+                )))
+                .map_err(|_| "桌面已關閉。")?;
+            let choice = loop {
+                if cancel.load(Ordering::Relaxed) || Instant::now() >= deadline {
+                    break "cancel".into();
+                }
+                match response.recv_timeout(Duration::from_millis(100)) {
+                    Ok(choice) => break choice,
+                    Err(mpsc::RecvTimeoutError::Timeout) => (),
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break "cancel".into(),
+                }
+            };
+            let _ = cad_tx.send(Event::Project(ProjectEvent::CadClosed(
+                cad_run.clone(),
+                request_id,
+            )));
+            Ok(choice)
+        });
         let file_tx = self.tx.clone();
         let file_run = id.clone();
         let file_waiter: projects::interaction::FileWaiter =
@@ -1188,6 +1278,7 @@ impl App {
             cancel: cancel.clone(),
             instructions: Some(instructions.clone()),
             outlook_consent: Some(outlook_consent),
+            cad_waiter: Some(cad_waiter),
             file_waiter: Some(file_waiter),
         };
         // 所有準備檢查成功後才提交歷史，避免未啟動卻遺失待送文字。
@@ -1218,6 +1309,7 @@ impl App {
             self.messages = messages;
         }
         self.projects.running = Some(Running {
+            pending_cad: None,
             pending_file: None,
             pending_outlook: None,
             instructions,
@@ -1322,10 +1414,33 @@ impl App {
     }
     pub(super) fn project_event(&mut self, event: ProjectEvent) -> AppResult<()> {
         match event {
+            ProjectEvent::CadClosed(id, request_id) => {
+                if let Some(run) = self.projects.running.as_mut().filter(|r| r.id == id) {
+                    if run.pending_cad.as_ref().is_some_and(|p| p.id == request_id) {
+                        run.pending_cad = None;
+                    }
+                }
+            }
             ProjectEvent::UserChartSaved(conversation, result) => {
                 // 使用者可以在存圖期間切換對話，仍需回覆結果以解除前端的儲存中狀態。
                 if self.logged_in() {
                     self.view.post(&json!({"type":"chart_saved","conversation":conversation,"ok":result.is_ok(),"message":result.unwrap_or_else(|e|e)}))?;
+                }
+            }
+            ProjectEvent::CadConnect(id, request_id, prompt, reply) => {
+                if let Some(run) = self
+                    .projects
+                    .running
+                    .as_mut()
+                    .filter(|r| r.id == id && !r.cancel.load(Ordering::Relaxed))
+                {
+                    run.pending_cad = Some(PendingCad {
+                        id: request_id,
+                        prompt,
+                        reply,
+                    });
+                    self.projects.status = "等待 CAD 就緒，原計畫已保留…".into();
+                    run.activity.push(self.projects.status.clone().into());
                 }
             }
             ProjectEvent::FileBusy(id, request_id, message, reply) => {

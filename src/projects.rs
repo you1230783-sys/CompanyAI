@@ -106,6 +106,22 @@ impl Store {
 pub enum Tool {
     /// 列出本機 CAD 註冊；不啟動應用程式。
     CadInventory {},
+    /// 來源先複製；僅讀取副本的 ModelSpace 分頁，不將整張大圖送入模型。
+    CadRead {
+        path: String,
+        version: String,
+        #[serde(default)]
+        offset: usize,
+        revision: Option<String>,
+    },
+    /// 以先前讀取的 revision 與 Handle 修改全新副本，絕不開啟來源原件。
+    CadEdit {
+        path: String,
+        revision: String,
+        name: String,
+        edits: Vec<serde_json::Value>,
+        operations: Vec<serde_json::Value>,
+    },
     /// 只建立新 DWG，完整幾何計畫由固定 Python adapter 驗證及執行。
     CadDraw {
         name: String,
@@ -495,6 +511,8 @@ impl Tool {
     pub fn label(&self) -> &'static str {
         match self {
             Self::CadInventory {} => "查看已安裝 CAD 版本",
+            Self::CadRead { .. } => "讀取 DWG 工作副本",
+            Self::CadEdit { .. } => "修改 DWG 新副本並核對",
             Self::CadDraw { .. } => "CAD 新建圖面、顏色及存檔核對",
             Self::RunBatch { .. } => "並行處理獨立工作",
             Self::RecordLogEvents { .. } => "整理有原文依據的 LOG 事件",

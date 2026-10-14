@@ -4,6 +4,7 @@
 mod analysis;
 pub mod batch;
 mod cad;
+mod cad_copy;
 mod chart_annotations;
 mod chart_preferences;
 mod code_review;
@@ -763,12 +764,15 @@ pub(super) struct SavedBroker {
     cad_attempts: u32,
     #[serde(default)]
     cad_partial_plans: Vec<String>,
+    #[serde(default)]
+    cad_reads: BTreeMap<String, Value>,
 }
 pub struct Broker {
     task_id: String,
     pub(super) analysis: super::analysis::State,
     excel_plans: BTreeMap<String, super::excel_plan::Plan>,
     file_waiter: Option<super::interaction::FileWaiter>,
+    cad_waiter: Option<crate::cad::Waiter>,
     outlook: super::mail::Session,
     outlook_process: Option<crate::outlook::process::Process>,
     pub(super) mail_notes: super::mail_notes::State,
@@ -795,6 +799,7 @@ pub struct Broker {
     cad_failed: bool,
     cad_attempts: u32,
     cad_partial_plans: Vec<String>,
+    cad_reads: BTreeMap<String, Value>,
     png_renderer: Option<super::charts::png::Renderer>,
     chart_chooser: Option<super::charts::quality::Chooser>,
     preferences: Option<super::steering::Inbox>,
@@ -814,6 +819,7 @@ impl Broker {
             mail_draft: None,
             excel_plans: BTreeMap::new(),
             file_waiter: None,
+            cad_waiter: None,
             outlook: super::mail::Session::default(),
             outlook_process: None,
             log_cursors: BTreeMap::new(),
@@ -836,6 +842,7 @@ impl Broker {
             cad_failed: false,
             cad_attempts: 0,
             cad_partial_plans: vec![],
+            cad_reads: BTreeMap::new(),
             png_renderer: None,
             chart_chooser: None,
             preferences: None,
@@ -848,7 +855,7 @@ impl Broker {
         // 經序列化建立不含程序資源的快照；授權與執行中的 COM 物件不保存。
         serde_json::from_value(
             json!({"analysis":self.analysis,"mail_notes":self.mail_notes,"mail_draft":self.mail_draft,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
-            "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts,"cad_artifacts":self.cad_artifacts,"cad_failed":self.cad_failed,"cad_attempts":self.cad_attempts,"cad_partial_plans":self.cad_partial_plans}),
+            "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts,"cad_artifacts":self.cad_artifacts,"cad_failed":self.cad_failed,"cad_attempts":self.cad_attempts,"cad_partial_plans":self.cad_partial_plans,"cad_reads":self.cad_reads}),
         )
         .map_err(|e| e.to_string())
     }
@@ -931,6 +938,7 @@ impl Broker {
         self.cad_failed = state.cad_failed;
         self.cad_attempts = state.cad_attempts;
         self.cad_partial_plans = state.cad_partial_plans;
+        self.cad_reads = state.cad_reads;
         self.python_artifacts = state.python_artifacts;
         self.datasets = state.datasets;
         self.chart_exports = state.chart_exports;
@@ -1070,6 +1078,9 @@ impl Broker {
             return Err("未確認 Outlook 範圍，未恢復舊任務。".into());
         }
         self.outlook.check_policy()
+    }
+    pub fn set_cad_waiter(&mut self, waiter: Option<crate::cad::Waiter>) {
+        self.cad_waiter = waiter;
     }
     pub fn set_file_waiter(&mut self, waiter: Option<super::interaction::FileWaiter>) {
         self.file_waiter = waiter;
@@ -2093,6 +2104,13 @@ impl Broker {
                 Ok(result)
             }
             Tool::CadInventory {} => crate::cad::inventory(cancel),
+            Tool::CadRead {
+                path,
+                version,
+                offset,
+                revision,
+            } => self.read_cad(path, version, *offset, revision.as_deref(), cancel),
+            Tool::CadEdit { .. } => self.edit_cad(tool, cancel),
             Tool::CadDraw {
                 name,
                 version,
@@ -2472,8 +2490,22 @@ impl Broker {
                         || readable_extension(&entry.path()).is_ok()
                         || super::logs::supported(&entry.path())
                         || super::vision::input::supported(&entry.path())
+                        || entry
+                            .path()
+                            .extension()
+                            .is_some_and(|e| e.eq_ignore_ascii_case("dwg"))
                     {
                         let mut info = json!({"name":entry.file_name().to_string_lossy(),"directory":metadata.is_dir()});
+                        if !metadata.is_dir()
+                            && entry
+                                .path()
+                                .extension()
+                                .is_some_and(|e| e.eq_ignore_ascii_case("dwg"))
+                        {
+                            info["kind"] = json!("cad_dwg");
+                            info["read_tool"] = json!("cad_read");
+                            info["bytes"] = json!(metadata.len());
+                        }
                         if !metadata.is_dir() && source_code::supported(&entry.path()) {
                             info["kind"] = json!("source_text");
                             info["bytes"] = json!(metadata.len());

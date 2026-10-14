@@ -1,34 +1,37 @@
 {
-  "version": "0.8.56",
+  "version": "0.8.57",
   "result": "PASS_BASIC",
-  "recorded_at": "2026-10-14T20:44:39.8343584+08:00",
-  "rust_selected_tests": 42,
-  "python_synthetic_contracts": 13,
+  "recorded_at": "2026-10-14T21:58:48.8076400+08:00",
+  "rust_selected_tests": 43,
+  "python_synthetic_contracts": 17,
   "native_runtime_inventory_pipe": true,
   "delivered_runtime_self_check": true,
+  "source_copy_and_read_lock_verified": true,
+  "existing_copy_synthetic_roundtrip": true,
+  "connection_dialog_synthetic_checks": true,
   "cad_drawing_tested_locally": false,
   "company_ai_service_tested": false,
   "installer_packaged_and_manifest_verified": true,
   "installer_install_update_rollback_uninstall_tested": false,
   "full_validation_completed": false,
-  "runtime_manifest_sha256": "ee2e1ab631f6008c85b63ef59867db5f352712775bab35fe87d6b4e9ad9f779b",
+  "runtime_manifest_sha256": "58e2fe25e54aad580573a789b2d807728357d8f9793766d7ea329ad3679a1b37",
   "binary_origin": "Official CPython 3.13.12 and pywin32 311 wheels; not locally compiled with v142",
   "artifacts": [
     {
       "Path": "Y:\\Rust\\Project\\CompanyAI\\dist\\LM_AI.exe",
-      "Hash": "7F2D3A45DEAAE24A51C6305C64F2F26AAD247DB81059F15C3A787B3D35DC762C"
+      "Hash": "3386FF4C7587D88A2D98D7E91FB5DBA09CDF266463FD2468E59BFB1862D65D65"
     },
     {
       "Path": "Y:\\Rust\\Project\\CompanyAI\\dist\\LM_AI_Setup.exe",
-      "Hash": "BFC95ECB41CAE075D12031BE18C6B561452573D17E6B4F35663FB8769427EAD5"
+      "Hash": "E3E5EF54FFD8F543B90B0490DD83E7309E5B82137C5A990D59E1551FA95B1CED"
     },
     {
       "Path": "Y:\\Rust\\Project\\CompanyAI\\dist\\update-manifest.json",
-      "Hash": "8307979C0020DD88E15A47D1388AD65EFFBB7E27B69C909981D9940A7C07F525"
+      "Hash": "D7C0C22CCF192EDA66690AE19A0AC03154ACB9E8040D6A7DF00C41524E251B5B"
     },
     {
       "Path": "Y:\\Rust\\Project\\CompanyAI\\dist\\update-manifest-exe.json",
-      "Hash": "8307979C0020DD88E15A47D1388AD65EFFBB7E27B69C909981D9940A7C07F525"
+      "Hash": "D7C0C22CCF192EDA66690AE19A0AC03154ACB9E8040D6A7DF00C41524E251B5B"
     }
   ]
 }

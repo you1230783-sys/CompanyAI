@@ -4,6 +4,7 @@ import json
 import math
 import operator
 import os
+import re
 from pathlib import Path
 import sys
 import traceback
@@ -38,6 +39,15 @@ def coordinate(value):
     if isinstance(value, (list, tuple)):
         return [float(v) for v in value]
     return [float(value.x), float(value.y), float(value.z)]
+
+
+def cad_text(value):
+    """只轉換數字前的直徑前綴；不改寫一般文字中的希臘字母／外語字元。"""
+    return re.sub(r"[ØøΦφ⌀](?=\s*\d)", "%%c", value)
+
+
+def text_equal(actual, expected):
+    return cad_text(str(actual)).replace("%%C", "%%c") == cad_text(str(expected)).replace("%%C", "%%c")
 
 
 def equal(actual, expected):
@@ -110,6 +120,7 @@ def prepare(operations):
                 require(op[key] > 0, key + " 必須大於零")
         if kind in ("text", "mtext", "leader"):
             require(isinstance(op["text"], str) and 0 < len(op["text"]) <= 1000 and "\x00" not in op["text"], "文字需為 1–1000 字")
+            op["text"] = cad_text(op["text"])
         if kind in ("line", "aligned_dimension", "diameter_dimension"):
             require(op["start"] != op["end"], "直線兩端不能相同")
         if kind == "leader":
@@ -240,14 +251,25 @@ class Drawing:
 
     def verify(self, doc):
         require(int(doc.GetVariable("INSUNITS")) == 4, "圖面單位不是毫米")
-        entities = {str(entity.Handle).upper(): entity for entity in doc.ModelSpace}
-        require(len(entities) == int(doc.ModelSpace.Count) == len(self.expected), "圖元數量不符")
+        rows = list(doc.ModelSpace)
+        entities = {str(entity.Handle).upper(): entity for entity in rows}
+        expected = {row["handle"] for row in self.expected}
+        missing, extra = sorted(expected - entities.keys()), sorted(entities.keys() - expected)
+        self.last_audit = dict(expected_count=len(self.expected), reported_count=int(doc.ModelSpace.Count),
+                               enumerated_count=len(rows), unique_handles=len(entities),
+                               missing_handles=missing[:100], unexpected_handles=extra[:100])
+        if hasattr(self, "report"):
+            self.report["entity_audit"] = self.last_audit
+        # Count 在舊版可能含內部項目；只有唯一 Handle 集合完全符合才接受計數差異。
+        require(not missing and not extra and len(rows) == len(entities) == len(self.expected),
+                "圖元集合不符：" + json.dumps(self.last_audit, ensure_ascii=False))
         unavailable = []
         for row in self.expected:
             require(row["handle"] in entities, "存檔後圖元 Handle 遺失")
             entity = entities[row["handle"]]
             for key, value in row["properties"].items():
-                require(equal(getattr(entity, key), value), "圖元屬性不符：" + key)
+                compare = text_equal if key == "TextString" else equal
+                require(compare(getattr(entity, key), value), "圖元屬性不符：" + key)
             if "measurement" in row:
                 try:
                     actual = float(entity.Measurement)
@@ -259,6 +281,7 @@ class Drawing:
                 else:
                     require(equal(actual, row["measurement"]), "標註量測值不符")
         return {"entity_count": len(entities), "geometry_and_colors_verified": True,
+                "entity_audit": self.last_audit,
                 "dimension_measurement_unavailable": unavailable}
 
 
@@ -268,28 +291,38 @@ def execute(request, report):
     found, errors = registry.discover()
     if request["action"] == "inventory":
         return {"status": "INVENTORY", "versions": found, "errors": errors}
-    operations = prepare(request["operations"])
+    operations = prepare(request["operations"]) if request["action"] == "draw" else []
     version = request["version"]
     candidates = [v for v in found if v["server_exists"] and (version == "latest" or v["progid"] == version)]
     require(candidates, "找不到所選 CAD 的 COM 登錄；請先安裝並開啟 CAD")
     selected = candidates[0]
     report.update(selected=selected, step="connect")
     clsid = pythoncom.MakeIID(selected["clsid"])
-    try:
-        raw = pythoncom.GetActiveObject(clsid).QueryInterface(pythoncom.IID_IDispatch)
-    except pythoncom.com_error:
+    if request["action"] == "launch":
         raw = pythoncom.CoCreateInstance(clsid, None, pythoncom.CLSCTX_LOCAL_SERVER, pythoncom.IID_IDispatch)
+    else:
+        raw = pythoncom.GetActiveObject(clsid).QueryInterface(pythoncom.IID_IDispatch)
     app = dynamic.Dispatch(raw)
     report["step"] = "identity"
     identity = {key: str(getattr(app, key)) for key in ("Name", "Version", "FullName")}
     require(os.path.normcase(os.path.abspath(identity["FullName"])) == os.path.normcase(os.path.abspath(selected["server"])), "連接的 CAD 路徑不符合所選版本")
     family = identify_product(selected, identity)
     require(family != "unknown", "此 CAD 身份尚未核對，不建立文件")
+    if request["action"] in ("connect", "launch"):
+        if request["action"] == "launch":
+            app.Visible = True
+        return {"status": "CONNECTED", "selected": selected, "application": identity}
+    if request["action"] in ("read", "edit"):
+        from cad_existing import execute_existing
+        report["application"] = identity
+        return execute_existing(app, family == "yoda_icad_2008", request, report, sys.modules[__name__])
+    require(request["action"] == "draw", "未知 CAD 操作")
     report.update(application=identity, step="create_document")
     app.Visible = True
     # 呼叫 Documents.Add 前先標記；即使 COM 回覆遺失，也不能當作未建立文件。
     report["drawing_started"] = True
     drawing = Drawing(app, family == "yoda_icad_2008")
+    drawing.report = report
     report["owned_document_created"] = True
     for index, op in enumerate(operations):
         report.update(step=op["kind"], operation_index=index)
@@ -321,7 +354,7 @@ def failure_details(report, exc):
     """只允許有明確證據的復原；逾時／未知 COM 結果仍交由人工確認。"""
     info = getattr(exc, "excepinfo", None)
     code = info[5] if info and len(info) > 5 else getattr(exc, "hresult", None)
-    before_drawing = report.get("drawing_started") is False
+    before_drawing = report.get("drawing_started") is False or report.get("step") == "validate_edit"
     known_partial = (report.get("owned_document_created") is True
                      and code == -2147024809 and report.get("step") not in ("save", "reopen"))
     recovery = "correct_and_retry" if before_drawing else "revised_new_document" if known_partial else "manual_check"
@@ -330,7 +363,8 @@ def failure_details(report, exc):
         "revised_new_document": "本次新圖面有未完成內容，未必已存檔。可提交修改後的計畫另建新圖面；不重播相同計畫、不修改或關閉部分圖面。",
         "manual_check": "CAD 結果未確認；停止後續繪圖，請人工檢查 CAD 與輸出目錄。",
     }[recovery]
-    return dict(recovery=recovery, advice=advice)
+    connection_lost = code in (-2147417848, -2147023174, -2147023170, -2147220995)
+    return dict(recovery=recovery, advice=advice, connection_lost=connection_lost)
 
 
 def main():

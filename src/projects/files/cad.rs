@@ -5,8 +5,9 @@ use sha2::{Digest, Sha256};
 
 /// Python 只有明確未繪圖、或已回報的無效參數錯誤才允許復原。
 /// 缺欄位、程序中斷與未知結果一律保留鎖定，不能憑檔案不存在判斷安全。
-fn recoverable(result: &Value) -> bool {
-    (result["recovery"] == "correct_and_retry" && result["drawing_started"] == false)
+pub(super) fn recoverable(result: &Value) -> bool {
+    result["recovery"] == "user_requested_new_document"
+        || (result["recovery"] == "correct_and_retry" && result["drawing_started"] == false)
         || (result["recovery"] == "revised_new_document"
             && result["owned_document_created"] == true)
 }
@@ -73,11 +74,15 @@ impl Broker {
         let path = format!("_AI_Output/{folder_name}/{name}");
         self.cad_failed = true; // 出現錯誤或未知結果時，不允許模型換 operation_id 立即重播。
         self.cad_attempts += 1;
-        let mut result = crate::cad::execute(
+        let mut result = crate::cad::execute_interactive(
             json!({"action":"draw", "version":version,
             "operations":operations,"output":folder.join(name)}),
             cancel,
+            self.cad_waiter.as_mut(),
         )?;
+        if result["drawing_started"] == false {
+            self.cad_attempts -= 1;
+        }
         result["intended_path"] = json!(path);
         if result["status"] == "DATA_VERIFIED_VISUAL_PENDING" {
             result["path"] = json!(path);

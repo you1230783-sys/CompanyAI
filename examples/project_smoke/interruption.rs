@@ -195,6 +195,7 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
         cancel: Arc::new(AtomicBool::new(false)),
         instructions: None,
         outlook_consent: None,
+        cad_waiter: None,
         file_waiter: None,
     };
     let result = (|| -> AppResult<()> {

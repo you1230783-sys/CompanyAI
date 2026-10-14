@@ -97,6 +97,7 @@ pub fn summarize(
         cancel: run.cancel.clone(),
         instructions: None,
         outlook_consent: None,
+        cad_waiter: None,
         file_waiter: None,
     };
     if agent_state.is_some() && state.agent_caps.is_none() {

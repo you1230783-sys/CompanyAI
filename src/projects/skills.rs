@@ -174,7 +174,7 @@ pub fn activate(ids: &mut Vec<String>, id: &str) -> AppResult<()> {
 pub fn enabled(tool: &str, ids: &[String]) -> bool {
     let has = |id: &str| ids.iter().any(|i| i == id);
     match tool {
-        "cad_inventory" | "cad_draw" => has("cad-drawing"),
+        "cad_inventory" | "cad_draw" | "cad_read" | "cad_edit" => has("cad-drawing"),
         "record_log_events" => has("log-analysis") || has("python-analysis"),
         "run_python" => has("python-analysis"),
         "analyze_image" | "read_mail_notes" | "set_work_stage" | "run_batch" => true,

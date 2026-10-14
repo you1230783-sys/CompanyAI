@@ -614,6 +614,8 @@ mod tests {
             ("test_python", json!({"copy_id":"c","revision":"r","tests":[{"id":"T1","requirement_ids":["R1"],"code":"pass","mocked_dependencies":[]}]})),
             ("review_code_change", json!({"copy_id":"c","revision":"r","checks":[]})),
             ("cad_inventory", json!({})),
+            ("cad_read", json!({"path":"a.dwg","version":"latest","offset":0,"revision":null})),
+            ("cad_edit", json!({"path":"a.dwg","revision":"r","name":"copy.dwg","edits":[{"handle":"AB","kind":"color","value":1}],"operations":[]})),
             ("cad_draw", json!({"name":"測試.dwg","version":"latest","operations":[{"kind":"circle","center":[0,0],"radius":5,"color":1}]})),
         ]);
         let definitions: Value = serde_json::from_str(DEFINITIONS).unwrap();

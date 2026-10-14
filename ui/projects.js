@@ -25,6 +25,33 @@
       card.append(title,hint,select,custom,apply);preferences.append(card);
     }
   }
+  // CAD 連線等待由原生程序發起；按鈕只回傳選擇，不讓前端提供執行檔路徑。
+  const cadDialog=document.createElement("dialog");cadDialog.id="project-cad-connect";document.body.append(cadDialog);
+  let cadKey="",cadTarget=null;
+  function replyCad(choice) {
+    if (!cadTarget) return;
+    command({action:"cad_ready",...cadTarget,choice});
+    cadTarget=null;
+    for (const button of cadDialog.querySelectorAll("button")) button.disabled=true;
+  }
+  cadDialog.addEventListener("cancel",event=>{event.preventDefault();replyCad("cancel");});
+  cadDialog.addEventListener("close",()=>replyCad("cancel"));
+  function renderCadConnect(project,visible) {
+    const pending=visible && !project.stopping ? project.cad_connect : null;
+    const key=pending ? `${project.running_id}:${pending.request_id}` : "";
+    if (key===cadKey) return;
+    cadKey=key;cadTarget=null;if(cadDialog.open)cadDialog.close();cadDialog.replaceChildren();
+    if (!pending) return;
+    cadTarget={conversation:state.active_id,run_id:project.running_id,request_id:pending.request_id};
+    const prompt=pending.prompt,selected=prompt.selected||{};
+    cadDialog.append(node("h2","",prompt.partial ? "CAD 連線中斷" : "請開啟 CAD"),
+      node("p","",`${selected.description||"CAD"} ${selected.year||""}（${selected.progid||""}）`),
+      node("p","",prompt.message),node("p","","本任務會保留原計畫；等待最多十分鐘，可隨時取消。"));
+    const buttons=node("div","dialog-actions");
+    const choices=prompt.partial ? [["rebuild","另建新副本重做"],["cancel","取消"]] : [["launch","開啟 CAD"],["retry","已開啟，重新連線"],["cancel","取消繪圖"]];
+    for(const [choice,label] of choices){const button=node("button","",label);button.onclick=()=>replyCad(choice);buttons.append(button);}
+    cadDialog.append(buttons);cadDialog.showModal();
+  }
   const fileDialog=document.createElement("dialog");fileDialog.id="project-file-busy";document.body.append(fileDialog);
   let fileKey="",fileTarget=null;
   function replyFile(retry) {
@@ -303,6 +330,7 @@
     renderReview(projects,showActivity);
     renderOutlookConsent(projects,showActivity);
     renderFileBusy(projects,showActivity);
+    renderCadConnect(projects,showActivity);
     // 診斷只在設定的進階區提供；保留目前對話每次任務的入口，不在聊天區佔位。
     $("debug-mode").checked=!!state.config.debug_mode;
     const selector = $("project-diagnostics-run"), old = selector.value;

@@ -23,6 +23,76 @@ static ACTIVE: Mutex<()> = Mutex::new(());
 const MANIFEST: &str = include_str!("../assets/cad-runtime-manifest.json");
 const FINGERPRINT: &str = include_str!("../assets/cad-runtime-sha256.txt");
 
+/// 桌面對話框回覆由原生控制器核對任務／請求 ID；不把開啟程式決策交給模型。
+pub type Waiter = Box<dyn FnMut(&Value, &AtomicBool, Instant) -> AppResult<String> + Send>;
+
+pub fn execute_interactive(
+    mut request: Value,
+    cancel: &AtomicBool,
+    mut waiter: Option<&mut Waiter>,
+) -> AppResult<Value> {
+    let deadline = Instant::now() + Duration::from_secs(600);
+    let mut action = "connect";
+    loop {
+        if cancel.load(Ordering::Relaxed) || Instant::now() >= deadline {
+            return Ok(json!({"status":"CANCELLED", "drawing_started":false,
+                "recovery":"correct_and_retry", "error":"CAD 連線等待已取消或逾時", "advice":"尚未開始繪圖。"}));
+        }
+        let mut connected = execute(
+            json!({"action":action,"version":request["version"]}),
+            cancel,
+        )?;
+        // 選定後固定 ProgID，等待期間不得改連另一個版本。
+        if let Some(progid) = connected["selected"]["progid"].as_str() {
+            request["version"] = json!(progid);
+        }
+        if connected["status"] == "CONNECTED" {
+            let mut result = execute(request.clone(), cancel)?;
+            if result["step"] == "connect" && result["drawing_started"] == false {
+                // 連線檢查與繪圖間 CAD 被關閉：未新增文件，可以回到同一連線提示。
+                // 保留實際失敗，無 UI 的呼叫者也不能收到先前的 CONNECTED 成功狀態。
+                connected = result;
+            } else {
+                if result["connection_lost"] == true && result["drawing_started"] == true {
+                    if let Some(ask) = waiter.as_mut() {
+                        let decision = ask(
+                            &json!({"partial":true,"selected":result["selected"],
+                            "message":"CAD 連線中斷，部分圖面狀態未確認。重新開啟 CAD 後，可選擇另建新副本重做；不會接續或覆寫原圖面。"}),
+                            cancel,
+                            deadline,
+                        )?;
+                        if decision == "rebuild" {
+                            result["recovery"] = json!("user_requested_new_document");
+                            result["advice"] = json!("使用者已選擇另建新圖面重做。保留本次部分圖面，下一次工具呼叫重新連線並建立全新副本。不能宣稱已完成。 ");
+                        }
+                    }
+                }
+                return Ok(result);
+            }
+        }
+        let Some(ask) = waiter.as_mut() else {
+            return Ok(connected);
+        };
+        if connected["selected"].is_null() {
+            return Ok(connected);
+        }
+        let decision = ask(
+            &json!({"partial":false,"selected":connected["selected"],
+            "message":"無法連接指定 CAD。請開啟並完成啟動畫面後重新連線，也可由應用程式啟動指定版本。請確認兩個程式使用相同使用者與權限。", "error":connected["error"]}),
+            cancel,
+            deadline,
+        )?;
+        action = match decision.as_str() {
+            "launch" => "launch",
+            "retry" => "connect",
+            _ => {
+                return Ok(json!({"status":"CANCELLED","drawing_started":false,
+                "recovery":"correct_and_retry","error":"使用者取消 CAD 連線","advice":"未開始繪圖，不要自動重送。"}))
+            }
+        };
+    }
+}
+
 /// 保留檔案唯讀 handle 至子程序結束，避免核對後被替換。
 fn runtime() -> AppResult<(PathBuf, Vec<fs::File>)> {
     let base = std::env::current_exe()

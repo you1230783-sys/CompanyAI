@@ -868,6 +868,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         instructions: matches!(case, 12 | 13 | 21 | 25).then(|| instructions.clone()),
         outlook_consent: (case == 15)
             .then(|| Box::new(|_: &AtomicBool, _| Ok(None)) as company_ai::projects::mail::Consent),
+        cad_waiter: None,
         file_waiter: if matches!(case, 16 | 17 | 20) {
             let held = held.clone();
             let prompts = file_prompts.clone();

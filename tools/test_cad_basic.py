@@ -4,11 +4,66 @@ import math
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
+import tempfile
+import hashlib
 
 import worker
+import cad_existing
 
 
 class BasicTests(unittest.TestCase):
+    def test_diameter_codes_preserve_other_text(self):
+        self.assertEqual(worker.cad_text("孔 Ø10、Φ20、⌀5；Φ 是符號"), "孔 %%c10、%%c20、%%c5；Φ 是符號")
+        self.assertTrue(worker.text_equal("%%C10", "%%c10"))
+        self.assertFalse(worker.text_equal("%%c12", "%%c10"))
+
+    def test_entity_audit_checks_handles_not_only_reported_count(self):
+        drawing = worker.Drawing.__new__(worker.Drawing)
+        drawing.legacy = False
+        drawing.expected = [{"handle":"A", "properties":{"Color":1}}]
+        class Space(list):
+            Count = 2
+        space = Space([SimpleNamespace(Handle="A", Color=1)])
+        doc = SimpleNamespace(ModelSpace=space, GetVariable=lambda key:4)
+        result = drawing.verify(doc)
+        self.assertEqual(result["entity_audit"]["reported_count"], 2)
+        space.append(SimpleNamespace(Handle="B",Color=1))
+        with self.assertRaises(ValueError): drawing.verify(doc)
+        self.assertEqual(drawing.last_audit["unexpected_handles"], ["B"])
+
+    def test_existing_copy_read_and_text_save_reopen(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[1]/".build") as folder:
+            path = Path(folder)/"copy.dwg"
+            path.write_bytes(b"synthetic DWG")
+            entity = SimpleNamespace(Handle="AB", ObjectName="AcDbText", TextString="old", Color=7,
+                                     Layer="0", InsertionPoint=[0.,0.,0.], Height=3.)
+            class Space(list):
+                Count = 1
+            calls = []
+            doc = SimpleNamespace(FullName=str(path), ModelSpace=Space([entity]), GetVariable=lambda key:4,
+                                  Layers=SimpleNamespace(Item=lambda name:SimpleNamespace(Lock=False)),
+                                  Close=lambda save:calls.append(("close",save)), Save=lambda:calls.append(("save",True)))
+            class Documents(list):
+                def Open(self, filename): return doc
+            app = SimpleNamespace(Documents=Documents())
+            report = {"completed_operations":0}
+            read = cad_existing.execute_existing(app, False, dict(action="read",output=str(path),source_revision=hashlib.sha256(path.read_bytes()).hexdigest(),offset=0,limit=100),report,worker)
+            self.assertEqual(read["entities"][0]["handle"], "AB")
+            self.assertTrue(path.with_name("cad-index.json").is_file())
+            request = dict(action="edit",output=str(path),source_revision=hashlib.sha256(path.read_bytes()).hexdigest(),edits=[dict(handle="AB",kind="text",value="Ø10")],operations=[])
+            result = cad_existing.execute_existing(app,False,request,report,worker)
+            self.assertEqual(entity.TextString,"%%c10")
+            self.assertEqual(result["status"],"DATA_VERIFIED_VISUAL_PENDING")
+            self.assertEqual(calls.count(("save",True)),1)
+            request["edits"][0]["handle"]="UNKNOWN"
+            with self.assertRaises(ValueError): cad_existing.execute_existing(app,False,request,report,worker)
+            self.assertEqual(calls.count(("save",True)),1)
+
+    def test_unknown_and_block_entities_are_not_editable(self):
+        block = SimpleNamespace(Handle="F",ObjectName="AcDbBlockReference",Name="part",Layer="0",Color=256)
+        row = cad_existing.describe(block, worker)
+        self.assertFalse(row["editable"])
+        self.assertEqual(row["properties"]["Name"],"part")
     def test_legacy_points_append_coordinates_without_indexing(self):
         class Points:
             def __init__(self):

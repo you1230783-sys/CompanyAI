@@ -193,6 +193,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         cancel: cancelled.clone(),
         instructions: None,
         outlook_consent: None,
+        cad_waiter: None,
         file_waiter: None,
     };
     let mut activity = vec![];
