@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import unittest
 import tempfile
 import hashlib
+import os
 
 import worker
 import cad_existing
@@ -14,6 +15,57 @@ from unittest.mock import patch
 
 
 class BasicTests(unittest.TestCase):
+    def test_process_identity_reads_current_windows_process(self):
+        record = cad_active.process_record(os.getpid())
+        self.assertEqual(record["pid"], os.getpid())
+        self.assertTrue(record["created"])
+        self.assertTrue(os.path.isabs(record["executable"]))
+
+    def test_process_discovery_requires_exact_path_and_one_instance(self):
+        app = SimpleNamespace(FullName=r"C:\CAD\icad.exe")
+        record = dict(pid=11, created="start", executable=os.path.normcase(app.FullName))
+        with patch.object(cad_active.win32process,"EnumProcesses",return_value=[11]), \
+             patch.object(cad_active,"process_record",return_value=record), \
+             patch.object(cad_active.win32gui,"EnumWindows",side_effect=lambda callback,arg:callback(123,arg)), \
+             patch.object(cad_active.win32process,"GetWindowThreadProcessId",return_value=(1,11)):
+            self.assertEqual(cad_active.discover_process(app),(record,None))
+            app.FullName=r"C:\Other\icad.exe"
+            self.assertIsNone(cad_active.discover_process(app)[0])
+            app.FullName=r"C:\CAD\icad.exe"
+            with patch.object(cad_active.win32process,"EnumProcesses",return_value=[11,22]):
+                self.assertIsNone(cad_active.discover_process(app)[0])
+
+    def test_process_without_desktop_window_is_readonly(self):
+        app=SimpleNamespace(FullName=r"C:\CAD\icad.exe")
+        with patch.object(cad_active.win32process,"EnumProcesses",return_value=[11]), \
+             patch.object(cad_active,"process_record",return_value=dict(pid=11,created="start",executable=os.path.normcase(app.FullName))), \
+             patch.object(cad_active.win32gui,"EnumWindows",return_value=None):
+            self.assertIsNone(cad_active.discover_process(app)[0])
+
+    def test_missing_com_hwnd_uses_process_and_unique_document(self):
+        app,doc,_,_=self.active_fixture()
+        app.Documents=[doc]
+        record=dict(pid=11,created="start",executable=r"C:\CAD\icad.exe")
+        with patch.object(cad_active,"discover_process",return_value=(record,None)):
+            result=cad_active.identity(app,doc,worker)
+            self.assertTrue(result["editable_session"])
+            self.assertEqual(result["identity_scope"],"process_and_document_snapshot")
+            app.Documents.append(SimpleNamespace(Name=doc.Name,FullName=doc.FullName))
+            self.assertFalse(cad_active.identity(app,doc,worker)["editable_session"])
+
+    def test_restarted_process_rejects_stale_active_edit(self):
+        app,doc,_,calls=self.active_fixture()
+        app.Documents=[doc]
+        record=dict(pid=11,created="old",executable=r"C:\CAD\icad.exe")
+        with patch.object(cad_active,"discover_process",return_value=(record,None)):
+            before=cad_active.execute_active(app,True,dict(action="active_read",offset=0),{},worker)
+            record["created"]="new"
+            request=dict(action="active_edit",document=before["document"],revision=before["revision"],
+                         edits=[dict(handle="A",kind="radius",value=8)],operations=[])
+            with self.assertRaisesRegex(ValueError,"文件身分或內容已變更"):
+                cad_active.execute_active(app,True,request,{},worker)
+        self.assertEqual(calls,[])
+
     def test_command_parser_rejects_programs_and_unbounded_commands(self):
         for value in ('_.ZOOM _E', 'ZOOM A', 'REGEN', '_-PURGE _A * _N', 'AUDIT N'):
             self.assertEqual(worker.prepare([dict(kind="command",command=value)])[0]["kind"], "command")

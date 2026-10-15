@@ -63,9 +63,10 @@ impl Broker {
         }
         let state = self.cad_active.clone().ok_or("請先讀取目前圖面。")?;
         if state["document"]["editable_session"] == false {
-            return Err(
-                "此 CAD 缺少可區分文件的視窗身分；目前圖面可閱讀，修改請使用 DWG 副本。".into(),
-            );
+            return Err(format!(
+                "目前圖面身分不足，尚未執行任何指令或修改。scope={}；原因={}。請直接回報此診斷；讀取其餘圖元或反覆回讀工作紀錄不會解除限制。使用者要求不儲存時，不自行改成另存副本。",
+                state["document"]["identity_scope"], state["document"]["identity_reason"]
+            ));
         }
         let handles = state["handles"].as_array().ok_or("缺少已讀取的 Handle。")?;
         if state["revision"] != revision
