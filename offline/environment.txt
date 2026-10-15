@@ -5,7 +5,7 @@ v142.c
 Verified _MSC_FULL_VER=192930159 x64
 Linker: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\link.exe
 SDK: 10.0.19041.0\
-Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-5c90b607a77f412eba57a9d1555a6cac
+Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-25d38f99cf734f80aaa519b39c76a412
 rustc 1.98.1 (48a229cea 2026-09-01)
 binary: rustc
 commit-hash: 48a229ceaefd4985c50990b14116b6d856af0985
@@ -52,7 +52,7 @@ File Type: EXECUTABLE IMAGE
 
         3000 .data
        6C000 .pdata
-      694000 .rdata
+      69C000 .rdata
         9000 .reloc
        3D000 .rsrc
       A7B000 .text

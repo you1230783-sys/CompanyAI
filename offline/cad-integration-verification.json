@@ -1,9 +1,9 @@
 {
-  "version": "0.8.63",
+  "version": "0.8.64",
   "result": "PASS_BASIC",
-  "recorded_at": "2026-10-15T14:36:14.604504+08:00",
+  "recorded_at": "2026-10-15T15:00:56.763072+08:00",
   "rust_selected_tests": 49,
-  "python_synthetic_contracts": 49,
+  "python_synthetic_contracts": 55,
   "native_runtime_inventory_pipe": true,
   "delivered_runtime_self_check": true,
   "active_missing_hwnd_readonly_and_application_fallback_synthetic": true,
@@ -21,34 +21,37 @@
   "unsupported_active_command_before_undo_synthetic": true,
   "process_identity_fallback_synthetic": true,
   "current_windows_process_identity_tested": true,
+  "linetype_validation_load_readback_synthetic": true,
+  "active_zoom_without_undo_synthetic": true,
+  "active_mixed_zoom_requires_undo_synthetic": true,
   "cad_drawing_tested_locally": false,
   "company_ai_service_tested": false,
   "original_extra_entity_cause_confirmed": false,
   "installer_packaged_and_manifest_verified": true,
   "installer_install_update_rollback_uninstall_tested": false,
   "full_validation_completed": false,
-  "runtime_manifest_sha256": "ad3f90030b6711ee35bb82ca02628d2eca488e3b358e648d610893b67f8acf1c",
+  "runtime_manifest_sha256": "3442e76a7c4476d39ad55eb23762b6d4088ba11aed6da775d9fbcebae7a7326f",
   "binary_origin": "Official CPython 3.13.12 and pywin32 311 wheels; not locally compiled with v142",
   "artifacts": [
     {
       "path": "dist/LM_AI.exe",
-      "bytes": 18610176,
-      "sha256": "a50d751fa08a170f23e167a33ad54728f2c201182b6fe8c24651057f5d562d9f"
+      "bytes": 18641920,
+      "sha256": "b1a1ce8520a289284552121167f138c6178747efc78c62c2aa7c296d207f6521"
     },
     {
       "path": "dist/LM_AI_Setup.exe",
-      "bytes": 36104990,
-      "sha256": "c2fcfe5258a905f41aab1f01ab5e15888f5d04e3a32c2a02a368fd3da4eea37d"
+      "bytes": 36103133,
+      "sha256": "c927d5ded80408ad1f2b2498a53d667252ab797ca63a9017e05c4204d54a8725"
     },
     {
       "path": "dist/update-manifest.json",
       "bytes": 1050,
-      "sha256": "00f5e95dcf999451cc302c08635a0ff6d3cb4bd3ecdef2ca0c5b7765e7f0c3c7"
+      "sha256": "87c30401d0d19ac27a530b9079236066bedeba085b7078dd5a8cc4d57191c7d6"
     },
     {
       "path": "dist/update-manifest-exe.json",
       "bytes": 1050,
-      "sha256": "00f5e95dcf999451cc302c08635a0ff6d3cb4bd3ecdef2ca0c5b7765e7f0c3c7"
+      "sha256": "87c30401d0d19ac27a530b9079236066bedeba085b7078dd5a8cc4d57191c7d6"
     }
   ]
 }

@@ -1,3 +1,16 @@
+## 目前圖面縮放與 Undo
+
+- 目前圖面純 ZOOM E／A 操作不要求圖元 Undo 群組；仍需 cad_active_read、editable_session=true、revision、桌面確認及指令後內容核對，不儲存、不關閉。不宣稱這類操作可整組 Undo。
+- 圖元修改及混合操作仍要求 StartUndoMark／EndUndoMark。缺介面時不可建議改色／移動／刪除再試，這些操作仍會遇到相同限制；直接回報尚未支援。
+- unsupported_capability 已提供失敗方法及 completed_operations=0 時直接回報，不為回報縮放失敗而再次逐頁讀取圖元或工作紀錄。
+
+## 原生線型操作
+
+- 新增 line／circle／curve 可選 line_style={"name":"DASHED","scale":1}；省略則保留 CAD 預設。既有已讀線／圓／弧使用 edits 的 kind="linetype"、value={"name":"CENTER","scale":1}，仍需 handle、revision 與可讀線型屬性。
+- 名稱：CONTINUOUS 實線、DASHED 虛線、HIDDEN 隱藏線、CENTER 中心線、DASHDOT 點畫線、DOT 點線、BYLAYER、BYBLOCK；scale 必須介於 0.000001–1000000。
+- 不調整全圖 LTSCALE，不修改尺寸／引線／圖塊內部線型。曲線為取樣線段，線型會逐段重新起算；外觀需目視確認，不保證短線段看得到虛線。
+- 先沿用已有定義；缺少時只查 CAD 安裝目錄的標準 LIN 檔。找不到則請使用者先在 CAD 載入，不能聲稱已套用或自動改實線。取得失敗後依 recovery 處理。
+
 ## 0.8.63：目前文件程序身分備援與診斷
 
 - 使用者已回報0.8.62在公司iCAD2008新建／儲存正常；目前文件唯讀成功，ZOOM被桌面身分檢查阻擋，尚未執行縮放。不能據此宣稱所有CAD或指令已驗收。

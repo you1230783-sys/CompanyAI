@@ -4654,6 +4654,35 @@
                         },
                         "minItems": 2,
                         "maxItems": 2
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
                       }
                     },
                     "required": [
@@ -4689,6 +4718,35 @@
                       },
                       "radius": {
                         "type": "number"
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
                       }
                     },
                     "required": [
@@ -5024,6 +5082,35 @@
                         "type": "integer",
                         "minimum": 2,
                         "maximum": 1000
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
                       }
                     },
                     "required": [
@@ -5293,6 +5380,54 @@
                       "value"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "linetype"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               }
@@ -5331,6 +5466,35 @@
                         },
                         "minItems": 2,
                         "maxItems": 2
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
                       }
                     },
                     "required": [
@@ -5366,6 +5530,35 @@
                       },
                       "radius": {
                         "type": "number"
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
                       }
                     },
                     "required": [
@@ -5701,6 +5894,35 @@
                         "type": "integer",
                         "minimum": 2,
                         "maximum": 1000
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
                       }
                     },
                     "required": [
@@ -5945,6 +6167,54 @@
                       "value"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "linetype"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               }
@@ -5983,6 +6253,35 @@
                         },
                         "minItems": 2,
                         "maxItems": 2
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
                       }
                     },
                     "required": [
@@ -6018,6 +6317,35 @@
                       },
                       "radius": {
                         "type": "number"
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
                       }
                     },
                     "required": [
@@ -6353,6 +6681,35 @@
                         "type": "integer",
                         "minimum": 2,
                         "maximum": 1000
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
                       }
                     },
                     "required": [

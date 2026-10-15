@@ -15,6 +15,94 @@ from unittest.mock import patch
 
 
 class BasicTests(unittest.TestCase):
+    def test_line_style_validation_and_legacy_defaults(self):
+        op = dict(kind="line", color=7, start=[0,0], end=[100,0])
+        self.assertNotIn("line_style", worker.prepare([op])[0])
+        self.assertEqual(worker.prepare([dict(op, line_style=dict(name="dashed", scale=2))])[0]["line_style"],
+                         dict(name="DASHED", scale=2.0))
+        for style in (dict(name="*",scale=1),dict(name="CENTER",scale=0),
+                      dict(name="CENTER",scale=True),dict(name="CENTER",scale=1,path="x.lin")):
+            with self.assertRaises(ValueError): worker.prepare([dict(op,line_style=style)])
+
+    def test_linetype_loads_only_missing_standard_definition(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "icadiso.lin").write_text("*DASHED,Dashed\nA,12,-6\n", encoding="ascii")
+            class Table(list):
+                def Load(self, name, filename):
+                    self.append(SimpleNamespace(Name=name))
+                    self.source = filename
+                def Item(self, name):
+                    return next(item for item in self if item.Name.upper() == name.upper())
+            table = Table()
+            drawing = worker.Drawing.__new__(worker.Drawing)
+            drawing.app = SimpleNamespace(FullName=str(root / "icad.exe"))
+            drawing.doc, drawing.report = SimpleNamespace(Linetypes=table), {}
+            drawing.prepare_linetypes([dict(name="DASHED",scale=1)])
+            self.assertEqual(table.source, str(root / "icadiso.lin"))
+            drawing.prepare_linetypes([dict(name="DASHED",scale=2)])
+            self.assertEqual(len(table), 1)
+            entity = SimpleNamespace()
+            properties = drawing.apply_line_style(entity,dict(name="DASHED",scale=2))
+            self.assertEqual(properties,dict(Linetype="DASHED",LinetypeScale=2.0))
+            with self.assertRaisesRegex(ValueError,"找不到標準線型"):
+                drawing.prepare_linetypes([dict(name="CENTER",scale=1)])
+
+    def test_linetype_readback_failure_is_not_success(self):
+        class Entity:
+            Linetype = "DASHED"
+            @property
+            def LinetypeScale(self): return 1.0
+            @LinetypeScale.setter
+            def LinetypeScale(self, value): pass
+        drawing = worker.Drawing.__new__(worker.Drawing)
+        drawing.linetype_names = {"DASHED":"DASHED"}
+        with self.assertRaisesRegex(ValueError,"比例讀回不符"):
+            drawing.apply_line_style(Entity(),dict(name="DASHED",scale=2))
+
+    def test_active_zoom_does_not_require_undo_or_save(self):
+        app, doc, entity, calls = self.active_fixture()
+        del doc.StartUndoMark
+        del doc.EndUndoMark
+        doc.PaperSpace = []
+        doc.GetVariable = lambda key: 0
+        doc.Activate = lambda: calls.append("activate")
+        doc.ActiveViewport = SimpleNamespace(ZoomExtents=lambda:calls.append("zoom"))
+        _, rows = cad_existing.snapshot(doc,worker)
+        report = {"completed_operations":0}
+        result = cad_existing.edit_document(app,doc,True,dict(edits=[],operations=[dict(kind="command",command="ZOOM E")]),
+            report,worker,{"A":entity},rows,guard=lambda:None)
+        self.assertTrue(result["view_only"])
+        self.assertFalse(result["saved"])
+        self.assertEqual(calls,["activate","zoom"])
+        self.assertEqual(report["completed_operations"],1)
+
+    def test_active_zoom_mixed_edit_still_requires_undo(self):
+        app, doc, entity, calls = self.active_fixture()
+        del doc.StartUndoMark
+        doc.ActiveViewport = SimpleNamespace(ZoomExtents=lambda:self.fail("不應縮放"))
+        _, rows = cad_existing.snapshot(doc,worker)
+        with self.assertRaises(AttributeError):
+            cad_existing.edit_document(app,doc,True,
+                dict(edits=[dict(handle="A",kind="color",value=3)],operations=[dict(kind="command",command="ZOOM E")]),
+                {"completed_operations":0},worker,{"A":entity},rows,guard=lambda:None)
+        self.assertEqual(entity.Color,1)
+        self.assertEqual(calls,[])
+
+    def test_active_linetype_edit_preserves_unsaved_contract(self):
+        app, doc, entity, calls = self.active_fixture()
+        entity.Linetype, entity.LinetypeScale = "Continuous", 1.0
+        doc.Linetypes = [SimpleNamespace(Name="Continuous"),SimpleNamespace(Name="DASHED")]
+        app.FullName = r"C:\CAD\icad.exe"
+        _, rows = cad_existing.snapshot(doc,worker)
+        result = cad_existing.edit_document(app,doc,False,
+            dict(edits=[dict(handle="A",kind="linetype",value=dict(name="DASHED",scale=2))],operations=[]),
+            {"completed_operations":0},worker,{"A":entity},rows,guard=lambda:None)
+        self.assertEqual(entity.Linetype,"DASHED")
+        self.assertEqual(entity.LinetypeScale,2.0)
+        self.assertFalse(result["saved"])
+        self.assertEqual(calls,["begin","end","regen"])
+
     def test_process_identity_reads_current_windows_process(self):
         record = cad_active.process_record(os.getpid())
         self.assertEqual(record["pid"], os.getpid())

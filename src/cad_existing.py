@@ -37,7 +37,7 @@ def describe(entity, api):
     kind = next((key for key in ("mtext", "text", "circle", "polyline", "line", "arc", "dimension", "leader", "blockreference")
                  if key in lower), "unknown")
     row = {"handle": str(entity.Handle).upper(), "type": name, "kind": kind, "properties": {}}
-    for field in ("Layer", "Color", "StyleName", "TextString", "Height", "Radius", "Rotation", "Measurement", "Name", "StartAngle", "EndAngle", "Thickness"):
+    for field in ("Layer", "Color", "Linetype", "LinetypeScale", "StyleName", "TextString", "Height", "Radius", "Rotation", "Measurement", "Name", "StartAngle", "EndAngle", "Thickness"):
         value = optional(entity, field)
         if isinstance(value, (str, int, float, bool)):
             if isinstance(value, float) and not math.isfinite(value):
@@ -141,6 +141,11 @@ def edit_document(app, doc, legacy, request, report, api, entities, before, outp
                         and 0 < len(value) <= 1000 and "\x00" not in value, "只能修改文字圖元的文字內容")
         elif kind == "color":
             api.require(type(value) is int and 1 <= value <= 255, "顏色需為 ACI 1–255")
+        elif kind == "linetype":
+            api.require(rows[handle]["kind"] in ("line", "circle", "arc"), "線型修改目前支援線／圓／弧")
+            api.require(all(field in rows[handle]["properties"] for field in ("Linetype", "LinetypeScale")),
+                        "缺少可核對的線型屬性，不能修改")
+            api.prepare_line_style(value)
         elif kind == "move":
             api.require(rows[handle]["kind"] in ("line", "circle", "text", "mtext"), "初版移動支援線／圓／文字")
             api.point_value(value)
@@ -156,20 +161,48 @@ def edit_document(app, doc, legacy, request, report, api, entities, before, outp
         elif kind == "delete":
             api.require(value is None, "刪除的 value 需為 null")
         else:
-            raise ValueError("只支援 text/color/move/radius/height/delete")
+            raise ValueError("只支援 text/color/linetype/move/radius/height/delete")
         api.require(not bool(doc.Layers.Item(rows[handle]["properties"]["Layer"]).Lock), "圖元所在圖層已鎖定")
     drawing = api.Drawing.__new__(api.Drawing)
     drawing.app, drawing.doc, drawing.model = app, doc, doc.ModelSpace
     drawing.legacy, drawing.expected = legacy, []
     drawing.report = report
     drawing.preflight_commands(additions)
+    # 縮放只調整視野，不需要圖元編輯的 Undo 群組。嚴格限定目前文件的
+    # 純 ZOOM 計畫；混入任何圖元操作、PURGE／AUDIT／REGEN 仍走下方保護。
+    # 保留原生確認、文件／revision 核對及每次指令前後的文件身分檢查。
+    view_only = (guard is not None and output is None and not edits and bool(additions)
+                 and all(op["kind"] == "command" and op["command"] in ("ZOOM EXTENTS", "ZOOM ALL")
+                         for op in additions))
+    if view_only:
+        report.update(view_only=True, undo_group_required=False)
+        for index, op in enumerate(additions):
+            guard()
+            report.update(step="view_command", operation_index=index, drawing_started=True)
+            # run_command 自行核對 ModelSpace／PaperSpace 的可讀屬性未改變。
+            drawing.run_command(op["command"])
+            guard()
+            report["completed_operations"] += 1
+        return {"status": "EDITED_UNSAVED", "saved": False, "view_only": True,
+                "modified_handles": [], "deleted_handles": [], "added_entities": 0,
+                "visual_check_required": True,
+                "verification": {"readable_entities_unchanged": True},
+                "advice": "縮放指令完成，未儲存、未關閉；可讀圖元內容核對未變。請目視確認顯示範圍。本輪未建立圖元 Undo 群組。"}
     deleted = set()
     # 目前圖面必須支援 Undo 群組才寫入；不透過 SendCommand 猜測指令完成。
     if guard:
         guard()
-        doc.StartUndoMark()
+        report["step"] = "prepare_undo_group"
+        # 開始前先確認起訖方法都存在，避免只能開始、不能結束的群組。
+        start_undo, end_undo = doc.StartUndoMark, doc.EndUndoMark
+        api.require(callable(start_undo) and callable(end_undo), "目前 CAD 不支援完整 Undo 群組，尚未修改圖元")
+        start_undo()
         report["undo_group_started"] = True
     try:
+        # 線型載入也屬於文件變更，須留在 Undo 群組內且先於任何圖元修改。
+        drawing.prepare_linetypes(
+            [op["line_style"] for op in additions if "line_style" in op]
+            + [edit["value"] for edit in edits if edit["kind"] == "linetype"])
         if additions:
             # 樣式建立也是寫入：保留在目前圖面的 Undo 群組內，且先於刪改既有圖元。
             report.update(step="prepare_annotation_styles", drawing_started=True)
@@ -187,6 +220,8 @@ def edit_document(app, doc, legacy, request, report, api, entities, before, outp
             elif kind == "color":
                 entity.Color = value
                 row["properties"]["Color"] = value
+            elif kind == "linetype":
+                row["properties"].update(drawing.apply_line_style(entity, value))
             elif kind in ("radius", "height"):
                 field = "Radius" if kind == "radius" else "Height"
                 if kind == "radius" and row["kind"] == "arc":
@@ -219,7 +254,7 @@ def edit_document(app, doc, legacy, request, report, api, entities, before, outp
             report["completed_operations"] += 1
     finally:
         if guard and report.get("undo_group_started"):
-            doc.EndUndoMark()
+            end_undo()
             report["undo_group_closed"] = True
     expected = {row["handle"]: row["properties"] for row in before if row["handle"] not in deleted}
     expected.update({row["handle"]: row["properties"] for row in drawing.expected})

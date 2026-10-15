@@ -120,7 +120,10 @@ def prepare(operations):
             continue
         require(not any(item["kind"] == "command" for item in prepared), "CAD 指令需放在本批幾何操作之後")
         require(isinstance(kind, str) and kind in fields, "未知繪圖操作")
-        require(set(op) == {"kind", "color"} | set(fields[kind].split()), "繪圖操作欄位缺漏或包含未知欄位")
+        optional_fields = {"line_style"} if kind in ("line", "circle", "curve") else set()
+        require(set(op) - optional_fields == {"kind", "color"} | set(fields[kind].split()), "繪圖操作欄位缺漏或包含未知欄位")
+        if "line_style" in op:
+            op["line_style"] = prepare_line_style(op["line_style"])
         require(type(op["color"]) is int and 1 <= op["color"] <= 255, "顏色需為 ACI 1–255")
         for key in ("start", "end", "center", "position", "location"):
             if key in op:
@@ -162,6 +165,17 @@ def prepare(operations):
         prepared.append(op)
     require(budget <= 4000, "總圖元數超過 4000 上限")
     return prepared
+
+
+def prepare_line_style(value):
+    """固定線型名稱及圖元比例；不接受模型提供 LIN 路徑或全圖變數。"""
+    require(isinstance(value, dict) and set(value) == {"name", "scale"}, "線型需 name/scale")
+    require(isinstance(value["name"], str), "線型名稱必須是字串")
+    name = value["name"].upper()
+    require(name in ("CONTINUOUS", "DASHED", "HIDDEN", "CENTER", "DASHDOT", "DOT", "BYLAYER", "BYBLOCK"), "不支援此線型名稱")
+    scale = number(value["scale"])
+    require(0.000001 <= scale <= 1000000, "線型比例需介於 0.000001 與 1000000")
+    return {"name": name, "scale": scale}
 
 
 def parse_command(value):
@@ -263,6 +277,60 @@ class Drawing:
             self.report.setdefault("annotation_style", {})["dimension_style_api"] = mode
         return name
 
+    def prepare_linetypes(self, styles):
+        """先載入缺少的標準線型；只查 CAD 安裝目錄，不變更既有定義或 LTSCALE。
+
+        Load 失敗即停止，不重播可能已改變文件的 COM 呼叫。使用者自行載入的
+        同名定義優先沿用；線型外觀仍受圖面比例與定義影響，需實機目視確認。
+        """
+        if not styles:
+            return
+        names = {prepare_line_style(style)["name"] for style in styles}
+        table = self.doc.Linetypes
+        loaded = {}
+        for index, item in enumerate(iter_entities(table)):
+            require(index < 10000, "線型定義超過讀取上限")
+            loaded[str(item.Name).upper()] = str(item.Name)
+        root = Path(str(self.app.FullName)).parent.resolve()
+        for name in sorted(names):
+            if name in loaded:
+                continue
+            # ByLayer／ByBlock 屬於原生特殊值，不從外部 LIN 載入。
+            if name in ("BYLAYER", "BYBLOCK"):
+                loaded[name] = "ByLayer" if name == "BYLAYER" else "ByBlock"
+                continue
+            source = None
+            for folder in (root, root / "Support"):
+                for filename in ("icadiso.lin", "gcadiso.lin", "acadiso.lin", "icad.lin", "gcad.lin", "acad.lin"):
+                    candidate = (folder / filename).resolve()
+                    if not candidate.is_relative_to(root) or not candidate.is_file():
+                        continue
+                    require(candidate.stat().st_size <= 4 * 1024 * 1024, "標準線型檔超過 4 MB")
+                    # 標準名稱為 ASCII；只尋找定義標頭，不解譯任何 LIN 程式內容。
+                    content = candidate.read_bytes().decode("latin-1")
+                    if re.search(r"(?im)^\s*\*" + re.escape(name) + r"\s*,", content):
+                        source = candidate
+                        break
+                if source is not None:
+                    break
+            require(source is not None, "找不到標準線型 " + name + "；請先在 CAD 載入此線型後再執行")
+            self.report.update(step="prepare_linetypes", drawing_started=True)
+            table.Load(name, str(source))
+            loaded[name] = str(table.Item(name).Name)
+            require(loaded[name].upper() == name, "載入後線型名稱不符")
+            self.report.setdefault("linetypes_loaded", []).append({"name": name, "source": str(source)})
+        self.linetype_names = loaded
+
+    def apply_line_style(self, entity, style):
+        """寫入並讀回原生圖元線型，回傳供存檔前後驗證的屬性。"""
+        style = prepare_line_style(style)
+        name = self.linetype_names[style["name"]]
+        entity.Linetype = name
+        entity.LinetypeScale = style["scale"]
+        require(str(entity.Linetype).upper() == name.upper(), "圖元線型讀回不符")
+        require(equal(entity.LinetypeScale, style["scale"]), "圖元線型比例讀回不符")
+        return {"Linetype": str(entity.Linetype), "LinetypeScale": style["scale"]}
+
     def prepare_styles(self, operations):
         """先準備整批所需樣式，避免完成部分幾何才發現樣式介面缺失。"""
         kinds = {op["kind"] for op in operations}
@@ -313,6 +381,11 @@ class Drawing:
         expected_start = len(self.expected)
         try:
             self.draw_entity(op)
+            if "line_style" in op:
+                # 曲線目前是取樣線段，逐段套用同一原生線型；不改動其他操作。
+                for row in self.expected[expected_start:]:
+                    entity = self.doc.HandleToObject(row["handle"])
+                    row["properties"].update(self.apply_line_style(entity, op["line_style"]))
         finally:
             if hasattr(self, "report"):
                 from cad_existing import describe
@@ -640,6 +713,7 @@ def execute(request, report):
     report["owned_document_created"] = True
     drawing.preflight_commands(operations)
     report["step"] = "prepare_annotation_styles"
+    drawing.prepare_linetypes([op["line_style"] for op in operations if "line_style" in op])
     drawing.prepare_styles(operations)
     for index, op in enumerate(operations):
         report.update(step=op["kind"], operation_index=index)
