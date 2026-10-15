@@ -1,52 +1,25 @@
+<!-- 開頭版本公告最多保留最新 3 個版本；歷史文件保留於 docs。 -->
 **0.8.59：CAD 標註樣式、目前圖面 HWND 備援與圖元診斷修正。** 保留原生引線；尺寸／引線字高3、箭頭3、ISO對正、偏移1與simplex.shx。未知額外圖元仍需診斷，公司 CAD 實機待測。[使用說明](docs/CAD_DRAWING.md) · [基礎驗證](docs/VALIDATION_0_8_59.md)
 
 **0.8.58：CAD 目前圖面不儲存編輯、共用副本操作與 Excel 座標繪圖。** 含文件確認、每輪 Undo 群組與更多基本編輯；CAD 指令與圖塊清理尚未加入。[使用說明](docs/CAD_DRAWING.md) · [基礎驗證](docs/VALIDATION_0_8_58.md)
 
 **0.8.57：CAD 連線提示、既有 DWG 副本讀取與限定修改測試版。** 原檔保留，先讀取圖元再改副本；含直徑符號與圖元核對診斷。[使用說明](docs/CAD_DRAWING.md) · [驗證範圍](docs/VALIDATION_0_8_57.md)
 
-**0.8.56：佑達 iCAD 引線、錯誤復原與成果狀態修正。** 基礎驗證與 NSIS 測試包，完整驗證延後。[驗證紀錄](docs/VALIDATION_0_8_56.md)
-
-**0.8.55：專案 AI CAD 繪圖與顏色測試版。** 對話中可要求新建 DWG、尺寸、中文文字、引線、剖面、公式曲線與 ACI 顏色；修改時另建新圖面。NSIS 隨附獨立 CAD runtime，僅做基礎驗證，完整驗證與本版公司實測待補。[使用範例](docs/CAD_DRAWING.md) · [驗證範圍](docs/VALIDATION_0_8_55.md)
-
-**0.8.54：專案程式碼唯讀與浩辰 CAD 獨立測試包。** [歷史驗證與界線](docs/VALIDATION_0_8_54.md) · [獨立工具說明](tools/gstarcad-probe/README.md)
-
-**0.8.53：修正聊天拒絕後持續查任務、連續錯誤停止追蹤，並整理分析摺疊與圖中文字編輯。** 使用者測試 OK 後，已補完完整開發環境與 NSIS 驗證。[驗證與界線](docs/VALIDATION_0_8_53.md)
-
-**0.8.52：分析完成摘要、LOG事件時間表、左右內容比較、方法重用與文件來源預覽，並修正Outlook ConversationID相容性。** [驗證與界線](docs/VALIDATION_0_8_52.md)
-
-**0.8.51：Outlook 日期批次與可中止讀取、Python 草稿區段與測試工作資料。** [驗證與界線](docs/VALIDATION_0_8_51.md)
-
-> **0.8.48：圖中文字、AI 圖表編輯與 Python 原始碼試用。** 可拖曳圖表文字並調整字型、色彩與底色；AI 可接續編輯歷史圖表。本機時間保存在對話與工具紀錄，Python 可修改副本並驗證語法。詳見 [驗證與限制](docs/VALIDATION_0_8_48.md)。
-
-> **0.8.47：郵件成果筆記、圖表與診斷改善。** 讀信後保存摘要及待寫草稿，依工作階段載入工具，優先查回既有成果；量測軸採標準差留白，AI可畫參考線。設定改頁籤，新增錯誤碼與診斷匯出、本機日期依據。詳見 [驗證與限制](docs/VALIDATION_0_8_47.md)。
-
-> **0.8.45：長任務恢復與分析依據。** 預設專案改存本機個人資料夾；暫時上游故障依10／30／60／180／300秒恢復，耗盡可續接。Outlook按新郵件與實際範圍判定進展，加入分析依據、筆數核對與專案方法記憶。圖片併入一般專案來源，移除專用按鈕與獨立技能。詳見 [驗證與限制](docs/VALIDATION_0_8_45.md)。
-
-> **0.8.44：圖表編輯與重試改善。** 對話框按鈕加底色，編輯器分三頁並提供說明；X／Y 可自動向外取整，空白參考線不顯示數字，游標同時顯示 X、Y。Python／其他工具失敗上限分別為10／5次。詳見 [驗證紀錄](docs/VALIDATION_0_8_44.md)。
-
-> **0.8.43：圖表座標與 Python LOG 改善。** X／Y 可平移、重新編號，並移除全系列無值位置；異常值選擇有三張示意。Python LOG 先試 Big5 再試 UTF-8，參數錯誤指出欄位位置。相同 Python 環境更新時直接沿用，專案圖片由 AI 按需閱讀。詳見 [驗證與限制](docs/VALIDATION_0_8_43.md)。
-
-> **0.8.42：離線 Python 分析與完整安裝包。** 新增 pandas／NumPy／openpyxl，支援 CSV／LOG 統計及 XLSX 成果；公司原始 Excel 仍經 Excel COM 讀取。請使用本版 NSIS 安裝。詳見 [驗證與限制](docs/VALIDATION_0_8_42.md)。
-
-> **0.8.41：圖片請求關聯與閱讀位置修正。** 圖片／快速摘要沿用父請求對話；圖片最大5 MB、每次任務1張，快速模型不公告或執行圖片工具。後續只帶文字重點；工具紀錄追加時保留閱讀位置。詳見 [驗證與限制](docs/VALIDATION_0_8_41.md)。
-
-> **0.8.40：Excel 欄位核對與圖表自訂。** 時間／X／Y先規劃再本機篩選。完成圖表可雙擊或按「編輯圖表」，調整標題、軸範圍、圖例、色彩與參考線；可恢復原樣，或直接存PNG至_AI_Output。類別軸使用實際標籤（時間請含完整秒數），重複標籤可用 #資料序號。新增階梯線、面積及水平長條。詳見 [本版驗證與限制](docs/VALIDATION_0_8_40.md)。
-
 # LM_AI — Windows 工作助理
 
 CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供日常問答、文件整理、專案副本修訂與 Classic Outlook 郵件分析。
 
-**目前 EXE／NSIS：0.8.54（基礎驗證測試包）** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
+**目前 EXE／NSIS：0.8.59（基礎驗證測試包）** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
 
 ## 下載與開始使用
 
-1. [下載 0.8.54 完整 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從系統托盤選「離開」，再以一般權限安裝至 `C:\largan\LM_AI`；Python 會放在旁邊的 `python` 子目錄。本版只做基礎檢查與 NSIS 打包，尚未補做完整安裝流程驗證。
+1. [下載 0.8.59 完整 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從系統托盤選「離開」，再以一般權限安裝至 `C:\largan\LM_AI`；Python 會放在旁邊的 `python` 子目錄。本版只做基礎檢查與 NSIS 打包，尚未補做完整安裝流程驗證。
 2. 開啟程式，按「登入」，在瀏覽器核對短碼並允許授權。
 3. 選擇模型後開始對話；需要讀取或修改資料夾內的文件時，先建立「專案」。
 
 執行需要 WebView2 Runtime，不需安裝 Rust、Node 或 Python。若啟動時提示缺少 WebView2，請依 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md) 處理。正式功能需要公司服務連線與桌面帳號權限。
 
-本版 EXE 與 NSIS 都是 **0.8.54**，只做基礎驗證。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
+本版 EXE 與 NSIS 都是 **0.8.59**，只做基礎驗證。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
 
 ## 可以做什麼
 
