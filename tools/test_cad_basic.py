@@ -60,12 +60,65 @@ class BasicTests(unittest.TestCase):
             GetVariable=lambda name: values[name], SetVariable=lambda name, value: values.__setitem__(name,value))
         drawing = worker.Drawing.__new__(worker.Drawing)
         drawing.app, drawing.doc, drawing.report = SimpleNamespace(), doc, {}
-        name = drawing.annotation_style()
+        drawing.legacy = False
+        name = drawing.dimension_style()
         self.assertEqual(style.FontFile, "simplex.shx")
         self.assertEqual(style.BigFontFile, "chineset.shx")
         self.assertEqual(values, original)
         self.assertEqual([captured[k] for k in ("DIMTXT","DIMASZ","DIMGAP","DIMTIH","DIMTOH")], [3,3,1,0,1])
         self.assertEqual(captured["DIMTXSTY"], name)
+
+    def test_legacy_dimension_styles_native_properties_without_alias_or_copy(self):
+        class NativeStyle:
+            __slots__ = ("DimTxt", "DimAsz", "DimGap", "DimTih", "DimToh", "DimTad",
+                         "DimTsz", "DimScale", "DimTxSty")
+        style = NativeStyle()
+        calls = []
+        class LegacyDocument:
+            DimensionStyles = SimpleNamespace(Add=lambda name: calls.append(name) or style,
+                                             Item=lambda name: style)
+            @property
+            def DimStyles(self):
+                raise AssertionError("iCAD 2008 must not access DimStyles")
+            def SetVariable(self, *args):
+                raise AssertionError("native style must not change document defaults")
+        drawing = worker.Drawing.__new__(worker.Drawing)
+        drawing.doc, drawing.legacy, drawing.report = LegacyDocument(), True, {}
+        drawing.annotation_style = lambda: "LM_test"
+        drawing.prepare_styles([dict(kind="line"), dict(kind="aligned_dimension"), dict(kind="leader")])
+        self.assertEqual(calls, ["LM_test"])
+        self.assertEqual([style.DimTxt, style.DimAsz, style.DimGap, style.DimTih, style.DimToh], [3,3,1,0,1])
+        self.assertEqual(style.DimTxSty, "LM_test")
+        drawing.verify_styles(drawing.doc)
+        style.DimAsz = 9
+        with self.assertRaisesRegex(ValueError, "DimAsz"):
+            drawing.verify_styles(drawing.doc)
+
+    def test_text_style_does_not_access_dimension_collections(self):
+        style = SimpleNamespace()
+        doc = SimpleNamespace(TextStyles=SimpleNamespace(Add=lambda name: style,
+            Item=lambda name: SimpleNamespace(BigFontFile="chineset.shx")),
+            ActiveTextStyle=SimpleNamespace(BigFontFile=""), GetVariable=lambda name:"User")
+        drawing = worker.Drawing.__new__(worker.Drawing)
+        drawing.app, drawing.doc, drawing.report, drawing.legacy = SimpleNamespace(), doc, {}, True
+        drawing.prepare_styles([dict(kind="text")])
+        self.assertEqual(style.FontFile, "simplex.shx")
+        self.assertFalse(hasattr(drawing, "dimension_style_name"))
+
+    def test_style_preflight_failure_keeps_existing_entities_and_closes_undo(self):
+        app, doc, entity, calls = self.active_fixture()
+        request = self.active_request(app, doc, [dict(handle="A", kind="delete", value=None)])
+        request["operations"] = [dict(kind="aligned_dimension", color=7,
+                                      start=[0,0], end=[200,0], location=[100,-15])]
+        report = {"completed_operations":0}
+        with patch.object(cad_active,"identity",return_value=request["document"]), \
+             patch.object(worker.Drawing,"prepare_styles",side_effect=AttributeError("DimensionStyles")), \
+             self.assertRaises(AttributeError):
+            cad_active.execute_active(app, True, request, report, worker)
+        self.assertEqual(doc.ModelSpace, [entity])
+        self.assertEqual(calls, ["begin","end"])
+        self.assertEqual(report["completed_operations"], 0)
+        self.assertEqual(report["step"], "prepare_annotation_styles")
 
     def test_legacy_native_leader_tracks_only_linked_annotation(self):
         class Model(list):
@@ -88,6 +141,7 @@ class BasicTests(unittest.TestCase):
         drawing.legacy, drawing.model, drawing.expected, drawing.report = True, Model(), [], {}
         drawing.point, drawing.points = lambda p: p, lambda p: p
         drawing.annotation_style = lambda: "LM_test"
+        drawing.dimension_style = lambda: "LM_test"
         drawing.draw(worker.prepare([dict(kind="leader", color=3, points=[[0,0],[10,10],[30,10]],
                                          text="%%c10", height=3)])[0])
         self.assertEqual(drawing.model.argument, 0)
@@ -362,6 +416,7 @@ class BasicTests(unittest.TestCase):
         drawing.legacy, drawing.model, drawing.expected = False, Model(), []
         drawing.point, drawing.points = lambda p: p, lambda p: p
         drawing.annotation_style = lambda: "LM_test"
+        drawing.dimension_style = lambda: "LM_test"
         op = worker.prepare([dict(kind="leader", color=5, points=[[25,20],[50,45],[100,45]], text="此孔直徑10", height=2.5)])[0]
         drawing.draw(op)
         self.assertEqual(calls, [2])

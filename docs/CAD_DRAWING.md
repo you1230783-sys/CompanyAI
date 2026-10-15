@@ -1,3 +1,11 @@
+## 0.8.60：iCAD 2008 尺寸樣式介面
+
+舊版使用 `Document.DimensionStyles.Add` 與 `DimTxt`／`DimAsz`／`DimGap` 等原生屬性；不再呼叫缺少的 `DimStyles` 或 `CopyFrom`。2008 的新樣式設定會立即讀回，並在儲存重開後核對。GstarCAD 使用原相容介面。一般文字僅準備文字樣式，不依賴尺寸樣式集合。
+
+整批所需樣式在幾何繪製／既有圖元刪改之前準備；目前文件的樣式準備保留在 Undo 群組內。前置失敗仍可能留下新建空圖或未使用樣式，不自動關閉、重播或假稱沒有寫入。
+
+介面參考：[IntelliCAD Document 成員](https://www.progesoft.com/products/progecad-professional/manual?mp=developer-reference/api-reference/objects/document-object/members)、[DimensionStyle 原生屬性](https://www.progesoft.com/products/progecad-professional/manual?mp=developer-reference/api-reference/objects/dimensionstyle-object/members)。參考文件較新，不能取代公司2008實測。[本版驗證](VALIDATION_0_8_60.md)。
+
 ## 0.8.59：標註與舊版讀取修正
 
 - 尺寸／引線字高3、箭頭3、ISO文字對正、距尺寸線1，使用專用 simplex.shx 樣式。一般文字保留明確 height 參數，預設3。中文沿用現有 BigFont，或使用 CAD 安裝目錄已存在的 chineset.shx；若沒有中文字型，報告會提示，需在 CAD 設定後確認外觀。

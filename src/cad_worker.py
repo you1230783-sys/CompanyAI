@@ -190,19 +190,6 @@ class Drawing:
                         break
         if bigfont:
             style.BigFontFile = bigfont
-        # CopyFrom(Document) 將暫時的尺寸變數固化在獨立樣式；隨即還原預設值。
-        values = {"DIMTXT": 3.0, "DIMASZ": 3.0, "DIMGAP": 1.0,
-                  "DIMTIH": 0, "DIMTOH": 1, "DIMTAD": 1, "DIMTSZ": 0.0,
-                  "DIMSCALE": 1.0, "DIMTXSTY": name}
-        previous = {key: self.doc.GetVariable(key) for key in values}
-        try:
-            for key, value in values.items():
-                self.doc.SetVariable(key, value)
-            dimension_style = self.doc.DimStyles.Add(name)
-            dimension_style.CopyFrom(self.doc)
-        finally:
-            for key, value in previous.items():
-                self.doc.SetVariable(key, value)
         self.annotation_style_name = name
         if hasattr(self, "report"):
             self.report["annotation_style"] = dict(name=name, font="simplex.shx",
@@ -211,6 +198,59 @@ class Drawing:
                 chinese_note="使用原樣式或已安裝的繁體中文 BigFont；中文仍需目視核對" if bigfont
                 else "原樣式無 BigFont；simplex.shx 不保證中文字形，請在 CAD 指定中文字型或 BigFont")
         return name
+
+    def dimension_style(self):
+        """尺寸與引線才需要尺寸樣式；一般文字不依賴尺寸集合介面。
+
+        佑達 iCAD 使用 IntelliCAD 原生 DimensionStyles／Dim* 屬性。
+        GstarCAD 使用 AutoCAD 相容的 DimStyles／CopyFrom，不混用兩套介面。
+        """
+        if hasattr(self, "dimension_style_name"):
+            return self.dimension_style_name
+        name = self.annotation_style()
+        values = {"DimTxt": 3.0, "DimAsz": 3.0, "DimGap": 1.0,
+                  "DimTih": 0, "DimToh": 1, "DimTad": 1, "DimTsz": 0.0,
+                  "DimScale": 1.0, "DimTxSty": name}
+        if self.legacy:
+            # 不先嘗試已知不支援的別名，也不呼叫原生樣式沒有的 CopyFrom。
+            style = self.doc.DimensionStyles.Add(name)
+            for key, value in values.items():
+                setattr(style, key, value)
+                require(equal(getattr(style, key), value), "舊版尺寸樣式設定讀回不符：" + key)
+            self.dimension_style_expected = values
+            mode = "DimensionStyles.Add/native_properties"
+        else:
+            # 將暫時的尺寸變數固化在新樣式；無論成功與否都還原文件預設值。
+            previous = {key.upper(): self.doc.GetVariable(key.upper()) for key in values}
+            try:
+                for key, value in values.items():
+                    self.doc.SetVariable(key.upper(), value)
+                style = self.doc.DimStyles.Add(name)
+                style.CopyFrom(self.doc)
+            finally:
+                for key, value in previous.items():
+                    self.doc.SetVariable(key, value)
+            mode = "DimStyles.Add/CopyFrom"
+        self.dimension_style_name = name
+        if hasattr(self, "report"):
+            self.report.setdefault("annotation_style", {})["dimension_style_api"] = mode
+        return name
+
+    def prepare_styles(self, operations):
+        """先準備整批所需樣式，避免完成部分幾何才發現樣式介面缺失。"""
+        kinds = {op["kind"] for op in operations}
+        if kinds & {"aligned_dimension", "diameter_dimension", "leader"}:
+            self.dimension_style()
+        elif kinds & {"text", "mtext"}:
+            self.annotation_style()
+
+    def verify_styles(self, doc):
+        """舊版獨立尺寸樣式在儲存前與重開後都讀回，不把設定成功當作持久化。"""
+        values = getattr(self, "dimension_style_expected", {})
+        if values:
+            style = doc.DimensionStyles.Item(self.dimension_style_name)
+            for key, value in values.items():
+                require(equal(getattr(style, key), value), "尺寸樣式核對失敗：" + key)
 
     def point(self, point):
         if self.legacy:
@@ -285,7 +325,7 @@ class Drawing:
             for start, end in zip(op["samples"], op["samples"][1:]):
                 self.line(start, end, color)
         elif kind in ("aligned_dimension", "diameter_dimension"):
-            style_name = self.annotation_style()
+            style_name = self.dimension_style()
             start, end = self.point(op["start"]), self.point(op["end"])
             if kind == "aligned_dimension":
                 obj = self.model.AddDimAligned(start, end, self.point(op["location"]))
@@ -301,7 +341,7 @@ class Drawing:
         # 帶箭頭直線是 2；0 是無箭頭，不能混淆 ArrowheadType 的 0。
         before = {str(entity.Handle).upper() for entity in self.model}
         leader = self.model.AddLeader(self.points(op["points"]), 0 if self.legacy else None, 2)
-        leader.StyleName = self.annotation_style()
+        leader.StyleName = self.dimension_style()
         properties = dict(Type=2, StyleName=leader.StyleName)
         if not self.legacy:
             leader.ArrowheadSize = 3.0
@@ -350,6 +390,7 @@ class Drawing:
         self.remember(hatch, color, PatternScale=op["scale"])
 
     def verify(self, doc):
+        self.verify_styles(doc)
         require(int(doc.GetVariable("INSUNITS")) == 4, "圖面單位不是毫米")
         rows = list(doc.ModelSpace)
         entities = {str(entity.Handle).upper(): entity for entity in rows}
@@ -434,6 +475,8 @@ def execute(request, report):
     drawing = Drawing(app, family == "yoda_icad_2008")
     drawing.report = report
     report["owned_document_created"] = True
+    report["step"] = "prepare_annotation_styles"
+    drawing.prepare_styles(operations)
     for index, op in enumerate(operations):
         report.update(step=op["kind"], operation_index=index)
         drawing.draw(op)

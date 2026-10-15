@@ -154,6 +154,10 @@ def edit_document(app, doc, legacy, request, report, api, entities, before, outp
         doc.StartUndoMark()
         report["undo_group_started"] = True
     try:
+        if additions:
+            # 樣式建立也是寫入：保留在目前圖面的 Undo 群組內，且先於刪改既有圖元。
+            report.update(step="prepare_annotation_styles", drawing_started=True)
+            drawing.prepare_styles(additions)
         for index, edit in enumerate(edits):
             if guard:
                 guard()
@@ -205,6 +209,7 @@ def edit_document(app, doc, legacy, request, report, api, entities, before, outp
     expected.update({row["handle"]: row["properties"] for row in drawing.expected})
 
     def verify(target):
+        drawing.verify_styles(target)
         actual, _ = snapshot(target, api)
         api.require(set(actual) == set(expected), "圖面 Handle 集合不符，不能宣稱操作完成")
         for row in drawing.expected:
