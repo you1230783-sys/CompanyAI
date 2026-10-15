@@ -621,7 +621,7 @@ mod tests {
             ("review_code_change", json!({"copy_id":"c","revision":"r","checks":[]})),
             ("cad_inventory", json!({})),
             ("cad_active_read",json!({"version":"latest","offset":0})),
-            ("cad_active_edit",json!({"revision":"r","edits":[{"handle":"AB","kind":"delete","value":null}],"operations":[]})),
+            ("cad_active_edit",json!({"revision":"r","edits":[{"handle":"AB","kind":"delete","value":null}],"operations":[{"kind":"command","command":"ZOOM E"}]})),
             ("cad_excel_plan",json!({"path":"a.xlsx","revision":"r","settings":{"sheet":1,"header_row":1,"start_row":2,"row_count":2,"x_column":"A","y_column":"B","radius_column":null,"label_column":null,"kind":"circles","radius":5,"scale":1,"origin":[0,0],"color":1,"height":3,"closed":false,"units_code":4}})),
             ("cad_excel_apply",json!({"plan_id":"p","target":"new","path":null,"revision":null,"name":"a.dwg","version":"latest"})),
             ("cad_read", json!({"path":"a.dwg","version":"latest","offset":0,"revision":null})),

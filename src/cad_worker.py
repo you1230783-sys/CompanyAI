@@ -14,6 +14,7 @@ import pythoncom
 from win32com.client import VARIANT, dynamic
 import registry
 from cad import identify_product
+from cad_existing import iter_entities
 
 sys.dont_write_bytecode = True
 
@@ -108,6 +109,12 @@ def prepare(operations):
         require(isinstance(source, dict), "每個操作必須是物件")
         op = dict(source)
         kind = op.get("kind")
+        if kind == "command":
+            require(set(op) == {"kind", "command"}, "指令操作只接受 kind/command")
+            op["command"] = parse_command(op["command"])
+            prepared.append(op)
+            continue
+        require(not any(item["kind"] == "command" for item in prepared), "CAD 指令需放在本批幾何操作之後")
         require(isinstance(kind, str) and kind in fields, "未知繪圖操作")
         require(set(op) == {"kind", "color"} | set(fields[kind].split()), "繪圖操作欄位缺漏或包含未知欄位")
         require(type(op["color"]) is int and 1 <= op["color"] <= 255, "顏色需為 ACI 1–255")
@@ -151,6 +158,22 @@ def prepare(operations):
         prepared.append(op)
     require(budget <= 4000, "總圖元數超過 4000 上限")
     return prepared
+
+
+def parse_command(value):
+    """完整比對指令語法；不將模型字串交給 SendCommand／LISP／Shell。"""
+    require(isinstance(value, str) and 0 < len(value) <= 80, "CAD 指令長度需為 1–80 字元")
+    require(not any(c in value for c in "\r\n\x00;()\""), "CAD 指令不接受多行、串接或程式運算式")
+    words = [word.lstrip("_.").upper() for word in value.strip().split()]
+    aliases = {
+        ("ZOOM", "E"): "ZOOM EXTENTS", ("ZOOM", "EXTENTS"): "ZOOM EXTENTS",
+        ("ZOOM", "A"): "ZOOM ALL", ("ZOOM", "ALL"): "ZOOM ALL",
+        ("REGEN",): "REGEN", ("PURGE",): "PURGE",
+        ("-PURGE", "A", "*", "N"): "PURGE",
+        ("AUDIT", "N"): "AUDIT N",
+    }
+    require(tuple(words) in aliases, "尚未支援此 CAD 指令；允許 ZOOM E/A、REGEN、PURGE、AUDIT N")
+    return aliases[tuple(words)]
 
 
 class Drawing:
@@ -238,6 +261,9 @@ class Drawing:
 
     def prepare_styles(self, operations):
         """先準備整批所需樣式，避免完成部分幾何才發現樣式介面缺失。"""
+        for op in operations:
+            if op["kind"] == "command":
+                self.command_method(op["command"])  # 缺少介面時在幾何操作之前停止。
         kinds = {op["kind"] for op in operations}
         if kinds & {"aligned_dimension", "diameter_dimension", "leader"}:
             self.dimension_style()
@@ -270,7 +296,8 @@ class Drawing:
     def remember(self, entity, color, **properties):
         entity.Color = color
         properties["Color"] = color
-        self.expected.append({"handle": str(entity.Handle).upper(), "properties": properties})
+        self.expected.append({"handle": str(entity.Handle).upper(), "properties": properties,
+                              "operation_index": getattr(self, "report", {}).get("operation_index")})
         return entity
 
     def line(self, start, end, color):
@@ -281,23 +308,31 @@ class Drawing:
 
     def draw(self, op):
         """記錄每項新增 Handle，讓未知圖元能追溯到產生的操作。"""
-        before = {str(entity.Handle).upper() for entity in self.model}
+        before = {str(entity.Handle).upper() for entity in iter_entities(self.model)}
+        expected_start = len(self.expected)
         try:
             self.draw_entity(op)
         finally:
             if hasattr(self, "report"):
                 from cad_existing import describe
+                audit = {"operation_index": self.report.get("operation_index"), "kind": op["kind"],
+                         "expected_entities": self.expected[expected_start:]}
+                self.report.setdefault("operation_entities", []).append(audit)
                 try:
-                    added = [describe(entity, sys.modules[__name__]) for entity in self.model
+                    after = list(iter_entities(self.model))
+                    added = [describe(entity, sys.modules[__name__]) for entity in after
                              if str(entity.Handle).upper() not in before]
-                    self.report.setdefault("operation_entities", []).append({
-                        "operation_index": self.report.get("operation_index"),
-                        "kind": op["kind"], "entities": added})
+                    audit.update(entities=added,
+                                 removed_handles=sorted(before - {str(e.Handle).upper() for e in after}))
                 except Exception as diagnostic_error:
                     # 診斷讀取不能蓋過原始繪圖錯誤；最終 verify 仍嚴格核對集合。
                     self.report.setdefault("audit_errors", []).append(str(diagnostic_error))
+                    audit["enumeration_error"] = str(diagnostic_error)
 
     def draw_entity(self, op):
+        if op["kind"] == "command":
+            self.run_command(op["command"])
+            return
         kind, color = op["kind"], op["color"]
         if kind == "line":
             self.line(op["start"], op["end"], color)
@@ -315,6 +350,8 @@ class Drawing:
         elif kind == "leader":
             style_name = self.annotation_style()
             self.native_leader(op)
+            if self.legacy:
+                return  # 原生 AddLeader 已建立並設定註解，不重複插入文字。
             # 固定字高 3、距水平尺寸線 1；字串的直徑符號已由 prepare 正規化。
             position = [min(op["points"][1][0], op["points"][2][0])+1, op["points"][1][1]+1, 0.0]
             text = self.model.AddText(op["text"], self.point(position), 3.0)
@@ -337,10 +374,76 @@ class Drawing:
         elif kind == "hatch":
             self.draw_hatch(op)
 
+    def command_method(self, command):
+        """每個允許指令對應固定同步 COM 方法，版本不支援時不偷換成字串注入。"""
+        if command == "ZOOM EXTENTS":
+            return self.app.ZoomExtents
+        if command == "ZOOM ALL":
+            return self.app.ZoomAll
+        if command == "REGEN":
+            return self.doc.Regen
+        if command == "PURGE":
+            return self.doc.PurgeAll
+        if command == "AUDIT N":
+            return self.doc.AuditInfo
+        raise ValueError("未知 CAD 指令")
+
+    def run_command(self, command):
+        """固定文件內執行維護指令；核對可讀圖元，不把 AUDIT 呼叫返回當作無錯誤。"""
+        from cad_existing import describe
+        method = self.command_method(command)
+        require(int(self.doc.GetVariable("CMDACTIVE")) == 0, "CAD 正在執行其他指令，請先完成或取消")
+
+        def entities():
+            result = {}
+            size = 0
+            for name in ("ModelSpace", "PaperSpace"):
+                rows = []
+                for index, entity in enumerate(iter_entities(getattr(self.doc, name))):
+                    require(index < 200000, "指令核對圖元超過上限")
+                    row = describe(entity, sys.modules[__name__])
+                    size += len(json.dumps(row, ensure_ascii=False).encode("utf-8"))
+                    require(size <= 64 * 1024 * 1024, "指令核對內容超過 64 MB")
+                    rows.append(row)
+                result[name] = sorted(rows, key=lambda row:row["handle"])
+            return result
+
+        def definitions():
+            result = {}
+            for name in ("Blocks", "Layers", "Linetypes", "TextStyles",
+                         "DimensionStyles" if self.legacy else "DimStyles"):
+                rows = []
+                for index, item in enumerate(iter_entities(getattr(self.doc, name))):
+                    require(index < 10000, "未使用定義清理核對超過上限")
+                    rows.append(str(item.Name))
+                result[name] = sorted(rows)
+            return result
+
+        before = entities()
+        tables = definitions() if command == "PURGE" else {}
+        entry = {"command":command, "status":"STARTED", "execution":"synchronous_com",
+                 "definitions_before":tables}
+        self.report.setdefault("commands", []).append(entry)
+        self.doc.Activate()
+        if command == "AUDIT N":
+            method(False)
+        elif command == "REGEN" and not self.legacy:
+            method(1)
+        else:
+            method()
+        require(int(self.doc.GetVariable("CMDACTIVE")) == 0, "指令結束狀態未確認")
+        require(entities() == before, "維護指令後圖元可讀內容不符；停止後續操作")
+        if tables:
+            after = definitions()
+            entry["removed_definitions"] = {key:sorted(set(values)-set(after[key])) for key,values in tables.items()}
+        entry.update(status="COMPLETED", readable_entities_unchanged=True,
+                     audit_clean_not_verified=command == "AUDIT N", visual_check_required=True)
+
     def native_leader(self, op):
         # 帶箭頭直線是 2；0 是無箭頭，不能混淆 ArrowheadType 的 0。
-        before = {str(entity.Handle).upper() for entity in self.model}
-        leader = self.model.AddLeader(self.points(op["points"]), 0 if self.legacy else None, 2)
+        before = {str(entity.Handle).upper() for entity in iter_entities(self.model)}
+        # IntelliCAD 原生第二參數是文字；AutoCAD 相容介面才是註解物件。
+        leader = self.model.AddLeader(self.points(op["points"]), op["text"] if self.legacy else None, 2)
         leader.StyleName = self.dimension_style()
         properties = dict(Type=2, StyleName=leader.StyleName)
         if not self.legacy:
@@ -348,6 +451,26 @@ class Drawing:
             leader.ArrowheadType = 0
             properties.update(ArrowheadSize=3.0, ArrowheadType=0)
         self.remember(leader, op["color"], **properties)
+        if self.legacy:
+            from cad_existing import describe
+            created = [e for e in iter_entities(self.model) if str(e.Handle).upper() not in before
+                       and str(e.Handle).upper() != str(leader.Handle).upper()]
+            # 僅接受本次同步呼叫新建、內容和端點皆吻合的唯一註解。
+            # 不靠總數吞掉未知物件，也不刪除使用者的文字。
+            require(len(created) == 1, "原生引線註解數量不符")
+            annotation = created[0]
+            row = describe(annotation, sys.modules[__name__])
+            require(row["kind"] in ("text", "mtext")
+                    and text_equal(row["properties"].get("TextString", ""), op["text"])
+                    and equal(row["properties"].get("InsertionPoint"), op["points"][-1]),
+                    "原生引線新建註解內容或位置不符")
+            position = [min(op["points"][1][0], op["points"][2][0])+1, op["points"][1][1]+1, 0.0]
+            annotation.StyleName = self.annotation_style()
+            annotation.Height = 3.0
+            annotation.InsertionPoint = self.point(position)
+            self.remember(annotation, op["color"], TextString=op["text"], Height=3.0,
+                          StyleName=annotation.StyleName, InsertionPoint=position)
+            return
         # 某些版本會自動建立空白註解。只有 COM 明示關聯、此次新建且位於
         # ModelSpace 的文字才納入預期集合；絕不按數量猜測／忽略未知物件。
         from cad_existing import optional, describe
@@ -355,7 +478,7 @@ class Drawing:
         handle = optional(annotation, "Handle") if annotation is not None else None
         if handle:
             handle = str(handle).upper()
-            members = {str(entity.Handle).upper() for entity in self.model}
+            members = {str(entity.Handle).upper() for entity in iter_entities(self.model)}
             row = describe(annotation, sys.modules[__name__])
             if hasattr(self, "report"):
                 self.report.setdefault("leader_annotations", []).append({
@@ -381,6 +504,10 @@ class Drawing:
                 selection.AddItems(array(outer + holes))
                 hatch.ApplyHatch(selection, self.points([op["seed"]]))
             finally:
+                # IntelliCAD Delete 會刪除集合內圖元；先清空成員才可刪除容器。
+                # Clear 失敗時不執行 Delete，保留圖面供診斷。
+                selection.Clear()
+                require(int(selection.Count) == 0, "剖面暫存選取集未清空；保留集合與邊界")
                 selection.Delete()
         else:
             hatch.AppendOuterLoop(array(outer))
@@ -392,13 +519,14 @@ class Drawing:
     def verify(self, doc):
         self.verify_styles(doc)
         require(int(doc.GetVariable("INSUNITS")) == 4, "圖面單位不是毫米")
-        rows = list(doc.ModelSpace)
+        rows = list(iter_entities(doc.ModelSpace))
         entities = {str(entity.Handle).upper(): entity for entity in rows}
         expected = {row["handle"] for row in self.expected}
         missing, extra = sorted(expected - entities.keys()), sorted(entities.keys() - expected)
         self.last_audit = dict(expected_count=len(self.expected), reported_count=int(doc.ModelSpace.Count),
                                enumerated_count=len(rows), unique_handles=len(entities),
                                missing_handles=missing[:100], unexpected_handles=extra[:100])
+        self.last_audit["missing_expected_entities"] = [row for row in self.expected if row["handle"] in missing][:100]
         if extra:
             from cad_existing import describe
             self.last_audit["unexpected_entities"] = [describe(entities[h], sys.modules[__name__]) for h in extra[:100]]

@@ -14,6 +14,40 @@ from unittest.mock import patch
 
 
 class BasicTests(unittest.TestCase):
+    def test_command_parser_rejects_programs_and_unbounded_commands(self):
+        for value in ('_.ZOOM _E', 'ZOOM A', 'REGEN', '_-PURGE _A * _N', 'AUDIT N'):
+            self.assertEqual(worker.prepare([dict(kind="command",command=value)])[0]["kind"], "command")
+        for value in ('AUDIT Y','SAVEAS x.dwg','EXPLODE ALL','SHELL','(load "x")',
+                      'REGEN\nQUIT','ZOOM E;QUIT','PURGE *','SCRIPT x','ZOOM 2X'):
+            with self.assertRaises(ValueError): worker.prepare([dict(kind="command",command=value)])
+        with self.assertRaises(ValueError):
+            worker.prepare([dict(kind="command",command="REGEN"),dict(kind="circle",color=1,center=[0,0],radius=2)])
+
+    def test_commands_sync_no_save_and_readable_entities_preserved(self):
+        drawing = worker.Drawing.__new__(worker.Drawing)
+        drawing.legacy, drawing.report = True, {}
+        entity = SimpleNamespace(Handle="1",ObjectName="Circle",Radius=5.,Color=1)
+        calls = []
+        blocks = [SimpleNamespace(Name="unused")]
+        drawing.app = SimpleNamespace(ZoomExtents=lambda:calls.append("zoom"),ZoomAll=lambda:calls.append("all"))
+        drawing.doc = SimpleNamespace(ModelSpace=[entity],PaperSpace=[],Blocks=blocks,Layers=[],
+            Linetypes=[],TextStyles=[],DimensionStyles=[],GetVariable=lambda key:0,
+            Activate=lambda:calls.append("activate"),Regen=lambda:calls.append("regen"),
+            PurgeAll=lambda:blocks.clear(),AuditInfo=lambda fix:calls.append(("audit",fix)))
+        for command in ('ZOOM EXTENTS','ZOOM ALL','REGEN','PURGE','AUDIT N'):
+            drawing.run_command(command)
+        self.assertIn(("audit",False), calls)
+        self.assertEqual(drawing.report["commands"][3]["removed_definitions"]["Blocks"],["unused"])
+        self.assertTrue(drawing.report["commands"][-1]["audit_clean_not_verified"])
+        drawing.doc.PurgeAll=lambda:setattr(entity,"Radius",10.)
+        with self.assertRaisesRegex(ValueError,"圖元可讀內容不符"): drawing.run_command("PURGE")
+        self.assertEqual(drawing.report["commands"][-1]["status"],"STARTED")
+
+    def test_busy_cad_command_is_not_executed(self):
+        drawing = worker.Drawing.__new__(worker.Drawing)
+        drawing.doc = SimpleNamespace(Regen=lambda:self.fail("不應執行"),GetVariable=lambda key:1)
+        with self.assertRaisesRegex(ValueError,"正在執行其他指令"): drawing.run_command("REGEN")
+
     def test_missing_hwnd_still_reads_without_edit_permission(self):
         app, doc, _, calls = self.active_fixture()
         result = cad_active.execute_active(app, True, dict(action="active_read", offset=0), {}, worker)
@@ -120,15 +154,15 @@ class BasicTests(unittest.TestCase):
         self.assertEqual(report["completed_operations"], 0)
         self.assertEqual(report["step"], "prepare_annotation_styles")
 
-    def test_legacy_native_leader_tracks_only_linked_annotation(self):
+    def test_legacy_native_leader_creates_text_annotation_once(self):
         class Model(list):
             @property
             def Count(self): return len(self)
             def AddLeader(self, points, annotation, kind):
                 self.argument = annotation
                 obj = SimpleNamespace(Handle="1", Type=kind, ObjectName="AcDbLeader")
-                linked = SimpleNamespace(Handle="2", TextString="", Height=3., Color=3,
-                                         InsertionPoint=[10.,10.,0.], ObjectName="AcDbMText")
+                linked = SimpleNamespace(Handle="2", TextString=annotation, Height=0., Color=256,
+                                         InsertionPoint=points[-1], ObjectName="AcDbMText")
                 obj.Annotation = linked
                 self.extend([obj, linked])
                 return obj
@@ -144,15 +178,73 @@ class BasicTests(unittest.TestCase):
         drawing.dimension_style = lambda: "LM_test"
         drawing.draw(worker.prepare([dict(kind="leader", color=3, points=[[0,0],[10,10],[30,10]],
                                          text="%%c10", height=3)])[0])
-        self.assertEqual(drawing.model.argument, 0)
-        self.assertEqual(len(drawing.expected), 3)
-        self.assertEqual(drawing.expected[1]["leader_handle"], "1")
+        self.assertEqual(drawing.model.argument, "%%c10")
+        self.assertEqual(len(drawing.expected), 2)
+        self.assertEqual(drawing.model[1].InsertionPoint, [11.,11.,0.])
+        self.assertEqual(drawing.model[1].Height, 3.)
+        self.assertEqual(drawing.model[1].Color, 3)
+        self.assertEqual(len(drawing.report["operation_entities"][0]["entities"]), 2)
         doc = SimpleNamespace(ModelSpace=drawing.model, GetVariable=lambda key:4)
         self.assertTrue(drawing.verify(doc)["geometry_and_colors_verified"])
         drawing.model.append(SimpleNamespace(Handle="X", ObjectName="AcDbPoint", Color=3))
         with self.assertRaisesRegex(ValueError, "圖元集合不符"):
             drawing.verify(doc)
         self.assertEqual(drawing.report["entity_audit"]["unexpected_entities"][0]["handle"], "X")
+
+    def test_com_enumerator_is_reset_for_each_snapshot(self):
+        class Enum:
+            def __init__(self): self.resets = 0; self.offset = 0
+            def QueryInterface(self, iid): return self
+            def Reset(self): self.offset = 0; self.resets += 1
+            def __iter__(self): return self
+            def __next__(self):
+                if self.offset == 2: raise StopIteration
+                self.offset += 1
+                return self.offset
+        enum = Enum()
+        space = SimpleNamespace(_oleobj_=SimpleNamespace(InvokeTypes=lambda *args:enum))
+        from win32com.client import util
+        with patch.object(util, "Iterator", side_effect=lambda obj: iter(obj)):
+            self.assertEqual(list(cad_existing.iter_entities(space)), [1,2])
+            self.assertEqual(list(cad_existing.iter_entities(space)), [1,2])
+        self.assertEqual(enum.resets, 2)
+
+    def test_legacy_hatch_cleanup_preserves_five_boundaries(self):
+        drawing = worker.Drawing.__new__(worker.Drawing)
+        drawing.legacy, drawing.expected, drawing.report = True, [], {"operation_index":23}
+        drawing.point = drawing.points = lambda p:p
+        class Space(list):
+            @property
+            def Count(self): return len(self)
+            def add(self, kind, **values):
+                obj = SimpleNamespace(Handle=str(len(self)+1), ObjectName=kind, **values)
+                self.append(obj)
+                return obj
+            def AddLine(self, a, b): return self.add("Line", StartPoint=a, EndPoint=b)
+            def AddCircle(self, p, r): return self.add("Circle", Center=p, Radius=r)
+            def AddHatch(self, *args): return self.add("Hatch", ApplyHatch=lambda *args:None)
+        space = Space()
+        class Selection(list):
+            @property
+            def Count(self): return len(self)
+            def AddItems(self, items): self.extend(items)
+            def Clear(self): self.clear()
+            def Delete(self):
+                for entity in self: space.remove(entity)
+        selection = Selection()
+        drawing.model = space
+        drawing.doc = SimpleNamespace(SelectionSets=SimpleNamespace(Add=lambda name:selection),
+                                      ModelSpace=space, GetVariable=lambda key:4)
+        op = dict(kind="hatch", color=8, boundary=[[0,0,0],[10,0,0],[10,10,0],[0,10,0]],
+                  holes=[dict(center=[5,5,0],radius=1)], scale=3, seed=[1,1,0])
+        with patch.object(worker, "VARIANT", side_effect=lambda kind, items:items):
+            drawing.draw(op)
+        self.assertEqual(len(space), 6)
+        self.assertTrue(drawing.verify(drawing.doc)["geometry_and_colors_verified"])
+        self.assertEqual(drawing.report["operation_entities"][0]["removed_handles"], [])
+        space.pop(0)
+        with self.assertRaises(ValueError): drawing.verify(drawing.doc)
+        self.assertEqual(drawing.last_audit["missing_expected_entities"][0]["operation_index"],23)
 
     def test_dimensions_are_delete_only(self):
         app, doc, entity, calls = self.active_fixture()

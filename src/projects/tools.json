@@ -5036,6 +5036,28 @@
                       "segments"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "command"
+                        ]
+                      },
+                      "command": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "description": "只允許 ZOOM E/A、REGEN、PURGE、AUDIT N。放在幾何操作後；PURGE 清理所有未使用定義，AUDIT N 不修復。禁止任意指令、LISP、存檔及載入程式。"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "command"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               },
@@ -5691,6 +5713,28 @@
                       "segments"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "command"
+                        ]
+                      },
+                      "command": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "description": "只允許 ZOOM E/A、REGEN、PURGE、AUDIT N。放在幾何操作後；PURGE 清理所有未使用定義，AUDIT N 不修復。禁止任意指令、LISP、存檔及載入程式。"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "command"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               },
@@ -6319,6 +6363,28 @@
                       "t_start",
                       "t_end",
                       "segments"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "command"
+                        ]
+                      },
+                      "command": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "description": "只允許 ZOOM E/A、REGEN、PURGE、AUDIT N。放在幾何操作後；PURGE 清理所有未使用定義，AUDIT N 不修復。禁止任意指令、LISP、存檔及載入程式。"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "command"
                     ],
                     "additionalProperties": false
                   }

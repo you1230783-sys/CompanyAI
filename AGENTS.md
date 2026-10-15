@@ -1,3 +1,14 @@
+## 0.8.61：引線／剖面修正與受限 CAD 指令
+
+- iCAD 原生 AddLeader 的第二參數使用註解字串；追蹤本次同步建立、內容及端點相符的唯一文字，設定字高3、樣式與顏色，不另建重複文字。2022 保留相容介面。
+- IntelliCAD SelectionSet.Delete 會刪除成員；暫存剖面選取集先 Clear 並核對 Count=0，再 Delete。清空失敗不刪除，保留圖面。
+- 每次 COM 列舉重設 IEnumVARIANT；報告記錄逐操作新增／移除及預期 Handle。缺少圖元時帶出對應操作，不猜測其身分、不忽略集合差異。
+- operations 可加入 {"kind":"command","command":"ZOOM E"}；支援 ZOOM E/EXTENTS、ZOOM A/ALL、REGEN、PURGE（或 -PURGE A * N）、AUDIT N，可有英文指令底線／點前綴。指令置於本批幾何操作後。
+- 指令透過固定同步 COM 方法執行，未開放任意 SendCommand／LISP／Shell／載入程式／儲存／關閉／炸開。缺介面即停止。操作目前文件沿用確認、Undo與不儲存；副本沿用另存重開核對。
+- PURGE 清理所有未使用定義（不僅圖層／圖塊）；報告列出圖塊、圖層、線型、文字／尺寸樣式差異，其他表格不在明細範圍。不是炸開圖塊，也不刪除使用中的幾何。
+- 維護指令前後核對 ModelSpace／PaperSpace 可讀圖元內容，未驗證完整圖塊定義／不可讀屬性。AUDIT N 只檢查不修復，COM返回不能宣稱圖面沒有錯誤，詳細診斷請看 CAD。
+- 請分別實測 2008／2022；合成測試不等於公司實機驗收。
+
 ## 2026-10-15：0.8.60 iCAD 尺寸樣式原生介面
 
 - 使用者回報0.8.59在第9步建立尺寸樣式時缺少DimStyles，已有8個圖元但未儲存。舊版改用DimensionStyles.Add與DimTxt／DimAsz等原生屬性，無CopyFrom；新版相容介面維持。一般文字不依賴尺寸集合。

@@ -6,6 +6,21 @@ import json
 import hashlib
 
 
+def iter_entities(collection):
+    """每次重設 COM 列舉器；舊版可能重用已走到尾端的 IEnumVARIANT。"""
+    ole = getattr(collection, "_oleobj_", None)
+    if ole is None:
+        yield from collection
+        return
+    import pythoncom
+    from win32com.client import util
+    enum = ole.InvokeTypes(pythoncom.DISPID_NEWENUM, 0,
+                           pythoncom.DISPATCH_METHOD | pythoncom.DISPATCH_PROPERTYGET,
+                           (13, 10), ()).QueryInterface(pythoncom.IID_IEnumVARIANT)
+    enum.Reset()
+    yield from util.Iterator(enum)
+
+
 def optional(obj, name):
     """舊版未實作的唯讀屬性明示為缺值，不推測幾何。"""
     try:
@@ -58,7 +73,7 @@ def describe(entity, api):
 def snapshot(doc, api):
     entities, rows = {}, []
     size = 0
-    for index, entity in enumerate(doc.ModelSpace):
+    for index, entity in enumerate(iter_entities(doc.ModelSpace)):
         api.require(index < 200000, "初版最多讀取 200000 個 ModelSpace 圖元；請分割圖面")
         row = describe(entity, api)
         size += len(json.dumps(row, ensure_ascii=False).encode("utf-8"))

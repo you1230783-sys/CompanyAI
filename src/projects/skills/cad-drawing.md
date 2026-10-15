@@ -1,3 +1,14 @@
+## 0.8.61：引線／剖面修正與受限 CAD 指令
+
+- iCAD 原生 AddLeader 的第二參數使用註解字串；追蹤本次同步建立、內容及端點相符的唯一文字，設定字高3、樣式與顏色，不另建重複文字。2022 保留相容介面。
+- IntelliCAD SelectionSet.Delete 會刪除成員；暫存剖面選取集先 Clear 並核對 Count=0，再 Delete。清空失敗不刪除，保留圖面。
+- 每次 COM 列舉重設 IEnumVARIANT；報告記錄逐操作新增／移除及預期 Handle。缺少圖元時帶出對應操作，不猜測其身分、不忽略集合差異。
+- operations 可加入 {"kind":"command","command":"ZOOM E"}；支援 ZOOM E/EXTENTS、ZOOM A/ALL、REGEN、PURGE（或 -PURGE A * N）、AUDIT N，可有英文指令底線／點前綴。指令置於本批幾何操作後。
+- 指令透過固定同步 COM 方法執行，未開放任意 SendCommand／LISP／Shell／載入程式／儲存／關閉／炸開。缺介面即停止。操作目前文件沿用確認、Undo與不儲存；副本沿用另存重開核對。
+- PURGE 清理所有未使用定義（不僅圖層／圖塊）；報告列出圖塊、圖層、線型、文字／尺寸樣式差異，其他表格不在明細範圍。不是炸開圖塊，也不刪除使用中的幾何。
+- 維護指令前後核對 ModelSpace／PaperSpace 可讀圖元內容，未驗證完整圖塊定義／不可讀屬性。AUDIT N 只檢查不修復，COM返回不能宣稱圖面沒有錯誤，詳細診斷請看 CAD。
+- 請分別實測 2008／2022；合成測試不等於公司實機驗收。
+
 # CAD 二維繪圖測試版
 
 使用者要求 CAD 繪圖時使用本技能。cad_inventory 唯讀列出 COM 版本，由新到舊排序。cad_draw 建立新圖；cad_read 讀取既有 DWG 的工作副本；cad_edit 修改全新副本。磁碟副本模式不開啟或修改原檔；使用者要求編輯目前圖面時改走 cad_active_read/cad_active_edit，原生確認後直接修改記憶體，不儲存。連線失敗由桌面提示使用者開啟／重試／取消，保留原計畫，不要要求使用者另開任務或自行反覆送出工具。
@@ -11,7 +22,7 @@
 - 顏色為 ACI 色碼 1–255：1紅、2黃、3綠、4青、5藍、6洋紅、7隨背景顯示白或黑、8深灰、9淺灰。可依使用者要求替每個操作指定不同 color；引線文字及箭頭、剖面邊界及孔圈使用該操作同色。第一版不支援 RGB。
 - line：start/end；circle：center/radius；text：position/text/height；mtext：position/text/height/width，換行使用 \\P。
 - aligned_dimension：start/end/location；diameter_dimension：start/end 為圓的相對端點，leader_length 大於零。
-- leader 必填 kind/color/points/text/height，height 是正數文字高度（本版固定 3，請填 3），不能省略。points 三點分別為箭頭、轉折、水平段末端；第二與第三點 y 相同。自動帶箭頭，文字放在水平段左端上方，文字與引線不關聯。依文字長度留足水平段。
+- leader 必填 kind/color/points/text/height，height 是正數文字高度（本版固定 3，請填 3），不能省略。points 三點分別為箭頭、轉折、水平段末端；第二與第三點 y 相同。自動帶箭頭，文字放在水平段左端上方，2008 使用原生註解，2022 使用獨立文字；關聯持久性仍須實測。依文字長度留足水平段。
 - hatch：boundary 是有序不自交外框頂點（不重複首點），holes 為外框內互不相交圓孔，seed 在填充區內且不在孔內。圖樣固定 ANSI31；scale 為正值。請自行核對幾何關係，不能以程式未報錯宣稱外觀合格。
 - curve：x/y 為 t 的數學公式，t_start < t_end、segments 2–1000。支援 + - * / **、sin/cos/tan/sqrt/exp/log/abs、pi/e。禁止 Python 程式、屬性、索引。結果是取樣直線近似，不是原生 spline，也沒有自動誤差界線；不能宣稱連續曲線精度已保證。
 - 正弦例：x="t", y="10*sin(2*pi*t/100)", t_start=0,t_end=200,segments=100。
@@ -38,7 +49,7 @@ intended_path 只是預定路徑；file_exists=false 不能稱「磁碟上已有
 - 使用者說「目前開著的圖／不要儲存／一步一步修改」時，用 cad_active_read(version,offset=0)。它讀取 ActiveDocument 的未儲存內容，回傳 document、revision、units_code、Handle 及 next_offset。續頁 offset 使用回傳值；切換或修改文件會要求重讀。
 - 定位目標後 cad_active_edit(revision,edits,operations)。編輯能力與副本共用；原生視窗顯示文件名、路徑，使用者確認後才寫入。操作期間應暫停手動編輯／切換文件。
 - 每輪重新讀取目前圖面才能再修改；不要沿用前一輪 revision，不從舊任務還原授權。文件 HWND／程序建立時間／名稱路徑與可讀屬性都需符合。無法辨識文件視窗或不支援 StartUndoMark/EndUndoMark 的 CAD 暫不支援目前圖面寫入，可改用副本。
-- 每次修改為一組 Undo。失敗不自動撤銷、不重送；保留當前畫面讓使用者檢查。程式不提供 CAD 指令。
+- 每次修改為一組 Undo。失敗不自動撤銷、不重送；保留當前畫面讓使用者檢查。僅提供本頁 0.8.61 列出的受限 CAD 指令。
 - EDITED_UNSAVED 才能回報「修改完成，尚未儲存」，提醒使用者在 CAD 檢查、Undo 或自行存檔。沒有 DWG 交付路徑，不使用 save_copy、不要求手動存好才能完成任務。
 - 每任務至多六次修改。使用者下一次對話可開始新任務，先重新讀取目前圖面，連續修改同一張圖而不必存檔。
 
