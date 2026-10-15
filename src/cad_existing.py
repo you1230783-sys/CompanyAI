@@ -19,10 +19,10 @@ def describe(entity, api):
     name = optional(entity, "ObjectName") or optional(entity, "EntityName") or "unknown"
     name = str(name)
     lower = name.lower()
-    kind = next((key for key in ("mtext", "text", "circle", "polyline", "line", "arc", "dimension", "blockreference")
+    kind = next((key for key in ("mtext", "text", "circle", "polyline", "line", "arc", "dimension", "leader", "blockreference")
                  if key in lower), "unknown")
     row = {"handle": str(entity.Handle).upper(), "type": name, "kind": kind, "properties": {}}
-    for field in ("Layer", "Color", "TextString", "Height", "Radius", "Rotation", "Measurement", "Name", "StartAngle", "EndAngle", "Thickness"):
+    for field in ("Layer", "Color", "StyleName", "TextString", "Height", "Radius", "Rotation", "Measurement", "Name", "StartAngle", "EndAngle", "Thickness"):
         value = optional(entity, field)
         if isinstance(value, (str, int, float, bool)):
             if isinstance(value, float) and not math.isfinite(value):
@@ -49,7 +49,9 @@ def describe(entity, api):
                 row["attributes"].append({"tag": str(attr.TagString)[:200], "text": str(attr.TextString)[:2000]})
         except Exception:
             row["attributes_unavailable"] = True
-    row["editable"] = kind in ("line", "circle", "text", "mtext", "arc") and not row.get("unavailable_properties")
+    row["editable"] = kind in ("line", "circle", "text", "mtext", "arc", "dimension", "leader") and not row.get("unavailable_properties")
+    if kind in ("dimension", "leader"):
+        row["allowed_edits"] = ["delete"]
     return row
 
 
@@ -117,6 +119,8 @@ def edit_document(app, doc, legacy, request, report, api, entities, before, outp
         api.require(handle in rows and handle not in used and rows[handle]["editable"], "Handle 不存在、重複或不支援修改")
         used.add(handle)
         kind, value = edit["kind"], edit["value"]
+        api.require("allowed_edits" not in rows[handle] or kind in rows[handle]["allowed_edits"],
+                    "尺寸／引線目前僅支援依已讀 Handle 刪除後重建")
         if kind == "text":
             api.require(rows[handle]["kind"] in ("text", "mtext") and isinstance(value, str)
                         and 0 < len(value) <= 1000 and "\x00" not in value, "只能修改文字圖元的文字內容")
@@ -142,6 +146,7 @@ def edit_document(app, doc, legacy, request, report, api, entities, before, outp
     drawing = api.Drawing.__new__(api.Drawing)
     drawing.app, drawing.doc, drawing.model = app, doc, doc.ModelSpace
     drawing.legacy, drawing.expected = legacy, []
+    drawing.report = report
     deleted = set()
     # 目前圖面必須支援 Undo 群組才寫入；不透過 SendCommand 猜測指令完成。
     if guard:
@@ -202,6 +207,10 @@ def edit_document(app, doc, legacy, request, report, api, entities, before, outp
     def verify(target):
         actual, _ = snapshot(target, api)
         api.require(set(actual) == set(expected), "圖面 Handle 集合不符，不能宣稱操作完成")
+        for row in drawing.expected:
+            if "leader_handle" in row:
+                linked = actual[row["leader_handle"]].Annotation
+                api.require(str(linked.Handle).upper() == row["handle"], "引線附屬文字關聯不符")
         for handle, properties in expected.items():
             for field, value in properties.items():
                 compare = api.text_equal if field == "TextString" else api.equal

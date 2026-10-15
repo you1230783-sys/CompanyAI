@@ -1,3 +1,14 @@
+## 0.8.59：標註與舊版讀取修正
+
+- 尺寸／引線字高3、箭頭3、ISO文字對正、距尺寸線1，使用專用 simplex.shx 樣式。一般文字保留明確 height 參數，預設3。中文沿用現有 BigFont，或使用 CAD 安裝目錄已存在的 chineset.shx；若沒有中文字型，報告會提示，需在 CAD 設定後確認外觀。
+- 2008／2022均保留原生引線、獨立文字與指定樣式。若COM明示有本次新建的空白／同內容文字附屬物件，核對關聯後納入預期集合；未知額外物件仍拒絕。不據此認定原報告的額外圖元一定由引線產生。
+- 報告增加每項操作實際產生的 Handle／類型／可讀屬性及額外圖元描述；仍不忽略未知物件、不自動刪除。
+- 不再強制要求 Document.HWND 才能閱讀；應用視窗可作備援，搭配程序建立時間、唯一文件名稱／路徑與快照。均不可用時仍可唯讀，editable_session=false 時請改用副本修改。應用視窗備援不具文件視窗同等身分粒度；桌面確認及操作期間勿關閉／切換圖面仍必要。
+- 已讀取的尺寸／原生引線只允許 delete，重標時先核對 Handle 再刪除重建。不明額外物件不在自動刪除範圍。
+- unsupported_capability 禁止相同版本反覆重試；讀取失敗在介面明示失敗。
+
+ISO 對正參照 [Autodesk 尺寸文字設定](https://help.autodesk.com/cloudhelp/2026/ENU/AutoCAD-Core/files/GUID-38DAEEF0-AB44-4C58-8D0E-955BFCFF71A7.htm)；中文 SHX 搭配參照 [Big Font 說明](https://help.autodesk.com/cloudhelp/2022/ENU/AutoCAD-MAC-Core/files/GUID-CBC3F683-06F3-4B9C-8747-D01F3C262956.htm)。文件僅供介面語意參考，不能取代2008／2022實測。驗證見 [0.8.59驗證紀錄](VALIDATION_0_8_59.md)。
+
 # 0.8.58：目前圖面與 Excel 座標
 
 三種入口共用固定幾何操作：新建圖面、既有 DWG 副本、目前開啟的圖面。副本與目前圖面共用修改／核對引擎。未新增 CAD 指令、LISP、圖塊展開或清理。

@@ -9,5 +9,5 @@
   "company_service_tested": false,
   "result": "PASS",
   "transport": "controlled events; loopback transport tested separately",
-  "version": "0.8.58"
+  "version": "0.8.59"
 }

@@ -14,6 +14,103 @@ from unittest.mock import patch
 
 
 class BasicTests(unittest.TestCase):
+    def test_missing_hwnd_still_reads_without_edit_permission(self):
+        app, doc, _, calls = self.active_fixture()
+        result = cad_active.execute_active(app, True, dict(action="active_read", offset=0), {}, worker)
+        self.assertEqual(result["status"], "READ_ACTIVE")
+        self.assertFalse(result["document"]["editable_session"])
+        self.assertEqual(result["entity_count"], 1)
+        self.assertEqual(calls, [])
+        request = dict(action="active_edit", document=result["document"], revision=result["revision"],
+                       edits=[dict(handle="A", kind="delete", value=None)], operations=[])
+        with self.assertRaisesRegex(ValueError, "可以閱讀"):
+            cad_active.execute_active(app, True, request, {}, worker)
+        self.assertEqual(calls, [])
+
+    def test_application_hwnd_fallback_and_duplicate_document(self):
+        app, doc, _, _ = self.active_fixture()
+        app.HWND, app.Documents = 123, [doc]
+        process = SimpleNamespace(Close=lambda: None)
+        with patch.object(cad_active.win32gui, "IsWindow", return_value=True), \
+             patch.object(cad_active.win32process, "GetWindowThreadProcessId", return_value=(1, 2)), \
+             patch.object(cad_active.win32api, "OpenProcess", return_value=process), \
+             patch.object(cad_active.win32process, "GetProcessTimes", return_value={"CreationTime":"now"}):
+            result = cad_active.identity(app, doc, worker)
+            self.assertEqual(result["identity_scope"], "application_window_and_snapshot")
+            self.assertTrue(result["editable_session"])
+            app.Documents.append(SimpleNamespace(Name=doc.Name, FullName=doc.FullName))
+            self.assertFalse(cad_active.identity(app, doc, worker)["editable_session"])
+
+    def test_missing_interface_is_not_retryable(self):
+        result = worker.failure_details(dict(drawing_started=False, step="read_active"), AttributeError("HWND"))
+        self.assertEqual(result["recovery"], "unsupported_capability")
+        self.assertFalse(result["connection_lost"])
+
+    def test_annotation_style_preserves_defaults_and_bigfont(self):
+        values = dict(DIMTXT=9, DIMASZ=9, DIMGAP=4, DIMTIH=1, DIMTOH=0,
+                      DIMTAD=0, DIMTSZ=2, DIMSCALE=2, DIMTXSTY="User")
+        original = values.copy()
+        style, dimstyle = SimpleNamespace(), SimpleNamespace()
+        captured = {}
+        dimstyle.CopyFrom = lambda doc: captured.update(values)
+        doc = SimpleNamespace(TextStyles=SimpleNamespace(Add=lambda name: style,
+            Item=lambda name: SimpleNamespace(BigFontFile="chineset.shx")),
+            ActiveTextStyle=SimpleNamespace(BigFontFile=""),
+            DimStyles=SimpleNamespace(Add=lambda name: dimstyle),
+            GetVariable=lambda name: values[name], SetVariable=lambda name, value: values.__setitem__(name,value))
+        drawing = worker.Drawing.__new__(worker.Drawing)
+        drawing.app, drawing.doc, drawing.report = SimpleNamespace(), doc, {}
+        name = drawing.annotation_style()
+        self.assertEqual(style.FontFile, "simplex.shx")
+        self.assertEqual(style.BigFontFile, "chineset.shx")
+        self.assertEqual(values, original)
+        self.assertEqual([captured[k] for k in ("DIMTXT","DIMASZ","DIMGAP","DIMTIH","DIMTOH")], [3,3,1,0,1])
+        self.assertEqual(captured["DIMTXSTY"], name)
+
+    def test_legacy_native_leader_tracks_only_linked_annotation(self):
+        class Model(list):
+            @property
+            def Count(self): return len(self)
+            def AddLeader(self, points, annotation, kind):
+                self.argument = annotation
+                obj = SimpleNamespace(Handle="1", Type=kind, ObjectName="AcDbLeader")
+                linked = SimpleNamespace(Handle="2", TextString="", Height=3., Color=3,
+                                         InsertionPoint=[10.,10.,0.], ObjectName="AcDbMText")
+                obj.Annotation = linked
+                self.extend([obj, linked])
+                return obj
+            def AddText(self, text, point, height):
+                obj = SimpleNamespace(Handle="3", TextString=text, InsertionPoint=point,
+                                      Height=height, ObjectName="AcDbText")
+                self.append(obj)
+                return obj
+        drawing = worker.Drawing.__new__(worker.Drawing)
+        drawing.legacy, drawing.model, drawing.expected, drawing.report = True, Model(), [], {}
+        drawing.point, drawing.points = lambda p: p, lambda p: p
+        drawing.annotation_style = lambda: "LM_test"
+        drawing.draw(worker.prepare([dict(kind="leader", color=3, points=[[0,0],[10,10],[30,10]],
+                                         text="%%c10", height=3)])[0])
+        self.assertEqual(drawing.model.argument, 0)
+        self.assertEqual(len(drawing.expected), 3)
+        self.assertEqual(drawing.expected[1]["leader_handle"], "1")
+        doc = SimpleNamespace(ModelSpace=drawing.model, GetVariable=lambda key:4)
+        self.assertTrue(drawing.verify(doc)["geometry_and_colors_verified"])
+        drawing.model.append(SimpleNamespace(Handle="X", ObjectName="AcDbPoint", Color=3))
+        with self.assertRaisesRegex(ValueError, "圖元集合不符"):
+            drawing.verify(doc)
+        self.assertEqual(drawing.report["entity_audit"]["unexpected_entities"][0]["handle"], "X")
+
+    def test_dimensions_are_delete_only(self):
+        app, doc, entity, calls = self.active_fixture()
+        entity.ObjectName = "AcDbAlignedDimension"
+        row = cad_existing.describe(entity, worker)
+        self.assertTrue(row["editable"])
+        self.assertEqual(row["allowed_edits"], ["delete"])
+        request = self.active_request(app, doc, [dict(handle="A",kind="color",value=3)])
+        with patch.object(cad_active,"identity",return_value=request["document"]), self.assertRaisesRegex(ValueError,"刪除後重建"):
+            cad_active.execute_active(app, True, request, {"completed_operations":0}, worker)
+        self.assertEqual(calls, [])
+
     def active_fixture(self):
         entity = SimpleNamespace(Handle="A", ObjectName="AcDbCircle", Center=[0.,0.,0.], Radius=5., Layer="0", Color=1)
         calls=[]
@@ -254,6 +351,8 @@ class BasicTests(unittest.TestCase):
     def test_leader_type_and_color_are_read_back(self):
         calls = []
         class Model:
+            def __iter__(self):
+                return iter([])
             def AddLeader(self, points, annotation, kind):
                 calls.append(kind)
                 return SimpleNamespace(Handle="1", Type=kind)
@@ -262,12 +361,14 @@ class BasicTests(unittest.TestCase):
         drawing = worker.Drawing.__new__(worker.Drawing)
         drawing.legacy, drawing.model, drawing.expected = False, Model(), []
         drawing.point, drawing.points = lambda p: p, lambda p: p
+        drawing.annotation_style = lambda: "LM_test"
         op = worker.prepare([dict(kind="leader", color=5, points=[[25,20],[50,45],[100,45]], text="此孔直徑10", height=2.5)])[0]
         drawing.draw(op)
         self.assertEqual(calls, [2])
         self.assertEqual(drawing.expected[0]["properties"]["Type"], 2)
         self.assertEqual(drawing.expected[0]["properties"]["Color"], 5)
-        self.assertEqual(drawing.expected[1]["properties"]["InsertionPoint"], [52,48,0])
+        self.assertEqual(drawing.expected[1]["properties"]["InsertionPoint"], [51,46,0])
+        self.assertEqual(drawing.expected[1]["properties"]["Height"], 3)
 
     def test_readback_detects_color_change(self):
         drawing = worker.Drawing.__new__(worker.Drawing)

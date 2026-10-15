@@ -11,7 +11,7 @@
 - 顏色為 ACI 色碼 1–255：1紅、2黃、3綠、4青、5藍、6洋紅、7隨背景顯示白或黑、8深灰、9淺灰。可依使用者要求替每個操作指定不同 color；引線文字及箭頭、剖面邊界及孔圈使用該操作同色。第一版不支援 RGB。
 - line：start/end；circle：center/radius；text：position/text/height；mtext：position/text/height/width，換行使用 \\P。
 - aligned_dimension：start/end/location；diameter_dimension：start/end 為圓的相對端點，leader_length 大於零。
-- leader 必填 kind/color/points/text/height，height 是正數文字高度（例如 3.5 mm），不能省略。points 三點分別為箭頭、轉折、水平段末端；第二與第三點 y 相同。自動帶箭頭，文字放在水平段左端上方，文字與引線不關聯。依文字長度留足水平段。
+- leader 必填 kind/color/points/text/height，height 是正數文字高度（本版固定 3，請填 3），不能省略。points 三點分別為箭頭、轉折、水平段末端；第二與第三點 y 相同。自動帶箭頭，文字放在水平段左端上方，文字與引線不關聯。依文字長度留足水平段。
 - hatch：boundary 是有序不自交外框頂點（不重複首點），holes 為外框內互不相交圓孔，seed 在填充區內且不在孔內。圖樣固定 ANSI31；scale 為正值。請自行核對幾何關係，不能以程式未報錯宣稱外觀合格。
 - curve：x/y 為 t 的數學公式，t_start < t_end、segments 2–1000。支援 + - * / **、sin/cos/tan/sqrt/exp/log/abs、pi/e。禁止 Python 程式、屬性、索引。結果是取樣直線近似，不是原生 spline，也沒有自動誤差界線；不能宣稱連續曲線精度已保證。
 - 正弦例：x="t", y="10*sin(2*pi*t/100)", t_start=0,t_end=200,segments=100。
@@ -50,3 +50,11 @@ intended_path 只是預定路徑；file_exists=false 不能稱「磁碟上已有
 4. 每次至多100列，展開後至多100個操作（圓+標籤為每列2項）；無效、空白、重複相鄰點、負半徑或超額時整批拒絕，不補0或暗中略過。標籤位於座標點，需依需求另行排版；目前不提供自動避讓。
 5. 先向使用者說明欄位與轉換預覽，需求已明確時可直接套用。cad_excel_apply(plan_id,target,path,revision,name,version)：target=new 時 path/revision=null；target=active 時先 cad_active_read，revision 為圖面版本、path=null；target=copy 時先 cad_read，提供該 DWG path/revision。name 為副本單一.dwg檔名，active 不使用名稱可填空字串；version=latest 或確切 ProgID。
 6. apply 再核對 Excel 原檔版本與目標圖面單位；一次性消耗計畫，失敗不可直接重播。new/copy 會保存新檔；active 僅修改目前圖面、不儲存。圖面與來源版本變更需重新讀取／預覽。單位、欄位與原點由使用者意圖確認，工具不猜測。
+
+## 0.8.59 相容修正
+
+- 尺寸字高與引線字高固定3、箭頭3、ISO對正（DIMTIH=0/DIMTOH=1）、文字偏移1，使用獨立simplex.shx樣式；一般文字預設填height=3，明確指定其他高度時尊重指定值。保留現有BigFont；沒有中文字型時回報，不把文字內容讀回成功當作中文字形驗收。
+- 2008／2022保留原生引線；COM明示關聯且本次新建的空白／同內容文字才可納入預期集合。顯示文字仍獨立建立，不宣稱其與引線關聯。報告列出每項操作產生的圖元及額外圖元的可讀屬性；不得逕自刪除未知物件。
+- 讀取缺少Document.HWND時嘗試應用視窗＋唯一文件名稱／路徑＋程序建立時間與內容快照；皆無可用視窗時仍能唯讀，editable_session=false不能修改目前文件，改用副本。
+- unsupported_capability是程式／CAD介面限制，相同呼叫不可重試。讀取錯誤不代表已成功讀到圖元；不要反覆讀同一診斷／重送相同工具。
+- 已讀取的尺寸／原生引線allowed_edits=[delete]，僅可依使用者要求刪除後重建；不能改它們的文字／位置或顏色。不要猜測Handle。

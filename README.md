@@ -1,3 +1,5 @@
+**0.8.59：CAD 標註樣式、目前圖面 HWND 備援與圖元診斷修正。** 保留原生引線；尺寸／引線字高3、箭頭3、ISO對正、偏移1與simplex.shx。未知額外圖元仍需診斷，公司 CAD 實機待測。[使用說明](docs/CAD_DRAWING.md) · [基礎驗證](docs/VALIDATION_0_8_59.md)
+
 **0.8.58：CAD 目前圖面不儲存編輯、共用副本操作與 Excel 座標繪圖。** 含文件確認、每輪 Undo 群組與更多基本編輯；CAD 指令與圖塊清理尚未加入。[使用說明](docs/CAD_DRAWING.md) · [基礎驗證](docs/VALIDATION_0_8_58.md)
 
 **0.8.57：CAD 連線提示、既有 DWG 副本讀取與限定修改測試版。** 原檔保留，先讀取圖元再改副本；含直徑符號與圖元核對診斷。[使用說明](docs/CAD_DRAWING.md) · [驗證範圍](docs/VALIDATION_0_8_57.md)

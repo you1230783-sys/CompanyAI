@@ -776,6 +776,8 @@ pub struct Broker {
     file_waiter: Option<super::interaction::FileWaiter>,
     cad_waiter: Option<crate::cad::Waiter>,
     cad_active: Option<Value>,
+    // 不支援介面的錯誤不能因模型遺忘歷史而持續送往 COM。
+    cad_active_unsupported: Option<String>,
     outlook: super::mail::Session,
     outlook_process: Option<crate::outlook::process::Process>,
     pub(super) mail_notes: super::mail_notes::State,
@@ -824,6 +826,7 @@ impl Broker {
             file_waiter: None,
             cad_waiter: None,
             cad_active: None,
+            cad_active_unsupported: None,
             outlook: super::mail::Session::default(),
             outlook_process: None,
             log_cursors: BTreeMap::new(),

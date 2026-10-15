@@ -8,6 +8,9 @@ impl Broker {
         offset: usize,
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
+        if self.cad_active_unsupported.as_deref() == Some(version) {
+            return Err("此 CAD 的目前圖面介面已回報不支援；本任務不再重試相同版本，請改用 DWG 副本或保留診斷。".into());
+        }
         let previous = self.cad_active.clone().unwrap_or(Value::Null);
         if offset > 0 && previous.is_null() {
             return Err("請先讀取目前圖面的第一頁。".into());
@@ -40,6 +43,10 @@ impl Broker {
             );
         } else {
             self.cad_active = None;
+            if result["recovery"] == "unsupported_capability" {
+                self.cad_active_unsupported = Some(version.to_owned());
+            }
+            return Err(format!("讀取目前 CAD 圖面失敗：{result}"));
         }
         Ok(result)
     }
@@ -55,6 +62,11 @@ impl Broker {
             return Err("先前 CAD 結果未確認或本任務已達六次操作，請先檢查圖面。".into());
         }
         let state = self.cad_active.clone().ok_or("請先讀取目前圖面。")?;
+        if state["document"]["editable_session"] == false {
+            return Err(
+                "此 CAD 缺少可區分文件的視窗身分；目前圖面可閱讀，修改請使用 DWG 副本。".into(),
+            );
+        }
         let handles = state["handles"].as_array().ok_or("缺少已讀取的 Handle。")?;
         if state["revision"] != revision
             || edits.len() > 100

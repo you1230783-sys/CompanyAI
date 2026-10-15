@@ -164,6 +164,25 @@ mod tests {
     }
 
     #[test]
+    fn cad_active_unsupported_does_not_call_worker_again() {
+        let root =
+            std::env::temp_dir().join(format!("lmai-cad-read-{}", crate::jobs::new_id().unwrap()));
+        fs::create_dir_all(&root).unwrap();
+        let project = Project {
+            id: "cad-read".into(),
+            name: "CAD".into(),
+            root,
+            imports: Default::default(),
+        };
+        let mut broker = Broker::new(project, "task".into()).unwrap();
+        broker.cad_active_unsupported = Some("Icad.Application.1".into());
+        let error = broker
+            .read_active_cad("Icad.Application.1", 0, &AtomicBool::new(false))
+            .unwrap_err();
+        assert!(error.contains("不再重試"));
+    }
+
+    #[test]
     fn cad_checkpoint_preserves_artifact_and_rejects_external_changes() {
         // 合成檔案只驗證 broker 所有權／雜湊，不將它稱為真實 DWG 相容性測試。
         let root =

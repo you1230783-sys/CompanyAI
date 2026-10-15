@@ -147,7 +147,7 @@ def prepare(operations):
             op["samples"] = [[fx.at(low + (high-low)*i/count), fy.at(low + (high-low)*i/count), 0.0] for i in range(count+1)]
             require(all(a != b for a, b in zip(op["samples"], op["samples"][1:])), "公式包含零長線段")
             budget += count
-        budget += 2 if kind == "leader" else 1
+        budget += 3 if kind == "leader" else 1
         prepared.append(op)
     require(budget <= 4000, "總圖元數超過 4000 上限")
     return prepared
@@ -161,8 +161,56 @@ class Drawing:
         self.model = self.doc.ModelSpace
         self.expected = []
         require(int(self.model.Count) == 0, "新圖面範本不為空，停止繪圖")
-        for name, value in (("INSUNITS", 4), ("LUNITS", 2), ("DIMSCALE", 1.0), ("DIMTXT", 2.5), ("DIMASZ", 3.0), ("DIMTSZ", 0.0), ("DIMLFAC", 1.0)):
+        for name, value in (("INSUNITS", 4), ("LUNITS", 2), ("DIMSCALE", 1.0), ("DIMTXT", 3.0), ("DIMASZ", 3.0), ("DIMTSZ", 0.0), ("DIMLFAC", 1.0)):
             self.doc.SetVariable(name, value)
+
+    def annotation_style(self):
+        """建立本輪專用樣式，不改使用者既有文字／尺寸樣式。
+
+        simplex 不含完整中文字集，沿用目前文字樣式的 BigFont；沒有 BigFont
+        時明示需人工核對中文，不以屬性設定成功宣稱字形顯示正常。
+        """
+        if hasattr(self, "annotation_style_name"):
+            return self.annotation_style_name
+        from cad_existing import optional
+        name = "LM_AI_" + uuid.uuid4().hex[:12]
+        style = self.doc.TextStyles.Add(name)
+        style.FontFile = "simplex.shx"
+        style.Height = 0.0
+        current_style = self.doc.TextStyles.Item(str(self.doc.GetVariable("DIMTXSTY")))
+        bigfont = optional(current_style, "BigFontFile") or optional(self.doc.ActiveTextStyle, "BigFontFile")
+        if not bigfont:
+            # 只採用已安裝的繁體中文字型；不下載字型、不猜測不存在的檔案。
+            install = optional(self.app, "FullName")
+            if install:
+                directory = Path(str(install)).parent
+                for candidate in (directory / "Fonts" / "chineset.shx", directory / "chineset.shx"):
+                    if candidate.is_file():
+                        bigfont = str(candidate)
+                        break
+        if bigfont:
+            style.BigFontFile = bigfont
+        # CopyFrom(Document) 將暫時的尺寸變數固化在獨立樣式；隨即還原預設值。
+        values = {"DIMTXT": 3.0, "DIMASZ": 3.0, "DIMGAP": 1.0,
+                  "DIMTIH": 0, "DIMTOH": 1, "DIMTAD": 1, "DIMTSZ": 0.0,
+                  "DIMSCALE": 1.0, "DIMTXSTY": name}
+        previous = {key: self.doc.GetVariable(key) for key in values}
+        try:
+            for key, value in values.items():
+                self.doc.SetVariable(key, value)
+            dimension_style = self.doc.DimStyles.Add(name)
+            dimension_style.CopyFrom(self.doc)
+        finally:
+            for key, value in previous.items():
+                self.doc.SetVariable(key, value)
+        self.annotation_style_name = name
+        if hasattr(self, "report"):
+            self.report["annotation_style"] = dict(name=name, font="simplex.shx",
+                big_font=bigfont or None, text_height=3.0, arrow_size=3.0,
+                text_gap=1.0, alignment="ISO", visual_check_required=True,
+                chinese_note="使用原樣式或已安裝的繁體中文 BigFont；中文仍需目視核對" if bigfont
+                else "原樣式無 BigFont；simplex.shx 不保證中文字形，請在 CAD 指定中文字型或 BigFont")
+        return name
 
     def point(self, point):
         if self.legacy:
@@ -192,62 +240,114 @@ class Drawing:
         return self.remember(self.model.AddCircle(self.point(center), radius), color, Center=center, Radius=radius)
 
     def draw(self, op):
+        """記錄每項新增 Handle，讓未知圖元能追溯到產生的操作。"""
+        before = {str(entity.Handle).upper() for entity in self.model}
+        try:
+            self.draw_entity(op)
+        finally:
+            if hasattr(self, "report"):
+                from cad_existing import describe
+                try:
+                    added = [describe(entity, sys.modules[__name__]) for entity in self.model
+                             if str(entity.Handle).upper() not in before]
+                    self.report.setdefault("operation_entities", []).append({
+                        "operation_index": self.report.get("operation_index"),
+                        "kind": op["kind"], "entities": added})
+                except Exception as diagnostic_error:
+                    # 診斷讀取不能蓋過原始繪圖錯誤；最終 verify 仍嚴格核對集合。
+                    self.report.setdefault("audit_errors", []).append(str(diagnostic_error))
+
+    def draw_entity(self, op):
         kind, color = op["kind"], op["color"]
         if kind == "line":
             self.line(op["start"], op["end"], color)
         elif kind == "circle":
             self.circle(op["center"], op["radius"], color)
         elif kind in ("text", "mtext"):
+            style_name = self.annotation_style()
             if kind == "text":
                 obj = self.model.AddText(op["text"], self.point(op["position"]), op["height"])
             else:
                 obj = self.model.AddMText(self.point(op["position"]), op["width"], op["text"])
                 obj.Height = op["height"]
-            self.remember(obj, color, TextString=op["text"], Height=op["height"])
+            obj.StyleName = style_name
+            self.remember(obj, color, TextString=op["text"], Height=op["height"], StyleName=style_name)
         elif kind == "leader":
-            # 兩種介面帶箭頭直線都是 2；0 是無箭頭，不能混淆 ArrowheadType 的 0。
-            leader = self.model.AddLeader(self.points(op["points"]), 0 if self.legacy else None, 2)
-            properties = {"Type": 2}
-            if not self.legacy:
-                leader.ArrowheadSize = 3.0
-                leader.ArrowheadType = 0
-                properties.update(ArrowheadSize=3.0, ArrowheadType=0)
-            self.remember(leader, color, **properties)
-            # 文字放在水平線的左端上方，不建立虛假的關聯標註。
-            position = [min(op["points"][1][0], op["points"][2][0])+2, op["points"][1][1]+3, 0.0]
-            self.remember(self.model.AddText(op["text"], self.point(position), op["height"]), color,
-                          TextString=op["text"], InsertionPoint=position, Height=op["height"])
+            style_name = self.annotation_style()
+            self.native_leader(op)
+            # 固定字高 3、距水平尺寸線 1；字串的直徑符號已由 prepare 正規化。
+            position = [min(op["points"][1][0], op["points"][2][0])+1, op["points"][1][1]+1, 0.0]
+            text = self.model.AddText(op["text"], self.point(position), 3.0)
+            text.StyleName = style_name
+            self.remember(text, color, TextString=op["text"], InsertionPoint=position,
+                          Height=3.0, StyleName=style_name)
         elif kind == "curve":
             for start, end in zip(op["samples"], op["samples"][1:]):
                 self.line(start, end, color)
         elif kind in ("aligned_dimension", "diameter_dimension"):
+            style_name = self.annotation_style()
             start, end = self.point(op["start"]), self.point(op["end"])
             if kind == "aligned_dimension":
                 obj = self.model.AddDimAligned(start, end, self.point(op["location"]))
             else:
                 obj = self.model.AddDimDiametric(start, end, op["leader_length"])
-            self.remember(obj, color)
+            obj.StyleName = style_name
+            self.remember(obj, color, StyleName=style_name)
             self.expected[-1]["measurement"] = math.dist(op["start"], op["end"])
         elif kind == "hatch":
-            outer = [self.line(a, b, color) for a, b in zip(op["boundary"], op["boundary"][1:] + op["boundary"][:1])]
-            holes = [self.circle(h["center"], h["radius"], color) for h in op["holes"]]
-            hatch = self.model.AddHatch(1, "ANSI31", False)
-            hatch.PatternScale = op["scale"]
-            def array(items):
-                return VARIANT(pythoncom.VT_ARRAY | pythoncom.VT_DISPATCH, tuple(items))
-            if self.legacy:
-                selection = self.doc.SelectionSets.Add("lm_" + uuid.uuid4().hex[:12])
-                try:
-                    selection.AddItems(array(outer + holes))
-                    hatch.ApplyHatch(selection, self.points([op["seed"]]))
-                finally:
-                    selection.Delete()
-            else:
-                hatch.AppendOuterLoop(array(outer))
-                for hole in holes:
-                    hatch.AppendInnerLoop(array([hole]))
-                hatch.Evaluate()
-            self.remember(hatch, color, PatternScale=op["scale"])
+            self.draw_hatch(op)
+
+    def native_leader(self, op):
+        # 帶箭頭直線是 2；0 是無箭頭，不能混淆 ArrowheadType 的 0。
+        before = {str(entity.Handle).upper() for entity in self.model}
+        leader = self.model.AddLeader(self.points(op["points"]), 0 if self.legacy else None, 2)
+        leader.StyleName = self.annotation_style()
+        properties = dict(Type=2, StyleName=leader.StyleName)
+        if not self.legacy:
+            leader.ArrowheadSize = 3.0
+            leader.ArrowheadType = 0
+            properties.update(ArrowheadSize=3.0, ArrowheadType=0)
+        self.remember(leader, op["color"], **properties)
+        # 某些版本會自動建立空白註解。只有 COM 明示關聯、此次新建且位於
+        # ModelSpace 的文字才納入預期集合；絕不按數量猜測／忽略未知物件。
+        from cad_existing import optional, describe
+        annotation = optional(leader, "Annotation")
+        handle = optional(annotation, "Handle") if annotation is not None else None
+        if handle:
+            handle = str(handle).upper()
+            members = {str(entity.Handle).upper() for entity in self.model}
+            row = describe(annotation, sys.modules[__name__])
+            if hasattr(self, "report"):
+                self.report.setdefault("leader_annotations", []).append({
+                    "leader_handle": str(leader.Handle).upper(), "annotation": row,
+                    "created_in_this_operation": handle not in before})
+            if (handle not in before and handle in members and row["kind"] in ("text", "mtext")
+                    and row["properties"].get("TextString") in ("", op["text"])
+                    and not row.get("unavailable_properties")):
+                self.expected.append({"handle": handle, "properties": row["properties"],
+                                      "leader_handle": str(leader.Handle).upper()})
+
+    def draw_hatch(self, op):
+        color = op["color"]
+        outer = [self.line(a, b, color) for a, b in zip(op["boundary"], op["boundary"][1:] + op["boundary"][:1])]
+        holes = [self.circle(h["center"], h["radius"], color) for h in op["holes"]]
+        hatch = self.model.AddHatch(1, "ANSI31", False)
+        hatch.PatternScale = op["scale"]
+        def array(items):
+            return VARIANT(pythoncom.VT_ARRAY | pythoncom.VT_DISPATCH, tuple(items))
+        if self.legacy:
+            selection = self.doc.SelectionSets.Add("lm_" + uuid.uuid4().hex[:12])
+            try:
+                selection.AddItems(array(outer + holes))
+                hatch.ApplyHatch(selection, self.points([op["seed"]]))
+            finally:
+                selection.Delete()
+        else:
+            hatch.AppendOuterLoop(array(outer))
+            for hole in holes:
+                hatch.AppendInnerLoop(array([hole]))
+            hatch.Evaluate()
+        self.remember(hatch, color, PatternScale=op["scale"])
 
     def verify(self, doc):
         require(int(doc.GetVariable("INSUNITS")) == 4, "圖面單位不是毫米")
@@ -258,6 +358,9 @@ class Drawing:
         self.last_audit = dict(expected_count=len(self.expected), reported_count=int(doc.ModelSpace.Count),
                                enumerated_count=len(rows), unique_handles=len(entities),
                                missing_handles=missing[:100], unexpected_handles=extra[:100])
+        if extra:
+            from cad_existing import describe
+            self.last_audit["unexpected_entities"] = [describe(entities[h], sys.modules[__name__]) for h in extra[:100]]
         if hasattr(self, "report"):
             self.report["entity_audit"] = self.last_audit
         # Count 在舊版可能含內部項目；只有唯一 Handle 集合完全符合才接受計數差異。
@@ -267,6 +370,9 @@ class Drawing:
         for row in self.expected:
             require(row["handle"] in entities, "存檔後圖元 Handle 遺失")
             entity = entities[row["handle"]]
+            if "leader_handle" in row:
+                linked = entities[row["leader_handle"]].Annotation
+                require(str(linked.Handle).upper() == row["handle"], "引線附屬文字關聯不符")
             for key, value in row["properties"].items():
                 compare = text_equal if key == "TextString" else equal
                 require(compare(getattr(entity, key), value), "圖元屬性不符：" + key)
@@ -362,6 +468,9 @@ def failure_details(report, exc):
     known_partial = (report.get("owned_document_created") is True
                      and code == -2147024809 and report.get("step") not in ("save", "reopen"))
     recovery = "correct_and_retry" if before_drawing else "revised_new_document" if known_partial else "manual_check"
+    if before_drawing and (isinstance(exc, AttributeError) or code in (-2147467263, -2147352573)):
+        return dict(recovery="unsupported_capability", connection_lost=False,
+                    advice="此 CAD 缺少所需介面；相同操作重試不會改善，請保留診斷並改用副本或更新程式。")
     advice = {
         "correct_and_retry": "尚未建立圖面；補正參數或確認指定 CAD 已就緒後，可在本任務有限次重試。",
         "revised_new_document": "本次新圖面有未完成內容，未必已存檔。可提交修改後的計畫另建新圖面；不重播相同計畫、不修改或關閉部分圖面。",
