@@ -24,6 +24,10 @@ def require(condition, message):
         raise ValueError(message)
 
 
+class CommandCapabilityError(ValueError):
+    """唯讀前置檢查已確認缺介面；不代表指令曾經執行。"""
+
+
 def number(value):
     require(type(value) in (int, float), "座標／尺寸必須是數字")
     value = float(value)
@@ -261,9 +265,6 @@ class Drawing:
 
     def prepare_styles(self, operations):
         """先準備整批所需樣式，避免完成部分幾何才發現樣式介面缺失。"""
-        for op in operations:
-            if op["kind"] == "command":
-                self.command_method(op["command"])  # 缺少介面時在幾何操作之前停止。
         kinds = {op["kind"] for op in operations}
         if kinds & {"aligned_dimension", "diameter_dimension", "leader"}:
             self.dimension_style()
@@ -377,9 +378,9 @@ class Drawing:
     def command_method(self, command):
         """每個允許指令對應固定同步 COM 方法，版本不支援時不偷換成字串注入。"""
         if command == "ZOOM EXTENTS":
-            return self.app.ZoomExtents
+            return self.doc.ActiveViewport.ZoomExtents if self.legacy else self.app.ZoomExtents
         if command == "ZOOM ALL":
-            return self.app.ZoomAll
+            return self.doc.ActiveViewport.ZoomAll if self.legacy else self.app.ZoomAll
         if command == "REGEN":
             return self.doc.Regen
         if command == "PURGE":
@@ -387,6 +388,33 @@ class Drawing:
         if command == "AUDIT N":
             return self.doc.AuditInfo
         raise ValueError("未知 CAD 指令")
+
+    def preflight_commands(self, operations):
+        """只查詢方法，不執行；無文件時將文件方法留待新空圖建立後檢查。"""
+        commands = [op["command"] for op in operations if op["kind"] == "command"]
+        if not commands:
+            return
+        self.report["step"] = "validate_commands"
+        checks = self.report.setdefault("command_capabilities", [])
+        missing = []
+        for command in commands:
+            if self.doc is None and (self.legacy or not command.startswith("ZOOM ")):
+                checks.append({"command":command, "status":"DEFERRED_NO_DOCUMENT", "executed":False})
+                continue
+            try:
+                method = self.command_method(command)
+                require(callable(method), "COM 成員不是可呼叫的方法")
+            except (AttributeError, pythoncom.com_error) as exc:
+                if not isinstance(exc, AttributeError) and getattr(exc, "hresult", None) not in (-2147352573, -2147352570, -2147467263):
+                    raise  # RPC／逾時等未知結果不是「不支援」，不得誤放行重試。
+                missing.append(command)
+                checks.append({"command":command, "status":"UNSUPPORTED", "executed":False, "error":str(exc)})
+            else:
+                checks.append({"command":command, "status":"AVAILABLE", "executed":False,
+                               "zoom_owner":"Document.ActiveViewport" if self.legacy else "Application"})
+        if missing:
+            self.report["unsupported_commands"] = missing
+            raise CommandCapabilityError("CAD 缺少指令介面，尚未執行指令；請移除或更換：" + ", ".join(missing))
 
     def run_command(self, command):
         """固定文件內執行維護指令；核對可讀圖元，不把 AUDIT 呼叫返回當作無錯誤。"""
@@ -596,13 +624,21 @@ def execute(request, report):
         report["application"] = identity
         return execute_existing(app, family == "yoda_icad_2008", request, report, sys.modules[__name__])
     require(request["action"] == "draw", "未知 CAD 操作")
-    report.update(application=identity, step="create_document")
+    report.update(application=identity, step="validate_commands")
+    # 有現成文件時只用它查詢介面，不縮放、不修改；避免已知不支援仍先建空圖。
+    if any(op["kind"] == "command" for op in operations):
+        probe = Drawing.__new__(Drawing)
+        probe.app, probe.legacy, probe.report = app, family == "yoda_icad_2008", report
+        probe.doc = app.ActiveDocument if int(app.Documents.Count) > 0 else None
+        probe.preflight_commands(operations)
+    report["step"] = "create_document"
     app.Visible = True
     # 呼叫 Documents.Add 前先標記；即使 COM 回覆遺失，也不能當作未建立文件。
     report["drawing_started"] = True
     drawing = Drawing(app, family == "yoda_icad_2008")
     drawing.report = report
     report["owned_document_created"] = True
+    drawing.preflight_commands(operations)
     report["step"] = "prepare_annotation_styles"
     drawing.prepare_styles(operations)
     for index, op in enumerate(operations):
@@ -633,6 +669,12 @@ def execute(request, report):
 
 def failure_details(report, exc):
     """只允許有明確證據的復原；逾時／未知 COM 結果仍交由人工確認。"""
+    if isinstance(exc, CommandCapabilityError) and report.get("completed_operations", 0) == 0:
+        owned = report.get("owned_document_created") is True
+        return dict(recovery="revised_new_document" if owned else "correct_and_retry",
+                    connection_lost=False,
+                    advice=("指令尚未執行，尚無幾何操作。請移除不支援指令後提交修正計畫；"
+                            + ("本次空圖／副本保留在 CAD，不接續修改。" if owned else "未建立新圖或修改目前文件。")))
     info = getattr(exc, "excepinfo", None)
     code = info[5] if info and len(info) > 5 else getattr(exc, "hresult", None)
     before_drawing = report.get("drawing_started") is False or report.get("step") == "validate_edit"

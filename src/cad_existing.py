@@ -162,6 +162,7 @@ def edit_document(app, doc, legacy, request, report, api, entities, before, outp
     drawing.app, drawing.doc, drawing.model = app, doc, doc.ModelSpace
     drawing.legacy, drawing.expected = legacy, []
     drawing.report = report
+    drawing.preflight_commands(additions)
     deleted = set()
     # 目前圖面必須支援 Undo 群組才寫入；不透過 SendCommand 猜測指令完成。
     if guard:

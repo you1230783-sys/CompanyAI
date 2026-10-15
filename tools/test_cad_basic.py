@@ -32,11 +32,14 @@ class BasicTests(unittest.TestCase):
         drawing.app = SimpleNamespace(ZoomExtents=lambda:calls.append("zoom"),ZoomAll=lambda:calls.append("all"))
         drawing.doc = SimpleNamespace(ModelSpace=[entity],PaperSpace=[],Blocks=blocks,Layers=[],
             Linetypes=[],TextStyles=[],DimensionStyles=[],GetVariable=lambda key:0,
+            ActiveViewport=SimpleNamespace(ZoomExtents=lambda:calls.append("viewport_zoom"),ZoomAll=lambda:calls.append("viewport_all")),
             Activate=lambda:calls.append("activate"),Regen=lambda:calls.append("regen"),
             PurgeAll=lambda:blocks.clear(),AuditInfo=lambda fix:calls.append(("audit",fix)))
         for command in ('ZOOM EXTENTS','ZOOM ALL','REGEN','PURGE','AUDIT N'):
             drawing.run_command(command)
         self.assertIn(("audit",False), calls)
+        self.assertIn("viewport_zoom", calls)
+        self.assertNotIn("zoom", calls)
         self.assertEqual(drawing.report["commands"][3]["removed_definitions"]["Blocks"],["unused"])
         self.assertTrue(drawing.report["commands"][-1]["audit_clean_not_verified"])
         drawing.doc.PurgeAll=lambda:setattr(entity,"Radius",10.)
@@ -47,6 +50,52 @@ class BasicTests(unittest.TestCase):
         drawing = worker.Drawing.__new__(worker.Drawing)
         drawing.doc = SimpleNamespace(Regen=lambda:self.fail("不應執行"),GetVariable=lambda key:1)
         with self.assertRaisesRegex(ValueError,"正在執行其他指令"): drawing.run_command("REGEN")
+
+    def test_modern_zoom_remains_on_application(self):
+        drawing = worker.Drawing.__new__(worker.Drawing)
+        calls = []
+        drawing.legacy, drawing.doc = False, SimpleNamespace()
+        drawing.app = SimpleNamespace(ZoomExtents=lambda:calls.append("modern"))
+        drawing.command_method("ZOOM EXTENTS")()
+        self.assertEqual(calls,["modern"])
+
+    def test_unsupported_command_preflight_does_not_create_document(self):
+        app = SimpleNamespace(Name="ICAD",Version="5.0.20.0",FullName=r"C:\CAD\icad.exe",
+            Documents=SimpleNamespace(Count=1,Add=lambda:self.fail("不應建立文件")),
+            ActiveDocument=SimpleNamespace(ActiveViewport=SimpleNamespace()))
+        selected = dict(server_exists=True,progid="Icad.Application.1",server=app.FullName,
+                        clsid="{8011C111-7E36-11D1-BC5A-0060089608A4}")
+        raw = SimpleNamespace(QueryInterface=lambda iid:None)
+        report = {}
+        with patch.object(worker.registry,"discover",return_value=([selected],[])), \
+             patch.object(worker.pythoncom,"GetActiveObject",return_value=raw), \
+             patch.object(worker.dynamic,"Dispatch",return_value=app), \
+             patch.object(worker,"identify_product",return_value="yoda_icad_2008"), \
+             self.assertRaises(worker.CommandCapabilityError) as caught:
+            worker.execute(dict(action="draw",version="latest",operations=[dict(kind="command",command="ZOOM E")]),report)
+        self.assertFalse(report["drawing_started"])
+        self.assertEqual(report["step"],"validate_commands")
+        self.assertEqual(report["unsupported_commands"],["ZOOM EXTENTS"])
+        self.assertFalse(report["command_capabilities"][0]["executed"])
+        self.assertEqual(worker.failure_details(report,caught.exception)["recovery"],"correct_and_retry")
+        report.update(owned_document_created=True,drawing_started=True)
+        self.assertEqual(worker.failure_details(report,caught.exception)["recovery"],"revised_new_document")
+
+    def test_unsupported_active_command_stops_before_undo(self):
+        app,doc,entity,calls=self.active_fixture()
+        request=self.active_request(app,doc,[])
+        request["operations"]=[dict(kind="command",command="ZOOM E")]
+        report={"completed_operations":0,"drawing_started":False}
+        with patch.object(cad_active,"identity",return_value=request["document"]),self.assertRaises(worker.CommandCapabilityError):
+            cad_active.execute_active(app,True,request,report,worker)
+        self.assertEqual(calls,[])
+        self.assertFalse(report["drawing_started"])
+
+    def test_command_preflight_without_document_is_explicitly_deferred(self):
+        drawing = worker.Drawing.__new__(worker.Drawing)
+        drawing.legacy,drawing.doc,drawing.report=True,None,{}
+        drawing.preflight_commands([dict(kind="command",command="ZOOM EXTENTS")])
+        self.assertEqual(drawing.report["command_capabilities"][0]["status"],"DEFERRED_NO_DOCUMENT")
 
     def test_missing_hwnd_still_reads_without_edit_permission(self):
         app, doc, _, calls = self.active_fixture()

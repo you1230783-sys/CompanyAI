@@ -40,7 +40,9 @@ impl Broker {
             )
         );
         if self.cad_partial_plans.contains(&plan) {
-            return Err("此計畫曾部分繪圖，不能原樣重播；請修改計畫後另建圖面。".into());
+            return Err(
+                "此計畫曾部分執行或確認含不支援指令，不能原樣重送；請修改計畫後再提交。".into(),
+            );
         }
         let name = if std::path::Path::new(name).extension().is_none() {
             format!("{name}.dwg")
@@ -95,7 +97,9 @@ impl Broker {
         if result["status"] != "DATA_VERIFIED_VISUAL_PENDING" {
             if recoverable(&result) {
                 self.cad_failed = false;
-                if result["recovery"] == "revised_new_document" {
+                if result["recovery"] == "revised_new_document"
+                    || result["unsupported_commands"].is_array()
+                {
                     self.cad_partial_plans.push(plan);
                 }
             }

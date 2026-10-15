@@ -1,3 +1,11 @@
+## 0.8.62：舊版縮放與指令能力前置檢查
+
+- 佑達 iCAD 2008 的 ZOOM E/A 改用 Document.ActiveViewport；GstarCAD 維持 Application 方法。方法存在不等於實機功能已驗收。
+- validate_commands 與 prepare_annotation_styles 分離；能力檢查只查詢方法、不執行指令。報告區分 AVAILABLE／UNSUPPORTED／DEFERRED_NO_DOCUMENT，並明示 executed=false。
+- 有現成文件時，在建立新圖前唯讀檢查指令。沒有文件則在新空圖建立後檢查；若不支援，保留空圖並允許移除該指令後另建，不接續修改空圖。既有圖面在 Undo／樣式／圖元修改之前檢查。
+- 未執行指令的已知缺介面錯誤不一律 manual_check。新圖計畫確認含不支援指令後不可原樣重送；移除或更換後可重試。RPC／逾時等未知結果仍不放行。
+- 沿用 v142 x64、空快取 --frozen、基礎驗證與 NSIS／main 交付；完整驗證與公司 CAD 實機待補。
+
 ## 0.8.61：引線／剖面修正與受限 CAD 指令
 
 - iCAD 原生 AddLeader 的第二參數使用註解字串；追蹤本次同步建立、內容及端點相符的唯一文字，設定字高3、樣式與顏色，不另建重複文字。2022 保留相容介面。
