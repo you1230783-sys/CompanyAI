@@ -1,41 +1,35 @@
 {
-  "version": "0.8.65",
+  "version": "0.8.66",
   "result": "PASS_BASIC",
-  "recorded_at": "2026-10-15T17:21:04.255658+08:00",
   "rust_selected_tests": 63,
   "python_synthetic_contracts": 57,
-  "native_runtime_self_check": true,
-  "native_webview_basic_check": true,
   "onboarding_dom_contracts": true,
-  "same_worker_connection_synthetic": true,
-  "leader_bottom_left_anchor_synthetic": true,
   "cad_drawing_tested_locally": false,
   "company_ai_service_tested": false,
   "installer_packaged_and_manifest_verified": true,
   "installer_install_update_rollback_uninstall_tested": false,
   "full_validation_completed": false,
   "runtime_manifest_sha256": "5098645160e0d07b2a7aa044a2c2344a51d33d3315fcde7787ceb70cb4218353",
-  "binary_origin": "Official CPython 3.13.12 and pywin32 311 wheels; not locally compiled with v142",
   "artifacts": [
     {
       "path": "dist/LM_AI.exe",
-      "bytes": 18630656,
-      "sha256": "58f9b2f15c258613b2179394808a8deb6f92ad3748b68b7d36bd43cfbc9c39dd"
+      "bytes": 18660352,
+      "sha256": "ff1fc687f8a3c7e3ad463167fe99a05de0eaac0cffb3e4675bf95f99f798c5da"
     },
     {
       "path": "dist/LM_AI_Setup.exe",
-      "bytes": 36105383,
-      "sha256": "1d56556a9a88a6dfe8ff5b2dbf9753a21423f1b4bae8118a43d861fb9b336aa4"
+      "bytes": 36107816,
+      "sha256": "2fe5c188f57131aea5774197ae91b50b880ce4e20b88ed0239dc79442f2ba838"
     },
     {
       "path": "dist/update-manifest.json",
       "bytes": 1050,
-      "sha256": "664b534fb60020140c5eb9ebe925bc2113e8f9769933e7841a173b6cd3402914"
+      "sha256": "a569d9aebebe9fa46935c54e453d4cc9b9b501b539cfe1c58c29a7a77789f69b"
     },
     {
       "path": "dist/update-manifest-exe.json",
       "bytes": 1050,
-      "sha256": "664b534fb60020140c5eb9ebe925bc2113e8f9769933e7841a173b6cd3402914"
+      "sha256": "a569d9aebebe9fa46935c54e453d4cc9b9b501b539cfe1c58c29a7a77789f69b"
     }
   ]
 }

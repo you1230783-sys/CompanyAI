@@ -1,4 +1,4 @@
-/* 一張入門卡與跨版本摘要；紀錄由 Rust 保存，登入後才可顯示或標記完成。 */
+/* 教學內容由原生目錄提供；每張卡片各自保存完成旗標，重看不需重設。 */
 "use strict";
 window.OnboardingUI = (() => {
   const dialog = document.createElement("dialog");
@@ -8,82 +8,179 @@ window.OnboardingUI = (() => {
   dialog.innerHTML = `<div class="onboarding-eyebrow" id="onboarding-eyebrow"></div>
     <h2 id="onboarding-title"></h2><p id="onboarding-intro" class="subtle"></p>
     <div id="onboarding-body"></div><div class="onboarding-actions">
+      <button id="onboarding-previous" class="secondary-button">上一張</button>
       <button id="onboarding-later" class="secondary-button">稍後再看</button>
-      <button id="onboarding-done">開始使用</button></div>`;
+      <button id="onboarding-done">看完了</button></div>`;
   document.body.append(dialog);
-  let autoShown = false, topic = "chat", previousFocus = null, timer = null;
+  let autoShown = false, timer = null, previousFocus = null, returnToSettings = false;
+  let mode = "lesson", sequence = [], position = 0, catalogSignature = "";
   const allowed = () => state.logged_in && !state.update_required && state.onboarding?.enabled;
-  function open(which) {
-    if (!allowed()) return;
-    topic = which;
-    previousFocus = document.activeElement;
+  const lessons = () => state.onboarding?.tutorials || [];
+
+  function appendText(parent, tag, text, className = "") {
+    const node = document.createElement(tag);
+    node.textContent = text;
+    if (className) node.className = className;
+    parent.append(node);
+    return node;
+  }
+
+  // 使用 textContent 呈現目錄文字，避免更新公告或教學內容被當作 HTML。
+  function renderReleases(parent, entries) {
+    parent.replaceChildren();
+    if (!entries.length) {
+      appendText(parent, "p", "目前沒有可顯示的更新紀錄。", "subtle");
+      return;
+    }
+    const versions = new Map();
+    for (const entry of entries) {
+      if (!versions.has(entry.version)) versions.set(entry.version, []);
+      versions.get(entry.version).push(entry);
+    }
+    // 版本按數字比較，避免把 0.8.100 排在 0.8.99 前面。
+    const compare = (a, b) => {
+      const aa = a.split(".").map(Number), bb = b.split(".").map(Number);
+      for (let i = 0; i < Math.max(aa.length, bb.length); i++) {
+        const difference = (bb[i] || 0) - (aa[i] || 0);
+        if (difference) return difference;
+      }
+      return 0;
+    };
+    for (const version of [...versions.keys()].sort(compare)) {
+      const section = document.createElement("section");
+      section.className = "release-entry";
+      appendText(section, "h3", version);
+      for (const entry of versions.get(version)) {
+        appendText(section, "h4", entry.section);
+        const list = document.createElement("ul");
+        for (const text of entry.items || []) appendText(list, "li", text);
+        section.append(list);
+      }
+      parent.append(section);
+    }
+  }
+
+  function paintLesson() {
+    const lesson = sequence[position];
     const body = $("onboarding-body");
     body.replaceChildren();
-    if (which === "chat") {
-      $("onboarding-eyebrow").textContent = "一般對話 · 入門 1 / 1";
-      $("onboarding-title").textContent = "從一句話開始";
-      $("onboarding-intro").textContent = "說明你想完成的事，LM_AI 會協助整理與回答。";
-      const steps = [
-        ["1", "描述需求", "例如：幫我把這段文字整理成三個重點。"],
-        ["2", "需要時附上檔案", "加入文件，並說明希望它幫你找什麼或整理什麼。"],
-        ["3", "看完再追問", "可以請它補充、縮短或換個說法；重要內容請再核對。"],
-      ];
-      for (const [number, title, description] of steps) {
-        const row = document.createElement("div"); row.className = "onboarding-step";
-        const badge = document.createElement("span"); badge.className = "onboarding-number"; badge.textContent = number;
-        const content = document.createElement("div"), heading = document.createElement("strong"), text = document.createElement("p");
-        heading.textContent = title; text.textContent = description;
-        content.append(heading, text); row.append(badge, content); body.append(row);
-      }
-      const hint = document.createElement("p"); hint.className = "subtle onboarding-hint";
-      hint.textContent = "之後可從「設定 → 一般 → 使用教學」重看。"; body.append(hint);
-      $("onboarding-done").textContent = "開始使用";
-    } else {
-      const info = state.onboarding;
-      $("onboarding-eyebrow").textContent = "版本更新";
-      $("onboarding-title").textContent = "這次更新了什麼";
-      $("onboarding-intro").textContent = `您從 ${info.from_version} 更新到 ${info.to_version}，以下為更新資訊：`;
-      const groups = new Map();
-      for (const entry of info.updates || []) {
-        if (!groups.has(entry.section)) groups.set(entry.section, []);
-        for (const text of entry.items || []) groups.get(entry.section).push(`${text}（${entry.version}）`);
-      }
-      for (const [section, items] of groups) {
-        const heading = document.createElement("h3"), list = document.createElement("ul");
-        heading.textContent = section + "新增或修改";
-        for (const text of items) { const item = document.createElement("li"); item.textContent = text; list.append(item); }
-        body.append(heading, list);
-      }
-      $("onboarding-done").textContent = "知道了";
-    }
+    $("onboarding-eyebrow").textContent = `${lesson.group} · ${position + 1} / ${sequence.length}`;
+    $("onboarding-title").textContent = lesson.title;
+    $("onboarding-intro").textContent = lesson.intro;
+    lesson.steps.forEach(([title, description], index) => {
+      const row = document.createElement("div"), content = document.createElement("div");
+      row.className = "onboarding-step";
+      appendText(row, "span", String(index + 1), "onboarding-number");
+      appendText(content, "strong", title);
+      appendText(content, "p", description);
+      row.append(content); body.append(row);
+    });
+    appendText(body, "p", "之後可從「設定 → 教學與更新日誌」選擇任何主題重看。", "subtle onboarding-hint");
+    $("onboarding-previous").hidden = position === 0;
+    $("onboarding-later").textContent = "稍後再看";
+    $("onboarding-done").textContent = position + 1 < sequence.length ? "看完了，下一張" : "看完了";
+  }
+
+  function show(fromSettings) {
+    previousFocus = document.activeElement;
+    returnToSettings = fromSettings;
+    if (fromSettings) $("settings-dialog").close();
     autoShown = true;
     dialog.showModal();
     $("onboarding-done").focus();
   }
+
+  function beginLessons(items, fromSettings = false) {
+    if (!allowed() || !items.length) return;
+    mode = "lesson"; sequence = items; position = 0;
+    paintLesson(); show(fromSettings);
+  }
+
+  function openUpdates(history = false) {
+    if (!allowed()) return;
+    mode = history ? "history" : "updates";
+    const info = state.onboarding;
+    $("onboarding-eyebrow").textContent = "版本更新";
+    $("onboarding-title").textContent = history ? "更新日誌" : "這次更新了什麼";
+    $("onboarding-intro").textContent = history
+      ? `目前版本 ${info.to_version}；更新紀錄自 0.8.65 開始。`
+      : `您從 ${info.from_version} 更新到 ${info.to_version}，以下為更新資訊：`;
+    renderReleases($("onboarding-body"), history ? info.release_history || [] : info.updates || []);
+    $("onboarding-previous").hidden = true;
+    $("onboarding-later").textContent = history ? "返回設定" : "稍後再看";
+    $("onboarding-done").textContent = history ? "關閉" : "知道了";
+    show(history);
+  }
+
+  $("onboarding-previous").onclick = () => {
+    if (mode === "lesson" && position > 0) { position--; paintLesson(); }
+  };
   $("onboarding-later").onclick = () => dialog.close();
   $("onboarding-done").onclick = () => {
     if (!allowed()) return;
-    send({type:"onboarding_ack", topic});
+    if (mode === "lesson") {
+      send({type:"onboarding_ack", topic:sequence[position].id});
+      if (++position < sequence.length) { paintLesson(); return; }
+    } else if (mode === "updates") send({type:"onboarding_ack", topic:"updates"});
+    // 手動重看完整日誌不改變自動更新通知的已讀狀態。
     dialog.close();
   };
   dialog.addEventListener("close", () => {
-    if (previousFocus?.isConnected && state.logged_in) previousFocus.focus();
+    if (returnToSettings && allowed()) {
+      $("settings-dialog").showModal();
+      window.SettingsUI.select(3);
+    }
+    returnToSettings = false;
+    if (previousFocus?.isConnected && allowed()) previousFocus.focus();
   });
-  $("onboarding-replay").onclick = () => {
-    if (!allowed()) return;
-    $("settings-dialog").close();
-    open("chat");
-  };
+  $("updates-replay").onclick = () => openUpdates(true);
+
+  function renderCatalog() {
+    const info = state.onboarding || {};
+    $("onboarding-storage-status").textContent = info.error || "";
+    const signature = JSON.stringify([info.tutorials, info.release_history]);
+    if (signature === catalogSignature) return;
+    catalogSignature = signature;
+    const catalog = $("tutorial-catalog"); catalog.replaceChildren();
+    const groups = new Map();
+    for (const lesson of lessons()) {
+      if (!groups.has(lesson.group)) groups.set(lesson.group, []);
+      groups.get(lesson.group).push(lesson);
+    }
+    for (const [group, items] of groups) {
+      const section = document.createElement("section"), heading = document.createElement("div");
+      section.className = "tutorial-group"; heading.className = "tutorial-section-heading";
+      appendText(heading, "h4", group);
+      const all = appendText(heading, "button", "依序閱讀", "secondary-button");
+      all.type = "button"; all.onclick = () => beginLessons(items, true);
+      section.append(heading);
+      for (const lesson of items) {
+        const button = document.createElement("button");
+        button.type = "button"; button.className = "tutorial-topic";
+        appendText(button, "span", lesson.title);
+        appendText(button, "span", lesson.completed ? "重看" : "未閱讀", "subtle");
+        button.onclick = () => beginLessons([lesson], true);
+        section.append(button);
+      }
+      catalog.append(section);
+    }
+    renderReleases($("release-history"), info.release_history || []);
+  }
+
   function render() {
-    $("onboarding-storage-status").textContent = state.onboarding?.error || "";
+    renderCatalog();
     if (!allowed()) { if (dialog.open) dialog.close(); return; }
-    // 不蓋過登入、強制更新、待確認操作或其他 modal；每次啟動最多自動顯示一張。
+    // 每次啟動最多自動開一組，且僅介紹目前情境；使用者可逐卡繼續或稍後再看。
     if (autoShown || timer || state.busy !== "none" || state.onboarding.error) return;
     timer = setTimeout(() => {
       timer = null;
       if (!allowed() || autoShown || state.busy !== "none" || document.querySelector("dialog[open]")) return;
-      if (state.onboarding.updates?.length) open("updates");
-      else if (state.onboarding.chat_pending) open("chat");
+      if (state.onboarding.updates?.length) { openUpdates(); return; }
+      if (typeof activeView !== "undefined" && activeView !== "chat") return;
+      const conversation = (state.conversations || []).find(item => item.id === state.active_id);
+      const context = conversation?.project_id ? "project" : "chat";
+      const first = lessons().find(lesson => !lesson.completed && lesson.context === context);
+      if (first) beginLessons(lessons().filter(lesson => !lesson.completed && lesson.group === first.group));
     }, 300);
   }
   return {render};

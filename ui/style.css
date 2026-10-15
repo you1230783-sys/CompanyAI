@@ -6,8 +6,21 @@
 .onboarding-number { display: grid; place-items: center; flex: 0 0 30px; height: 30px; border-radius: 50%; color: var(--on-accent); background: var(--accent); font-weight: 600; }
 .onboarding-step p { margin: 5px 0 0; color: var(--muted); line-height: 1.6; }
 .onboarding-hint { font-size: 13px; }
-.onboarding-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+.onboarding-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 22px; }
 .onboarding-card li { margin: 8px 0; line-height: 1.6; }
+/* 教學目錄獨立排版，窄視窗自動改為單欄。 */
+.tutorial-catalog { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 16px; }
+.settings-panel .tutorial-group { padding: 16px; margin: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.tutorial-section-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.tutorial-section-heading h3, .tutorial-section-heading h4 { margin: 0; }
+.tutorial-topic { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin-top: 8px; padding: 12px; text-align: left; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.tutorial-topic:hover { background: var(--hover); }
+.tutorial-topic .subtle { flex-shrink: 0; font-size: 12px; }
+.release-entry { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 12px; }
+.release-entry h4 { margin-bottom: 6px; }
+.release-entry li { margin: 6px 0; line-height: 1.6; }
+#settings-dialog .settings-tabs { flex-wrap: wrap; }
+#settings-dialog .settings-tabs button { white-space: nowrap; }
 :root {
   --font-size: 14px;
   --ink: #253039;

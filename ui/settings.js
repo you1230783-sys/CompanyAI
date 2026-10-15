@@ -27,7 +27,8 @@ window.SettingsUI = (() => {
   buttons.forEach((button, index) => {
     button.onclick = () => select(index);
     button.onkeydown = event => {
-      const next = {ArrowRight:(index+1)%3, ArrowLeft:(index+2)%3, Home:0, End:2}[event.key];
+      const count = buttons.length;
+      const next = {ArrowRight:(index+1)%count, ArrowLeft:(index+count-1)%count, Home:0, End:count-1}[event.key];
       if (next !== undefined) { event.preventDefault(); select(next, true); }
     };
   });

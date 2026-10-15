@@ -8,6 +8,11 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 const CHAT_ID: &str = "chat.basics";
 const CHAT_REVISION: u32 = 1;
 
+/// 教學內容與 revision 一起發行；只接受目錄內的項目，不能由前端任意寫入旗標。
+fn tutorial_catalog() -> Vec<Value> {
+    serde_json::from_str(include_str!("../../assets/tutorials.json")).unwrap_or_default()
+}
+
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 struct Saved {
@@ -106,7 +111,15 @@ impl Onboarding {
                 saved.tutorials.insert(CHAT_ID.into(), CHAT_REVISION);
             }
             "updates" => saved.pending_from = None,
-            _ => return Err("未知的教學項目".into()),
+            id => {
+                let revision = tutorial_catalog()
+                    .iter()
+                    .find(|entry| entry["id"] == id)
+                    .and_then(|entry| entry["revision"].as_u64())
+                    .and_then(|revision| u32::try_from(revision).ok())
+                    .ok_or("未知的教學項目")?;
+                saved.tutorials.insert(id.into(), revision);
+            }
         }
         self.persist(&saved)?;
         self.saved = saved;
@@ -131,14 +144,41 @@ impl Onboarding {
         let lower = from.and_then(|v| service::version_number(v).ok());
         let current = service::version_number(service::CURRENT_VERSION).ok();
         // 只加入已明確決定交付的簡短公告，從 0.8.65 開始；不回填歷史版本。
-        let entries: Vec<Value> = serde_json::from_str::<Vec<Value>>(include_str!("../../assets/release-notes.json"))
-            .unwrap_or_default().into_iter().filter(|entry| {
-                let version = entry["version"].as_str().and_then(|v| service::version_number(v).ok());
-                matches!((lower,current,version), (Some(a),Some(b),Some(v)) if a < v && v <= b && v >= [0,8,65])
-            }).collect();
+        let history: Vec<Value> =
+            serde_json::from_str::<Vec<Value>>(include_str!("../../assets/release-notes.json"))
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|entry| {
+                    let version = entry["version"]
+                        .as_str()
+                        .and_then(|v| service::version_number(v).ok());
+                    matches!((current,version), (Some(b),Some(v)) if v <= b && v >= [0,8,65])
+                })
+                .collect();
+        let entries: Vec<_> = history
+            .iter()
+            .filter(|entry| {
+                let version = entry["version"]
+                    .as_str()
+                    .and_then(|v| service::version_number(v).ok());
+                matches!((lower,version), (Some(a),Some(v)) if a < v)
+            })
+            .collect();
+        let tutorials: Vec<_> = tutorial_catalog()
+            .into_iter()
+            .map(|mut entry| {
+                let id = entry["id"].as_str().unwrap_or("");
+                let revision = entry["revision"].as_u64().unwrap_or(1);
+                entry["completed"] = json!(
+                    u64::from(self.saved.tutorials.get(id).copied().unwrap_or(0)) >= revision
+                );
+                entry
+            })
+            .collect();
         json!({"enabled":!self.disabled,"chat_pending":!self.disabled && self.error.is_none()
             && self.saved.tutorials.get(CHAT_ID).copied().unwrap_or(0) < CHAT_REVISION,
-            "updates":entries,"from_version":from,"to_version":service::CURRENT_VERSION,
+            "updates":entries,"release_history":history,"tutorials":tutorials,
+            "from_version":from,"to_version":service::CURRENT_VERSION,
             "error":self.error,"state_file":self.path})
     }
 }
@@ -163,7 +203,12 @@ mod tests {
         let info = state.state();
         let updates = info["updates"].as_array().unwrap();
         assert!(!updates.is_empty());
-        assert!(updates.iter().all(|entry| entry["version"] == "0.8.65"));
+        assert!(updates.iter().any(|entry| entry["version"] == "0.8.65"));
+        assert!(updates.iter().all(|entry| {
+            let version = service::version_number(entry["version"].as_str().unwrap()).unwrap();
+            version >= [0, 8, 65]
+                && version <= service::version_number(service::CURRENT_VERSION).unwrap()
+        }));
         state.saved.tutorials.insert(CHAT_ID.into(), CHAT_REVISION);
         assert_eq!(state.state()["chat_pending"], false);
         state.saved.pending_from = Some(service::CURRENT_VERSION.into());

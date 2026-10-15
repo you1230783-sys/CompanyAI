@@ -568,7 +568,7 @@ impl App {
         last.attachments = names;
         // 尚無 server conversation 時，送出執行緒先用相同 local ID 建立／取得；重試仍固定 ID。
         let use_fast = self.config.quick_actions_fast
-            && matches!(action, "translate" | "summarize" | "polish");
+            && matches!(action, "translate" | "summarize" | "polish" | "explain");
         let model = if use_fast {
             "fast"
         } else {

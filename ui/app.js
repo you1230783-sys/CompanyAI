@@ -371,6 +371,8 @@ function showView(view) {
   $("project-context").textContent = project?.root || "";
   $("project-context").title = project?.root || "";
   $("project-context").hidden = !project;
+  // 一般對話提供快速解釋；專案透過原本的任務輸入提出需求。
+  document.querySelector('[data-action="explain"]').hidden = !!conversation?.project_id;
   // 只在真正進入助理頁時更新，狀態推播重繪不重複查詢。
   if (previous !== view && view === "outlook") window.MailUI?.enter();
 }
