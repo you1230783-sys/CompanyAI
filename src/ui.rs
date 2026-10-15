@@ -35,6 +35,7 @@ use windows_sys::Win32::{
 mod access;
 mod diagnostics;
 mod mail_batch;
+mod onboarding;
 mod projects;
 mod retry;
 mod site;
@@ -46,6 +47,9 @@ const TRAY_MESSAGE: u32 = WM_APP + 4;
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Command {
+    OnboardingAck {
+        topic: String,
+    },
     Project {
         command: projects::ProjectCommand,
     },
@@ -183,6 +187,7 @@ enum Event {
     AllRead(u64, usize),
 }
 struct App {
+    onboarding: onboarding::Onboarding,
     projects: projects::ProjectRuntime,
     vnc: vnc::VncRuntime,
     site: site::SiteRuntime,
@@ -313,7 +318,7 @@ impl App {
             "update_available":self.versions.known.as_ref().is_some_and(|info| info.available()),
             "update_status":self.update_status,"update_ready":self.update_ready.is_some(),"update_busy":self.update_busy,
             "update_kind":self.update_ready.as_ref().map(|ready|ready.artifact.kind.as_str()),
-            "version":service::CURRENT_VERSION,"config":self.config,"status":self.status,"status_notice_id":self.status_notice_id,"error":self.error,
+            "version":service::CURRENT_VERSION,"onboarding":self.onboarding.state(),"config":self.config,"status":self.status,"status_notice_id":self.status_notice_id,"error":self.error,
             "busy":self.busy,"logged_in":self.logged_in(),"can_send":self.can_send(),"update_required":self.versions.blocked(),
             "retry":self.retry_state(),"projects":self.project_state(),"models":models,"conversations":conversations,"active_id":self.active_id,"messages":self.messages,
             "draft":self.draft,"draft_revision":self.draft_revision,"focus_draft":self.focus_draft,
@@ -676,6 +681,7 @@ impl App {
     fn command(&mut self, command: Command) -> AppResult<()> {
         command.check_access(self.logged_in(), self.versions.blocked(), self.smoke)?;
         match command {
+            Command::OnboardingAck { topic } => self.onboarding.acknowledge(&topic)?,
             Command::ExportDiagnostics { include_details } => {
                 self.export_diagnostics(include_details)?
             }
@@ -1669,6 +1675,10 @@ impl App {
             return Err("更新版本已改變，請重新點擊下載箭頭確認。".into());
         }
         self.preserve_draft()?;
+        // 非關鍵導覽狀態寫入失敗不能阻擋必要更新；NSIS仍會記錄真實EXE版本。
+        if let Err(error) = self.onboarding.before_update() {
+            self.toast(&error);
+        }
         crate::deployment::launch_update(
             self.update_ready.as_ref().ok_or("更新檔不存在。")?,
             &self.config,
@@ -2101,6 +2111,7 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
             Ordering::Relaxed,
         );
         let mut app = App {
+            onboarding: onboarding::Onboarding::load(smoke),
             projects: projects::ProjectRuntime::load(&root),
             vnc: vnc::VncRuntime::default(),
             site: site::SiteRuntime::default(),

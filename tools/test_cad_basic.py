@@ -15,6 +15,30 @@ from unittest.mock import patch
 
 
 class BasicTests(unittest.TestCase):
+    def test_connect_retains_the_launched_application_object(self):
+        selected = dict(clsid="{8011C111-7E36-11D1-BC5A-0060089608A4}", server=r"C:\CAD\icad.exe")
+        app = SimpleNamespace(Name="ICAD", Version="5", FullName=selected["server"])
+        missing = worker.pythoncom.com_error(-2147221021, "not running", None, None)
+        report = {}
+        with patch.object(worker.pythoncom, "GetActiveObject", side_effect=missing), \
+             patch.object(worker.pythoncom, "CoCreateInstance", return_value=object()) as launch, \
+             patch.object(worker.dynamic, "Dispatch", return_value=app):
+            connected, identity = worker.connect_application(selected, dict(action="draw", launch_if_missing=True), report)
+        self.assertIs(connected, app)
+        self.assertTrue(app.Visible)
+        self.assertEqual(identity["FullName"], selected["server"])
+        launch.assert_called_once()
+        self.assertTrue(report["connection"]["same_worker"])
+
+    def test_connect_does_not_launch_without_user_permission(self):
+        missing = worker.pythoncom.com_error(-2147221021, "not running", None, None)
+        selected = dict(clsid="{8011C111-7E36-11D1-BC5A-0060089608A4}", server=r"C:\CAD\icad.exe")
+        with patch.object(worker.pythoncom, "GetActiveObject", side_effect=missing), \
+             patch.object(worker.pythoncom, "CoCreateInstance") as launch:
+            with self.assertRaises(worker.pythoncom.com_error):
+                worker.connect_application(selected, dict(action="draw"), {})
+        launch.assert_not_called()
+
     def test_line_style_validation_and_legacy_defaults(self):
         op = dict(kind="line", color=7, start=[0,0], end=[100,0])
         self.assertNotIn("line_style", worker.prepare([op])[0])
@@ -371,6 +395,8 @@ class BasicTests(unittest.TestCase):
         self.assertEqual(len(drawing.expected), 2)
         self.assertEqual(drawing.model[1].InsertionPoint, [11.,11.,0.])
         self.assertEqual(drawing.model[1].Height, 3.)
+        self.assertEqual(drawing.model[1].AttachmentPoint, 7)
+        self.assertEqual(drawing.model[1].Rotation, 0)
         self.assertEqual(drawing.model[1].Color, 3)
         self.assertEqual(len(drawing.report["operation_entities"][0]["entities"]), 2)
         doc = SimpleNamespace(ModelSpace=drawing.model, GetVariable=lambda key:4)

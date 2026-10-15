@@ -1,4 +1,46 @@
 use super::*;
+#[test]
+fn long_cross_task_history_keeps_requirements_and_bounds_optional_memory() {
+    let memory = Memory::open(fixture(), "chat").unwrap();
+    let mut messages = Vec::new();
+    for i in 0..3 {
+        let id = format!("task_{i}");
+        let requirement = format!("要求{i}：原檔唯讀，不儲存目前CAD圖面");
+        let answer = "已完成的長篇答案".repeat(8000);
+        memory
+            .save_run(
+                &id,
+                &requirement,
+                &answer,
+                "completed",
+                Some("已完成；下一步核對外觀"),
+                &[],
+            )
+            .unwrap();
+        let mut user = Message::user(&requirement);
+        user.request_id = Some(id);
+        messages.push(user);
+        messages.push(Message::assistant(answer));
+    }
+    messages.push(Message::user("繼續，但保持不儲存"));
+    let projected = memory.context(&messages).unwrap();
+    for i in 0..3 {
+        assert!(projected
+            .iter()
+            .any(|m| m.content == format!("要求{i}：原檔唯讀，不儲存目前CAD圖面")));
+    }
+    assert!(context_sizes(&projected)["total_tokens"].as_u64().unwrap() < 5500);
+    assert!(!projected
+        .iter()
+        .any(|m| m.content.contains("已完成的長篇答案")));
+    let huge = "不得修改來源。".repeat(2000);
+    messages[0].content = huge.clone();
+    let projected = memory.context(&messages).unwrap();
+    assert!(projected.iter().any(|m| m.content == huge));
+    assert!(projected[0]
+        .content
+        .contains("\"history_exceeds_budget\":true"));
+}
 fn fixture() -> Project {
     let root = std::env::current_dir()
         .unwrap()
@@ -140,7 +182,7 @@ fn context_keeps_original_results_on_disk_and_only_sends_selected_memory() {
     assert!(!memory.context(&[Message::user("原始要求")]).unwrap()[0]
         .content
         .contains("上一輪已確認"));
-    assert!(context
+    assert!(!context
         .iter()
         .any(|m| m.content.contains("UNIQUE_FULL_ANSWER_")));
     assert!(context[0].content.contains("上一輪已確認數值 42"));
@@ -180,7 +222,10 @@ fn next_conversation_uses_final_answers_and_counts_with_chunked_details_on_deman
         .context(&[user, answer, Message::user("第三輪")])
         .unwrap();
     assert!(context.iter().any(|m| m.content == "原要求"));
-    assert!(context.iter().any(|m| m.content == "最終回覆"));
+    assert!(context[0].content.contains("最終回覆"));
+    assert!(context
+        .iter()
+        .any(|m| m.content.contains("read_task_result(task_id=")));
     assert!(context[0].content.contains("tool_usage"));
     assert!(!context
         .iter()

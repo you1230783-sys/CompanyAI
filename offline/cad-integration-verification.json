@@ -1,57 +1,41 @@
 {
-  "version": "0.8.64",
+  "version": "0.8.65",
   "result": "PASS_BASIC",
-  "recorded_at": "2026-10-15T15:00:56.763072+08:00",
-  "rust_selected_tests": 49,
-  "python_synthetic_contracts": 55,
-  "native_runtime_inventory_pipe": true,
-  "delivered_runtime_self_check": true,
-  "active_missing_hwnd_readonly_and_application_fallback_synthetic": true,
-  "active_unsupported_retry_guard_synthetic": true,
-  "annotation_style_restore_and_bigfont_synthetic": true,
-  "legacy_dimension_styles_native_synthetic": true,
-  "style_preflight_preserves_existing_entities_synthetic": true,
-  "legacy_leader_text_argument_synthetic": true,
-  "legacy_hatch_boundary_preservation_synthetic": true,
-  "com_enumerator_reset_synthetic": true,
-  "restricted_command_parser_synthetic": true,
-  "command_entity_invariance_synthetic": true,
-  "legacy_viewport_zoom_synthetic": true,
-  "command_preflight_no_document_creation_synthetic": true,
-  "unsupported_active_command_before_undo_synthetic": true,
-  "process_identity_fallback_synthetic": true,
-  "current_windows_process_identity_tested": true,
-  "linetype_validation_load_readback_synthetic": true,
-  "active_zoom_without_undo_synthetic": true,
-  "active_mixed_zoom_requires_undo_synthetic": true,
+  "recorded_at": "2026-10-15T17:21:04.255658+08:00",
+  "rust_selected_tests": 63,
+  "python_synthetic_contracts": 57,
+  "native_runtime_self_check": true,
+  "native_webview_basic_check": true,
+  "onboarding_dom_contracts": true,
+  "same_worker_connection_synthetic": true,
+  "leader_bottom_left_anchor_synthetic": true,
   "cad_drawing_tested_locally": false,
   "company_ai_service_tested": false,
-  "original_extra_entity_cause_confirmed": false,
   "installer_packaged_and_manifest_verified": true,
   "installer_install_update_rollback_uninstall_tested": false,
   "full_validation_completed": false,
-  "runtime_manifest_sha256": "3442e76a7c4476d39ad55eb23762b6d4088ba11aed6da775d9fbcebae7a7326f",
+  "runtime_manifest_sha256": "5098645160e0d07b2a7aa044a2c2344a51d33d3315fcde7787ceb70cb4218353",
   "binary_origin": "Official CPython 3.13.12 and pywin32 311 wheels; not locally compiled with v142",
   "artifacts": [
     {
       "path": "dist/LM_AI.exe",
-      "bytes": 18641920,
-      "sha256": "b1a1ce8520a289284552121167f138c6178747efc78c62c2aa7c296d207f6521"
+      "bytes": 18630656,
+      "sha256": "58f9b2f15c258613b2179394808a8deb6f92ad3748b68b7d36bd43cfbc9c39dd"
     },
     {
       "path": "dist/LM_AI_Setup.exe",
-      "bytes": 36103133,
-      "sha256": "c927d5ded80408ad1f2b2498a53d667252ab797ca63a9017e05c4204d54a8725"
+      "bytes": 36105383,
+      "sha256": "1d56556a9a88a6dfe8ff5b2dbf9753a21423f1b4bae8118a43d861fb9b336aa4"
     },
     {
       "path": "dist/update-manifest.json",
       "bytes": 1050,
-      "sha256": "87c30401d0d19ac27a530b9079236066bedeba085b7078dd5a8cc4d57191c7d6"
+      "sha256": "664b534fb60020140c5eb9ebe925bc2113e8f9769933e7841a173b6cd3402914"
     },
     {
       "path": "dist/update-manifest-exe.json",
       "bytes": 1050,
-      "sha256": "87c30401d0d19ac27a530b9079236066bedeba085b7078dd5a8cc4d57191c7d6"
+      "sha256": "664b534fb60020140c5eb9ebe925bc2113e8f9769933e7841a173b6cd3402914"
     }
   ]
 }

@@ -3,10 +3,21 @@ use crate::AppResult;
 use serde_json::{json, Value};
 mod core;
 const SKILLS: &[(&str, &str, &str)] = &[
+    ("cad-new", "CAD新建圖面", include_str!("skills/cad-new.md")),
     (
-        "cad-drawing",
-        "CAD圖面／副本編輯與Excel座標（測試版）",
-        include_str!("skills/cad-drawing.md"),
+        "cad-active",
+        "CAD目前圖面閱讀與修改，不儲存",
+        include_str!("skills/cad-active.md"),
+    ),
+    (
+        "cad-copy",
+        "CAD既有DWG副本閱讀與修改",
+        include_str!("skills/cad-copy.md"),
+    ),
+    (
+        "cad-excel",
+        "Excel座標轉CAD圖面",
+        include_str!("skills/cad-excel.md"),
     ),
     (
         "python-edit",
@@ -105,6 +116,7 @@ pub fn catalog_for(_model: &str) -> Value {
                 "python-analysis" | "python-edit" | "log-analysis" | "excel-read"
                 | "multi-file-excel" => "資料分析",
                 "charts" | "dataset-charts" | "chart-edit" => "圖表",
+                "cad-new" | "cad-active" | "cad-copy" | "cad-excel" => "CAD",
                 _ => "文件與郵件",
             };
             json!({"category":category,"id":id,"description":description})
@@ -112,6 +124,9 @@ pub fn catalog_for(_model: &str) -> Value {
         .collect::<Vec<_>>())
 }
 pub fn load(id: &str) -> AppResult<&'static str> {
+    if id == "cad-drawing" {
+        return Ok(include_str!("skills/cad-drawing.md"));
+    }
     // 僅相容舊 checkpoint 尚待完成的載入；新目錄不公告圖片技能，基本閱讀已內建。
     if id == "image-read" {
         return Ok("");
@@ -122,15 +137,36 @@ pub fn load(id: &str) -> AppResult<&'static str> {
         .map(|s| s.2)
         .ok_or("未知技能；請依技能目錄指定 id。".into())
 }
+/// 參考頁只提供方法，不啟用工具或切換工作階段。
+pub fn read_guide(id: &str) -> AppResult<&'static str> {
+    match id {
+        "cad-geometry" => Ok(include_str!("skills/cad-geometry.md")),
+        "cad-edits" => Ok(include_str!("skills/cad-edits.md")),
+        "cad-commands" => Ok(include_str!("skills/cad-commands.md")),
+        "python-tables" => Ok(include_str!("skills/python-tables.md")),
+        "python-logs" => Ok(include_str!("skills/python-logs.md")),
+        "python-source" => Ok(include_str!("skills/python-source.md")),
+        "log-time" => Ok(include_str!("skills/log-time.md")),
+        "log-events" => Ok(include_str!("skills/log-events.md")),
+        "chart-details" => Ok(include_str!("skills/chart-details.md")),
+        _ => load(id),
+    }
+}
 pub fn context(ids: &[String]) -> AppResult<String> {
     for id in ids {
         load(id)?;
     }
-    Ok(ids
-        .iter()
-        .map(|id| core::guide(id))
-        .collect::<Vec<_>>()
-        .join("\n"))
+    let mut guides = Vec::new();
+    if ids.iter().any(|id| id.starts_with("cad-")) {
+        guides.push(include_str!("skills/cad-common.md"));
+    }
+    for id in ids {
+        let guide = core::guide(id);
+        if !guide.is_empty() && !guides.contains(&guide) {
+            guides.push(guide);
+        }
+    }
+    Ok(guides.join("\n"))
 }
 
 pub fn context_for(ids: &[String], _model: &str) -> AppResult<String> {
@@ -157,8 +193,6 @@ pub fn activate(ids: &mut Vec<String>, id: &str) -> AppResult<()> {
     // 技能代表當前階段；切換時收回舊詳細說明與工具，資料與成果仍由 broker 保存。
     ids.clear();
     let dependencies: &[&str] = match id {
-        "outlook-research" => &["outlook-coverage"],
-        "outlook-coverage" => &["outlook-research"],
         "paper-evidence" => &["research"],
         "multi-file-excel" => &["excel-read"],
         _ => &[],
@@ -174,8 +208,14 @@ pub fn activate(ids: &mut Vec<String>, id: &str) -> AppResult<()> {
 pub fn enabled(tool: &str, ids: &[String]) -> bool {
     let has = |id: &str| ids.iter().any(|i| i == id);
     match tool {
-        "cad_active_read" | "cad_active_edit" | "cad_excel_plan" | "cad_excel_apply"
-        | "cad_inventory" | "cad_draw" | "cad_read" | "cad_edit" => has("cad-drawing"),
+        // 舊 checkpoint 保留原工具權限；新任務只公告與目標文件相關的工具。
+        "cad_inventory" => ids.iter().any(|id| id.starts_with("cad-")),
+        "cad_draw" => has("cad-new") || has("cad-drawing"),
+        "cad_active_read" => has("cad-active") || has("cad-excel") || has("cad-drawing"),
+        "cad_active_edit" => has("cad-active") || has("cad-drawing"),
+        "cad_read" => has("cad-copy") || has("cad-excel") || has("cad-drawing"),
+        "cad_edit" => has("cad-copy") || has("cad-drawing"),
+        "cad_excel_plan" | "cad_excel_apply" => has("cad-excel") || has("cad-drawing"),
         "record_log_events" => has("log-analysis") || has("python-analysis"),
         "run_python" => has("python-analysis"),
         "analyze_image" | "read_mail_notes" | "set_work_stage" | "run_batch" => true,
@@ -192,9 +232,11 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
                 || has("excel-read")
         }
         "export_log_dataset" | "export_excel_dataset" | "inspect_dataset" | "chart_dataset" => {
-            has("dataset-charts") || has("python-analysis") || has("charts")
+            has("dataset-charts")
         }
-        "inspect_excel" | "read_excel_range" => has("excel-read") || has("dataset-charts"),
+        "inspect_excel" | "read_excel_range" => {
+            has("excel-read") || has("dataset-charts") || has("cad-excel")
+        }
         "list_logs" | "read_log" | "search_logs" => has("log-analysis"),
         "outlook_folders" | "outlook_headers" | "outlook_read" | "outlook_index" => {
             has("outlook-research")
@@ -210,7 +252,7 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
         | "chart_excel_range"
         | "transform_chart"
         | "set_chart_policy"
-        | "set_chart_reference_lines" => has("charts") || has("dataset-charts"),
+        | "set_chart_reference_lines" => has("charts"),
         "create_working_copy" | "save_copy" | "delete_copy" => {
             has("text-edit") || has("office-edit") || has("python-edit")
         }
@@ -233,6 +275,36 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cad_stages_and_reference_pages_do_not_load_unrelated_tools() {
+        let mut ids = vec![];
+        activate(&mut ids, "cad-new").unwrap();
+        assert!(enabled("cad_draw", &ids));
+        assert!(!enabled("cad_edit", &ids));
+        assert!(!enabled("cad_excel_apply", &ids));
+        assert!(context(&ids).unwrap().len() < 5000);
+        activate(&mut ids, "cad-active").unwrap();
+        assert!(enabled("cad_active_edit", &ids));
+        assert!(!enabled("cad_draw", &ids));
+        assert!(read_guide("cad-geometry").is_ok());
+        assert!(activate(&mut ids, "cad-geometry").is_err());
+        assert!(enabled("cad_active_edit", &ids));
+        activate(&mut ids, "cad-excel").unwrap();
+        assert!(enabled("inspect_excel", &ids));
+        assert!(enabled("cad_excel_apply", &ids));
+        assert!(!enabled("cad_active_edit", &ids));
+        activate(&mut ids, "outlook-research").unwrap();
+        assert!(!enabled("outlook_compare", &ids));
+        activate(&mut ids, "outlook-coverage").unwrap();
+        assert!(enabled("outlook_compare", &ids));
+        assert!(!enabled("outlook_read", &ids));
+    }
+    #[test]
+    fn shared_core_guides_are_not_repeated() {
+        let mut ids = vec![];
+        activate(&mut ids, "paper-evidence").unwrap();
+        assert_eq!(context(&ids).unwrap(), core::guide("research"));
+    }
     #[test]
     fn every_advertised_skill_can_be_loaded_through_tool_schema() {
         let tools: Value = serde_json::from_str(include_str!("tools.json")).unwrap();

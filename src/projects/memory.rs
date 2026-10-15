@@ -9,6 +9,22 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use vault::Vault;
 
+/// 跨任務投影的長度診斷；不記錄原文，也不冒充模型 tokenizer 的實際數字。
+pub(super) fn context_sizes(messages: &[Message]) -> Value {
+    let estimate = |message: &Message| context::estimated_tokens(&message.content);
+    let memory = messages.first().map(estimate).unwrap_or(0);
+    let current = messages.last().map(estimate).unwrap_or(0);
+    let history: usize = messages
+        .iter()
+        .skip(1)
+        .take(messages.len().saturating_sub(2))
+        .map(estimate)
+        .sum();
+    json!({"estimate_only":true,"memory_tokens":memory,"history_tokens":history,
+        "current_request_tokens":current,"total_tokens":memory+history+current,
+        "excludes":"system_prompt, tools, current_task_tool_results"})
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 struct NoteVersion {
     title: String,

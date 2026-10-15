@@ -62,6 +62,7 @@ Var UpdatePid
 Var Restart
 Var InstanceLock
 Var HadPrevious
+Var PreviousAppVersion
 Var HadPython
 Var PythonSwapped
 Var CadCreated
@@ -214,7 +215,17 @@ Section "安裝 LM_AI"
 !endif
     ; 沿用 runtime 時兩個 Python 回復旗標仍為 no；主程式替換失敗不動原環境。
     StrCpy $HadPrevious "no"
+    StrCpy $PreviousAppVersion ""
     IfFileExists "$INSTDIR\LM_AI.exe" 0 replace_app
+    ; 替換前讀真實 EXE 版本；首次支援教學的舊版尚未建立 onboarding-state.json。
+    ClearErrors
+    GetDLLVersion "$INSTDIR\LM_AI.exe" $R0 $R1
+    IfErrors previous_version_done
+    IntOp $R2 $R0 >> 16
+    IntOp $R3 $R0 & 0xFFFF
+    IntOp $R4 $R1 >> 16
+    StrCpy $PreviousAppVersion "$R2.$R3.$R4"
+    previous_version_done:
     Delete "$INSTDIR\LM_AI.previous.exe"
     ClearErrors
     Rename "$INSTDIR\LM_AI.exe" "$INSTDIR\LM_AI.previous.exe"
@@ -250,6 +261,12 @@ Section "安裝 LM_AI"
     WriteRegStr HKCU "${UNINSTALL_KEY}" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
     WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoModify" 1
     WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoRepair" 1
+    ; 僅在安裝成功後發布轉換紀錄；回復舊版的路徑不寫入新版紀錄。
+    StrCmp $PreviousAppVersion "" transition_done
+    StrCmp $PreviousAppVersion "${APP_VERSION}" transition_done
+    WriteINIStr "$INSTDIR\update-transition.ini" "update" "from" "$PreviousAppVersion"
+    WriteINIStr "$INSTDIR\update-transition.ini" "update" "to" "${APP_VERSION}"
+    transition_done:
     Goto finished
     rollback:
     Delete "$INSTDIR\LM_AI.exe"

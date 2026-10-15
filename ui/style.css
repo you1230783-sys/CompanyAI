@@ -1,3 +1,13 @@
+.onboarding-card { width: min(520px, calc(100vw - 40px)); padding: 28px; border: 1px solid var(--line); border-radius: 20px; background: var(--panel); color: var(--ink); max-height: calc(100vh - 48px); overflow-y: auto; box-shadow: 0 20px 70px #0003; }
+.onboarding-card::backdrop { background: #142a3466; }
+.onboarding-card h2 { margin: 8px 0 10px; font-size: 26px; }
+.onboarding-eyebrow { color: var(--accent); font-weight: 600; font-size: 13px; letter-spacing: .04em; }
+.onboarding-step { display: flex; align-items: flex-start; gap: 14px; padding: 16px; margin: 12px 0; background: var(--surface); border-radius: 12px; }
+.onboarding-number { display: grid; place-items: center; flex: 0 0 30px; height: 30px; border-radius: 50%; color: var(--on-accent); background: var(--accent); font-weight: 600; }
+.onboarding-step p { margin: 5px 0 0; color: var(--muted); line-height: 1.6; }
+.onboarding-hint { font-size: 13px; }
+.onboarding-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+.onboarding-card li { margin: 8px 0; line-height: 1.6; }
 :root {
   --font-size: 14px;
   --ink: #253039;

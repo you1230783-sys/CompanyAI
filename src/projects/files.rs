@@ -17,6 +17,15 @@ mod python;
 mod python_edit;
 mod review;
 mod source_code;
+
+/// 分析工具共用程式碼唯讀白名單，不連帶開放副本寫入或原始碼執行。
+pub(super) fn is_source_code(path: &Path) -> bool {
+    source_code::supported(path)
+}
+
+pub(super) fn excluded_source_path(path: &Path) -> bool {
+    source_code::excluded(path)
+}
 use super::{
     office,
     sandbox::{Edit, Worker},
@@ -1334,12 +1343,17 @@ impl Broker {
         worker: &mut Worker,
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
+        // 程式碼以純文字循序掃描，不啟動 Office／PDF；允許較大批次但不擴大結果上限。
+        let source_only = paths
+            .iter()
+            .all(|path| source_code::supported(Path::new(path)));
+        let max_files = if source_only { 100 } else { 20 };
         if paths.is_empty()
-            || paths.len() > 20
+            || paths.len() > max_files
             || query.trim().is_empty()
             || query.chars().count() > 200
         {
-            return Err("搜尋需指定 1–20 份文件與 1–200 字查詢。".into());
+            return Err(format!("搜尋需指定1–{max_files}個明確檔案及1–200字查詢；全部為支援的程式碼時最多100檔，含一般文件時最多20檔。更多檔案請拆批，不接受資料夾或萬用字元，勿原樣重試。"));
         }
         let mut matches = Vec::new();
         let mut errors = Vec::new();
@@ -1348,6 +1362,12 @@ impl Broker {
         for path in paths {
             if cancel.load(std::sync::atomic::Ordering::Relaxed) {
                 return Err("操作已取消。".into());
+            }
+            if path.contains('*') || path.contains('?') || path.ends_with(['/', '\\']) {
+                let error = "搜尋只接受明確檔名；請先 list_files 列出資料夾，全程式碼每批最多100檔、混合文件最多20檔，不支援萬用字元。";
+                coverage.push(json!({"path":path,"status":"failed","matches":null,"detail":error}));
+                errors.push(json!({"path":path,"error":error}));
+                continue;
             }
             match self.content(path, cancel, worker) {
                 Ok(content) => {
@@ -1368,6 +1388,11 @@ impl Broker {
                         let body_chars = body.chars().count();
                         for (byte, _) in body.match_indices(query) {
                             total += 1;
+                            if total.is_multiple_of(4096)
+                                && cancel.load(std::sync::atomic::Ordering::Relaxed)
+                            {
+                                return Err("操作已取消。".into());
+                            }
                             if matches.len() >= 60 {
                                 truncated = true;
                                 omitted += 1;
@@ -1395,7 +1420,8 @@ impl Broker {
             }
         }
         Ok(
-            json!({"matches":matches,"coverage":coverage,"errors":errors,"truncated":truncated,"complete":errors.is_empty()&&!truncated}),
+            json!({"matches":matches,"coverage":coverage,"errors":errors,"truncated":truncated,"complete":errors.is_empty()&&!truncated,
+                "application_version":env!("CARGO_PKG_VERSION"),"source_code_supported":true,"max_files":max_files}),
         )
     }
     pub fn published(&self) -> &[String] {
@@ -2226,7 +2252,7 @@ impl Broker {
             Tool::AskPreference { .. } => Err("偏好問題需由任務協調器保存。".into()),
             Tool::RunBatch { .. } => Err("批次工作只能由頂層 broker 執行，不允許巢狀批次。".into()),
             Tool::ReadSkillGuide { id, offset } => {
-                let guide = super::skills::load(id)?;
+                let guide = super::skills::read_guide(id)?;
                 let total = guide.chars().count();
                 if *offset > total {
                     return Err("技能說明位置超出範圍。".into());
@@ -2630,6 +2656,10 @@ impl Broker {
                 let path = &canonical;
                 if needle.is_empty() {
                     return Err("搜尋文字不可空白。".into());
+                }
+                // 不將資料夾／glob 誤報為格式不支援，避免模型換工具反覆讀同一路徑。
+                if path.contains('*') || path.contains('?') || path.ends_with(['/', '\\']) {
+                    return Err("find_text 只接受單一明確檔案，支援 CPP/H 等唯讀原始碼；資料夾請先 list_files，取得檔名後用 search_files（全程式碼每批最多100檔、混合文件最多20檔）。不要重送相同資料夾或萬用字元。".into());
                 }
                 let content = self.content(path, cancel, worker)?;
                 let matches: Vec<_> = content.match_indices(needle).take(100).map(|(index,_)| json!({"offset":content[..index].chars().count(),"line":content[..index].bytes().filter(|b| *b == b'\n').count()+1})).collect();

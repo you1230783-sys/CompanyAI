@@ -260,7 +260,7 @@
       "type": "function",
       "function": {
         "name": "find_text",
-        "description": "尋找文字，回傳字元位置與檔案版本。",
+        "description": "在單一明確檔案搜尋字面文字（區分大小寫，不支援正規表示式）。支援唯讀程式碼 CPP/H/PY/Rust/JS/HTML/CSS 等及一般可讀文件；程式檔上限4MiB。path不可為資料夾或萬用字元。最多回傳100處命中、行號及revision；多檔請用search_files，命中後用read_code_section讀小段。大小／格式／排除路徑錯誤不應原樣重試。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -1296,7 +1296,10 @@
                 "python-analysis",
                 "python-edit",
                 "chart-edit",
-                "cad-drawing"
+                "cad-new",
+                "cad-active",
+                "cad-copy",
+                "cad-excel"
               ]
             },
             "progress_note": {
@@ -1316,7 +1319,7 @@
       "type": "function",
       "function": {
         "name": "search_files",
-        "description": "跨文件搜尋字面文字，最多20檔，回傳來源與短摘錄。",
+        "description": "跨檔唯讀字面搜尋，區分大小寫；支援CPP/H/PY/Rust/JS/HTML/CSS等。全程式碼每批最多100檔，混合一般文件最多20檔；單一程式檔4MiB，最多60處命中。先list_files取得明確檔名，不接受資料夾/glob/正規表示式。檢查coverage/errors/truncated，未掃描不是零命中；較大程式檔或正規表示式改用run_python kind=text靜態分析，不用inspect_excel。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -1326,7 +1329,7 @@
                 "type": "string",
                 "description": ""
               },
-              "maxItems": 20
+              "maxItems": 100
             },
             "query": {
               "type": "string",
@@ -2925,7 +2928,7 @@
       "type": "function",
       "function": {
         "name": "run_python",
-        "description": "本機隔離 Python 分析，內附 pandas/NumPy/openpyxl。來源最多8份；CSV/dataset/文字，以及_AI_Output生成XLSX。LOG無BOM先Big5再UTF-8，metadata提供編碼與歧義提示。原始Excel先COM匯出。texts/tables以inputs.name索引，不是path；每項必填name/path/kind。emit_table/emit_excel成果自動保存。",
+        "description": "本機隔離 Python 分析，內附 pandas/NumPy/openpyxl。一般或混合來源最多8份；CSV/dataset/文字，以及_AI_Output生成XLSX。LOG無BOM先Big5再UTF-8，metadata提供編碼與歧義提示。原始Excel先COM匯出。texts/tables以inputs.name索引，不是path；每項必填name/path/kind。emit_table/emit_excel成果自動保存。 程式碼CPP/H/PY/JS等可用kind=text，內容只放texts[name]作靜態搜尋/統計，不執行來源；全程式碼最多32檔，其他或混合來源最多8檔。單檔32MiB、合計序列化60MiB。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -2939,7 +2942,7 @@
             },
             "inputs": {
               "type": "array",
-              "maxItems": 8,
+              "maxItems": 32,
               "items": {
                 "type": "object",
                 "properties": {
@@ -3323,7 +3326,7 @@
       "type": "function",
       "function": {
         "name": "read_skill_guide",
-        "description": "按需閱讀完整技能方法；每頁3000字，不切換目前技能。",
+        "description": "按需閱讀技能或參考頁；不切換技能、不啟用工具。只讀當前需要的主題，不必遍讀所有指南。每頁3000字。",
         "parameters": {
           "type": "object",
           "properties": {

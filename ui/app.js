@@ -882,6 +882,7 @@ function receive(next) {
   window.BehaviorUI?.render();
   window.VncUI?.render();
   window.AuthUI?.apply();
+  window.OnboardingUI?.render();
   if (next.focus_draft && state.logged_in) {
     showView("chat");
     $("prompt").focus();

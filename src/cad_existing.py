@@ -37,7 +37,7 @@ def describe(entity, api):
     kind = next((key for key in ("mtext", "text", "circle", "polyline", "line", "arc", "dimension", "leader", "blockreference")
                  if key in lower), "unknown")
     row = {"handle": str(entity.Handle).upper(), "type": name, "kind": kind, "properties": {}}
-    for field in ("Layer", "Color", "Linetype", "LinetypeScale", "StyleName", "TextString", "Height", "Radius", "Rotation", "Measurement", "Name", "StartAngle", "EndAngle", "Thickness"):
+    for field in ("Layer", "Color", "Linetype", "LinetypeScale", "StyleName", "TextString", "Height", "Radius", "Rotation", "AttachmentPoint", "Alignment", "Measurement", "Name", "StartAngle", "EndAngle", "Thickness"):
         value = optional(entity, field)
         if isinstance(value, (str, int, float, bool)):
             if isinstance(value, float) and not math.isfinite(value):

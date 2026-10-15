@@ -7,6 +7,7 @@ import os
 import re
 from pathlib import Path
 import sys
+import time
 import traceback
 import uuid
 
@@ -430,8 +431,11 @@ class Drawing:
             position = [min(op["points"][1][0], op["points"][2][0])+1, op["points"][1][1]+1, 0.0]
             text = self.model.AddText(op["text"], self.point(position), 3.0)
             text.StyleName = style_name
+            text.Alignment = 0  # 左對齊基線；不繼承使用者先前的中間對齊。
+            text.Rotation = 0.0
+            text.InsertionPoint = self.point(position)
             self.remember(text, color, TextString=op["text"], InsertionPoint=position,
-                          Height=3.0, StyleName=style_name)
+                          Height=3.0, StyleName=style_name, Alignment=0, Rotation=0.0)
         elif kind == "curve":
             for start, end in zip(op["samples"], op["samples"][1:]):
                 self.line(start, end, color)
@@ -568,9 +572,19 @@ class Drawing:
             position = [min(op["points"][1][0], op["points"][2][0])+1, op["points"][1][1]+1, 0.0]
             annotation.StyleName = self.annotation_style()
             annotation.Height = 3.0
+            layout = {"Rotation": 0.0}
+            annotation.Rotation = 0.0
+            if row["kind"] == "mtext":
+                # MText 預設可能以上緣或中心為插入點：只加 y=1 會向下穿過引線。
+                # 先固定左下錨點，再設插入點，讓整個文字框從水平線上方1mm向上延伸。
+                annotation.AttachmentPoint = 7
+                layout["AttachmentPoint"] = 7
+            else:
+                annotation.Alignment = 0
+                layout["Alignment"] = 0
             annotation.InsertionPoint = self.point(position)
             self.remember(annotation, op["color"], TextString=op["text"], Height=3.0,
-                          StyleName=annotation.StyleName, InsertionPoint=position)
+                          StyleName=annotation.StyleName, InsertionPoint=position, **layout)
             return
         # 某些版本會自動建立空白註解。只有 COM 明示關聯、此次新建且位於
         # ModelSpace 的文字才納入預期集合；絕不按數量猜測／忽略未知物件。
@@ -661,6 +675,50 @@ class Drawing:
                 "dimension_measurement_unavailable": unavailable}
 
 
+def connect_application(selected, request, report):
+    """在同一工作程序保留 COM 物件至操作結束；就緒等待只重試連線／身分讀取。
+
+    不重試 CoCreateInstance，不把啟動失敗當作可任意再開一個 CAD；未知錯誤
+    直接回報。只有使用者點選開啟時才允許啟動，手動重連只取得既有物件。
+    """
+    clsid = pythoncom.MakeIID(selected["clsid"])
+    allow_launch = request.get("launch_if_missing") is True or request["action"] == "launch"
+    deadline = time.monotonic() + (15.0 if request.get("wait_for_ready") is True else 0.0)
+    launch_attempted = False
+    app = None
+    report["connection"] = {"same_worker": True, "attempts": 0, "launch_attempted": False}
+    while True:
+        report["connection"]["attempts"] += 1
+        try:
+            if app is None:
+                try:
+                    raw = pythoncom.GetActiveObject(clsid).QueryInterface(pythoncom.IID_IDispatch)
+                except pythoncom.com_error as exc:
+                    # MK_E_UNAVAILABLE 才代表目前 ROT 沒有此物件；其他錯誤不啟動新程序。
+                    if not (allow_launch and not launch_attempted and exc.hresult == -2147221021):
+                        raise
+                    launch_attempted = True
+                    report["connection"]["launch_attempted"] = True
+                    raw = pythoncom.CoCreateInstance(clsid, None, pythoncom.CLSCTX_LOCAL_SERVER,
+                                                     pythoncom.IID_IDispatch)
+                app = dynamic.Dispatch(raw)
+            identity = {key: str(getattr(app, key)) for key in ("Name", "Version", "FullName")}
+            if launch_attempted:
+                require(os.path.normcase(os.path.abspath(identity["FullName"]))
+                        == os.path.normcase(os.path.abspath(selected["server"])),
+                        "連接的 CAD 路徑不符合所選版本")
+                app.Visible = True
+            return app, identity
+        except pythoncom.com_error as exc:
+            report["connection"]["last_hresult"] = exc.hresult
+            # 已取得 app 時只重讀其身分，不重新 CoCreate 或改接另一個物件。
+            transient = exc.hresult in (-2147221021, -2147418111, -2147417846)
+            if not transient or time.monotonic() >= deadline or (launch_attempted and app is None):
+                raise
+            pythoncom.PumpWaitingMessages()
+            time.sleep(min(0.5, max(0.0, deadline - time.monotonic())))
+
+
 def execute(request, report):
     report.update(step="validate", drawing_started=False, completed_operations=0,
                   saved=False, file_exists=False)
@@ -673,14 +731,8 @@ def execute(request, report):
     require(candidates, "找不到所選 CAD 的 COM 登錄；請先安裝並開啟 CAD")
     selected = candidates[0]
     report.update(selected=selected, step="connect")
-    clsid = pythoncom.MakeIID(selected["clsid"])
-    if request["action"] == "launch":
-        raw = pythoncom.CoCreateInstance(clsid, None, pythoncom.CLSCTX_LOCAL_SERVER, pythoncom.IID_IDispatch)
-    else:
-        raw = pythoncom.GetActiveObject(clsid).QueryInterface(pythoncom.IID_IDispatch)
-    app = dynamic.Dispatch(raw)
+    app, identity = connect_application(selected, request, report)
     report["step"] = "identity"
-    identity = {key: str(getattr(app, key)) for key in ("Name", "Version", "FullName")}
     require(os.path.normcase(os.path.abspath(identity["FullName"])) == os.path.normcase(os.path.abspath(selected["server"])), "連接的 CAD 路徑不符合所選版本")
     family = identify_product(selected, identity)
     require(family != "unknown", "此 CAD 身份尚未核對，不建立文件")

@@ -262,6 +262,13 @@ fn run_for(
     let checkpoint_owned = std::cell::Cell::new(!run.resume);
     let result = (|| {
         run.messages = broker.memory()?.context(&run.messages)?;
+        if !run.resume {
+            let sizes = super::memory::context_sizes(&run.messages);
+            record["cross_task_context"] = sizes.clone();
+            report(&mut activity, &mut progress, format!(
+                "跨任務內容已整理：本次要求約 {}、近期歷史約 {}、專案記憶約 {} tokens（估算，不含技能與工具）。",
+                sizes["current_request_tokens"], sizes["history_tokens"], sizes["memory_tokens"]));
+        }
         let mut worker = Worker::start(
             &std::env::current_exe().map_err(|e| e.to_string())?,
             &run.cancel,
@@ -753,6 +760,23 @@ fn run_for(
                             message,
                             call_id,
                         } => {
+                            // 已經通過原生回覆身分核對，且沒有可執行工具。
+                            // 空白 length 不是一般參數錯誤；不要原樣再花一次完整輸出額度。
+                            let empty_length = status.result.as_ref().is_some_and(|result| {
+                                let choice = &result["choices"][0];
+                                choice["finish_reason"] == "length"
+                                    && choice["message"]["content"]
+                                        .as_str()
+                                        .is_none_or(|text| text.trim().is_empty())
+                                    && choice["message"]["tool_calls"]
+                                        .as_array()
+                                        .is_none_or(Vec::is_empty)
+                            });
+                            if empty_length {
+                                broker.archive_results()?;
+                                progress_state.recover_context();
+                                return pause("模型用完輸出額度但未提供文字或工具指令；本輪未執行工具，已停止自動重送並整理續接內容", &broker, &progress_state, None);
+                            }
                             if let (Some(message), Some(call_id)) = (message, call_id) {
                                 // parse 已確認這是本輪提供的單一工具；參數錯誤歸入該工具的失敗預算。
                                 repair_tool_is_python = message

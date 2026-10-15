@@ -32,46 +32,41 @@ pub fn execute_interactive(
     mut waiter: Option<&mut Waiter>,
 ) -> AppResult<Value> {
     let deadline = Instant::now() + Duration::from_secs(600);
-    let mut action = "connect";
+    let mut launch_if_missing = false;
+    let mut wait_for_ready = false;
     loop {
         if cancel.load(Ordering::Relaxed) || Instant::now() >= deadline {
             return Ok(json!({"status":"CANCELLED", "drawing_started":false,
                 "recovery":"correct_and_retry", "error":"CAD 連線等待已取消或逾時", "advice":"尚未開始繪圖。"}));
         }
-        let mut connected = execute(
-            json!({"action":action,"version":request["version"]}),
-            cancel,
-        )?;
-        // 選定後固定 ProgID，等待期間不得改連另一個版本。
+        // 不先用另一個短命程序探測：啟動取得的 COM 物件必須保留至真正操作完成。
+        // 只在上一輪明確尚未開始操作時重送既定計畫，不重播部分修改。
+        let mut attempt = request.clone();
+        attempt["launch_if_missing"] = json!(launch_if_missing);
+        attempt["wait_for_ready"] = json!(wait_for_ready);
+        let mut connected = execute(attempt, cancel)?;
         if let Some(progid) = connected["selected"]["progid"].as_str() {
             request["version"] = json!(progid);
         }
-        if connected["status"] == "CONNECTED" {
-            let mut result = execute(request.clone(), cancel)?;
-            if result["step"] == "connect" && result["drawing_started"] == false {
-                // 連線檢查與繪圖間 CAD 被關閉：未新增文件，可以回到同一連線提示。
-                // 保留實際失敗，無 UI 的呼叫者也不能收到先前的 CONNECTED 成功狀態。
-                connected = result;
-            } else {
-                if result["connection_lost"] == true
-                    && result["drawing_started"] == true
-                    && request["action"] != "active_edit"
-                {
-                    if let Some(ask) = waiter.as_mut() {
-                        let decision = ask(
-                            &json!({"partial":true,"selected":result["selected"],
-                            "message":"CAD 連線中斷，部分圖面狀態未確認。重新開啟 CAD 後，可選擇另建新副本重做；不會接續或覆寫原圖面。"}),
-                            cancel,
-                            deadline,
-                        )?;
-                        if decision == "rebuild" {
-                            result["recovery"] = json!("user_requested_new_document");
-                            result["advice"] = json!("使用者已選擇另建新圖面重做。保留本次部分圖面，下一次工具呼叫重新連線並建立全新副本。不能宣稱已完成。 ");
-                        }
+        if connected["step"] != "connect" || connected["drawing_started"] != false {
+            if connected["connection_lost"] == true
+                && connected["drawing_started"] == true
+                && request["action"] != "active_edit"
+            {
+                if let Some(ask) = waiter.as_mut() {
+                    let decision = ask(
+                        &json!({"partial":true,"selected":connected["selected"],
+                        "message":"CAD 連線中斷，部分圖面狀態未確認。重新開啟 CAD 後，可選擇另建新副本重做；不會接續或覆寫原圖面。"}),
+                        cancel,
+                        deadline,
+                    )?;
+                    if decision == "rebuild" {
+                        connected["recovery"] = json!("user_requested_new_document");
+                        connected["advice"] = json!("使用者已選擇另建新圖面重做；保留本次部分圖面，下一次呼叫建立全新副本，不能宣稱已完成。");
                     }
                 }
-                return Ok(result);
             }
+            return Ok(connected);
         }
         let Some(ask) = waiter.as_mut() else {
             return Ok(connected);
@@ -81,13 +76,14 @@ pub fn execute_interactive(
         }
         let decision = ask(
             &json!({"partial":false,"selected":connected["selected"],
-            "message":"無法連接指定 CAD。請開啟並完成啟動畫面後重新連線，也可由應用程式啟動指定版本。請確認兩個程式使用相同使用者與權限。", "error":connected["error"]}),
+            "message":"原計畫已保留，尚未開始繪圖。請開啟指定 CAD，完成啟動畫面／授權提示後按重新連線繼續；也可選擇開啟 CAD。程式會等待最多15秒取得連線。請確認兩個程式使用相同使用者與權限。", "error":connected["error"]}),
             cancel,
             deadline,
         )?;
-        action = match decision.as_str() {
-            "launch" => "launch",
-            "retry" => "connect",
+        wait_for_ready = true;
+        launch_if_missing = match decision.as_str() {
+            "launch" => true,
+            "retry" => false,
             _ => {
                 return Ok(json!({"status":"CANCELLED","drawing_started":false,
                 "recovery":"correct_and_retry","error":"使用者取消 CAD 連線","advice":"未開始繪圖，不要自動重送。"}))

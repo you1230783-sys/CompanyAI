@@ -1,29 +1,25 @@
 <!-- 開頭版本公告最多保留最新 3 個版本；歷史文件保留於 docs。 -->
+**0.8.65：技能分組、跨任務精簡與一般對話教學。** CAD依工作情境載入、分析指南按需查閱；減少舊答案重送，加入教學重看與簡短更新摘要。[基礎驗證](docs/VALIDATION_0_8_65.md)
+
 **0.8.64：原生線型與目前圖面純縮放。** 支援線型／圖元比例；純 ZOOM 不再依賴舊版缺少的 Undo 群組介面。[基礎驗證](docs/VALIDATION_0_8_64.md)
 
-**0.8.63：目前 CAD 文件的 Windows 程序身分備援。** 缺少 COM HWND 時核對唯一程序與文件快照；診斷明示原因，縮放不再要求讀遍圖元。[基礎驗證](docs/VALIDATION_0_8_63.md)
-
-**0.8.62：修正 iCAD 2008 縮放介面與指令前置檢查。** 使用 ActiveViewport；不支援指令在幾何操作前回報，允許修改計畫後重試。[基礎驗證](docs/VALIDATION_0_8_62.md)
-
-
-
-
+**0.8.63：目前 CAD 文件的 Windows 程序身分備援。** 缺少 COM HWND 時核對唯一程序與文件快照。[基礎驗證](docs/VALIDATION_0_8_63.md)
 
 # LM_AI — Windows 工作助理
 
 CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供日常問答、文件整理、專案副本修訂與 Classic Outlook 郵件分析。
 
-**目前 EXE／NSIS：0.8.64（基礎驗證測試包）** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
+**目前 EXE／NSIS：0.8.65（基礎驗證測試包）** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
 
 ## 下載與開始使用
 
-1. [下載 0.8.64 完整 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從系統托盤選「離開」，再以一般權限安裝至 `C:\largan\LM_AI`；Python 會放在旁邊的 `python` 子目錄。本版只做基礎檢查與 NSIS 打包，尚未補做完整安裝流程驗證。
+1. [下載 0.8.65 完整 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從系統托盤選「離開」，再以一般權限安裝至 `C:\largan\LM_AI`；Python 會放在旁邊的 `python` 子目錄。本版只做基礎檢查與 NSIS 打包，尚未補做完整安裝流程驗證。
 2. 開啟程式，按「登入」，在瀏覽器核對短碼並允許授權。
 3. 選擇模型後開始對話；需要讀取或修改資料夾內的文件時，先建立「專案」。
 
 執行需要 WebView2 Runtime，不需安裝 Rust、Node 或 Python。若啟動時提示缺少 WebView2，請依 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md) 處理。正式功能需要公司服務連線與桌面帳號權限。
 
-本版 EXE 與 NSIS 都是 **0.8.64**，只做基礎驗證。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
+本版 EXE 與 NSIS 都是 **0.8.65**，只做基礎驗證。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
 
 ## 可以做什麼
 

@@ -225,8 +225,15 @@ pub(super) fn snapshot(
     inputs: &[Input],
     cancel: &AtomicBool,
 ) -> AppResult<Value> {
-    if inputs.len() > 8 {
-        return Err("每次 Python 最多 8 個來源。".into());
+    let source_only = !inputs.is_empty()
+        && inputs.iter().all(|input| {
+            input.kind == "text"
+                && input.log_range.is_none()
+                && files::is_source_code(Path::new(&input.path))
+        });
+    let max_sources = if source_only { 32 } else { 8 };
+    if inputs.len() > max_sources {
+        return Err(format!("每次 Python 最多{max_sources}個來源；全為kind=text程式碼時可32檔，其他或混合來源最多8檔，請分批。"));
     }
     let mut names = std::collections::BTreeSet::new();
     let mut output = Vec::new();
@@ -290,15 +297,24 @@ pub(super) fn snapshot(
                 .to_ascii_lowercase();
             let generated_xlsx =
                 input.kind == "xlsx" && ext == "xlsx" && rel.starts_with("_AI_Output");
+            // 來源只轉為 texts[name] 快照；不能 import／執行使用者的程式碼。
+            // 與閱讀／搜尋共用格式及排除規則，避免同檔在不同工具反覆遭拒。
+            if files::excluded_source_path(&rel) {
+                return Err(
+                    "Python 來源位於排除的版本庫、依賴、產物或機密設定路徑，未讀取內容。".into(),
+                );
+            }
+            let source_code = files::is_source_code(&rel);
             if !generated_xlsx
                 && !(input.kind == "text"
-                    && matches!(
-                        ext.as_str(),
-                        "log" | "txt" | "out" | "err" | "json" | "jsonl"
-                    )
+                    && (source_code
+                        || matches!(
+                            ext.as_str(),
+                            "log" | "txt" | "md" | "out" | "err" | "json" | "jsonl"
+                        ))
                     || input.kind == "csv" && ext == "csv")
             {
-                return Err("Python 只直接讀取 CSV、文字／LOG，以及 _AI_Output 生成的 XLSX；公司 Excel 原檔請先由 COM 匯出資料集。".into());
+                return Err("Python 可直接讀取 CSV、kind=text 的程式碼／文字／LOG，以及 _AI_Output 生成的 XLSX；CPP/H/PY/JS等請用kind=text。公司 Excel 原檔先由 COM 匯出資料集，不用inspect_excel開程式碼。".into());
             }
             let mut guards = Vec::new();
             let bytes = read_locked(&project.root, &input.path, MAX_INPUT, &mut guards)?;
@@ -320,7 +336,8 @@ pub(super) fn snapshot(
                 )
                 .map_err(|e| format!("Python 來源 {}：{e}", input.name))?;
                 json!({"name":input.name,"path":input.path,"kind":input.kind,"revision":revision,
-                    "text":decoded.text,"encoding":decoded.name,"encoding_ambiguous":decoded.ambiguous})
+                    "text":decoded.text,"encoding":decoded.name,"encoding_ambiguous":decoded.ambiguous,
+                    "source_code":source_code,"scope":"complete_file_read_only","source_execution_allowed":false})
             }
         };
         bytes_total += serde_json::to_vec(&value).map_err(|e| e.to_string())?.len();
