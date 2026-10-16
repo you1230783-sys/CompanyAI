@@ -1676,10 +1676,6 @@ impl App {
             return Err("更新版本已改變，請重新點擊下載箭頭確認。".into());
         }
         self.preserve_draft()?;
-        // 非關鍵導覽狀態寫入失敗不能阻擋必要更新；NSIS仍會記錄真實EXE版本。
-        if let Err(error) = self.onboarding.before_update() {
-            self.toast(&error);
-        }
         crate::deployment::launch_update(
             self.update_ready.as_ref().ok_or("更新檔不存在。")?,
             &self.config,
@@ -2012,7 +2008,20 @@ impl Drop for ComApartment {
 }
 /// 自我檢查使用隔離資料夾，實際載入 WebView2 與 Markdown DOM，不連公司服務。
 pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
-    let _instance = if !smoke && demo.is_none() {
+    run_with_local(demo, smoke, None)
+}
+
+/// 本機模型測試保留正式畫面與工具流程，所有個人資料寫入獨立目錄。
+pub fn run_local(local: crate::local_test::LocalTest) -> AppResult<()> {
+    run_with_local(None, false, Some(local))
+}
+
+fn run_with_local(
+    demo: Option<&DemoServer>,
+    smoke: bool,
+    local: Option<crate::local_test::LocalTest>,
+) -> AppResult<()> {
+    let _instance = if !smoke && demo.is_none() && local.is_none() {
         match crate::single_instance::acquire()? {
             Some(instance) => Some(instance),
             None => return Ok(()),
@@ -2029,7 +2038,9 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
     }
     .map_err(|_| "無法初始化桌面介面。")?;
     let _apartment = ComApartment;
-    let root = if smoke {
+    let root = if let Some(local) = &local {
+        local.root.clone()
+    } else if smoke {
         std::env::temp_dir().join("CompanyAI-ui-smoke")
     } else {
         let root = storage::data_dir()?;
@@ -2039,14 +2050,18 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
             root
         }
     };
-    let config = if let Some(demo) = demo {
+    let config = if let Some(local) = &local {
+        local.config.clone()
+    } else if let Some(demo) = demo {
         demo.config()
     } else if smoke {
         Config::default()
     } else {
         storage::load_config(&root)?
     };
-    let session = if demo.is_none() && !smoke {
+    let session = if let Some(local) = &local {
+        Some(local.session.clone())
+    } else if demo.is_none() && !smoke {
         storage::load_session(&root, &config)?
     } else {
         None
@@ -2061,7 +2076,7 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
     unsafe {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         let instance = GetModuleHandleW(ptr::null());
-        let name = wide(if demo.is_some() || smoke {
+        let name = wide(if demo.is_some() || smoke || local.is_some() {
             "LM_AI_TestWindow"
         } else {
             "LM_AI_Window"
@@ -2112,7 +2127,7 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
             Ordering::Relaxed,
         );
         let mut app = App {
-            onboarding: onboarding::Onboarding::load(smoke),
+            onboarding: onboarding::Onboarding::load(smoke || local.is_some()),
             projects: projects::ProjectRuntime::load(&root),
             vnc: vnc::VncRuntime::default(),
             site: site::SiteRuntime::default(),
@@ -2162,7 +2177,7 @@ pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
             tx,
             rx,
             commands,
-            demo: demo.is_some(),
+            demo: demo.is_some() || local.is_some(),
             smoke,
             ready: false,
             smoke_result: None,

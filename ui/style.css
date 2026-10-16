@@ -1273,6 +1273,8 @@ output {
 .vnc-machines { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 12px; }
 .vnc-machine { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow-wrap: anywhere; }
 #vnc-manager-dialog { width: min(960px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow-y: auto; }
+#project-cad-connect.cad-preview-dialog { width: min(1024px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; }
+#project-cad-connect.cad-preview-dialog select { width: 100%; max-width: 100%; margin: 8px 0; }
 .vnc-manager-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 20px; }
 .vnc-manager-list { overflow: auto; max-height: 480px; }
 .vnc-manager-list table { width: 100%; border-collapse: collapse; font-size: 0.85em; }

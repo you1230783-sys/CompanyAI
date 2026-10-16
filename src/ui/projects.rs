@@ -573,7 +573,20 @@ impl App {
             } else {
                 &["launch", "retry", "cancel"][..]
             };
-            if !allowed.contains(&choice.as_str()) {
+            let preview_choice = pending.prompt["preview"] == true
+                && (choice == "cancel"
+                    || pending.prompt["candidates"]
+                        .as_array()
+                        .is_some_and(|items| {
+                            items.iter().any(|row| {
+                                row["candidate"]
+                                    .as_u64()
+                                    .is_some_and(|id| choice == &format!("candidate:{id}"))
+                            })
+                        }));
+            if (pending.prompt["preview"] == true && !preview_choice)
+                || (pending.prompt["preview"] != true && !allowed.contains(&choice.as_str()))
+            {
                 return Err("CAD 回覆不合法。".into());
             }
             run.pending_cad
@@ -582,7 +595,7 @@ impl App {
                 .reply
                 .send(choice.clone())
                 .map_err(|_| "CAD 等待已結束。")?;
-            self.projects.status = "正在處理 CAD 連線選擇…".into();
+            self.projects.status = "正在處理 CAD 回覆…".into();
             return Ok(());
         }
         if let ProjectCommand::FileReady {

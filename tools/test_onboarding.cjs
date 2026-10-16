@@ -17,10 +17,10 @@ function fixture(overrides = {}) {
     showModal() { this.open = true; }
     close() { this.open = false; this.listeners.close?.(); }
   }
-  for (const id of ["settings-dialog", "updates-replay", "tutorial-catalog", "release-history", "onboarding-storage-status"]) { const node = new Element("div"); node.id = id; }
+  for (const id of ["settings-dialog", "updates-replay", "tutorial-catalog", "onboarding-storage-status"]) { const node = new Element("div"); node.id = id; }
   const tutorials = JSON.parse(fs.readFileSync("assets/tutorials.json", "utf8"));
   assert.equal(new Set(tutorials.map(item => item.id)).size, 14);
-  const state = {logged_in:false, update_required:false, busy:"none", onboarding:{enabled:true,tutorials,updates:[],release_history:[]}, ...overrides};
+  const state = {logged_in:false, update_required:false, busy:"none", onboarding:{enabled:true,tutorials,release_notes:[]}, ...overrides};
   const context = {state, window:{SettingsUI:{select:index => assert.equal(index, 3)}}, $:id => nodes.get(id), send:value => sent.push(value),
     setTimeout:callback => { timers.push(callback); return timers.length; },
     document:{createElement:tag => new Element(tag),body:new Element("body"),activeElement:null,
@@ -52,11 +52,14 @@ assert.equal(chat.sent.length, acknowledged);
 chat.nodes.get("tutorial-catalog").children[0].children[1].onclick();
 chat.state.logged_in = false; chat.render();
 assert.equal(chat.nodes.get("onboarding-dialog").open, false);
-const update = fixture({logged_in:true,onboarding:{enabled:true,chat_pending:true,from_version:"0.8.64",to_version:"0.8.65",updates:[{section:"專案",version:"0.8.65",items:["技能精簡"]}]}});
+const update = fixture({logged_in:true,onboarding:{enabled:true,tutorials:[],version:"0.8.67",release_notes:[{section:"專案",version:"0.8.67",items:["CAD 相容性改善"]}]}});
 update.render(); update.flush();
-assert.match(update.nodes.get("onboarding-intro").textContent, /0.8.64.*0.8.65/);
+assert.equal(update.nodes.get("onboarding-dialog").open, false);
+update.nodes.get("updates-replay").onclick();
+assert.match(update.nodes.get("onboarding-intro").textContent, /0.8.67/);
+assert.doesNotMatch(update.nodes.get("onboarding-intro").textContent, /更新到|0.8.65/);
 update.nodes.get("onboarding-done").onclick();
-assert.equal(update.sent[0].topic, "updates");
+assert.equal(update.sent.length, 0);
 const blocked = fixture({logged_in:true,update_required:true}); blocked.render(); blocked.flush();
 assert.equal(blocked.nodes.get("onboarding-dialog").open, false);
-console.log("PASS onboarding DOM contracts: login gate, topic sequence, individual replay, settings return, history replay, logout, update display, required-update gate");
+console.log("PASS onboarding DOM contracts: login gate, topic sequence, individual replay, settings return, current release dialog, logout, no automatic update notice, required-update gate");

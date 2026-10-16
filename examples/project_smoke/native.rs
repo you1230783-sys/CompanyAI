@@ -77,7 +77,7 @@ pub(super) fn call(body: &Value, name: &str, mut args: Value) -> Value {
         .unwrap()
         .iter()
         .find(|t| t["function"]["name"] == name)
-        .unwrap();
+        .unwrap_or_else(|| panic!("測試模型呼叫未公告的工具：{name}；須先載入對應技能"));
     // 合成模型遵守當輪公告的筆記契約；案例有指定累積筆記時保留原值。
     if args.get("progress_note").is_none() {
         args["progress_note"] = json!("依測試案例已確認上一輪結果；接著執行本輪指定步驟。");
@@ -260,9 +260,17 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                 if posts == 1 {
                     assert_eq!(
                         body["tools"].as_array().unwrap().len(),
-                        13,
-                        "首次提供基本閱讀、按需圖片、技能手冊、工作階段、並行批次與可選問題"
+                        15,
+                        "首次提供基本閱讀、程式碼搜尋／分段閱讀、按需圖片、技能手冊、工作階段、並行批次與可選問題"
                     );
+                    // 程式碼唯讀工具已移入基本工具；不必先載入 Python 編輯技能。
+                    for name in ["find_text", "read_code_section"] {
+                        assert!(body["tools"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .any(|tool| tool["function"]["name"] == name));
+                    }
                     assert!(body["tools"]
                         .as_array()
                         .unwrap()
@@ -484,15 +492,17 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                                 previous.to_string().contains("原始文字"),
                                 "整理後原文仍可按需查回"
                             );
-                            call(
-                                &body,
-                                "transform_chart",
-                                json!({"chart_index":1,"transform":{
+                            // 技能拆分後，CSV 繪圖不一併載入座標轉換工具。
+                            call(&body, "load_skill", json!({"id":"charts"}))
+                        }
+                        10 => call(
+                            &body,
+                            "transform_chart",
+                            json!({"chart_index":1,"transform":{
                                 "x":{"mode":"index","offset":0,"start":1,"step":1},
                                 "y":{"mode":"offset","offset":-1,"start":1,"step":1},"drop_empty":true}}),
-                            )
-                        }
-                        10 => {
+                        ),
+                        11 => {
                             assert_eq!(previous["ok"], true, "{previous}");
                             assert_eq!(previous["result"]["first_x"], 1.0);
                             assert_eq!(previous["result"]["last_x"], 100.0);
@@ -1039,7 +1049,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         }
         21 => {
             assert!(result?.contains("CSV 與更正整理完成"));
-            assert_eq!(posts, 10);
+            assert_eq!(posts, 11);
             assert!(transformed_seen, "轉換後的圖表必須透過 UI 事件送出");
             assert!(activity.iter().any(|s| s.contains("CSV 已保存")));
             assert!(activity.iter().any(|s| s.contains("已保存交接筆記")));

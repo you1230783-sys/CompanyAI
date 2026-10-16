@@ -1,3 +1,62 @@
+## 0.8.68 恢復發行（2026-10-16 最新授權）
+
+- 使用者要求完成編譯、打包與推送，取代下方暫停限制。使用 Build.ps1 -EmptyCargoCache -IncludeInstaller，完成 v142 x64、離線依賴及必要驗證後交付 EXE、NSIS、更新清單與原始碼至既有 main。
+- 已重建新 CAD runtime；保留 icon.png、使用者 onboarding-state.json 與歷史離線 ZIP，不提交測試連線或聊天資料。最終結果見 docs/VALIDATION_0_8_68.md，不沿用舊驗證冒充新功能驗收。
+- 本次完整建置結束碼 0：實際 v142 14.29 x64、空快取／--frozen、345 Rust、61 CAD 合成、專案／Python 整合及 NSIS 安裝生命週期通過。已更新 EXE／NSIS／兩份簽署清單；新 CAD 的公司實機效率與模型核對仍待驗收。
+
+## 0.8.68 CAD 本機索引與局部預覽（2026-10-16 實作階段）
+
+- 使用者同意實作一次建立快照、按幾何條件查詢、穩定候選編號、局部預覽與修改前核對。維持暫停編譯／打包／推送，這輪只改原始碼與文件。
+- 新增 cad_snapshot／cad_query／cad_preview，作用中圖面與專案 DWG 副本共用本機索引。完整快照不送模型、不恢復作用中文件寫入授權；查詢結果才按需交付，details=true 才加入已讀 Handle。
+- 品質模型可取得局部 JPG 並另走 analyze_image；快速模型移除圖片工具／方法說明且執行端拒絕。兩者均可顯示使用者候選預覽；指認不等於寫入同意。
+- 預覽為 WCS XY 幾何示意，不是真實 CAD 截圖；僅線、圓、可讀直線折線。矩形辨識、距邊計算與未知屬性限制見 docs/CAD_SNAPSHOT_QUERY.md。
+- 本批僅格式整理與人工程式檢閱，未新增／執行測試，未編譯或實機驗證。先前 345 項測試與 Luna 實測不涵蓋本批。恢復建置時先 python tools/build_cad_runtime.py 更新鎖定 runtime，再按 v142 指引完整驗證。
+
+## 0.8.68 暫停發行，先討論 CAD 按需查詢（2026-10-16，後續已授權實作）
+
+- 使用者要求停止編譯，先討論一次讀取建立本機索引、依區域／圖元條件查詢，再決定是否併入本版；目前不實作這項新設計，不繼續打包或推送。
+- 本次建置已停止；Rust 345 項、release 主程式、CAD 61 項與專案整合通過，Python 全套及 NSIS 尚未完成。dist／offline 產物未更新，未提交／推送。
+- 原始碼暫定版本已改為 0.8.68；保留現有修改與 Git 暫存內容，最終驗證待設計決定後重跑。詳見 docs/VALIDATION_0_8_68.md。
+
+## 0.8.68 發行（2026-10-16 先前授權，已由上方暫停要求取代）
+
+- 使用者要求編譯、進版並推送 Git，取代先前暫不發行限制；進版 0.8.68，交付 EXE、NSIS、簽署清單與原始碼至既有 main。
+- 使用 Build.ps1 -EmptyCargoCache -IncludeInstaller，以 v142 x64／--frozen 做完整核心與 NSIS 驗證。保留歷史離線 ZIP、icon.png 及使用者 onboarding-state.json；不納入測試連線檔／聊天資料。
+- 本版 CAD 分頁實測無重讀，但每頁掃描成本、模型誤填版本及剖面屬性過度確認仍是已知限制。發行結果以 docs/VALIDATION_0_8_68.md 為準，不宣稱公司模型已完整驗收。
+
+## localhost Luna 實測（2026-10-16 最新授權）
+
+- 使用者授權 localhost 轉接到 Codex GPT-6 Luna low 並實際操作應用程式核對 CAD 分頁；允許為測試建立隔離 EXE，仍不進版、封裝或推送。
+- 新增 Start-LocalLuna.ps1、原生 dynamicTools 轉接與 --local-ai-test／--local-cad-probe 隔離入口；只綁 127.0.0.1，使用獨立設定與合成資料。
+- v142 x64／空快取 --frozen 基礎建置與 26 項 progress 測試通過；target 已更新，dist 未動。645 圖元法蘭圖已存檔重開核對。
+- 兩次 GUI 真正模型／CAD 測試均成功讀完 645 圖元、offset 0→100→…→600，無分頁重讀。另補齊四個 CAD 工具漏掉的 progress_note，6 項 schema 測試及第二次完整基礎建置通過。
+- 第二次需人工更正模型誤填的年份 version 為 ProgID；最後雖交付核對表，仍把未讀出的 Hatch 屬性稱為符合，答案正確性不通過。僅驗證分頁／筆記流程，詳見 docs/LOCAL_LUNA_TEST.md、docs/VALIDATION_LOCAL_LUNA.md；不宣稱完整 CAD 驗收。
+
+## 待發行：CAD 0／100 分頁循環（2026-10-16）
+
+- 使用者明確觀察 offset 在 0／100 間反覆；補上獨立 CAD 閱讀區間與固定提供模型的 cad_paging，重讀同頁不算新進展。
+- 同文件同 revision 重讀首頁保留累積 Handle；文件／內容變更仍重設。詳見 docs/PENDING_CAD_PAGING.md。
+- 沿用先改、不編譯不進版安排；新增 Rust 回歸未執行，未封裝推送，實機與模型效果待驗證。每頁全圖掃描效能問題本輪未修改。
+
+## 待發行：只保留本版更新日誌與教學（2026-10-16 最新要求）
+
+- 取代下方跨版本摘要修正：取消更新後自動公告、版本區間追蹤與 NSIS 舊版本轉換紀錄，只保留設定按鈕開啟的本版更新日誌對話框。
+- 移除設定下方重複日誌及內嵌 0.8.65／0.8.66 公告；往後 release-notes.json 每次發行替換為本版內容，不累積歷史。完整開發紀錄留在文件。
+- 保留全部教學與已讀紀錄，舊 JSON 的版本欄位忽略。先改、不編譯、不進版、不封裝推送；教學 DOM 測試通過，Rust／原生／NSIS 尚未驗證。見 docs/PENDING_ONBOARDING_UPDATE_RANGE.md。
+
+## 待發行：教學公告與更新版本起點（2026-10-16，已由上方簡化方案取代）
+
+- 最新要求先修改、不編譯不進版；本輪不接續打包或推送。
+- 檢查 0.8.65～0.8.67 使用者摘要，移除開發用離線測試與內部技能拆分公告；14 張教學卡保留 ID／revision 與已讀紀錄。
+- 升級重新設定公告起點，避免舊 pending_from 導致 0.8.65 → 0.8.67 顯示為 0.8.64；同版本已讀不重現。新增 Rust 案例未執行，詳見 docs/PENDING_ONBOARDING_UPDATE_RANGE.md。
+
+## 0.8.67 完整補測進行中（2026-10-16）
+
+- 使用者最新要求：CAD 測完後補跑之前略過的完整驗證，全部通過才打包及推送 main。沿用版本 0.8.67；本輪目前只修改測試，不改產品功能。
+- 已修正工具數量、技能拆分、教學保存目錄隔離與四分頁測試；342 Rust、61 CAD 合成、完整專案／Python／前端／本機 VNC 通過。完整核心命令 `Build.ps1 -EmptyCargoCache -ValidateOnly -TestVnc` 結束碼 0；另一次 Python 全套含 Excel COM 通過。
+- 尚有使用者的「文件1 - Word」開啟，已透過非同步問題請使用者儲存並關閉 Office，未收到答覆；不代為關閉。Test-Office.ps1 要求 Office 全部關閉，剩下全格式 Office／圖片、SMB 文件、NSIS 生命週期及發行待續。
+- 本輪未更新 dist／簽署清單、未提交推送。詳細證據與待辦見 docs/VALIDATION_0_8_67_FULL.md；不要把核心通過宣稱全部驗收完成。保留 icon.png、dist/onboarding-state.json 與既有文件。
+
 ## 0.8.67：CAD 離線實機測試與相容修正
 
 - 加入不需公司登入的固定離線測試入口，沿用正式 Broker／COM，測試後清理成功產生的 DWG，保留報告。

@@ -169,13 +169,30 @@ pub fn context(ids: &[String]) -> AppResult<String> {
     Ok(guides.join("\n"))
 }
 
-pub fn context_for(ids: &[String], _model: &str) -> AppResult<String> {
+/// 快速模型連詳細參考頁也不收到圖片操作指示；CAD使用者預覽說明仍可保留。
+pub fn read_guide_for(id: &str, model: &str) -> AppResult<String> {
+    let guide = read_guide(id)?;
+    if super::vision::input::model_supported(model) {
+        return Ok(guide.into());
+    }
+    Ok(guide
+        .lines()
+        .filter(|line| !line.contains("analyze_image") && !line.contains("品質模型圖片輔助"))
+        .collect::<Vec<_>>()
+        .join("\n"))
+}
+
+pub fn context_for(ids: &[String], model: &str) -> AppResult<String> {
     let available: Vec<_> = ids
         .iter()
         .filter(|id| id.as_str() != "image-read")
         .cloned()
         .collect();
-    context(&available)
+    let mut result = context(&available)?;
+    if ids.iter().any(|id| id.starts_with("cad-")) && super::vision::input::model_supported(model) {
+        result.push_str("\n品質模型圖片輔助：cad_preview(show_user=false)只產生局部JPG；show_user=true交給使用者指認。產生的局部JPG可按需求用analyze_image(path,focus)判讀，並核對快照版本。此為幾何示意，不是CAD截圖；尺寸與修改目標以cad_query精確資料為準。不得從省略圖元的預覽推斷不存在。圖片不會隨預覽自動上傳。\n");
+    }
+    Ok(result)
 }
 
 /// 圖片併入基本檔案閱讀，依模型能力提供方法，不需要多一輪載入技能。
@@ -210,6 +227,9 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
     match tool {
         // 舊 checkpoint 保留原工具權限；新任務只公告與目標文件相關的工具。
         "cad_inventory" => ids.iter().any(|id| id.starts_with("cad-")),
+        "cad_snapshot" | "cad_query" | "cad_preview" => {
+            has("cad-active") || has("cad-copy") || has("cad-excel") || has("cad-drawing")
+        }
         "cad_draw" => has("cad-new") || has("cad-drawing"),
         "cad_active_read" => has("cad-active") || has("cad-excel") || has("cad-drawing"),
         "cad_active_edit" => has("cad-active") || has("cad-drawing"),

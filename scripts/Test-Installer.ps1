@@ -162,6 +162,8 @@ Run-Checked (Join-Path $work 'real-setup.exe') '/S'
 if ((Get-FileHash $app).Hash -ne (Get-FileHash $AppSource).Hash) { throw 'Installed Rust app differs from the selected build.' }
 Run-Checked $app '--self-check'
 Run-Checked $app '--python-self-check'
+# 安裝後以正式 EXE 核對 CAD runtime 與管線；只掃描登錄，不啟動或繪圖。
+Run-Checked $app '--cad-self-check'
 # 完整環境必須原地沿用。保留所有檔案的建立時間，並鎖住一個檔案禁止寫入／刪除；
 # 若安裝器仍先搬移或覆蓋 Python，這次更新會失敗，不能只靠相同內容判定「沒有重裝」。
 $pythonRoot = Join-Path $installRoot 'python'
@@ -252,6 +254,7 @@ try {
 Assert-RuntimeUnavailable $releaseApp $missingBrowserFolder
 Run-Checked $releaseApp '--self-check'
 Run-Checked $releaseApp '--python-self-check'
+Run-Checked $releaseApp '--cad-self-check'
 Run-Checked $releaseUninstaller '/S'
 $deadline = [DateTime]::UtcNow.AddSeconds(60)
 while (((Test-Path $releaseUninstaller) -or (Test-Path $releaseKey)) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
@@ -276,6 +279,7 @@ Remove-Item -LiteralPath $releaseKeep
     python_bundled = $true
     python_folder = 'python'
     python_install_self_check = $true
+    cad_install_self_check = $true
     python_failure_rollback = $true
     python_reused_without_replacement = $true
     python_repair_cases = $repairCases

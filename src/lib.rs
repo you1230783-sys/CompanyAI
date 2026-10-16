@@ -12,6 +12,7 @@ pub mod errors;
 pub mod history;
 pub mod hotkey;
 pub mod jobs;
+pub mod local_test;
 pub mod notifications;
 pub mod outlook;
 pub mod projects;

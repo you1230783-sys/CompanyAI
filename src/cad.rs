@@ -178,10 +178,16 @@ pub fn execute(request: Value, cancel: &AtomicBool) -> AppResult<Value> {
     let stdout = child.stdout.take().ok_or("CAD 輸出管線遺失。")?;
     // 同時讀寫管線，避免大量幾何資料塞滿管線而阻塞主程序的取消監控。
     let writer = thread::spawn(move || stdin.write_all(&input));
+    // 完整快照只交給本機索引；一般工具結果維持原有小型上限。
+    let output_limit = if request["action"] == "active_snapshot" {
+        70_000_000
+    } else {
+        2_000_000
+    };
     let reader = thread::spawn(move || {
         let mut bytes = Vec::new();
         stdout
-            .take(2_000_001)
+            .take(output_limit + 1)
             .read_to_end(&mut bytes)
             .map(|_| bytes)
     });
@@ -212,7 +218,7 @@ pub fn execute(request: Value, cancel: &AtomicBool) -> AppResult<Value> {
         .join()
         .map_err(|_| "CAD 輸出執行緒失敗。")?
         .map_err(|e| e.to_string())?;
-    if bytes.len() > 2_000_000 {
+    if bytes.len() as u64 > output_limit {
         return Err("CAD 結果過大。".into());
     }
     serde_json::from_slice(&bytes).map_err(|e| format!("CAD 回應無法解析：{e}"))

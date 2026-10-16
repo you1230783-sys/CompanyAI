@@ -430,6 +430,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_tool_preserves_the_progress_note_contract() {
+        // CAD 工具曾漏掉此欄位，模型只能翻頁卻無法累積核對結果。
+        // 檢查整份目錄，避免未來新增工具再次繞過共用交接規則。
+        for strict in [false, true] {
+            for tool in definitions(strict).unwrap() {
+                let parameters = &tool["function"]["parameters"];
+                assert_eq!(
+                    parameters["properties"]["progress_note"]["type"], "string",
+                    "{} 缺少交接筆記",
+                    tool["function"]["name"]
+                );
+                assert!(parameters["required"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("progress_note")));
+            }
+        }
+    }
+
+    #[test]
+    fn cad_read_accepts_a_note_with_the_next_page() {
+        let tools = definitions(false).unwrap();
+        let schema = &tools
+            .iter()
+            .find(|tool| tool["function"]["name"] == "cad_active_read")
+            .unwrap()["function"]["parameters"];
+        let args = json!({"version":"latest","offset":100,
+            "progress_note":"已核對第一頁外框與安裝孔；接著閱讀尚未提供的圖元。"});
+        assert!(decode_arguments(&args.to_string(), schema).is_ok());
+    }
+
+    #[test]
     fn python_input_errors_locate_missing_kind_and_unknown_key_without_echoing_code() {
         let source = catalog().unwrap();
         let schema = &source["tools"]

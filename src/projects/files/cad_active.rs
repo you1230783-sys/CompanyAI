@@ -8,45 +8,47 @@ impl Broker {
         offset: usize,
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
-        if self.cad_active_unsupported.as_deref() == Some(version) {
-            return Err("此 CAD 的目前圖面介面已回報不支援；本任務不再重試相同版本，請改用 DWG 副本或保留診斷。".into());
-        }
-        let previous = self.cad_active.clone().unwrap_or(Value::Null);
-        if offset > 0 && previous.is_null() {
-            return Err("請先讀取目前圖面的第一頁。".into());
-        }
-        let version = if offset > 0 {
-            previous["version"].as_str().ok_or("缺少 CAD 版本。")?
-        } else {
-            version
-        };
-        let result = crate::cad::execute_interactive(
-            json!({"action":"active_read", "version":version,
-            "offset":offset,"document":previous["document"],"revision":previous["revision"]}),
-            cancel,
-            self.cad_waiter.as_mut(),
-        )?;
-        if result["status"] == "READ_ACTIVE" {
-            let mut handles = if offset > 0 {
-                previous["handles"].as_array().cloned().unwrap_or_default()
-            } else {
-                vec![]
-            };
-            for row in result["entities"].as_array().into_iter().flatten() {
-                if row["editable"] == true && !handles.contains(&row["handle"]) {
-                    handles.push(row["handle"].clone());
+        // 舊分頁工具沿用完整本機快照；新任務優先 cad_snapshot／cad_query。
+        if offset == 0 {
+            let previous = self.cad_active.clone();
+            self.snapshot_cad(version, None, true, cancel)?;
+            if let (Some(previous), Some(current)) = (previous, self.cad_active.as_mut()) {
+                if previous["document"] == current["document"]
+                    && previous["revision"] == current["revision"]
+                {
+                    current["handles"] = previous["handles"].clone();
                 }
             }
-            self.cad_active = Some(
-                json!({"document":result["document"],"revision":result["revision"],
-                "version":result["selected"]["progid"],"units_code":result["units_code"],"handles":handles}),
-            );
-        } else {
-            self.cad_active = None;
-            if result["recovery"] == "unsupported_capability" {
-                self.cad_active_unsupported = Some(version.to_owned());
+        }
+        let id = self
+            .cad_snapshot
+            .as_ref()
+            .filter(|s| s.data["source"].is_null())
+            .map(|s| s.id.clone())
+            .ok_or("請先讀取目前圖面快照。")?;
+        self.guard_cad_snapshot(&id, cancel)?;
+        let snapshot = self.cad_snapshot.as_ref().ok_or("缺少目前圖面快照。")?;
+        let end = offset.saturating_add(100).min(snapshot.rows.len());
+        let rows = snapshot
+            .rows
+            .get(offset..end)
+            .ok_or("分頁超出圖元數量。")?
+            .to_vec();
+        let mut result = snapshot.data.clone();
+        result["snapshot_id"] = json!(id);
+        result["entities"] = json!(rows);
+        result["offset"] = json!(offset);
+        result["next_offset"] = json!((end < snapshot.rows.len()).then_some(end));
+        result["advice"] = json!("此頁來自本機快照；需要特定物件請cad_query，不必逐頁讀完。手動改圖請refresh=true；修改前仍核對完整revision。");
+        let handles = self
+            .cad_active
+            .as_mut()
+            .and_then(|s| s["handles"].as_array_mut())
+            .ok_or("目前圖面授權已失效。")?;
+        for row in rows {
+            if row["editable"] == true && !handles.contains(&row["handle"]) {
+                handles.push(row["handle"].clone());
             }
-            return Err(format!("讀取目前 CAD 圖面失敗：{result}"));
         }
         Ok(result)
     }
@@ -110,6 +112,7 @@ impl Broker {
         )?;
         // 寫入前即作廢舊快照；成功、失敗與程序中斷都需重讀後才能再操作。
         self.cad_active = None;
+        self.cad_snapshot = None;
         self.cad_failed = true;
         self.cad_attempts += 1;
         let execution = crate::cad::execute_interactive(

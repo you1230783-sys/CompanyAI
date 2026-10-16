@@ -125,9 +125,19 @@ def execute_active(app, legacy, request, report, api):
                     "作用中圖面已切換或關閉，停止操作；請重新讀取")
 
     guard()
+    if request["action"] == "active_probe":
+        # 查詢快照前只核對文件身分／數量／單位，不再掃描 ModelSpace。
+        # 同數量的手動編輯無可靠通用變更序號；快照標為歷史資料，寫入仍完整核對 revision。
+        return {"status": "ACTIVE_PROBE", "document": current,
+                "entity_count": int(doc.ModelSpace.Count), "units_code": doc.GetVariable("INSUNITS")}
     entities, rows = snapshot(doc, api)
     stamp = revision(doc, rows)
     guard()
+    if request["action"] == "active_snapshot":
+        return {"status": "READ_ACTIVE", "document": current, "revision": stamp,
+                "units_code": doc.GetVariable("INSUNITS"), "entity_count": len(rows),
+                "reported_count": int(doc.ModelSpace.Count), "entities": rows,
+                "saved": False, "scope": "ModelSpace; currently readable properties only"}
     if request["action"] == "active_read":
         offset = request["offset"]
         api.require(type(offset) is int and 0 <= offset <= len(rows), "分頁超出圖元數量")

@@ -7,6 +7,7 @@ mod cad;
 mod cad_active;
 mod cad_copy;
 mod cad_excel;
+mod cad_query;
 mod chart_annotations;
 mod chart_preferences;
 mod code_review;
@@ -777,14 +778,19 @@ pub(super) struct SavedBroker {
     cad_partial_plans: Vec<String>,
     #[serde(default)]
     cad_reads: BTreeMap<String, Value>,
+    #[serde(default)]
+    cad_previews: BTreeMap<String, Value>,
 }
 pub struct Broker {
+    model: String,
     task_id: String,
     pub(super) analysis: super::analysis::State,
     excel_plans: BTreeMap<String, super::excel_plan::Plan>,
     file_waiter: Option<super::interaction::FileWaiter>,
     cad_waiter: Option<crate::cad::Waiter>,
     cad_active: Option<Value>,
+    // 完整快照只活在本次 Broker；重啟／續接須重讀，不恢復作用中文件寫入授權。
+    cad_snapshot: Option<super::cad_index::Snapshot>,
     // 不支援介面的錯誤不能因模型遺忘歷史而持續送往 COM。
     cad_active_unsupported: Option<String>,
     outlook: super::mail::Session,
@@ -814,6 +820,7 @@ pub struct Broker {
     cad_attempts: u32,
     cad_partial_plans: Vec<String>,
     cad_reads: BTreeMap<String, Value>,
+    cad_previews: BTreeMap<String, Value>,
     png_renderer: Option<super::charts::png::Renderer>,
     chart_chooser: Option<super::charts::quality::Chooser>,
     preferences: Option<super::steering::Inbox>,
@@ -835,6 +842,8 @@ impl Broker {
             file_waiter: None,
             cad_waiter: None,
             cad_active: None,
+            cad_snapshot: None,
+            model: "fast".into(),
             cad_active_unsupported: None,
             outlook: super::mail::Session::default(),
             outlook_process: None,
@@ -859,6 +868,7 @@ impl Broker {
             cad_attempts: 0,
             cad_partial_plans: vec![],
             cad_reads: BTreeMap::new(),
+            cad_previews: BTreeMap::new(),
             png_renderer: None,
             chart_chooser: None,
             preferences: None,
@@ -871,7 +881,7 @@ impl Broker {
         // 經序列化建立不含程序資源的快照；授權與執行中的 COM 物件不保存。
         serde_json::from_value(
             json!({"analysis":self.analysis,"mail_notes":self.mail_notes,"mail_draft":self.mail_draft,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
-            "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts,"cad_artifacts":self.cad_artifacts,"cad_failed":self.cad_failed,"cad_attempts":self.cad_attempts,"cad_partial_plans":self.cad_partial_plans,"cad_reads":self.cad_reads}),
+            "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts,"cad_artifacts":self.cad_artifacts,"cad_failed":self.cad_failed,"cad_attempts":self.cad_attempts,"cad_partial_plans":self.cad_partial_plans,"cad_reads":self.cad_reads,"cad_previews":self.cad_previews}),
         )
         .map_err(|e| e.to_string())
     }
@@ -955,6 +965,7 @@ impl Broker {
         self.cad_attempts = state.cad_attempts;
         self.cad_partial_plans = state.cad_partial_plans;
         self.cad_reads = state.cad_reads;
+        self.cad_previews = state.cad_previews;
         self.python_artifacts = state.python_artifacts;
         self.datasets = state.datasets;
         self.chart_exports = state.chart_exports;
@@ -992,6 +1003,7 @@ impl Broker {
         config: crate::config::Config,
         session: crate::storage::Session,
     ) -> AppResult<()> {
+        self.model = config.model.clone();
         self.server_pdf = Some(super::server_pdf::Reader::new(
             config,
             session,
@@ -1488,7 +1500,7 @@ impl Broker {
             {
                 return Ok(None);
             }
-            return Ok(Some(result.clone()));
+            return Ok(Some(self.current_cad_result(tool, result.clone())));
         }
         Ok(None)
     }
@@ -1582,7 +1594,7 @@ impl Broker {
             if old != request {
                 return Err("操作識別碼重複但參數不同；已停止。".into());
             }
-            return Ok(result.clone());
+            return Ok(self.current_cad_result(tool, result.clone()));
         }
         let outcome = loop {
             let result = if let Tool::RunBatch { tasks } = tool {
@@ -2139,6 +2151,24 @@ impl Broker {
             Tool::CadActiveRead { version, offset } => {
                 self.read_active_cad(version, *offset, cancel)
             }
+            Tool::CadSnapshot {
+                version,
+                path,
+                refresh,
+            } => self.snapshot_cad(version, path.as_deref(), *refresh, cancel),
+            Tool::CadQuery {
+                snapshot_id,
+                filter,
+                offset,
+                limit,
+                details,
+            } => self.query_cad(snapshot_id, filter, *offset, *limit, *details, cancel),
+            Tool::CadPreview {
+                snapshot_id,
+                candidates,
+                region,
+                show_user,
+            } => self.preview_cad(snapshot_id, candidates, *region, *show_user, cancel),
             Tool::CadActiveEdit {
                 revision,
                 edits,
@@ -2252,7 +2282,7 @@ impl Broker {
             Tool::AskPreference { .. } => Err("偏好問題需由任務協調器保存。".into()),
             Tool::RunBatch { .. } => Err("批次工作只能由頂層 broker 執行，不允許巢狀批次。".into()),
             Tool::ReadSkillGuide { id, offset } => {
-                let guide = super::skills::read_guide(id)?;
+                let guide = super::skills::read_guide_for(id, &self.model)?;
                 let total = guide.chars().count();
                 if *offset > total {
                     return Err("技能說明位置超出範圍。".into());
@@ -2563,7 +2593,11 @@ impl Broker {
                         if !metadata.is_dir() && super::vision::input::supported(&entry.path()) {
                             info["kind"] = json!("image");
                             info["bytes"] = json!(metadata.len());
-                            info["read_tool"] = json!("analyze_image");
+                            if super::vision::input::model_supported(&self.model) {
+                                info["read_tool"] = json!("analyze_image");
+                            } else {
+                                info["image_input_available"] = json!(false);
+                            }
                         }
                         entries.push(info);
                     }
@@ -2581,7 +2615,9 @@ impl Broker {
                     let image = super::vision::input::load(&self.project, path)?;
                     return Ok(
                         json!({"kind":"image","image":image.metadata(),"content_read":false,
-                        "guidance":"這是專案圖片，尚未辨識內容。依任務需要直接呼叫 analyze_image(path,focus)，不必載入技能；不需要圖片資訊即可略過。快速模型不支援圖片。"}),
+                        "guidance":if super::vision::input::model_supported(&self.model) {
+                            "這是專案圖片，尚未辨識內容。依任務需要直接呼叫 analyze_image(path,focus)，不必載入技能；不需要圖片資訊即可略過。"
+                        } else {super::vision::input::UNSUPPORTED_MODEL}}),
                     );
                 }
                 if super::logs::supported(Path::new(path)) {

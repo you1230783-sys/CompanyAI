@@ -4,6 +4,31 @@ use company_ai::{demo::DemoServer, ui, AppResult};
 
 fn main() {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if matches!(
+        arguments.first().map(String::as_str),
+        Some("--local-ai-test" | "--local-cad-probe")
+    ) {
+        let result = (|| {
+            let probe = arguments[0] == "--local-cad-probe";
+            if arguments.len() != if probe { 4 } else { 3 } {
+                return Err("用法：--local-ai-test <connection.json> <全新資料夾>；--local-cad-probe 另加 <request.txt>".into());
+            }
+            let local = company_ai::local_test::LocalTest::load(
+                std::path::Path::new(&arguments[1]),
+                std::path::Path::new(&arguments[2]),
+            )?;
+            if probe {
+                local.probe(std::path::Path::new(&arguments[3]))
+            } else {
+                ui::run_local(local)
+            }
+        })();
+        if let Err(error) = result {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     // 離線驗收只代替模型產生固定測試計畫，仍走正式 Broker 與 CAD worker。
     if arguments.first().map(String::as_str) == Some("--cad-offline-test") {
         if arguments.len() != 3 {

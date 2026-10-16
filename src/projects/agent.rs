@@ -294,6 +294,11 @@ fn build_request(
     }
     if !super::vision::input::model_supported(&caps.model) {
         tools.retain(|tool| tool["function"]["name"] != "analyze_image");
+        for tool in &mut tools {
+            if tool["function"]["name"] == "cad_preview" {
+                tool["function"]["parameters"]["properties"]["show_user"]["enum"] = json!([true]);
+            }
+        }
     }
     if use_tools
         && (tools.len() > caps.limits.tools.min(128)

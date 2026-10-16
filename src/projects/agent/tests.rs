@@ -374,7 +374,19 @@ fn history_pairs_and_request_scoped_ids_survive_repeated_calls() {
 #[test]
 fn catalog_is_portable_and_nullable_fields_restore_original_defaults() {
     let tools = schema::definitions(true).unwrap();
-    assert_eq!(tools.len(), 67);
+    // 與正式目錄逐一比對名稱，新增工具時不需同步維護另一個魔術數字；
+    // 同時抓出漏轉換、重複或意外新增的傳輸工具。
+    let source: Value = serde_json::from_str(include_str!("../tools.json")).unwrap();
+    let names = |items: &[Value]| -> std::collections::BTreeSet<String> {
+        items
+            .iter()
+            .map(|tool| tool["function"]["name"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let expected = names(source["tools"].as_array().unwrap());
+    assert!(!expected.is_empty());
+    assert_eq!(tools.len(), expected.len());
+    assert_eq!(names(&tools), expected);
     let encoded = serde_json::to_string(&tools).unwrap();
     for key in [
         "\"oneOf\":",
@@ -451,7 +463,7 @@ fn unsupported_model_and_limits_do_not_fall_back_or_truncate() {
 /// 此測試不執行工具，也不宣稱虛構檔案／版本具備授權。
 #[test]
 fn every_native_tool_schema_maps_to_existing_decision() {
-    fn example(s: &Value) -> Value {
+    fn example(s: &Value, source: &Value) -> Value {
         if let Some(v) = s["enum"].as_array() {
             return v[0].clone();
         }
@@ -459,7 +471,7 @@ fn every_native_tool_schema_maps_to_existing_decision() {
             if v.iter().any(|s| s["type"] == "null") {
                 return Value::Null;
             }
-            return example(&v[0]);
+            return example(&v[0], source);
         }
         let kind = s["type"]
             .as_str()
@@ -471,10 +483,15 @@ fn every_native_tool_schema_maps_to_existing_decision() {
                     .as_object()
                     .unwrap()
                     .iter()
-                    .map(|(k, v)| (k.clone(), example(v)))
+                    .map(|(k, v)| (k.clone(), example(v, &source["properties"][k])))
                     .collect(),
             ),
-            "array" => json!([example(&s["items"])]),
+            // 可攜 Schema 省略 minItems；合成模型仍須遵守原工具的固定座標長度。
+            "array" => Value::Array(
+                (0..source["minItems"].as_u64().unwrap_or(1))
+                    .map(|_| example(&s["items"], &source["items"]))
+                    .collect(),
+            ),
             "string" => json!("範例"),
             "integer" => json!(0),
             "number" => json!(1.0),
@@ -484,9 +501,19 @@ fn every_native_tool_schema_maps_to_existing_decision() {
         }
     }
     let task = task(request());
+    let source: Value = serde_json::from_str(include_str!("../tools.json")).unwrap();
     for tool in task.request["tools"].as_array().unwrap() {
         let name = tool["function"]["name"].as_str().unwrap();
-        let args = example(&tool["function"]["parameters"]);
+        let original = source["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["function"]["name"] == name)
+            .unwrap();
+        let args = example(
+            &tool["function"]["parameters"],
+            &original["function"]["parameters"],
+        );
         let mut result = status(&task, &args.to_string());
         result.result.as_mut().unwrap()["choices"][0]["message"]["tool_calls"][0]["function"]
             ["name"] = json!(name);

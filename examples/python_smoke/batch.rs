@@ -39,29 +39,52 @@ pub(super) fn run(project: &Project, worker: &mut Worker) -> AppResult<()> {
     // CSV 成果的來源路徑／版本位於 dataset；最外層另包含預覽與統計。
     let artifact = &a["artifacts"][0]["dataset"];
     assert!(artifact["path"].is_string() && artifact["revision"].is_string());
+    // 技能切換會收回上一階段工具；資料繪圖可與基本閱讀並行，
+    // Python 的成功／失敗並行則留在 Python 階段，不繞過技能邊界。
+    call(
+        &mut broker,
+        worker,
+        "dataset-skill",
+        json!({"tool":"load_skill","id":"dataset-charts"}),
+    )?;
     let mixed = call(
         &mut broker,
         worker,
         "mixed",
         json!({"tool":"run_batch","tasks":[
         task("chart","chart_dataset",json!({"path":artifact["path"],"revision":artifact["revision"],"x_column":"x","y_columns":["y"],"start_row":1,"row_count":3,"kind":"scatter","title":"並行圖","x_label":"x","y_label":"y"})),
-        task("read","read_file",json!({"path":"next.py","offset":0})),
-        task("fail","run_python",json!({"purpose":"合成失敗","inputs":[],"code":"raise ValueError('fixture')"})),
-        task("valid","run_python",json!({"purpose":"仍應成功","inputs":[],"code":"result={'ok':True}"}))]}),
+        task("read","read_file",json!({"path":"next.py","offset":0}))]}),
     )?;
-    for index in [0, 1, 3] {
+    for index in [0, 1] {
         assert_eq!(mixed["tasks"][index]["outcome"]["ok"], true, "{mixed}");
     }
-    assert_eq!(mixed["tasks"][2]["outcome"]["ok"], false);
     assert_eq!(broker.charts().len(), 1);
     assert_eq!(
         mixed["tasks"][1]["outcome"]["result"]["text"],
         "# 下一份資料的讀取準備\nvalue=42\n"
     );
+    call(
+        &mut broker,
+        worker,
+        "python-skill-again",
+        json!({"tool":"load_skill","id":"python-analysis"}),
+    )?;
+    let partial = call(
+        &mut broker,
+        worker,
+        "partial-python",
+        json!({"tool":"run_batch","tasks":[
+        task("fail","run_python",json!({"purpose":"合成失敗","inputs":[],"code":"raise ValueError('fixture')"})),
+        task("valid","run_python",json!({"purpose":"仍應成功","inputs":[],"code":"result={'ok':True}"}))]}),
+    )?;
+    assert_eq!(partial["tasks"][0]["outcome"]["ok"], false);
+    assert_eq!(partial["tasks"][1]["outcome"]["ok"], true, "{partial}");
     std::fs::write(
         project.root.join("batch-verification.json"),
-        serde_json::to_vec_pretty(&json!({"result":"PASS","parallel":result,"mixed":mixed}))
-            .map_err(|e| e.to_string())?,
+        serde_json::to_vec_pretty(
+            &json!({"result":"PASS","parallel":result,"mixed":mixed,"python_partial":partial}),
+        )
+        .map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())?;
     println!("PASS real batch: overlapping Python processes, independent CSVs, idempotent replay, chart plus read, partial failure preserves success");

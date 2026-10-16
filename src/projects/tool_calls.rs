@@ -11,15 +11,33 @@ const DEFINITIONS: &str = include_str!("tools.json");
 /// 工具參數只有這份定義；壓成單行再附到技能，避免排版空白增加每輪內容。
 /// 沒有設定 strict:true，因為純文字提示並不能啟用服務端的約束解碼。
 /// 技能目錄由 runner 另附短 system 訊息，避免完整工具定義超過單則 64 KB。
+#[cfg(test)]
 pub(super) fn system_prompt() -> AppResult<String> {
+    system_prompt_for("quality")
+}
+
+pub(super) fn system_prompt_for(model: &str) -> AppResult<String> {
     let mut definitions: Value =
         serde_json::from_str(DEFINITIONS).map_err(|_| "內建專案工具定義無法解析，已停止。")?;
-    // 共用筆記規則只說一次，舊文字契約也避免每個工具重複整段說明。
+    if !super::vision::input::model_supported(model) {
+        if let Some(tools) = definitions["tools"].as_array_mut() {
+            tools.retain(|tool| tool["function"]["name"] != "analyze_image");
+            for tool in tools {
+                if tool["function"]["name"] == "cad_preview" {
+                    tool["function"]["parameters"]["properties"]["show_user"]["enum"] =
+                        json!([true]);
+                }
+            }
+        }
+    }
+    // 文字協定以一條共用規則表示筆記參數，避免每個工具重複相同 Schema。
+    // 原生 Schema 與回覆解析仍使用完整目錄，不改工具真正接受的參數。
     for tool in definitions["tools"].as_array_mut().into_iter().flatten() {
-        if let Some(note) =
-            tool["function"]["parameters"]["properties"]["progress_note"].as_object_mut()
-        {
-            note.remove("description");
+        if let Some(properties) = tool["function"]["parameters"]["properties"].as_object_mut() {
+            properties.remove("progress_note");
+        }
+        if let Some(required) = tool["function"]["parameters"]["required"].as_array_mut() {
+            required.retain(|name| name != "progress_note");
         }
     }
     fn compact_schema(value: &mut Value) {
@@ -61,7 +79,7 @@ pub(super) fn system_prompt() -> AppResult<String> {
         }
     }
     Ok(format!(
-        "{}\n\n工具定義（OpenAI Chat Completions tools 形狀，僅為文字契約）：\n{}",
+        "{}\n\n所有工具的 arguments 共用必填參數 progress_note:string，以下省略重複定義。請簡述已完成與下一步，不記內部思考、不把待辦稱為完成。\n工具定義（OpenAI Chat Completions tools 形狀，僅為文字契約）：\n{}",
         super::SKILL,
         definitions
     ))
@@ -620,6 +638,9 @@ mod tests {
             ("test_python", json!({"copy_id":"c","revision":"r","tests":[{"id":"T1","requirement_ids":["R1"],"code":"pass","mocked_dependencies":[]}]})),
             ("review_code_change", json!({"copy_id":"c","revision":"r","checks":[]})),
             ("cad_inventory", json!({})),
+            ("cad_snapshot", json!({"version":"latest","path":null,"refresh":false})),
+            ("cad_query", json!({"snapshot_id":"s","filter":{"diameter":25,"region":[0,0,200,100]},"offset":0,"limit":10,"details":true})),
+            ("cad_preview", json!({"snapshot_id":"s","candidates":[1],"region":[0,0,200,100],"show_user":true})),
             ("cad_active_read",json!({"version":"latest","offset":0})),
             ("cad_active_edit",json!({"revision":"r","edits":[{"handle":"AB","kind":"delete","value":null}],"operations":[{"kind":"command","command":"ZOOM E"}]})),
             ("cad_excel_plan",json!({"path":"a.xlsx","revision":"r","settings":{"sheet":1,"header_row":1,"start_row":2,"row_count":2,"x_column":"A","y_column":"B","radius_column":null,"label_column":null,"kind":"circles","radius":5,"scale":1,"origin":[0,0],"color":1,"height":3,"closed":false,"units_code":4}})),

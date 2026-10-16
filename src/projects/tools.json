@@ -5987,7 +5987,7 @@
       "type": "function",
       "function": {
         "name": "cad_active_read",
-        "description": "讀取目前 CAD 圖面含未儲存內容。修改前必須重讀；只涵蓋 ModelSpace。",
+        "description": "舊分頁相容入口；首次建立完整本機快照，後續分頁從快照取出。新任務優先cad_snapshot與cad_query按需定位。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -5997,11 +5997,17 @@
             "offset": {
               "type": "integer",
               "minimum": 0
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
             "version",
-            "offset"
+            "offset",
+            "progress_note"
           ],
           "additionalProperties": false
         }
@@ -6752,12 +6758,18 @@
               },
               "minItems": 0,
               "maxItems": 100
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
             "revision",
             "edits",
-            "operations"
+            "operations",
+            "progress_note"
           ],
           "additionalProperties": false
         }
@@ -6876,12 +6888,18 @@
                 "units_code"
               ],
               "additionalProperties": false
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
             "path",
             "revision",
-            "settings"
+            "settings",
+            "progress_note"
           ],
           "additionalProperties": false
         }
@@ -6923,6 +6941,11 @@
             },
             "version": {
               "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
             }
           },
           "required": [
@@ -6931,7 +6954,231 @@
             "path",
             "revision",
             "name",
-            "version"
+            "version",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "cad_snapshot",
+        "description": "一次建立完整本機CAD索引，只回精簡總覽。path=null讀目前圖面，專案DWG路徑則唯讀副本。refresh=false重用快照，true明確重建；重建後舊候選作廢。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "refresh": {
+              "type": "boolean"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "更新目標、決策、已完成、待辦與下一步；不把快照建立說成已核對整張圖。"
+            }
+          },
+          "required": [
+            "version",
+            "path",
+            "refresh",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "cad_query",
+        "description": "查詢本機快照；不用重掃CAD。先條件篩選，修改前details=true取精確資料。候選編號僅在同快照有效。多條件AND；空條件可查總覽樣本外的資料。 details=true每頁最多10筆；其他每頁最多50筆。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "snapshot_id": {
+              "type": "string"
+            },
+            "filter": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "line",
+                    "circle",
+                    "polyline",
+                    "arc",
+                    "dimension",
+                    "leader",
+                    "text",
+                    "mtext",
+                    "blockreference",
+                    "unknown",
+                    null
+                  ]
+                },
+                "layer": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "color": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "text": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "diameter": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "tolerance": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "region": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "description": "WCS XY [左,下,右,上]，圖面單位。"
+                },
+                "handles": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 50
+                },
+                "candidates": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "integer"
+                  },
+                  "maxItems": 50
+                },
+                "rectangle": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "總覽的矩形id，提供圓與該矩形的距邊關係；不是篩選條件。"
+                }
+              },
+              "additionalProperties": false
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            },
+            "details": {
+              "type": "boolean"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "更新目標、決策、已完成、待辦與下一步；不把快照建立說成已核對整張圖。"
+            }
+          },
+          "required": [
+            "snapshot_id",
+            "filter",
+            "offset",
+            "limit",
+            "details",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "cad_preview",
+        "description": "顯示局部幾何示意給使用者選候選，兩種模型均可使用；不自動傳圖給模型。非CAD截圖，未知圖元與外觀不呈現。選擇不是修改同意；關閉不得猜候選。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "snapshot_id": {
+              "type": "string"
+            },
+            "candidates": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "minItems": 1,
+              "maxItems": 20
+            },
+            "region": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number"
+              },
+              "minItems": 4,
+              "maxItems": 4,
+              "description": "WCS XY [左,下,右,上]，圖面單位。"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "更新目標、決策、已完成、待辦與下一步；不把快照建立說成已核對整張圖。"
+            },
+            "show_user": {
+              "type": "boolean",
+              "description": "true顯示給使用者並等待指認；依目前模型提供的允許值操作。"
+            }
+          },
+          "required": [
+            "snapshot_id",
+            "candidates",
+            "region",
+            "progress_note",
+            "show_user"
           ],
           "additionalProperties": false
         }

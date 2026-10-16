@@ -45,6 +45,24 @@
     if (!pending) return;
     cadTarget={conversation:state.active_id,run_id:project.running_id,request_id:pending.request_id};
     const prompt=pending.prompt,selected=prompt.selected||{};
+    cadDialog.classList.toggle("cad-preview-dialog",Boolean(prompt.preview));
+    if (prompt.preview) {
+      cadDialog.append(node("h2","","CAD 局部候選預覽"),node("p","",prompt.message));
+      // 只顯示原生端產生的 JPG，不接受網址或可執行 SVG／HTML。
+      if (typeof prompt.image === "string" && prompt.image.startsWith("data:image/jpeg;base64,") && prompt.image.length < 7000000) {
+        const image=document.createElement("img");image.src=prompt.image;image.alt="候選圖元局部幾何示意，編號對應下方清單";
+        image.style.cssText="display:block;max-width:100%;max-height:55vh;object-fit:contain;background:white";cadDialog.append(image);
+      }
+      const select=document.createElement("select");select.setAttribute("aria-label","選擇候選圖元");
+      select.add(new Option("請選擇要指認的圖元",""));
+      for (const row of prompt.candidates || []) {
+        const center=Array.isArray(row.center) ? `，圓心 (${row.center.join(", ")})` : "";
+        select.add(new Option(`${row.candidate} 號：${row.kind}，Handle ${row.handle}，圖層 ${row.layer || "未提供"}，ACI ${row.color ?? "未提供"}${center}${row.diameter == null ? "" : `，直徑 ${row.diameter}`}`,`candidate:${row.candidate}`));
+      }
+      const buttons=node("div","dialog-actions"),choose=node("button","primary-button","選擇此圖元"),close=node("button","","關閉，不選擇");
+      choose.disabled=true;select.onchange=()=>{choose.disabled=!select.value;};choose.onclick=()=>{if(select.value)replyCad(select.value);};close.onclick=()=>replyCad("cancel");
+      buttons.append(choose,close);cadDialog.append(node("p","","只用於指認目標；修改圖面時會另外確認。"),select,buttons);cadDialog.showModal();return;
+    }
     cadDialog.append(node("h2","",prompt.confirm_document ? "確認修改目前圖面" : prompt.partial ? "CAD 連線中斷" : "請開啟 CAD"),
       node("p","",prompt.confirm_document ? `${prompt.document.name}（${prompt.document.full_name||"尚未儲存"}）` : `${selected.description||"CAD"} ${selected.year||""}（${selected.progid||""}）`),
       node("p","",prompt.message),node("p","","本任務會保留原計畫；等待最多十分鐘，可隨時取消。"));

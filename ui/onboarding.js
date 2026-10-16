@@ -96,20 +96,18 @@ window.OnboardingUI = (() => {
     paintLesson(); show(fromSettings);
   }
 
-  function openUpdates(history = false) {
+  function openUpdates() {
     if (!allowed()) return;
-    mode = history ? "history" : "updates";
+    mode = "release";
     const info = state.onboarding;
     $("onboarding-eyebrow").textContent = "版本更新";
-    $("onboarding-title").textContent = history ? "更新日誌" : "這次更新了什麼";
-    $("onboarding-intro").textContent = history
-      ? `目前版本 ${info.to_version}；更新紀錄自 0.8.65 開始。`
-      : `您從 ${info.from_version} 更新到 ${info.to_version}，以下為更新資訊：`;
-    renderReleases($("onboarding-body"), history ? info.release_history || [] : info.updates || []);
+    $("onboarding-title").textContent = "更新日誌";
+    $("onboarding-intro").textContent = "目前版本 " + info.version;
+    renderReleases($("onboarding-body"), info.release_notes || []);
     $("onboarding-previous").hidden = true;
-    $("onboarding-later").textContent = history ? "返回設定" : "稍後再看";
-    $("onboarding-done").textContent = history ? "關閉" : "知道了";
-    show(history);
+    $("onboarding-later").textContent = "返回設定";
+    $("onboarding-done").textContent = "關閉";
+    show(true);
   }
 
   $("onboarding-previous").onclick = () => {
@@ -121,8 +119,8 @@ window.OnboardingUI = (() => {
     if (mode === "lesson") {
       send({type:"onboarding_ack", topic:sequence[position].id});
       if (++position < sequence.length) { paintLesson(); return; }
-    } else if (mode === "updates") send({type:"onboarding_ack", topic:"updates"});
-    // 手動重看完整日誌不改變自動更新通知的已讀狀態。
+    }
+    // 更新日誌只供手動查看，不記錄已讀或自動彈出。
     dialog.close();
   };
   dialog.addEventListener("close", () => {
@@ -133,12 +131,12 @@ window.OnboardingUI = (() => {
     returnToSettings = false;
     if (previousFocus?.isConnected && allowed()) previousFocus.focus();
   });
-  $("updates-replay").onclick = () => openUpdates(true);
+  $("updates-replay").onclick = () => openUpdates();
 
   function renderCatalog() {
     const info = state.onboarding || {};
     $("onboarding-storage-status").textContent = info.error || "";
-    const signature = JSON.stringify([info.tutorials, info.release_history]);
+    const signature = JSON.stringify(info.tutorials);
     if (signature === catalogSignature) return;
     catalogSignature = signature;
     const catalog = $("tutorial-catalog"); catalog.replaceChildren();
@@ -164,7 +162,6 @@ window.OnboardingUI = (() => {
       }
       catalog.append(section);
     }
-    renderReleases($("release-history"), info.release_history || []);
   }
 
   function render() {
@@ -175,7 +172,6 @@ window.OnboardingUI = (() => {
     timer = setTimeout(() => {
       timer = null;
       if (!allowed() || autoShown || state.busy !== "none" || document.querySelector("dialog[open]")) return;
-      if (state.onboarding.updates?.length) { openUpdates(); return; }
       if (typeof activeView !== "undefined" && activeView !== "chat") return;
       const conversation = (state.conversations || []).find(item => item.id === state.active_id);
       const context = conversation?.project_id ? "project" : "chat";

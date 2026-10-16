@@ -1,4 +1,4 @@
-//! 教學完成紀錄與跨版本摘要。資料放在 EXE 旁，方便測試期間手動重設。
+//! 教學完成紀錄與目前版本公告。資料放在 EXE 旁，方便測試期間手動重設。
 //! 教學 revision 與應用版本獨立；升版不會自動要求重看同一張卡。
 use crate::{service, storage, AppResult};
 use serde::{Deserialize, Serialize};
@@ -16,8 +16,6 @@ fn tutorial_catalog() -> Vec<Value> {
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 struct Saved {
-    last_version: Option<String>,
-    pending_from: Option<String>,
     tutorials: BTreeMap<String, u32>,
 }
 
@@ -61,31 +59,7 @@ impl Onboarding {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
             Err(error) => return Err(error.to_string()),
         }
-        // 首次支援此功能時，舊版沒有旗標；由安裝包在替換 EXE 前記錄真實舊版本。
-        let transition = folder.join("update-transition.ini");
-        let installed_from = fs::metadata(&transition)
-            .ok()
-            .filter(|m| m.len() <= 4096)
-            .and_then(|_| fs::read_to_string(&transition).ok())
-            .and_then(|text| {
-                let value = |key: &str| {
-                    text.lines()
-                        .find_map(|line| line.trim().strip_prefix(key).map(str::to_owned))
-                };
-                (value("to=").as_deref() == Some(service::CURRENT_VERSION))
-                    .then(|| value("from="))
-                    .flatten()
-            });
-        let previous = self.saved.last_version.clone().or(installed_from);
-        if let Some(previous) = previous {
-            if service::version_number(&previous)?
-                < service::version_number(service::CURRENT_VERSION)?
-                && self.saved.pending_from.is_none()
-            {
-                self.saved.pending_from = Some(previous);
-            }
-        }
-        self.saved.last_version = Some(service::CURRENT_VERSION.into());
+        // 舊版版本欄位由 serde 忽略；保留每張教學卡的完成紀錄。
         self.persist(&self.saved)
     }
 
@@ -110,7 +84,6 @@ impl Onboarding {
             "chat" => {
                 saved.tutorials.insert(CHAT_ID.into(), CHAT_REVISION);
             }
-            "updates" => saved.pending_from = None,
             id => {
                 let revision = tutorial_catalog()
                     .iter()
@@ -126,44 +99,14 @@ impl Onboarding {
         Ok(())
     }
 
-    /// 更新啟動前保存目前版本。沒有確認安裝成功前不先改成目標版本。
-    pub(super) fn before_update(&self) -> AppResult<()> {
-        if self.disabled {
-            return Ok(());
-        }
-        if let Some(error) = &self.error {
-            return Err(error.clone());
-        }
-        let mut saved = self.saved.clone();
-        saved.last_version = Some(service::CURRENT_VERSION.into());
-        self.persist(&saved)
-    }
-
     pub(super) fn state(&self) -> Value {
-        let from = self.saved.pending_from.as_deref();
-        let lower = from.and_then(|v| service::version_number(v).ok());
-        let current = service::version_number(service::CURRENT_VERSION).ok();
-        // 只加入已明確決定交付的簡短公告，從 0.8.65 開始；不回填歷史版本。
-        let history: Vec<Value> =
+        // 公告檔只保存本版內容；升版時直接替換，不累積舊版公告。
+        let release_notes: Vec<Value> =
             serde_json::from_str::<Vec<Value>>(include_str!("../../assets/release-notes.json"))
                 .unwrap_or_default()
                 .into_iter()
-                .filter(|entry| {
-                    let version = entry["version"]
-                        .as_str()
-                        .and_then(|v| service::version_number(v).ok());
-                    matches!((current,version), (Some(b),Some(v)) if v <= b && v >= [0,8,65])
-                })
+                .filter(|entry| entry["version"].as_str() == Some(service::CURRENT_VERSION))
                 .collect();
-        let entries: Vec<_> = history
-            .iter()
-            .filter(|entry| {
-                let version = entry["version"]
-                    .as_str()
-                    .and_then(|v| service::version_number(v).ok());
-                matches!((lower,version), (Some(a),Some(v)) if a < v)
-            })
-            .collect();
         let tutorials: Vec<_> = tutorial_catalog()
             .into_iter()
             .map(|mut entry| {
@@ -177,8 +120,8 @@ impl Onboarding {
             .collect();
         json!({"enabled":!self.disabled,"chat_pending":!self.disabled && self.error.is_none()
             && self.saved.tutorials.get(CHAT_ID).copied().unwrap_or(0) < CHAT_REVISION,
-            "updates":entries,"release_history":history,"tutorials":tutorials,
-            "from_version":from,"to_version":service::CURRENT_VERSION,
+            "release_notes":release_notes,"tutorials":tutorials,
+            "version":service::CURRENT_VERSION,
             "error":self.error,"state_file":self.path})
     }
 }
@@ -188,59 +131,55 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tutorial_revision_and_upgrade_range_are_independent() {
-        let mut state = Onboarding {
+    fn legacy_state_preserves_tutorials_without_upgrade_announcements() {
+        let saved: Saved = serde_json::from_value(json!({
+            "last_version":"0.8.65", "pending_from":"0.8.64",
+            "tutorials":{"chat.basics":1}
+        }))
+        .unwrap();
+        let state = Onboarding {
             path: None,
+            saved,
             error: None,
             disabled: false,
-            saved: Saved {
-                last_version: Some(service::CURRENT_VERSION.into()),
-                pending_from: Some("0.8.50".into()),
-                tutorials: BTreeMap::new(),
-            },
         };
-        assert_eq!(state.state()["chat_pending"], true);
-        let info = state.state();
-        let updates = info["updates"].as_array().unwrap();
-        assert!(!updates.is_empty());
-        assert!(updates.iter().any(|entry| entry["version"] == "0.8.65"));
-        assert!(updates.iter().all(|entry| {
-            let version = service::version_number(entry["version"].as_str().unwrap()).unwrap();
-            version >= [0, 8, 65]
-                && version <= service::version_number(service::CURRENT_VERSION).unwrap()
-        }));
-        state.saved.tutorials.insert(CHAT_ID.into(), CHAT_REVISION);
         assert_eq!(state.state()["chat_pending"], false);
-        state.saved.pending_from = Some(service::CURRENT_VERSION.into());
-        assert!(state.state()["updates"].as_array().unwrap().is_empty());
-        assert_eq!(Onboarding::load(true).state()["enabled"], false);
+        assert!(state.state().get("from_version").is_none());
+        assert!(state.state().get("updates").is_none());
+        let info = state.state();
+        let notes = info["release_notes"].as_array().unwrap();
+        assert!(!notes.is_empty());
+        assert!(notes
+            .iter()
+            .all(|entry| entry["version"] == service::CURRENT_VERSION));
+        let persisted = serde_json::to_value(&state.saved).unwrap();
+        assert!(persisted.get("pending_from").is_none());
+        assert_eq!(persisted["tutorials"][CHAT_ID], CHAT_REVISION);
     }
 
     #[test]
     fn completing_one_topic_preserves_the_other_and_persists() {
-        let path = std::env::current_dir()
-            .unwrap()
-            .join(".build")
-            .join(format!(
-                "onboarding-test-{}.json",
-                crate::jobs::new_id().unwrap()
-            ));
+        // 不與專案 Broker 的路徑鎖測試共用 .build；Windows 在目錄被固定時
+        // 可能拒絕原子重新命名。獨立暫存目錄讓本測試只驗證教學保存契約。
+        let root = std::env::temp_dir().join(format!(
+            "company-ai-onboarding-{}",
+            crate::jobs::new_id().unwrap()
+        ));
+        let path = root.join("onboarding-state.json");
         let mut state = Onboarding {
             path: Some(path.clone()),
             error: None,
             disabled: false,
-            saved: Saved {
-                pending_from: Some("0.8.64".into()),
-                ..Saved::default()
-            },
+            saved: Saved::default(),
         };
         state.acknowledge("chat").unwrap();
         let saved: Saved = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         assert_eq!(saved.tutorials.get(CHAT_ID), Some(&CHAT_REVISION));
-        assert_eq!(saved.pending_from.as_deref(), Some("0.8.64"));
-        state.acknowledge("updates").unwrap();
-        assert!(state.saved.pending_from.is_none());
+        state.acknowledge("chat.attachments").unwrap();
+        assert_eq!(state.saved.tutorials.get(CHAT_ID), Some(&CHAT_REVISION));
+        assert_eq!(state.saved.tutorials.get("chat.attachments"), Some(&1));
         assert!(state.acknowledge("unknown").is_err());
         fs::remove_file(path).unwrap();
+        fs::remove_dir(root).unwrap();
     }
 }

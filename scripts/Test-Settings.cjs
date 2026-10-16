@@ -30,11 +30,15 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
 
 
     const checks=[];
+    // 使用正式目錄，避免只驗證沒有教學卡／更新內容的空白分頁。
+    const tutorials=JSON.parse(fs.readFileSync('assets/tutorials.json','utf8')).map(item=>({...item,completed:true}));
+    const releases=JSON.parse(fs.readFileSync('assets/release-notes.json','utf8'));
     await evaluate(`(() => {
       document.querySelectorAll('dialog[open]').forEach(d=>d.close());
       window.testCommands=[];send=message=>testCommands.push(message);
       window.testFixture={...LMUI.getState(),logged_in:true,can_send:true,busy:'none',active_id:'review-settings',
         version:'0.8.47',models:[{id:'quality',label:'品質'}],notifications:[],
+        onboarding:{enabled:true,tutorials:${JSON.stringify(tutorials)},release_notes:${JSON.stringify(releases)},version:${JSON.stringify(releases.at(-1).version)}},
         conversations:[{id:'review-settings',title:'設定來源檢查',updated_at:1}],
         config:{...LMUI.getState().config,debug_mode:true,model:'quality'},
         messages:[{role:'assistant',request_id:'old-run',content:'早先任務'},{role:'user',request_id:'latest-run',content:'目前任務'}],
@@ -53,11 +57,16 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
       testFixture.projects.preferences=[];LMUI.receive(testFixture);
       $('settings-dialog').showModal();
       const tabs=[...document.querySelectorAll('.settings-tabs [role=tab]')];
-      check(tabs.map(t=>t.textContent.trim()).join(',')==='一般,操作,進階','three settings tabs');
+      check(tabs.map(t=>t.textContent.trim()).join(',')==='一般,操作,進階,教學與更新日誌','four settings tabs');
       $('hotkey').value='Win+F11';tabs[1].click();tabs[2].click();tabs[0].click();
       check($('hotkey').value==='Win+F11','tabs preserve input drafts');
       tabs[0].dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}));
-      check(!$('settings-panel-2').hidden && $('settings-panel-0').hidden,'keyboard switches panels');
+      check(!$('settings-panel-3').hidden && $('settings-panel-0').hidden,'End selects the last tutorial tab');
+      check($('tutorial-catalog').closest('#settings-panel-3') && $('updates-replay').closest('#settings-panel-3'),'tutorials and release history have their own panel');
+      check(document.querySelectorAll('#tutorial-catalog .tutorial-topic').length===14,'all tutorial topics rendered');
+      check(!$('release-history'),'no duplicate inline release history');
+      tabs[3].dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));
+      check(!$('settings-panel-2').hidden && $('settings-panel-3').hidden,'ArrowLeft returns to Advanced');
       check($('vnc-enabled').closest('#settings-panel-2') && $('advanced-settings').closest('#settings-panel-2'),'VNC and diagnostics in Advanced');
       $('project-diagnostics-run').value='old-run';
       testFixture.messages.push({role:'user',request_id:'new-run',content:'新增任務'});LMUI.receive(testFixture);
@@ -95,6 +104,13 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
     await capture('diagnostics-light',1180,'light');
     await evaluate(`$('project-diagnostics-dialog').close();$('settings-dialog').showModal();SettingsUI.select(2);`);
     await capture('advanced-light',1180,'light');await capture('advanced-dark',1180,'dark');await capture('advanced-narrow',520,'light');
+    await evaluate(`SettingsUI.select(3);`);await capture('tutorials-narrow',520,'light');
+    await evaluate(`document.querySelector('#tutorial-catalog .tutorial-topic').click();check($('onboarding-dialog').open && !$('settings-dialog').open,'topic replay opens its card');`);
+    await capture('tutorial-card-narrow',520,'light');
+    await evaluate(`$('onboarding-later').click();`);await delay(100);
+    await evaluate(`check($('settings-dialog').open && !$('settings-panel-3').hidden,'closing replay returns to tutorial settings');$('updates-replay').click();check($('onboarding-title').textContent==='更新日誌','release replay opens history');`);
+    await capture('release-history-narrow',520,'light');
+    await evaluate(`$('onboarding-done').click();`);await delay(100);
     await evaluate(`SettingsUI.select(1);`);await capture('operations-narrow',520,'light');
     await evaluate(`SettingsUI.select(0);`);await capture('general-light',1180,'light');
     const chartPng = await evaluate(`(() => {

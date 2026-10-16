@@ -1,7 +1,7 @@
 //! 專案圖片辨識：沿用目前模型與正式代理 API，以獨立、無工具的子請求按需看圖。
 //! 主任務只取得辨識文字和來源；未知提交保留原 ID 查回，不重送圖片。
 pub(crate) mod input;
-mod jpeg;
+pub(crate) mod jpeg;
 use super::{agent, delegation::Outcome, files::Broker, model, runner::Run, text};
 use crate::{
     jobs::{self, Task},
@@ -104,6 +104,14 @@ pub(super) fn analyze(
     }
     let lookup_only = state.pending.is_some();
     if state.pending.is_none() {
+        // 待查原請求即使快照已失效仍只查原ID；只有新上傳需核對目前快照。
+        for image in &images {
+            if let Err(error) =
+                broker.guard_cad_preview_image(&image.path, &image.sha256, &run.cancel)
+            {
+                return Ok(failed(&error));
+            }
+        }
         let budget_key = text::revision(&format!("vision-budget|{}|{}", run.id, caps.principal_id));
         let mut attempts = broker
             .memory()?

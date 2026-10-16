@@ -168,7 +168,7 @@ impl Broker {
         Ok(result)
     }
 
-    fn remember_cad_handles(&mut self, path: &str, page: &Value) -> AppResult<()> {
+    pub(super) fn remember_cad_handles(&mut self, path: &str, page: &Value) -> AppResult<()> {
         let entry = self.cad_reads.get_mut(path).ok_or("缺少 CAD 讀取記錄。")?;
         let mut handles = entry["handles"].as_array().cloned().unwrap_or_default();
         for row in page["entities"].as_array().into_iter().flatten() {

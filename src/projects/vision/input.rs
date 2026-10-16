@@ -12,9 +12,9 @@ pub const MAX_BYTES: usize = 5_000_000;
 
 /// 快速模型沒有圖片能力；技能公告、原生入口與工具執行共用此判斷。
 pub fn model_supported(model: &str) -> bool {
-    model != "fast"
+    model == "quality"
 }
-pub const UNSUPPORTED_MODEL: &str = "此模型不支援圖片傳入，請切換至支援圖片的模型。";
+pub const UNSUPPORTED_MODEL: &str = "此模型不支援圖片傳入；需要圖片辨識時請切換至品質模型。";
 
 pub struct Image {
     pub path: String,

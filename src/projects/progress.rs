@@ -307,6 +307,7 @@ impl Progress {
             "total_repairs":self.total_repairs,"consecutive_repairs":self.consecutive_repairs,
             "no_progress":self.no_progress,
             "no_progress_reason":self.no_progress_reason,"outlook_paging":self.coverage.mail_index(),
+            "cad_paging":self.coverage.cad_index(),
             "tool_failures":{"python":self.python_failures,"python_limit":10,"other":self.other_failures,"other_limit":5}})
     }
 
@@ -328,6 +329,7 @@ impl Progress {
             "review_required":self.instruction_review_required,"copies":copies,
             "recent_operations":operations,"readings":readings,
             "outlook_paging":self.coverage.mail_index(),
+            "cad_paging":self.coverage.cad_index(),
             "tool_failures":{"python":self.python_failures,"other":self.other_failures},"total_repairs":self.total_repairs,
             "notice":"筆記是上輪操作前的摘要；最新工具結果優先。完整操作可用 read_work_log 查回，不重播已成功修改。"})
     }

@@ -54,6 +54,28 @@ def describe(entity, api):
             except (TypeError, ValueError, AttributeError):
                 pass
     # 圖塊只讀名稱／位置／屬性。定義與巢狀內容不展開、不修改。
+    if kind == "polyline":
+        # 只接受可直接解釋為 WCS XY 的直線折線；有 bulge／傾斜法向量不猜圓弧。
+        # 3D 折線、不可讀屬性及過大頂點集合仍保留原圖元摘要。
+        normal = row["properties"].get("Normal")
+        if normal and all(abs(normal[i] - (1 if i == 2 else 0)) < 1e-9 for i in range(3)):
+            try:
+                coords = list(entity.Coordinates)
+                stride = 2 if "lwpolyline" in lower else 3
+                count = len(coords) // stride
+                if 2 <= count <= 2048 and len(coords) % stride == 0 and all(
+                        isinstance(v, (float, int)) and math.isfinite(v) and abs(v) <= 1e12 for v in coords):
+                    if all(abs(float(entity.GetBulge(i))) < 1e-12 for i in range(count)):
+                        elevation = float(entity.Elevation) if stride == 2 else 0.0
+                        if math.isfinite(elevation):
+                            points = [[coords[i], coords[i+1], elevation if stride == 2 else coords[i+2]]
+                                      for i in range(0, len(coords), stride)]
+                            if len(points) > 2 and points[0] == points[-1]:
+                                points.pop()
+                            row["geometry"] = {"vertices": points, "closed": bool(entity.Closed),
+                                               "coordinates": "WCS", "straight_segments": True}
+            except Exception:
+                row["geometry_unavailable"] = True
     if kind == "blockreference":
         row["attributes"] = []
         try:

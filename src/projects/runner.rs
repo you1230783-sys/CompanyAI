@@ -343,7 +343,7 @@ fn run_for(
         let prompt = if native {
             super::agent::system_prompt_for(&run.config.model)
         } else {
-            super::tool_calls::system_prompt()?
+            super::tool_calls::system_prompt_for(&run.config.model)?
         };
         let mut skill = Message::user(&prompt);
         skill.role = "system".into();
@@ -493,6 +493,12 @@ fn run_for(
             let datasets = broker.dataset_index();
             let python_artifacts = broker.python_artifact_index();
             let cad_artifacts = broker.cad_artifact_index();
+            let cad_snapshot = broker.cad_snapshot_index();
+            if !cad_snapshot.is_null() {
+                messages.push(super::agent::Message::user(&format!(
+                    "本機CAD索引（精確資料用cad_query查回）：{cad_snapshot}"
+                )));
+            }
             if cad_artifacts["artifacts"]
                 .as_array()
                 .is_some_and(|v| !v.is_empty())

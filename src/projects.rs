@@ -1,6 +1,7 @@
 //! 專案資料與固定工具契約。授權及副本所有權由桌面保存，不由模型文字決定。
 pub(crate) mod agent;
 pub mod analysis;
+pub mod cad_index;
 pub mod charts;
 pub mod code_review;
 pub mod context;
@@ -106,6 +107,30 @@ impl Store {
 pub enum Tool {
     /// 列出本機 CAD 註冊；不啟動應用程式。
     CadInventory {},
+    /// 一次讀完整目前圖面，後續僅查本機快照；refresh 明確重建快照。
+    CadSnapshot {
+        version: String,
+        path: Option<String>,
+        #[serde(default)]
+        refresh: bool,
+    },
+    CadQuery {
+        snapshot_id: String,
+        /// 查詢條件較大，獨立配置以免增加所有工具及 Decision 的大小；JSON 契約不變。
+        filter: Box<cad_index::Filter>,
+        #[serde(default)]
+        offset: usize,
+        limit: usize,
+        #[serde(default)]
+        details: bool,
+    },
+    /// 給使用者的局部幾何預覽；不會自動將圖片傳給模型。
+    CadPreview {
+        snapshot_id: String,
+        candidates: Vec<usize>,
+        region: Option<[f64; 4]>,
+        show_user: bool,
+    },
     /// 讀取目前文件的未儲存狀態；每次修改前需重新取得快照。
     CadActiveRead {
         version: String,
@@ -536,6 +561,9 @@ impl Tool {
     pub fn label(&self) -> &'static str {
         match self {
             Self::CadActiveRead { .. } => "讀取 CAD 目前圖面",
+            Self::CadSnapshot { .. } => "建立 CAD 本機圖面索引",
+            Self::CadQuery { .. } => "查詢 CAD 圖元",
+            Self::CadPreview { .. } => "顯示 CAD 局部候選預覽",
             Self::CadActiveEdit { .. } => "修改 CAD 目前圖面（不儲存）",
             Self::CadExcelPlan { .. } => "預覽 Excel 座標繪圖計畫",
             Self::CadExcelApply { .. } => "套用 Excel 座標至 CAD",
