@@ -1,6 +1,7 @@
 //! CAD 專用固定工作程序。與可執行模型程式的分析 Python 完全分開。
 //! 固定腳本／runtime 逐檔核對，JSON 管線不提供任意 COM 名稱或 shell 指令。
 use crate::AppResult;
+pub mod offline;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{

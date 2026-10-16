@@ -29,6 +29,24 @@ class CommandCapabilityError(ValueError):
     """唯讀前置檢查已確認缺介面；不代表指令曾經執行。"""
 
 
+class CadInstallationError(RuntimeError):
+    """COM 已回應但原廠型別庫缺漏；不能當作模型參數或不支援屬性重試。"""
+
+
+def check_type_library(raw):
+    """pywin32 可能將型別庫錯誤隱藏成 AttributeError，先保留真正成因。"""
+    try:
+        raw.GetTypeInfo()
+    except pythoncom.com_error as exc:
+        if exc.hresult in (-2147319779, -2147312566):
+            raise CadInstallationError(
+                f"CAD COM 型別庫未登錄或無法載入（HRESULT {exc.hresult}）；"
+                "請修復該版本的原廠安裝／COM 登錄後重新開啟 CAD。尚未操作圖面。") from exc
+        # 合法 IDispatch 可以不提供型別資訊，仍允許原本的動態名稱查詢。
+    except AttributeError:
+        pass
+
+
 def number(value):
     require(type(value) in (int, float), "座標／尺寸必須是數字")
     value = float(value)
@@ -63,6 +81,19 @@ def equal(actual, expected):
     if isinstance(expected, str):
         return str(actual) == expected
     return math.isclose(float(actual), float(expected), rel_tol=1e-7, abs_tol=1e-6)
+
+
+def command_snapshot_equal(actual, expected):
+    """縮放可能改變浮點數末位；結構、字串與可讀欄位仍須完全一致。"""
+    if isinstance(expected, dict):
+        return (isinstance(actual, dict) and actual.keys() == expected.keys()
+                and all(command_snapshot_equal(actual[k], v) for k, v in expected.items()))
+    if isinstance(expected, list):
+        return (isinstance(actual, list) and len(actual) == len(expected)
+                and all(command_snapshot_equal(a, b) for a, b in zip(actual, expected)))
+    if type(expected) in (int, float) and type(actual) in (int, float):
+        return math.isclose(actual, expected, rel_tol=1e-10, abs_tol=1e-8)
+    return actual == expected
 
 
 class Formula:
@@ -301,7 +332,9 @@ class Drawing:
                 loaded[name] = "ByLayer" if name == "BYLAYER" else "ByBlock"
                 continue
             source = None
-            for folder in (root, root / "Support"):
+            # GstarCAD 2022 安裝包將預設支援檔放在 UserDataCache/Support。
+            # 只擴充已知的安裝目錄，不搜尋整顆磁碟或使用模型提供的路徑。
+            for folder in (root, root / "Support", root / "UserDataCache" / "Support"):
                 for filename in ("icadiso.lin", "gcadiso.lin", "acadiso.lin", "icad.lin", "gcad.lin", "acad.lin"):
                     candidate = (folder / filename).resolve()
                     if not candidate.is_relative_to(root) or not candidate.is_file():
@@ -537,7 +570,27 @@ class Drawing:
         else:
             method()
         require(int(self.doc.GetVariable("CMDACTIVE")) == 0, "指令結束狀態未確認")
-        require(entities() == before, "維護指令後圖元可讀內容不符；停止後續操作")
+        after_entities = entities()
+        # iCAD 2008 原生尺寸在第一次重繪後才提供計算好的 TextString。
+        # 僅容許從「不可讀」變成可讀；既有文字改變、欄位消失及圖元增減仍拒絕。
+        late_text = []
+        if self.legacy:
+            for space, rows in before.items():
+                old = {row["handle"]: row for row in rows}
+                for row in after_entities[space]:
+                    prior = old.get(row["handle"])
+                    if (prior and prior["type"] in ("DimAligned", "DimDiametric")
+                            and "TextString" not in prior["properties"]
+                            and "TextString" in row["properties"]):
+                        late_text.append({"space":space, "handle":row["handle"],
+                                          "TextString":row["properties"].pop("TextString")})
+        entry["dimension_text_first_readable"] = late_text
+        if not command_snapshot_equal(after_entities, before):
+            # 保留差異，避免只能請使用者猜測是否少了圖元。
+            entry["entity_differences"] = {
+                space: {"before": before[space], "after": after_entities[space]}
+                for space in before if not command_snapshot_equal(after_entities[space], before[space])}
+            raise ValueError("維護指令後圖元可讀內容不符；停止後續操作")
         if tables:
             after = definitions()
             entry["removed_definitions"] = {key:sorted(set(values)-set(after[key])) for key,values in tables.items()}
@@ -701,6 +754,7 @@ def connect_application(selected, request, report):
                     report["connection"]["launch_attempted"] = True
                     raw = pythoncom.CoCreateInstance(clsid, None, pythoncom.CLSCTX_LOCAL_SERVER,
                                                      pythoncom.IID_IDispatch)
+                check_type_library(raw)
                 app = dynamic.Dispatch(raw)
             identity = {key: str(getattr(app, key)) for key in ("Name", "Version", "FullName")}
             if launch_attempted:
@@ -795,6 +849,9 @@ def execute(request, report):
 
 def failure_details(report, exc):
     """只允許有明確證據的復原；逾時／未知 COM 結果仍交由人工確認。"""
+    if isinstance(exc, CadInstallationError):
+        return dict(recovery="repair_installation", connection_lost=False,
+                    advice="原廠 COM 型別庫有安裝問題；不重試繪圖，也不由模型自動修改 Windows 登錄。")
     if isinstance(exc, CommandCapabilityError) and report.get("completed_operations", 0) == 0:
         owned = report.get("owned_document_created") is True
         return dict(recovery="revised_new_document" if owned else "correct_and_retry",

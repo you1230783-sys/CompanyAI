@@ -5,7 +5,7 @@ v142.c
 Verified _MSC_FULL_VER=192930159 x64
 Linker: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\link.exe
 SDK: 10.0.19041.0\
-Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-90578244ce954a969be6f9f8bcfc13bb
+Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-834cf658361f4b0097bb6f52cc88992c
 rustc 1.98.1 (48a229cea 2026-09-01)
 binary: rustc
 commit-hash: 48a229ceaefd4985c50990b14116b6d856af0985
@@ -29,18 +29,18 @@ File Type: EXECUTABLE IMAGE
     kernel32.dll
     oleaut32.dll
     ole32.dll
-    combase.dll
     shell32.dll
+    combase.dll
     propsys.dll
     shlwapi.dll
     api-ms-win-core-winrt-error-l1-1-0.dll
     bcrypt.dll
     gdi32.dll
     crypt32.dll
-    api-ms-win-core-synch-l1-2-0.dll
     dwmapi.dll
     advapi32.dll
     userenv.dll
+    api-ms-win-core-synch-l1-2-0.dll
     winhttp.dll
     mpr.dll
     ADVAPI32.dll
@@ -52,8 +52,8 @@ File Type: EXECUTABLE IMAGE
 
         3000 .data
        6C000 .pdata
-      6A1000 .rdata
+      6A5000 .rdata
         9000 .reloc
        3D000 .rsrc
-      A7A000 .text
+      A93000 .text
         1000 _RDATA

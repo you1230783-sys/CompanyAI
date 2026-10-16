@@ -4,6 +4,20 @@ use company_ai::{demo::DemoServer, ui, AppResult};
 
 fn main() {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
+    // 離線驗收只代替模型產生固定測試計畫，仍走正式 Broker 與 CAD worker。
+    if arguments.first().map(String::as_str) == Some("--cad-offline-test") {
+        if arguments.len() != 3 {
+            eprintln!("用法：LM_AI.exe --cad-offline-test <報告根目錄> <CAD ProgID>");
+            std::process::exit(2);
+        }
+        if let Err(error) =
+            company_ai::cad::offline::run(std::path::Path::new(&arguments[1]), &arguments[2])
+        {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if arguments.first().map(String::as_str) == Some("--verify-update-package")
         && arguments.len() == 3
     {

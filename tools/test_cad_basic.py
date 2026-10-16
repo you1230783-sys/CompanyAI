@@ -15,6 +15,56 @@ from unittest.mock import patch
 
 
 class BasicTests(unittest.TestCase):
+    def test_command_snapshot_ignores_only_floating_point_roundoff(self):
+        a = {"handle":"17B", "properties":{"StartPoint":[62., -53.58732180445816, 0.]}}
+        b = {"handle":"17B", "properties":{"StartPoint":[62., -53.587321804458156, 0.]}}
+        self.assertTrue(worker.command_snapshot_equal(a, b))
+        b["properties"]["StartPoint"][0] += .001
+        self.assertFalse(worker.command_snapshot_equal(a, b))
+        self.assertFalse(worker.command_snapshot_equal(a, {**a, "text":"new"}))
+
+    def test_legacy_zoom_records_first_dimension_text_but_rejects_changed_text(self):
+        drawing = worker.Drawing.__new__(worker.Drawing)
+        drawing.legacy, drawing.report = True, {}
+        entity = SimpleNamespace(Handle="A", EntityName="DimAligned", Color=7)
+        drawing.doc = SimpleNamespace(ModelSpace=[entity], PaperSpace=[],
+            GetVariable=lambda key:0, Activate=lambda:None,
+            ActiveViewport=SimpleNamespace(ZoomExtents=lambda:setattr(entity, "TextString", "220.0000")))
+        drawing.run_command("ZOOM EXTENTS")
+        self.assertEqual(drawing.report["commands"][0]["dimension_text_first_readable"][0]["TextString"], "220.0000")
+        drawing.doc.ActiveViewport.ZoomExtents = lambda:setattr(entity, "TextString", "999.0000")
+        with self.assertRaisesRegex(ValueError, "圖元可讀內容不符"):
+            drawing.run_command("ZOOM EXTENTS")
+        self.assertIn("entity_differences", drawing.report["commands"][-1])
+
+    def test_missing_typelib_is_installation_error_not_attribute_error(self):
+        class Broken:
+            def GetTypeInfo(self):
+                raise worker.pythoncom.com_error(-2147319779, "not registered", None, None)
+        with self.assertRaises(worker.CadInstallationError) as caught:
+            worker.check_type_library(Broken())
+        result = worker.failure_details(dict(drawing_started=False), caught.exception)
+        self.assertEqual(result["recovery"], "repair_installation")
+
+    def test_gstar_user_data_cache_standard_linetype(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            support = root / "UserDataCache" / "Support"
+            support.mkdir(parents=True)
+            source = support / "gcadiso.lin"
+            source.write_text("*CENTER,Center\nA,12,-3,2,-3\n", encoding="ascii")
+            class Table(list):
+                def Load(self, name, filename):
+                    self.append(SimpleNamespace(Name=name))
+                    self.source = filename
+                def Item(self, name): return self[0]
+            table = Table()
+            drawing = worker.Drawing.__new__(worker.Drawing)
+            drawing.app = SimpleNamespace(FullName=str(root / "gcad.exe"))
+            drawing.doc, drawing.report = SimpleNamespace(Linetypes=table), {}
+            drawing.prepare_linetypes([dict(name="CENTER", scale=1)])
+            self.assertEqual(table.source, str(source))
+
     def test_connect_retains_the_launched_application_object(self):
         selected = dict(clsid="{8011C111-7E36-11D1-BC5A-0060089608A4}", server=r"C:\CAD\icad.exe")
         app = SimpleNamespace(Name="ICAD", Version="5", FullName=selected["server"])

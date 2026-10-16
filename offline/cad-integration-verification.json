@@ -1,35 +1,154 @@
 {
-  "version": "0.8.66",
-  "result": "PASS_BASIC",
+  "version": "0.8.67",
+  "result": "PASS_BASIC_AND_CAD_DATA",
   "rust_selected_tests": 63,
-  "python_synthetic_contracts": 57,
-  "onboarding_dom_contracts": true,
-  "cad_drawing_tested_locally": false,
+  "python_synthetic_contracts": 61,
+  "cad_tests": [
+    {
+      "progid": "GStarCAD.Application.22",
+      "status": "PASS_DATA_VISUAL_PENDING",
+      "cases": [
+        {
+          "tool": "cad_inventory",
+          "status": "INVENTORY",
+          "completed_operations": 0,
+          "entity_count": null,
+          "handles_verified": null,
+          "dimension_measurement_unavailable": null
+        },
+        {
+          "tool": "cad_active_read",
+          "status": "READ_ACTIVE",
+          "completed_operations": 0,
+          "entity_count": null,
+          "handles_verified": null,
+          "dimension_measurement_unavailable": null
+        },
+        {
+          "tool": "cad_active_edit",
+          "status": "EDITED_UNSAVED",
+          "completed_operations": 1,
+          "entity_count": null,
+          "handles_verified": null,
+          "dimension_measurement_unavailable": null
+        },
+        {
+          "tool": "cad_draw",
+          "status": "DATA_VERIFIED_VISUAL_PENDING",
+          "completed_operations": 24,
+          "entity_count": 68,
+          "handles_verified": null,
+          "dimension_measurement_unavailable": []
+        },
+        {
+          "tool": "cad_read",
+          "status": "READ_COPY",
+          "completed_operations": 0,
+          "entity_count": null,
+          "handles_verified": null,
+          "dimension_measurement_unavailable": null
+        },
+        {
+          "tool": "cad_edit",
+          "status": "DATA_VERIFIED_VISUAL_PENDING",
+          "completed_operations": 3,
+          "entity_count": null,
+          "handles_verified": 69,
+          "dimension_measurement_unavailable": null
+        }
+      ],
+      "removed_test_files": 4,
+      "local_report": ".build/cad-live/cad-offline-858269584db6c2992c48a369b4c3a1b0/offline-report.json",
+      "report_sha256": "2678a018bc2d925c9523ef9dade14c965c4875813fd8c4a9c0c069715f1e0064"
+    },
+    {
+      "progid": "Icad.Application.1",
+      "status": "PASS_DATA_VISUAL_PENDING",
+      "cases": [
+        {
+          "tool": "cad_inventory",
+          "status": "INVENTORY",
+          "completed_operations": 0,
+          "entity_count": null,
+          "handles_verified": null,
+          "dimension_measurement_unavailable": null
+        },
+        {
+          "tool": "cad_active_read",
+          "status": "READ_ACTIVE",
+          "completed_operations": 0,
+          "entity_count": null,
+          "handles_verified": null,
+          "dimension_measurement_unavailable": null
+        },
+        {
+          "tool": "cad_active_edit",
+          "status": "EDITED_UNSAVED",
+          "completed_operations": 1,
+          "entity_count": null,
+          "handles_verified": null,
+          "dimension_measurement_unavailable": null
+        },
+        {
+          "tool": "cad_draw",
+          "status": "DATA_VERIFIED_VISUAL_PENDING",
+          "completed_operations": 24,
+          "entity_count": 68,
+          "handles_verified": null,
+          "dimension_measurement_unavailable": [
+            "167",
+            "168",
+            "169"
+          ]
+        },
+        {
+          "tool": "cad_read",
+          "status": "READ_COPY",
+          "completed_operations": 0,
+          "entity_count": null,
+          "handles_verified": null,
+          "dimension_measurement_unavailable": null
+        },
+        {
+          "tool": "cad_edit",
+          "status": "DATA_VERIFIED_VISUAL_PENDING",
+          "completed_operations": 3,
+          "entity_count": null,
+          "handles_verified": 69,
+          "dimension_measurement_unavailable": null
+        }
+      ],
+      "removed_test_files": 4,
+      "local_report": ".build/cad-live/cad-offline-4d5fefa3ea8c5157a59ac514619b227f/offline-report.json",
+      "report_sha256": "035a61b2c72063df16da8c761f06729140f720ea3298f6fc292ecc6928e4f986"
+    }
+  ],
   "company_ai_service_tested": false,
+  "cad_visual_verified": false,
+  "full_validation_completed": false,
   "installer_packaged_and_manifest_verified": true,
   "installer_install_update_rollback_uninstall_tested": false,
-  "full_validation_completed": false,
-  "runtime_manifest_sha256": "5098645160e0d07b2a7aa044a2c2344a51d33d3315fcde7787ceb70cb4218353",
+  "runtime_manifest_sha256": "0738a66989e8749d5245c2b767844bcf9bdbab24bc396d1a1eb59b5aed380a5b",
   "artifacts": [
     {
       "path": "dist/LM_AI.exe",
-      "bytes": 18660352,
-      "sha256": "ff1fc687f8a3c7e3ad463167fe99a05de0eaac0cffb3e4675bf95f99f798c5da"
+      "bytes": 18779648,
+      "sha256": "3822678cc852eef8d570946bfcf2fe03538733e73ec77dbc0583aafb5238e499"
     },
     {
       "path": "dist/LM_AI_Setup.exe",
-      "bytes": 36107816,
-      "sha256": "2fe5c188f57131aea5774197ae91b50b880ce4e20b88ed0239dc79442f2ba838"
+      "bytes": 36144261,
+      "sha256": "bcbc836848ea1a95644e20c84ab49b7d1757149fc1b06f5b3c6e8cd8074d3faa"
     },
     {
       "path": "dist/update-manifest.json",
       "bytes": 1050,
-      "sha256": "a569d9aebebe9fa46935c54e453d4cc9b9b501b539cfe1c58c29a7a77789f69b"
+      "sha256": "02dcd48df70980456321c59dc8bb1ccde804bd1bb49311030b83cafa98e16536"
     },
     {
       "path": "dist/update-manifest-exe.json",
       "bytes": 1050,
-      "sha256": "a569d9aebebe9fa46935c54e453d4cc9b9b501b539cfe1c58c29a7a77789f69b"
+      "sha256": "02dcd48df70980456321c59dc8bb1ccde804bd1bb49311030b83cafa98e16536"
     }
   ]
 }
