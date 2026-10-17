@@ -194,6 +194,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         instructions: None,
         outlook_consent: None,
         cad_waiter: None,
+        cad_progress: None,
         file_waiter: None,
     };
     let mut activity = vec![];

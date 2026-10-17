@@ -411,7 +411,11 @@ class Drawing:
 
     def draw(self, op):
         """記錄每項新增 Handle，讓未知圖元能追溯到產生的操作。"""
-        before = {str(entity.Handle).upper() for entity in iter_entities(self.model)}
+        if BULK_ENABLED:
+            from cad_bulk import snapshot as native_snapshot
+            before = set(native_snapshot(self.doc, sys.modules[__name__], handles_only=True)[0])
+        else:
+            before = {str(entity.Handle).upper() for entity in iter_entities(self.model)}
         expected_start = len(self.expected)
         try:
             self.draw_entity(op)
@@ -427,11 +431,16 @@ class Drawing:
                          "expected_entities": self.expected[expected_start:]}
                 self.report.setdefault("operation_entities", []).append(audit)
                 try:
-                    after = list(iter_entities(self.model))
-                    added = [describe(entity, sys.modules[__name__]) for entity in after
-                             if str(entity.Handle).upper() not in before]
+                    if BULK_ENABLED:
+                        after_entities, added = native_snapshot(self.doc, sys.modules[__name__], exclude_handles=before)
+                        after_handles = set(after_entities)
+                    else:
+                        after = list(iter_entities(self.model))
+                        added = [describe(entity, sys.modules[__name__]) for entity in after
+                                 if str(entity.Handle).upper() not in before]
+                        after_handles = {str(e.Handle).upper() for e in after}
                     audit.update(entities=added,
-                                 removed_handles=sorted(before - {str(e.Handle).upper() for e in after}))
+                                 removed_handles=sorted(before - after_handles))
                 except Exception as diagnostic_error:
                     # 診斷讀取不能蓋過原始繪圖錯誤；最終 verify 仍嚴格核對集合。
                     self.report.setdefault("audit_errors", []).append(str(diagnostic_error))
@@ -537,6 +546,13 @@ class Drawing:
             size = 0
             for name in ("ModelSpace", "PaperSpace"):
                 rows = []
+                if BULK_ENABLED and name == "ModelSpace":
+                    from cad_existing import snapshot
+                    _, rows = snapshot(self.doc, sys.modules[__name__])
+                    # 縮放核對沿用原有可讀屬性範圍；native_revision 用於修改前版本核對。
+                    rows = [{k:v for k,v in row.items() if k != "native_revision"} for row in rows]
+                    result[name] = sorted(rows, key=lambda row:row["handle"])
+                    continue
                 for index, entity in enumerate(iter_entities(getattr(self.doc, name))):
                     require(index < 200000, "指令核對圖元超過上限")
                     row = describe(entity, sys.modules[__name__])
@@ -687,8 +703,14 @@ class Drawing:
     def verify(self, doc):
         self.verify_styles(doc)
         require(int(doc.GetVariable("INSUNITS")) == 4, "圖面單位不是毫米")
-        rows = list(iter_entities(doc.ModelSpace))
-        entities = {str(entity.Handle).upper(): entity for entity in rows}
+        described = {}
+        if BULK_ENABLED:
+            from cad_existing import snapshot
+            entities, rows = snapshot(doc, sys.modules[__name__])
+            described = {row["handle"]: row["properties"] for row in rows}
+        else:
+            rows = list(iter_entities(doc.ModelSpace))
+            entities = {str(entity.Handle).upper(): entity for entity in rows}
         expected = {row["handle"] for row in self.expected}
         missing, extra = sorted(expected - entities.keys()), sorted(entities.keys() - expected)
         self.last_audit = dict(expected_count=len(self.expected), reported_count=int(doc.ModelSpace.Count),
@@ -706,16 +728,17 @@ class Drawing:
         unavailable = []
         for row in self.expected:
             require(row["handle"] in entities, "存檔後圖元 Handle 遺失")
-            entity = entities[row["handle"]]
             if "leader_handle" in row:
                 linked = entities[row["leader_handle"]].Annotation
                 require(str(linked.Handle).upper() == row["handle"], "引線附屬文字關聯不符")
             for key, value in row["properties"].items():
                 compare = text_equal if key == "TextString" else equal
-                require(compare(getattr(entity, key), value), "圖元屬性不符：" + key)
+                available = described.get(row["handle"], {})
+                observed = available[key] if key in available else getattr(entities[row["handle"]], key)
+                require(compare(observed, value), "圖元屬性不符：" + key)
             if "measurement" in row:
                 try:
-                    actual = float(entity.Measurement)
+                    actual = float(entities[row["handle"]].Measurement)
                 except pythoncom.com_error as exc:
                     # 舊版 ICAD 明確回 E_NOTIMPL；只把該值標為未驗證，不捏造通過。
                     if not (self.legacy and exc.excepinfo and exc.excepinfo[5] == -2147467263):
@@ -774,6 +797,7 @@ def connect_application(selected, request, report):
 
 
 def execute(request, report):
+    global BULK_APP, BULK_LEGACY
     report.update(step="validate", drawing_started=False, completed_operations=0,
                   saved=False, file_exists=False)
     found, errors = registry.discover()
@@ -781,7 +805,9 @@ def execute(request, report):
         return {"status": "INVENTORY", "versions": found, "errors": errors}
     operations = prepare(request["operations"]) if request["action"] == "draw" else []
     version = request["version"]
-    candidates = [v for v in found if v["server_exists"] and (version == "latest" or v["progid"] == version)]
+    require(isinstance(version, str), "CAD 版本必須是 inventory 回傳的 ProgID")
+    # Windows ProgID 本身不區分大小寫；仍以已登錄 CLSID／執行檔核對實際連線。
+    candidates = [v for v in found if v["server_exists"] and (version.casefold() == "latest" or v["progid"].casefold() == version.casefold())]
     require(candidates, "找不到所選 CAD 的 COM 登錄；請先安裝並開啟 CAD")
     selected = candidates[0]
     report.update(selected=selected, step="connect")
@@ -790,6 +816,7 @@ def execute(request, report):
     require(os.path.normcase(os.path.abspath(identity["FullName"])) == os.path.normcase(os.path.abspath(selected["server"])), "連接的 CAD 路徑不符合所選版本")
     family = identify_product(selected, identity)
     require(family != "unknown", "此 CAD 身份尚未核對，不建立文件")
+    BULK_APP, BULK_LEGACY = app, family == "yoda_icad_2008"
     if request["action"] in ("connect", "launch"):
         if request["action"] == "launch":
             app.Visible = True
@@ -876,11 +903,28 @@ def failure_details(report, exc):
     return dict(recovery=recovery, advice=advice, connection_lost=connection_lost)
 
 
+READ_PROGRESS_ENABLED = False
+BULK_ENABLED = False
+BULK_APP = None
+BULK_LEGACY = False
+
+
+def read_progress(completed, reported_count, phase):
+    """固定數字進度走 stderr；stdout 保持單一結果 JSON，沒有圖元正文。"""
+    if READ_PROGRESS_ENABLED:
+        event = dict(completed=completed, reported_count=reported_count, phase=phase)
+        sys.stderr.buffer.write(json.dumps(event, ensure_ascii=True).encode("ascii") + b"\n")
+        sys.stderr.buffer.flush()
+
+
 def main():
+    global READ_PROGRESS_ENABLED, BULK_ENABLED
     report = {"status": "FAILED", "existing_documents_targeted": False}
     pythoncom.CoInitialize()
     try:
         request = json.loads(sys.stdin.buffer.read(1_000_001).decode("utf-8"))
+        READ_PROGRESS_ENABLED = request.get("read_progress") is True
+        BULK_ENABLED = True
         report.update(execute(request, report))
     except Exception as exc:
         report.update(status="FAILED", error=str(exc), traceback=traceback.format_exc(),

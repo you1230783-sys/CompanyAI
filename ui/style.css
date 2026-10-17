@@ -1604,3 +1604,6 @@ dialog button.icon-button { padding:6px; }
 .analysis-completion {padding:10px;border:1px solid #80808055;border-radius:8px;margin:8px 0;}
 .analysis-source-list {max-height:420px;overflow:auto;}.analysis-timeline {overflow:auto;max-height:500px;}
 .analysis-timeline table {border-collapse:collapse;width:100%;}.analysis-timeline td,.analysis-timeline th {padding:7px;border:1px solid #80808055;text-align:left;}
+.cad-read-notice{position:fixed;right:20px;top:64px;z-index:80;max-width:min(360px,calc(100vw - 40px));padding:16px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px #0003}
+.cad-read-notice[hidden]{display:none}
+.cad-read-notice p{margin:8px 0;line-height:1.5}

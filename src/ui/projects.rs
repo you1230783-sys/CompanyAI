@@ -176,6 +176,7 @@ pub(super) enum ProjectCommand {
     },
 }
 pub(super) enum ProjectEvent {
+    CadReadProgress(String, serde_json::Value),
     CadClosed(String, String),
     CadConnect(String, String, serde_json::Value, mpsc::Sender<String>),
     UserChartSaved(String, AppResult<String>),
@@ -224,6 +225,7 @@ struct PendingFile {
     reply: mpsc::Sender<bool>,
 }
 pub(super) struct Running {
+    cad_read_progress: Option<serde_json::Value>,
     pending_cad: Option<PendingCad>,
     pending_file: Option<PendingFile>,
     pending_outlook: Option<PendingOutlook>,
@@ -422,6 +424,7 @@ impl App {
             "chart_review":self.projects.running.as_ref().and_then(|r|r.pending_chart.as_ref().map(|p|json!({"request_id":p.id,"review":p.review}))),
             "outlook_consent":self.projects.running.as_ref().and_then(|r|r.pending_outlook.as_ref().map(|p|json!({"request_id":p.id,"folders":p.folders}))),
             "cad_connect":self.projects.running.as_ref().and_then(|r|r.pending_cad.as_ref().map(|p|json!({"request_id":p.id,"prompt":p.prompt}))),
+            "cad_read_progress":self.projects.running.as_ref().and_then(|r|r.cad_read_progress.as_ref()),
             "file_busy":self.projects.running.as_ref().and_then(|r|r.pending_file.as_ref().map(|p|json!({"request_id":p.id,"message":p.message}))),
             "supplements":self.projects.running.as_ref().and_then(|r|r.instructions.entries().ok()),
             "queued":self.archive.conversations.iter().find(|c| Some(&c.id)==self.active_id.as_ref()).and_then(|c| c.project_queued.as_ref()).map(|q| json!({"id":q.id,"text":q.text,"after_run":q.after_run,"interrupt":q.interrupt,"auto_start":q.auto_start})),
@@ -1188,6 +1191,14 @@ impl App {
         let instructions = projects::steering::Inbox::open(&self.root, &id)?;
         let cad_tx = self.tx.clone();
         let cad_run = id.clone();
+        let progress_tx = self.tx.clone();
+        let progress_run = id.clone();
+        let cad_progress: crate::cad::Progress = Box::new(move |progress| {
+            let _ = progress_tx.send(Event::Project(ProjectEvent::CadReadProgress(
+                progress_run.clone(),
+                progress,
+            )));
+        });
         let cad_waiter: crate::cad::Waiter = Box::new(move |prompt, cancel, deadline| {
             let (reply, response) = mpsc::channel();
             let request_id = crate::jobs::new_id()?;
@@ -1294,6 +1305,7 @@ impl App {
             instructions: Some(instructions.clone()),
             outlook_consent: Some(outlook_consent),
             cad_waiter: Some(cad_waiter),
+            cad_progress: Some(cad_progress),
             file_waiter: Some(file_waiter),
         };
         // 所有準備檢查成功後才提交歷史，避免未啟動卻遺失待送文字。
@@ -1324,6 +1336,7 @@ impl App {
             self.messages = messages;
         }
         self.projects.running = Some(Running {
+            cad_read_progress: None,
             pending_cad: None,
             pending_file: None,
             pending_outlook: None,
@@ -1429,6 +1442,14 @@ impl App {
     }
     pub(super) fn project_event(&mut self, event: ProjectEvent) -> AppResult<()> {
         match event {
+            ProjectEvent::CadReadProgress(id, progress) => {
+                // 過期任務與取消後的晚到進度不能重新顯示提示。
+                if let Some(run) = self.projects.running.as_mut().filter(|r| r.id == id) {
+                    run.cad_read_progress = (progress["active"] == true
+                        && !run.cancel.load(Ordering::Relaxed))
+                    .then_some(progress);
+                }
+            }
             ProjectEvent::CadClosed(id, request_id) => {
                 if let Some(run) = self.projects.running.as_mut().filter(|r| r.id == id) {
                     if run.pending_cad.as_ref().is_some_and(|p| p.id == request_id) {

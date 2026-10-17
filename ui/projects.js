@@ -4,6 +4,34 @@
   let signature = "", importProject = null, settingsProject = null, removeProject = null;
   let lastNotice = "", pickerRequest = 0, activityKey = "", activitySignature = "";
   const command = value => send({type: "project", command: value});
+  // 原生讀取進度使用非模態提示；不搶焦點、不要求每批確認，也不阻擋其他應用程式。
+  const cadReadNotice=node("section","cad-read-notice");
+  cadReadNotice.id="project-cad-read-notice";cadReadNotice.hidden=true;
+  cadReadNotice.setAttribute("aria-label","CAD 讀取進度");
+  const cadReadCount=node("p",""),cadReadCancel=node("button","","取消讀取並停止任務");
+  cadReadNotice.append(node("strong","","正在讀取 CAD 圖面"),
+    node("p","","請盡量避免編輯、切換圖面或執行 CAD 指令。您可以繼續使用其他應用程式。"),
+    cadReadCount,cadReadCancel);
+  document.body.append(cadReadNotice);
+  let cadReadRun="";
+  cadReadCancel.onclick=()=>{
+    if(cadReadRun && state.projects?.running_id===cadReadRun){
+      cadReadCancel.disabled=true;command({action:"stop"});
+    }
+  };
+  function renderCadRead(projects) {
+    const progress=state.logged_in && projects.running && !projects.stopping ? projects.cad_read_progress : null;
+    cadReadNotice.hidden=!progress?.active;
+    cadReadRun=progress?.active ? projects.running_id : "";
+    if(!cadReadRun)return;
+    const elapsed=Math.max(0,Number(progress.elapsed_seconds)||0);
+    const count=Math.max(0,Number(progress.completed)||0);
+    const total=progress.reported_count;
+    const phase=progress.phase==="checking" ? "正在核對讀取結果" : progress.phase==="reading" ? "正在建立索引" : "正在連接圖面";
+    // CAD 回報數量在舊版可能含內部項目，因此不把比值當作已驗證百分比。
+    cadReadCount.textContent=`${phase}，已讀 ${count} 個圖元${Number.isInteger(total) ? `（CAD 回報 ${total} 個）` : ""}。已用 ${Math.floor(elapsed/60)} 分 ${elapsed%60} 秒；最多等待 10 分鐘。`;
+    cadReadCancel.disabled=false;
+  }
   // 非模態卡片不攔住其他操作；依原任務代號回答，關閉不代表同意。
   const preferences=document.createElement("section"); preferences.id="project-preferences";
   preferences.className="project-preferences"; preferences.hidden=true; document.body.append(preferences);
@@ -350,6 +378,7 @@
     renderOutlookConsent(projects,showActivity);
     renderFileBusy(projects,showActivity);
     renderCadConnect(projects,showActivity);
+    renderCadRead(projects);
     // 診斷只在設定的進階區提供；保留目前對話每次任務的入口，不在聊天區佔位。
     $("debug-mode").checked=!!state.config.debug_mode;
     const selector = $("project-diagnostics-run"), old = selector.value;

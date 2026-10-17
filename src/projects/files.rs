@@ -788,6 +788,7 @@ pub struct Broker {
     excel_plans: BTreeMap<String, super::excel_plan::Plan>,
     file_waiter: Option<super::interaction::FileWaiter>,
     cad_waiter: Option<crate::cad::Waiter>,
+    cad_progress: Option<crate::cad::Progress>,
     cad_active: Option<Value>,
     // 完整快照只活在本次 Broker；重啟／續接須重讀，不恢復作用中文件寫入授權。
     cad_snapshot: Option<super::cad_index::Snapshot>,
@@ -841,6 +842,7 @@ impl Broker {
             excel_plans: BTreeMap::new(),
             file_waiter: None,
             cad_waiter: None,
+            cad_progress: None,
             cad_active: None,
             cad_snapshot: None,
             model: "fast".into(),
@@ -1109,6 +1111,11 @@ impl Broker {
     }
     pub fn set_cad_waiter(&mut self, waiter: Option<crate::cad::Waiter>) {
         self.cad_waiter = waiter;
+    }
+
+    /// 進度只供桌面顯示，不放入模型上下文，也不建立任何寫入授權。
+    pub fn set_cad_progress(&mut self, progress: Option<crate::cad::Progress>) {
+        self.cad_progress = progress;
     }
     pub fn set_file_waiter(&mut self, waiter: Option<super::interaction::FileWaiter>) {
         self.file_waiter = waiter;

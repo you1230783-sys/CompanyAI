@@ -155,6 +155,7 @@ impl Broker {
                 json!({"action":"active_snapshot","version":version}),
                 cancel,
                 self.cad_waiter.as_mut(),
+                self.cad_progress.as_mut(),
             )?;
             if data["status"] != "READ_ACTIVE" {
                 if data["recovery"] == "unsupported_capability" {
@@ -306,7 +307,11 @@ impl Broker {
         Ok(
             json!({"snapshot_id":id,"revision":revision,"path":path,"preview":metadata,"selected_candidate":selected,
             "selected_handle":selected.map(|i|self.cad_snapshot.as_ref().map(|s|s.rows[i-1]["handle"].clone())),
-            "notice":"使用者只指認候選，未授權直接寫入；未選擇不得猜測。修改前cad_query(details=true)取得詳細資料，再走原本文件確認。"}),
+            "notice":if selected.is_some() {
+                "使用者已在預覽完成指認，selected_candidate／selected_handle 就是其選擇，不需再次詢問選哪個。若原要求已指定修改，可先讀編輯方法及 cad_query(details=true)，再呼叫對應修改工具；原生端仍會依既有規則處理寫入確認，預覽本身不繞過確認。"
+            } else {
+                "使用者已關閉預覽，沒有選擇候選；selected_candidate／selected_handle 為 null，不得猜測目標或直接修改。"
+            }}),
         )
     }
 }

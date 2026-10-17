@@ -42,7 +42,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     # 測試涵蓋登入兌換、重複登入碼、API Header 與 Windows 憑證加密。
     if ($BasicValidation) {
         # 本次使用者要求先測聊天／附件相關契約；不把局部測試記成完整驗收。
-        foreach ($filter in @('jobs::', 'demo::work::tests::', 'projects::files::source_code::', 'projects::text::', 'projects::skills::', 'projects::memory::', 'ui::onboarding::', 'projects::agent::schema::', 'projects::files::cad::', 'projects::files::cad_copy::', 'projects::files::cad_excel::', 'projects::tool_calls::')) {
+        foreach ($filter in @('cad::', 'jobs::', 'demo::work::tests::', 'projects::files::source_code::', 'projects::text::', 'projects::skills::', 'projects::memory::', 'ui::onboarding::', 'projects::agent::schema::', 'projects::files::cad::', 'projects::files::cad_copy::', 'projects::files::cad_excel::', 'projects::tool_calls::')) {
             & cargo test --lib $filter --frozen
             if ($LASTEXITCODE -ne 0) { throw "Basic contract tests failed: $filter" }
         }

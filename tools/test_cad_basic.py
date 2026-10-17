@@ -11,10 +11,105 @@ import os
 import worker
 import cad_existing
 import cad_active
+import cad_bulk
 from unittest.mock import patch
 
 
 class BasicTests(unittest.TestCase):
+    def test_bulk_geometry_preserves_native_values_and_defers_com(self):
+        row = cad_bulk.convert([[0,"CIRCLE"],[5,"A"],[8,"holes"],[62,1],[10,[30.,25.,0.]],[40,6.]], [], True)
+        self.assertEqual(row["properties"]["Radius"], 6.)
+        self.assertEqual(row["properties"]["Center"], [30.,25.,0.])
+        self.assertEqual(row["properties"]["LinetypeScale"], 1.)
+        self.assertTrue(row["editable"])
+        self.assertIsNone(cad_bulk.convert([[0,"CIRCLE"],[5,"A"],[210,[0.,1.,0.]]], [], True))
+        self.assertIsNone(cad_bulk.convert([[0,"CUSTOM"],[5,"A"]], [], True))
+        calls=[]
+        entities=cad_bulk.Entities(SimpleNamespace(HandleToObject=lambda h:calls.append(h) or h), ["A","B"])
+        self.assertEqual(set(entities), {"A","B"})
+        self.assertEqual(calls, [])
+        self.assertEqual(entities["A"], "A")
+        self.assertEqual(entities["A"], "A")
+        self.assertEqual(calls, ["A"])
+
+    def test_bulk_reads_polyline_children_and_block_attributes(self):
+        poly=cad_bulk.convert([[0,"POLYLINE"],[5,"A"],[10,[0.,0.,5.]],[70,1]],
+            [[[0,"VERTEX"],[10,[0.,0.,0.]]],[[0,"VERTEX"],[10,[20.,0.,0.]]],[[0,"VERTEX"],[10,[20.,10.,0.]]]], True)
+        self.assertEqual(poly["geometry"]["vertices"], [[0.,0.,5.],[20.,0.,5.],[20.,10.,5.]])
+        self.assertTrue(poly["geometry"]["closed"])
+        block=cad_bulk.convert([[0,"INSERT"],[5,"B"],[2,"module"],[10,[10.,20.,0.]]],
+            [[[0,"ATTRIB"],[2,"ID"],[1,"中文模組"]]], False)
+        self.assertEqual(block["attributes"], [{"tag":"ID","text":"中文模組"}])
+        self.assertFalse(block["editable"])
+        attr=cad_bulk.convert([[0,"ATTRIB"],[5,"C"],[10,[10.,20.,0.]],[40,3.],[1,"中文-01"]], [], True)
+        self.assertEqual(attr["kind"], "unknown")
+        self.assertEqual(attr["properties"]["TextString"], "中文-01")
+        self.assertFalse(attr["editable"])
+
+    def test_bulk_protocol_requires_complete_unique_matching_document(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/"export.jsonl"
+            data=[["HEADER",2,"nonce","a.dwg","Y:/",4,0,"ANSI_950"],
+                  ["ENTITY",[[0,"LINE"],[5,"A"]],None],["COMPLETE","nonce",1,0]]
+            path.write_text("\n".join(json.dumps(v) for v in data), encoding="ascii")
+            _, rows=cad_bulk.read_export(path,"nonce","ascii")
+            self.assertEqual(rows["A"][1], [])
+            with self.assertRaisesRegex(ValueError,"標頭"):
+                cad_bulk.read_export(path,"old","ascii")
+            path.write_text("\n".join(json.dumps(v) for v in data[:-1]), encoding="ascii")
+            with self.assertRaisesRegex(ValueError,"完整結尾"):
+                cad_bulk.read_export(path,"nonce","ascii")
+
+    def test_known_geometry_skips_unrelated_com_properties(self):
+        fields = []
+        class Line:
+            def __getattr__(self, name):
+                fields.append(name)
+                values = dict(ObjectName="AcDbLine", Handle="A", Layer="0", Color=7,
+                              Linetype="CENTER", LinetypeScale=1.0, Thickness=0.0,
+                              StartPoint=(0., 0., 0.), EndPoint=(220., 0., 0.), Normal=(0., 0., 1.))
+                if name not in values:
+                    raise AttributeError(name)
+                return values[name]
+        row = cad_existing.describe(Line(), worker)
+        self.assertNotIn("Radius", fields)
+        self.assertNotIn("TextString", fields)
+        self.assertNotIn("Measurement", fields)
+        self.assertEqual(row["properties"]["Linetype"], "CENTER")
+        self.assertEqual(row["properties"]["EndPoint"], [220., 0., 0.])
+        self.assertTrue(row["editable"])
+
+    def test_snapshot_batches_accumulate_and_guard_without_restarting(self):
+        rows = [SimpleNamespace(Handle=f"{i:X}", ObjectName="AcDbCircle", Radius=6.,
+                                Center=(float(i), 0., 0.)) for i in range(123)]
+        progress, checks = [], []
+        api = SimpleNamespace(require=worker.require, coordinate=worker.coordinate,
+                              read_progress=lambda *args: progress.append(args))
+        doc = SimpleNamespace(ModelSpace=rows, Name="fixture", FullName="", GetVariable=lambda _:4)
+        entities, result = cad_existing.snapshot(doc, api, lambda: checks.append(True))
+        self.assertEqual(len(entities), 123)
+        self.assertEqual([r["handle"] for r in result], [r.Handle for r in rows])
+        self.assertEqual([p[0] for p in progress], [0, 50, 100, 123, 123])
+        self.assertEqual(progress[-1][2], "checking")
+        self.assertEqual(len(checks), 4)
+
+    def test_snapshot_rejects_document_change_between_batches(self):
+        doc = SimpleNamespace(ModelSpace=[SimpleNamespace(Handle=f"{i:X}", ObjectName="AcDbLine")
+                                         for i in range(51)], Name="before", FullName="", GetVariable=lambda _:4)
+        def progress(completed, _total, _phase):
+            if completed == 50:
+                doc.Name = "after"
+        api = SimpleNamespace(require=worker.require, coordinate=worker.coordinate, read_progress=progress)
+        with self.assertRaisesRegex(ValueError, "部分索引已捨棄"):
+            cad_existing.snapshot(doc, api)
+
+    def test_unknown_entity_keeps_conservative_property_fallback(self):
+        row = cad_existing.describe(SimpleNamespace(ObjectName="CustomShape", Handle="A",
+            TextString="custom", Radius=2., Measurement=3.), worker)
+        self.assertEqual(row["properties"]["Measurement"], 3.)
+        self.assertEqual(row["properties"]["TextString"], "custom")
+        self.assertFalse(row["editable"])
+
     def test_command_snapshot_ignores_only_floating_point_roundoff(self):
         a = {"handle":"17B", "properties":{"StartPoint":[62., -53.58732180445816, 0.]}}
         b = {"handle":"17B", "properties":{"StartPoint":[62., -53.587321804458156, 0.]}}

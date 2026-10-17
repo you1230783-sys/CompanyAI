@@ -4,6 +4,20 @@ from pathlib import Path
 import math
 import json
 import hashlib
+import time
+from itertools import islice
+
+# 只縮減已知幾何類型的無關探測；文字、尺寸及未知圖元仍使用完整備援。
+# 不快取「某屬性讀不到」的結果，避免把暫時 COM 錯誤套用到整張圖。
+SCALAR_FIELDS = ("Layer", "Color", "Linetype", "LinetypeScale", "StyleName", "TextString", "Height", "Radius", "Rotation", "AttachmentPoint", "Alignment", "Measurement", "Name", "StartAngle", "EndAngle", "Thickness")
+POINT_FIELDS = ("StartPoint", "EndPoint", "Center", "InsertionPoint", "Normal")
+COMMON_FIELDS = ("Layer", "Color", "Linetype", "LinetypeScale", "Thickness")
+GEOMETRY_FIELDS = {
+    "line": (COMMON_FIELDS, ("StartPoint", "EndPoint", "Normal")),
+    "circle": (COMMON_FIELDS + ("Radius",), ("Center", "Normal")),
+    "arc": (COMMON_FIELDS + ("Radius", "StartAngle", "EndAngle"), ("StartPoint", "EndPoint", "Center", "Normal")),
+}
+READ_BATCH_SIZE = 50
 
 
 def iter_entities(collection):
@@ -36,8 +50,13 @@ def describe(entity, api):
     lower = name.lower()
     kind = next((key for key in ("mtext", "text", "circle", "polyline", "line", "arc", "dimension", "leader", "blockreference")
                  if key in lower), "unknown")
+    if lower.startswith("dim"):
+        kind = "dimension"  # 佑達 2008 使用 DimAligned／DimDiametric 名稱。
     row = {"handle": str(entity.Handle).upper(), "type": name, "kind": kind, "properties": {}}
-    for field in ("Layer", "Color", "Linetype", "LinetypeScale", "StyleName", "TextString", "Height", "Radius", "Rotation", "AttachmentPoint", "Alignment", "Measurement", "Name", "StartAngle", "EndAngle", "Thickness"):
+    # 名稱含有 line 不一定是直線（例如 Spline／外掛圖元）；只有已知原生名稱縮減欄位。
+    native_geometry = lower in ("line", "acdbline", "circle", "acdbcircle", "arc", "acdbarc")
+    scalar_fields, point_fields = GEOMETRY_FIELDS.get(kind, (SCALAR_FIELDS, POINT_FIELDS)) if native_geometry else (SCALAR_FIELDS, POINT_FIELDS)
+    for field in scalar_fields:
         value = optional(entity, field)
         if isinstance(value, (str, int, float, bool)):
             if isinstance(value, float) and not math.isfinite(value):
@@ -46,7 +65,7 @@ def describe(entity, api):
                 row.setdefault("unavailable_properties", []).append(field)
             else:
                 row["properties"][field] = value
-    for field in ("StartPoint", "EndPoint", "Center", "InsertionPoint", "Normal"):
+    for field in point_fields:
         value = optional(entity, field)
         if value is not None:
             try:
@@ -92,17 +111,59 @@ def describe(entity, api):
     return row
 
 
-def snapshot(doc, api):
+def snapshot(doc, api, guard=None):
+    """正式入口：批次建立完整索引；沒有原生介面的合成測試仍使用 COM。"""
+    if getattr(api, "BULK_ENABLED", False):
+        from cad_bulk import snapshot as bulk_snapshot
+        return bulk_snapshot(doc, api, guard)
+    return com_snapshot(doc, api, guard)
+
+
+def com_snapshot(doc, api, guard=None):
+    """同一 COM 執行緒分批累積索引；失敗時不交付部分結果、不自動續讀。
+
+    每批檢查可觀察的文件／數量／單位／DBMOD 變更。DBMOD 不是遞增版號，
+    因此仍不能偵測所有同數量編輯；修改前必須重新核對完整 revision。
+    """
     entities, rows = {}, []
     size = 0
-    for index, entity in enumerate(iter_entities(doc.ModelSpace)):
-        api.require(index < 200000, "初版最多讀取 200000 個 ModelSpace 圖元；請分割圖面")
-        row = describe(entity, api)
-        size += len(json.dumps(row, ensure_ascii=False).encode("utf-8"))
-        api.require(size <= 64 * 1024 * 1024, "圖元索引超過 64 MB，請分割圖面")
-        api.require(row["handle"] not in entities, "CAD 枚舉出重複 Handle，停止以免定位錯誤")
-        entities[row["handle"]] = entity
-        rows.append(row)
+    model = doc.ModelSpace
+
+    def observable_state():
+        def variable(name):
+            try:
+                return doc.GetVariable(name)
+            except Exception:
+                return None  # 舊版缺少變更旗標時不捏造保障。
+        return (optional(doc, "Name"), optional(doc, "FullName"), optional(model, "Count"),
+                variable("INSUNITS"), variable("DBMOD"))
+
+    initial = observable_state()
+    progress = getattr(api, "read_progress", lambda *_: None)
+    progress(0, initial[2], "reading")
+    last_update = time.monotonic()
+    iterator = iter(iter_entities(model))
+    while True:
+        if guard:
+            guard()
+        api.require(observable_state() == initial, "讀取期間圖面狀態已變更；部分索引已捨棄，請停止操作 CAD 後重新讀取")
+        # 列舉器只重設一次；分批不再從第 0 個圖元掃描，也不把 COM 物件傳給其他執行緒。
+        batch = list(islice(iterator, READ_BATCH_SIZE))
+        if not batch:
+            break
+        for entity in batch:
+            api.require(len(rows) < 200000, "初版最多讀取 200000 個 ModelSpace 圖元；請分割圖面")
+            row = describe(entity, api)
+            size += len(json.dumps(row, ensure_ascii=False).encode("utf-8"))
+            api.require(size <= 64 * 1024 * 1024, "圖元索引超過 64 MB，請分割圖面")
+            api.require(row["handle"] not in entities, "CAD 枚舉出重複 Handle，停止以免定位錯誤")
+            entities[row["handle"]] = entity
+            rows.append(row)
+            if time.monotonic() - last_update >= 1.0:
+                progress(len(rows), initial[2], "reading")
+                last_update = time.monotonic()
+        progress(len(rows), initial[2], "reading")
+    progress(len(rows), initial[2], "checking")
     return entities, rows
 
 
@@ -283,7 +344,8 @@ def edit_document(app, doc, legacy, request, report, api, entities, before, outp
 
     def verify(target):
         drawing.verify_styles(target)
-        actual, _ = snapshot(target, api)
+        actual, actual_rows = snapshot(target, api)
+        described = {r["handle"]: r for r in actual_rows}
         api.require(set(actual) == set(expected), "圖面 Handle 集合不符，不能宣稱操作完成")
         for row in drawing.expected:
             if "leader_handle" in row:
@@ -292,7 +354,15 @@ def edit_document(app, doc, legacy, request, report, api, entities, before, outp
         for handle, properties in expected.items():
             for field, value in properties.items():
                 compare = api.text_equal if field == "TextString" else api.equal
-                api.require(compare(getattr(actual[handle], field), value), f"圖面屬性核對失敗：{handle}.{field}")
+                available = described[handle]["properties"]
+                observed = available[field] if field in available else getattr(actual[handle], field)
+                api.require(compare(observed, value), f"圖面屬性核對失敗：{handle}.{field}")
+        # 未指定修改的主圖元及其子圖元原生資料也須保持一致。
+        for previous in before:
+            handle = previous["handle"]
+            if handle not in used and previous.get("native_revision"):
+                api.require(described[handle].get("native_revision") == previous["native_revision"],
+                            f"未指定圖元的原生資料已變更：{handle}")
         return {"handles_verified": len(actual), "available_properties_verified": True,
                 "unavailable_properties_not_verified": True}
 

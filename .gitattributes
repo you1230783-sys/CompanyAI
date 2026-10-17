@@ -21,3 +21,4 @@ ui/vendor/pdf.NOTICES.txt -whitespace
 ui/vendor/echarts.min.js text eol=lf
 ui/vendor/ECHARTS-LICENSE.txt text eol=lf
 ui/vendor/ECHARTS-NOTICE.txt text eol=lf
+*.lsp text eol=lf

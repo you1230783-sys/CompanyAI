@@ -81,6 +81,7 @@ impl Broker {
             "operations":operations,"output":folder.join(name)}),
             cancel,
             self.cad_waiter.as_mut(),
+            self.cad_progress.as_mut(),
         )?;
         if result["drawing_started"] == false {
             self.cad_attempts -= 1;

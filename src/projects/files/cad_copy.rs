@@ -136,6 +136,7 @@ impl Broker {
             "output":copy.absolute,"source_revision":copy.revision,"offset":offset,"limit":100}),
             cancel,
             self.cad_waiter.as_mut(),
+            self.cad_progress.as_mut(),
         )?;
         result["source"] = json!(path);
         result["revision"] = json!(copy.revision);
@@ -236,6 +237,7 @@ impl Broker {
             "edits":edits,"operations":operations}),
             cancel,
             self.cad_waiter.as_mut(),
+            self.cad_progress.as_mut(),
         )?;
         result["source"] = json!(path);
         result["source_revision"] = json!(revision);

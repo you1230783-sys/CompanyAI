@@ -98,6 +98,7 @@ pub fn summarize(
         instructions: None,
         outlook_consent: None,
         cad_waiter: None,
+        cad_progress: None,
         file_waiter: None,
     };
     if agent_state.is_some() && state.agent_caps.is_none() {

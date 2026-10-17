@@ -130,7 +130,12 @@ def execute_active(app, legacy, request, report, api):
         # 同數量的手動編輯無可靠通用變更序號；快照標為歷史資料，寫入仍完整核對 revision。
         return {"status": "ACTIVE_PROBE", "document": current,
                 "entity_count": int(doc.ModelSpace.Count), "units_code": doc.GetVariable("INSUNITS")}
-    entities, rows = snapshot(doc, api)
+    # 批次之間只核對 COM 文件物件，完整程序／文件身分仍於前後核對。
+    def batch_guard():
+        api.require(app.ActiveDocument._oleobj_ == doc._oleobj_,
+                    "讀取期間作用中圖面已切換或關閉；部分索引已捨棄")
+
+    entities, rows = snapshot(doc, api, guard=batch_guard)
     stamp = revision(doc, rows)
     guard()
     if request["action"] == "active_snapshot":

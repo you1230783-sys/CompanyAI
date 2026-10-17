@@ -92,6 +92,7 @@ impl LocalTest {
                 outlook_consent: None,
                 // 無人值守只讀測試不自動同意 CAD 修改或重新連線。
                 cad_waiter: None,
+                cad_progress: None,
                 file_waiter: None,
             },
             |event| {

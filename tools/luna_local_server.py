@@ -15,7 +15,7 @@ import subprocess
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL = "gpt-6-luna"
@@ -238,8 +238,13 @@ def handler(bridge):
                 return self.reply(413, {"error": "request too large", "task_accepted": False})
             body = json.loads(self.rfile.read(size)) if size else {}
             if path.endswith("/agent/capabilities"):
+                # 桌面模式決定圖片工具是否可用；兩種模式仍使用同一個 Luna low，
+                # 方便驗證快速模式的純文字流程，不冒充公司端模型。
+                desktop_model = parse_qs(url.query).get("model", ["quality"])[0]
+                if desktop_model not in ("quality", "fast"):
+                    return self.reply(400, {"error": "unsupported desktop model"})
                 caps = json.loads((ROOT / "src/projects/agent/test_capabilities.json").read_text())
-                caps.update(model="quality", principal_id="local_luna", strict_tool_arguments=False,
+                caps.update(model=desktop_model, principal_id="local_luna", strict_tool_arguments=False,
                             capability_revision="local_luna_low_1")
                 return self.reply(200, caps)
             if path.endswith("/capabilities"):
@@ -248,7 +253,10 @@ def handler(bridge):
                     "max_count": 0, "max_file_bytes": 0, "max_total_bytes": 0,
                     "allowed_extensions": [], "allowed_mime_types": []}})
             if path.endswith("/models"):
-                return self.reply(200, {"models": [{"id": "quality", "label": "GPT-6 Luna · low（本機測試）"}], "default_model": "quality"})
+                return self.reply(200, {"models": [
+                    {"id": "quality", "label": "GPT-6 Luna · low（品質流程測試）"},
+                    {"id": "fast", "label": "GPT-6 Luna · low（快速流程測試）"},
+                ], "default_model": "quality"})
             if path.endswith("/version"):
                 return self.reply(200, {"latest_version": bridge.args.app_version,
                     "minimum_version": bridge.args.app_version, "message": "本機模型測試"})

@@ -29,7 +29,17 @@ def summarize(folder):
             "message_count": len(request["messages"]),
             "cad_paging": state.get("cad_paging", []),
             "error": error_path.read_text(encoding="utf-8") if error_path.exists() else None,
+            "desktop_model": request.get("model"),
+            "actual_model": response.get("model"),
+            "effort": response.get("effort"),
+            "image_tool_available": any(tool["function"]["name"] == "analyze_image"
+                                        for tool in request.get("tools", [])),
         }
+        # 索引模式的 offset 只針對符合條件的候選；必須連同條件記錄，
+        # 不能將兩次不同查詢的 offset=0 誤報為全圖分頁循環。
+        if response.get("tool") in ("cad_snapshot", "cad_query", "cad_preview", "cad_edit"):
+            row["arguments"] = {key: value for key, value in response.get("arguments", {}).items()
+                                if key != "progress_note"}
         if response_path.exists() and index + 1 < len(requests):
             row["desktop_interval_seconds"] = round(
                 requests[index + 1].stat().st_mtime - response_path.stat().st_mtime, 3)
@@ -39,7 +49,16 @@ def summarize(folder):
             if calls:
                 for message in records[index + 1]["messages"]:
                     if message.get("role") == "tool" and message.get("tool_call_id") == calls[0]["id"]:
-                        row["tool_ok"] = json.loads(message["content"]).get("ok")
+                        result = json.loads(message["content"])
+                        row["tool_ok"] = result.get("ok")
+                        if row["tool"].startswith("cad_"):
+                            details = result.get("result", {})
+                            row["cad_result"] = {key: details[key] for key in (
+                                "snapshot_id", "revision", "entity_count", "reused",
+                                "matched_count", "next_offset", "selected_candidate",
+                                "selected_handle", "status", "saved", "path") if key in details}
+                            if not result.get("ok"):
+                                row["tool_error"] = result.get("error")
         if response.get("tool") == "finish":
             row["answer"] = response["arguments"].get("message")
         rows.append(row)

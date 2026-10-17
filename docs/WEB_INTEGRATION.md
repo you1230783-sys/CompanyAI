@@ -631,3 +631,10 @@ read_work_log目錄offset按筆數，每頁20筆固定快照；指定operation_i
 ### 2026-10-12 Outlook 標題相容性修正（併0.8.52）
 
 桌面將 Table 的 ConversationID 改為選用欄位；資料提供者拒絕加入時仍可讀取標題，thread_id 留空，沿用既有候選分組。必要識別／日期欄位失敗仍回報查詢錯誤，不回傳假零封。此修正不變更網站路由、工具 Schema、資料夾權限或隱藏副本判定。實作與驗證紀錄見 [開發文件](DEVELOPMENT.md)。
+# CAD 本機批次讀取與進度（0.8.69）
+
+桌面 CAD 讀取、繪圖及修改含重開核對採 600 秒期限，inventory／probe 為 240 秒。
+固定 LISP 在 CAD 程序內匯出資料，Python 轉成本機索引；未知／傾斜圖元保留 COM 詳讀，數量不符時才完整 COM 備援。
+讀取數量及經過時間只在桌面非模態提示顯示，不加入 AI messages 或網站 API。
+完整索引成功後才提供原有 `cad_snapshot`／`cad_query` 結果；取消及失敗不提供部分快照。
+這項變更不需要網站新增路由，快速模型仍不接收圖片。實測與限制見 `VALIDATION_LUNA_CAD_INDEX.md`。

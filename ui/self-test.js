@@ -26,6 +26,26 @@ window.runSelfTest = async (structuredFixture) => {
     // 原生 ready 訊息可能早於後續 script；先等全部介面入口就緒再驗證動態節點。
     await waitFor(() => !!window.ProjectUI && !!window.AuthUI, "UI modules initialized");
     await window.runReviewTests(check);
+    {
+      const old=LMUI.getState(), originalSend=send, commands=[];
+      try {
+        send=message=>commands.push(message);
+        const projects={...(old.projects||{}),items:[],running:true,stopping:false,running_id:"cad-read-test",
+          running_conversation:"cad-read-chat",cad_read_progress:{active:true,completed:50,reported_count:644,phase:"reading",elapsed_seconds:65}};
+        LMUI.receive({...old,logged_in:true,active_id:"cad-read-chat",messages:[],projects});
+        const notice=$("project-cad-read-notice");
+        check(!notice.hidden && !notice.closest("dialog"),"CAD read notice is visible and nonmodal");
+        check(notice.textContent.includes("已讀 50") && notice.textContent.includes("644") && notice.textContent.includes("1 分 5 秒"),"CAD notice uses native counts and elapsed time");
+        notice.querySelector("button").click();
+        check(commands.at(-1)?.command?.action==="stop","CAD read cancel uses native task cancellation");
+        LMUI.receive({...LMUI.getState(),projects:{...projects,stopping:true}});
+        check(notice.hidden,"CAD notice hides while stopping");
+        LMUI.receive({...LMUI.getState(),projects:{...projects,cad_read_progress:null}});
+        check(notice.hidden,"CAD notice clears before model thinking");
+        LMUI.receive({...LMUI.getState(),projects:{...projects},logged_in:false});
+        check(notice.hidden,"CAD notice clears after logout");
+      } finally {send=originalSend;LMUI.receive(old);}
+    }
     check(!!$("project-default-profile") && !$("project-default-desktop") && !$("project-default-downloads"),"default project uses one local profile action");
     check($("project-default-dialog").textContent.includes("LM_AI_Projects"),"default project location is explained");
     {

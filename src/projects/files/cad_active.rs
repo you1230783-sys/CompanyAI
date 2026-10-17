@@ -120,6 +120,7 @@ impl Broker {
             "document":state["document"],"revision":revision,"edits":edits,"operations":operations}),
             cancel,
             self.cad_waiter.as_mut(),
+            self.cad_progress.as_mut(),
         );
         let mut result = match execution {
             Ok(result) => result,

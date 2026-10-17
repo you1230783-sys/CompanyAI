@@ -32,6 +32,7 @@ pub struct Run {
     pub instructions: Option<super::steering::Inbox>,
     pub outlook_consent: Option<super::mail::Consent>,
     pub cad_waiter: Option<crate::cad::Waiter>,
+    pub cad_progress: Option<crate::cad::Progress>,
     pub file_waiter: Option<super::interaction::FileWaiter>,
 }
 
@@ -242,6 +243,7 @@ fn run_for(
     broker.set_outlook_consent(run.outlook_consent.take());
     broker.set_file_waiter(run.file_waiter.take());
     broker.set_cad_waiter(run.cad_waiter.take());
+    broker.set_cad_progress(run.cad_progress.take());
     if let Some(renderer) = png_renderer {
         broker.set_png_renderer(renderer);
     }

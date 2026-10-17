@@ -2,6 +2,8 @@
 //! 固定腳本／runtime 逐檔核對，JSON 管線不提供任意 COM 名稱或 shell 指令。
 use crate::AppResult;
 pub mod offline;
+mod progress;
+pub use progress::Callback as Progress;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
@@ -31,6 +33,7 @@ pub fn execute_interactive(
     mut request: Value,
     cancel: &AtomicBool,
     mut waiter: Option<&mut Waiter>,
+    mut progress: Option<&mut Progress>,
 ) -> AppResult<Value> {
     let deadline = Instant::now() + Duration::from_secs(600);
     let mut launch_if_missing = false;
@@ -45,7 +48,7 @@ pub fn execute_interactive(
         let mut attempt = request.clone();
         attempt["launch_if_missing"] = json!(launch_if_missing);
         attempt["wait_for_ready"] = json!(wait_for_ready);
-        let mut connected = execute(attempt, cancel)?;
+        let mut connected = execute_with_progress(attempt, cancel, progress.as_deref_mut())?;
         if let Some(progid) = connected["selected"]["progid"].as_str() {
             request["version"] = json!(progid);
         }
@@ -154,9 +157,42 @@ pub fn self_check() -> AppResult<()> {
 
 /// 取消／逾時只終止自己的 Python；CAD 可能仍有部分圖面，因此不自動重試。
 pub fn execute(request: Value, cancel: &AtomicBool) -> AppResult<Value> {
+    execute_with_progress(request, cancel, None)
+}
+
+/// 繪圖／修改包含存檔重開後的完整讀取，給予同樣十分鐘期限。
+fn execution_timeout(request: &Value) -> Duration {
+    Duration::from_secs(
+        if is_drawing_read(request)
+            || matches!(
+                request["action"].as_str(),
+                Some("draw" | "edit" | "active_edit")
+            )
+        {
+            600
+        } else {
+            240
+        },
+    )
+}
+
+fn is_drawing_read(request: &Value) -> bool {
+    matches!(
+        request["action"].as_str(),
+        Some("read" | "active_read" | "active_snapshot")
+    )
+}
+
+fn execute_with_progress(
+    mut request: Value,
+    cancel: &AtomicBool,
+    progress: Option<&mut Progress>,
+) -> AppResult<Value> {
     let _active = ACTIVE
         .try_lock()
         .map_err(|_| "另一個 CAD 工作仍在執行，請稍後手動重試。")?;
+    let reading = is_drawing_read(&request);
+    request["read_progress"] = json!(reading || progress.is_some());
     let input = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
     if input.len() > 900_000 {
         return Err("CAD 計畫超過大小限制。".into());
@@ -170,12 +206,14 @@ pub fn execute(request: Value, cancel: &AtomicBool) -> AppResult<Value> {
         .arg(base.join("worker.py"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .creation_flags(0x08000000)
         .spawn()
         .map_err(|e| format!("無法啟動 CAD 工作程序：{e}"))?;
     let mut stdin = child.stdin.take().ok_or("CAD 輸入管線遺失。")?;
     let stdout = child.stdout.take().ok_or("CAD 輸出管線遺失。")?;
+    let stderr = child.stderr.take().ok_or("CAD 進度管線遺失。")?;
+    let mut monitor = progress::Monitor::new(stderr, progress, reading);
     // 同時讀寫管線，避免大量幾何資料塞滿管線而阻塞主程序的取消監控。
     let writer = thread::spawn(move || stdin.write_all(&input));
     // 完整快照只交給本機索引；一般工具結果維持原有小型上限。
@@ -191,14 +229,17 @@ pub fn execute(request: Value, cancel: &AtomicBool) -> AppResult<Value> {
             .read_to_end(&mut bytes)
             .map(|_| bytes)
     });
-    let deadline = Instant::now() + Duration::from_secs(240);
+    let deadline = Instant::now() + execution_timeout(&request);
     loop {
+        monitor.tick();
         if cancel.load(Ordering::Relaxed) || Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(
-                "CAD 工作取消或逾時，結果未知；請檢查 CAD 與成果資料夾，勿自動重送。".into(),
-            );
+            return Err(if reading {
+                "CAD 讀取已取消或超過 10 分鐘；未建立完整索引。請檢查 CAD 狀態，勿自動重送。".into()
+            } else {
+                "CAD 工作取消或逾時，結果未知；請檢查 CAD 與成果資料夾，勿自動重送。".into()
+            });
         }
         match child.try_wait() {
             Ok(Some(_)) => break,
@@ -226,4 +267,26 @@ pub fn execute(request: Value, cancel: &AtomicBool) -> AppResult<Value> {
 
 pub fn inventory(cancel: &AtomicBool) -> AppResult<Value> {
     execute(json!({"action":"inventory"}), cancel)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ten_minutes_cover_reads_and_existing_drawing_verification() {
+        for action in [
+            "read",
+            "active_read",
+            "active_snapshot",
+            "draw",
+            "edit",
+            "active_edit",
+        ] {
+            assert_eq!(execution_timeout(&json!({"action":action})).as_secs(), 600);
+        }
+        for action in ["active_probe", "inventory"] {
+            assert_eq!(execution_timeout(&json!({"action":action})).as_secs(), 240);
+        }
+    }
 }

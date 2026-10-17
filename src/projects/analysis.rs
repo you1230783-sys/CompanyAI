@@ -335,6 +335,18 @@ impl State {
             });
         };
         match tool {
+            Tool::CadSnapshot {
+                path: Some(path), ..
+            } => {
+                put(
+                    self,
+                    path,
+                    tool.label().into(),
+                    "indexed",
+                    &value["revision"],
+                    "已建立完整本機 CAD 索引；模型仍按需查詢，未視為全圖需求驗收。".into(),
+                );
+            }
             Tool::SearchFiles { query, .. } => {
                 if let Some(entries) = value["coverage"].as_array() {
                     for entry in entries {
@@ -647,6 +659,20 @@ mod tests {
         let restored: State = serde_json::from_value(old).unwrap();
         assert!(restored.timeline.is_empty() && restored.sources.is_empty());
     }
+    #[test]
+    fn successful_cad_snapshot_replaces_same_source_failure() {
+        let mut state = State::default();
+        let tool = super::super::Tool::CadSnapshot {
+            version: "latest".into(),
+            path: Some("part.dwg".into()),
+            refresh: false,
+        };
+        state.observe(&tool, &json!({"ok":false,"error":"舊連線錯誤"}));
+        assert_eq!(state.completion_summary()["requires_attention"], true);
+        state.observe(&tool, &json!({"ok":true,"result":{"revision":"current"}}));
+        assert_eq!(state.completion_summary()["requires_attention"], false);
+    }
+
     #[test]
     fn checks_use_recorded_counts_and_reject_duplicate_parts() {
         let result = json!({"ok":true,"result":{"summary":{"total":10,"parsed":8,"bad":2,"counterexamples":1}}});

@@ -196,6 +196,7 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
         instructions: None,
         outlook_consent: None,
         cad_waiter: None,
+        cad_progress: None,
         file_waiter: None,
     };
     let result = (|| -> AppResult<()> {
