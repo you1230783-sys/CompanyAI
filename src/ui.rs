@@ -18,7 +18,7 @@ use serde::Deserialize;
 use serde_json::json;
 use std::{
     cell::RefCell,
-    path::PathBuf,
+    path::{Path, PathBuf},
     ptr,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -829,6 +829,19 @@ impl App {
                             .export_custom_chart_png(&chart, Some(&custom), custom_reply)?;
                         let tx = self.tx.clone();
                         let destination = self.root.join("chart-smoke.png");
+                        let mermaid_source = "flowchart TD\n A[\"讀取程式碼\"] --> B{\"資料完整？\"}\n B -->|是| C[\"產生流程圖\"]\n B -->|否| A";
+                        let (mermaid_svg_reply, mermaid_svg_response) = mpsc::channel();
+                        let (mermaid_png_reply, mermaid_png_response) = mpsc::channel();
+                        self.view.render_mermaid(
+                            mermaid_source,
+                            crate::projects::diagrams::Format::Svg,
+                            mermaid_svg_reply,
+                        )?;
+                        self.view.render_mermaid(
+                            mermaid_source,
+                            crate::projects::diagrams::Format::Png,
+                            mermaid_png_reply,
+                        )?;
                         thread::spawn(move || {
                             let result = (|| -> AppResult<()> {
                                 let url = response
@@ -852,6 +865,38 @@ impl App {
                                 };
                                 let path =
                                     crate::projects::files::save_user_chart(&project, &custom_png)?;
+                                // 驗證真正 WebView2 awaitPromise 橋接、MMD 中文及三種成果落盤。
+                                let svg = crate::projects::diagrams::decode_rendered(
+                                    &mermaid_svg_response
+                                        .recv_timeout(Duration::from_secs(30))
+                                        .map_err(|_| "Mermaid SVG 自檢逾時。")??,
+                                    crate::projects::diagrams::Format::Svg,
+                                )?;
+                                let png = crate::projects::diagrams::decode_rendered(
+                                    &mermaid_png_response
+                                        .recv_timeout(Duration::from_secs(30))
+                                        .map_err(|_| "Mermaid PNG 自檢逾時。")??,
+                                    crate::projects::diagrams::Format::Png,
+                                )?;
+                                for (name, bytes) in [
+                                    ("流程.mmd", mermaid_source.as_bytes()),
+                                    ("流程.svg", svg.as_slice()),
+                                    ("流程.png", png.as_slice()),
+                                ] {
+                                    let relative = crate::projects::files::diagrams::save(
+                                        &project, name, bytes,
+                                    )?;
+                                    if std::fs::read(project.root.join(&relative))
+                                        .map_err(|e| e.to_string())?
+                                        != bytes
+                                    {
+                                        return Err("Mermaid 自檢讀回不符。".into());
+                                    }
+                                }
+                                std::fs::write(folder.join("mermaid-smoke.svg"), &svg)
+                                    .map_err(|e| e.to_string())?;
+                                std::fs::write(folder.join("mermaid-smoke.png"), &png)
+                                    .map_err(|e| e.to_string())?;
                                 std::fs::write(folder.join("chart-manual-save.json"),serde_json::to_vec_pretty(&json!({"result":"PASS","path":path,"bytes":custom_png.len(),"version":env!("CARGO_PKG_VERSION")})).map_err(|e|e.to_string())?).map_err(|e|e.to_string())
                             })();
                             let _ = tx.send(Event::SmokePng(result));
@@ -1588,6 +1633,9 @@ impl App {
             }
         }
         // 自我檢查開始後由前端管理虛構資料，避免主程式的空白狀態覆蓋測試畫面。
+        if !self.smoke {
+            self.project_attention_tick();
+        }
         if changed && !self.smoke {
             self.publish();
         }
@@ -1933,7 +1981,9 @@ unsafe extern "system" fn window_proc(
                     } else {
                         app.restore_window();
                     }
-                    if lparam as u32 == NIN_BALLOONUSERCLICK {
+                    if lparam as u32 == NIN_BALLOONUSERCLICK
+                        && !app.open_project_attention().unwrap_or(false)
+                    {
                         let _ = app.view.post(&json!({"type":if app.work.task_balloon {"show_tasks"} else {"show_notifications"}}));
                     }
                     return 0;
@@ -2008,19 +2058,33 @@ impl Drop for ComApartment {
 }
 /// 自我檢查使用隔離資料夾，實際載入 WebView2 與 Markdown DOM，不連公司服務。
 pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
-    run_with_local(demo, smoke, None)
+    run_with_local(demo, smoke, None, None)
 }
 
 /// 本機模型測試保留正式畫面與工具流程，所有個人資料寫入獨立目錄。
 pub fn run_local(local: crate::local_test::LocalTest) -> AppResult<()> {
-    run_with_local(None, false, Some(local))
+    run_with_local(None, false, Some(local), None)
+}
+
+/// 本機模型情境沿用正式控制器與離線呈現器；不使用一般使用者資料目錄。
+pub fn run_local_scenario(mut local: crate::local_test::LocalTest, path: &Path) -> AppResult<()> {
+    local.config.notification_popups = false;
+    run_with_local(None, false, Some(local), Some(path))
 }
 
 fn run_with_local(
     demo: Option<&DemoServer>,
     smoke: bool,
     local: Option<crate::local_test::LocalTest>,
+    scenario_path: Option<&Path>,
 ) -> AppResult<()> {
+    let mut scenario = match (scenario_path, local.as_ref()) {
+        (Some(path), Some(local)) => {
+            Some(projects::local_scenario::Scenario::load(path, &local.root)?)
+        }
+        (None, _) => None,
+        _ => return Err("情境只允許明確的本機測試連線。".into()),
+    };
     let _instance = if !smoke && demo.is_none() && local.is_none() {
         match crate::single_instance::acquire()? {
             Some(instance) => Some(instance),
@@ -2215,7 +2279,7 @@ fn run_with_local(
             (&*state as *const RefCell<App>) as isize,
         );
         SetTimer(window, 1, 50, None);
-        if !smoke {
+        if !smoke && scenario.is_none() {
             ShowWindow(window, SW_SHOW);
         }
         let started = Instant::now();
@@ -2230,6 +2294,16 @@ fn run_with_local(
                 DispatchMessageW(&message);
             } else {
                 thread::sleep(Duration::from_millis(5));
+            }
+            if let Some(scenario) = scenario.as_mut() {
+                if let Some(done) = scenario.tick(&mut state.borrow_mut()) {
+                    result = done;
+                    break;
+                }
+                if started.elapsed() > Duration::from_secs(3 * 60 * 60) {
+                    result = Err("本機情境逾時，保留未完成資料。".into());
+                    break;
+                }
             }
             if smoke {
                 if let Some(done) = state.borrow_mut().smoke_result.take() {

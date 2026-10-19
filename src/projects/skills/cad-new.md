@@ -10,7 +10,7 @@ version依共用規則；沿用selected_cad固定版本，不重複載入技能�
 5. 幾何、必要尺寸及註記齊備後cad_plan_commit(plan_id,plan_revision)，不再抄operations。程式合併後一次建立**同一張DWG**、存檔重開。暫存區段尚未繪圖，也不代表已存DWG。
 整圖最多40段、400項及500KB。cad_plan_inspect指定part_id可取單段，修正以相同ID及最新plan_revision整段替換；其餘段不變。錯誤依指定區段改，不重送全圖。舊cad_draw每次另開新圖，不用它追加。
 recent_details常駐最近至多4段完整參數（32KB），直接沿用，不反覆inspect；缺段才查回。省略ID見recent_details_omitted，原資料不刪。
-核對含支撐、背板與墊片的整體外廓，計算總突出與寬高。孔邊及孔心距離分清。矩形外框需4項line；沒有折線、圖塊或陣列操作。保留要求數量，標籤不能替代設備；能力不足明示未完成。
+核對含支撐、背板與墊片的整體外廓，計算總突出與寬高。孔邊及孔心距離分清。封閉外框可使用原生封閉折線polyline；重複構件可用原生圖塊。保留要求數量，標籤不能替代設備；能力不足明示未完成。
 line／circle／curve的line_style若required，未指定填null，指定{name,scale}；null還原實線。尺寸與文字留區域，勿遮擋。尺寸／引線可每段1–3項，不必湊滿20項；收到輸出額度續接提示就直接交下一小段，不重算整圖。
 回報實際幾何、簡化占位及未完成需求；核對真實長寬、淨距與門口，不保證未驗承載、散熱或通行。成功DWG程式自動交付，finish.artifacts填[]；分開回報資料核對與待目視字型／排版。
-引線、剖面、曲線或線型按需讀cad-geometry；指令讀cad-commands。方法閱讀不切技能，不先讀全部指南。目前圖面修改用cad-active，磁碟DWG副本用cad-copy，表格座標用cad-excel。
+引線、剖面、曲線或線型讀cad-geometry；原生折線／圓弧／半徑與角度尺寸／圖層／圖塊讀cad-advanced；指令讀cad-commands。方法閱讀不切技能，不先讀全部指南。目前圖面修改用cad-active，磁碟DWG副本用cad-copy，表格座標用cad-excel。

@@ -3,6 +3,18 @@ use super::*;
 use crate::storage;
 use sha2::{Digest, Sha256};
 
+/// 修剪／圓角的第二目標也必須已交付詳細資料，不允許以猜測Handle擴大操作範圍。
+pub(super) fn edits_are_read(edits: &[Value], handles: &[Value]) -> bool {
+    edits.iter().all(|edit| {
+        handles.contains(&edit["handle"])
+            && ["boundary", "other_handle"].iter().all(|key| {
+                edit["value"]
+                    .get(*key)
+                    .is_none_or(|value| handles.contains(value))
+            })
+    })
+}
+
 /// Python 只有明確未繪圖、或已回報的無效參數錯誤才允許復原。
 /// 缺欄位、程序中斷與未知結果一律保留鎖定，不能憑檔案不存在判斷安全。
 pub(super) fn recoverable(result: &Value) -> bool {

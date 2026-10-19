@@ -4,6 +4,26 @@ use company_ai::{demo::DemoServer, ui, AppResult};
 
 fn main() {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if arguments.first().map(String::as_str) == Some("--local-project-scenario") {
+        let result = (|| {
+            if arguments.len() != 4 {
+                return Err(
+                    "用法：--local-project-scenario <connection.json> <全新資料夾> <scenario.json>"
+                        .into(),
+                );
+            }
+            let local = company_ai::local_test::LocalTest::load(
+                std::path::Path::new(&arguments[1]),
+                std::path::Path::new(&arguments[2]),
+            )?;
+            ui::run_local_scenario(local, std::path::Path::new(&arguments[3]))
+        })();
+        if let Err(error) = result {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if matches!(
         arguments.first().map(String::as_str),
         Some("--local-ai-test" | "--local-cad-probe")

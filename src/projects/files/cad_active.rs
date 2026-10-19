@@ -75,7 +75,7 @@ impl Broker {
         if state["revision"] != revision
             || edits.len() > 100
             || operations.len() > 100
-            || edits.iter().any(|e| !handles.contains(&e["handle"]))
+            || !cad::edits_are_read(edits, handles)
         {
             return Err("目前圖面 revision 或 Handle 不符；請重新讀取，單次至多各 100 項。".into());
         }

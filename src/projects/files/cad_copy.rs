@@ -218,10 +218,7 @@ impl Broker {
             return Err("請使用最近 cad_read 回傳的 revision。".into());
         }
         let handles = read["handles"].as_array().ok_or("尚未讀取目標 Handle。")?;
-        if edits.len() > 100
-            || operations.len() > 100
-            || edits.iter().any(|e| !handles.contains(&e["handle"]))
-        {
+        if edits.len() > 100 || operations.len() > 100 || !cad::edits_are_read(edits, handles) {
             return Err("只能修改已讀取的可修改 Handle，每次最多 100 項修改與 100 項新增。".into());
         }
         let version = read["version"].clone();

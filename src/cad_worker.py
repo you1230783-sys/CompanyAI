@@ -203,8 +203,18 @@ def prepare(operations, max_operations=100):
             prepared.append(op)
             continue
         require(not any(item["kind"] == "command" for item in prepared), "CAD 指令需放在本批幾何操作之後")
+        from cad_geometry import prepare_extra
+        extra = prepare_extra(op)
+        if extra is not None:
+            budget += len(extra.get('entities', [])) + 1
+            prepared.append(extra)
+            continue
         require(isinstance(kind, str) and kind in fields, "未知繪圖操作")
         optional_fields = {"line_style"} if kind in ("line", "circle", "curve") else set()
+        optional_fields.add('layer')
+        if 'layer' in op:
+            from cad_geometry import symbol
+            op['layer'] = symbol(op['layer'])
         require(set(op) - optional_fields == {"kind", "color"} | set(fields[kind].split()), "繪圖操作欄位缺漏或包含未知欄位")
         if "line_style" in op:
             op["line_style"] = prepare_line_style(op["line_style"])
@@ -420,7 +430,13 @@ class Drawing:
     def prepare_styles(self, operations):
         """先準備整批所需樣式，避免完成部分幾何才發現樣式介面缺失。"""
         kinds = {op["kind"] for op in operations}
-        if kinds & {"aligned_dimension", "diameter_dimension", "leader"}:
+        from cad_geometry import prepare_layers
+        styles = [dict(name=op['linetype'], scale=1) for op in operations if op['kind']=='layer']
+        styles.extend(child['line_style'] for op in operations if op['kind']=='block_definition'
+                      for child in op['entities'] if 'line_style' in child)
+        self.prepare_linetypes(styles)
+        prepare_layers(self, operations)
+        if kinds & {"aligned_dimension", "diameter_dimension", "radius_dimension", "angular_dimension", "leader"}:
             self.dimension_style()
         elif kinds & {"text", "mtext"}:
             self.annotation_style()
@@ -450,6 +466,9 @@ class Drawing:
 
     def remember(self, entity, color, **properties):
         entity.Color = color
+        # 2008的HandleToObject不能可靠查回圖塊成員；保留剛建立的原生物件供設層／線型。
+        # 只持有最後一個COM參照，不把物件序列化或帶到下一次程序。
+        self.last_created_entity = entity
         properties["Color"] = color
         self.expected.append({"handle": str(entity.Handle).upper(), "properties": properties,
                               "operation_index": getattr(self, "report", {}).get("operation_index")})
@@ -471,6 +490,11 @@ class Drawing:
         expected_start = len(self.expected)
         try:
             self.draw_entity(op)
+            if 'layer' in op:
+                for row in self.expected[expected_start:]:
+                    entity = self.doc.HandleToObject(row['handle'])
+                    entity.Layer = op['layer']
+                    row['properties']['Layer'] = op['layer']
             if "line_style" in op:
                 # 曲線目前是取樣線段，逐段套用同一原生線型；不改動其他操作。
                 for row in self.expected[expected_start:]:
@@ -502,7 +526,10 @@ class Drawing:
         if op["kind"] == "command":
             self.run_command(op["command"])
             return
-        kind, color = op["kind"], op["color"]
+        kind, color = op["kind"], op.get("color", 7)
+        from cad_geometry import draw_extra
+        if draw_extra(self, op):
+            return
         if kind == "line":
             self.line(op["start"], op["end"], color)
         elif kind == "circle":
@@ -856,6 +883,8 @@ class Drawing:
         # Count 在舊版可能含內部項目；只有唯一 Handle 集合完全符合才接受計數差異。
         require(not missing and not extra and len(rows) == len(entities) == len(self.expected),
                 "圖元集合不符：" + json.dumps(self.last_audit, ensure_ascii=False))
+        from cad_geometry import verify_extra
+        verify_extra(self, doc, entities, rows)
         unavailable = []
         for row in self.expected:
             require(row["handle"] in entities, "存檔後圖元 Handle 遺失")

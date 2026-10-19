@@ -47,5 +47,14 @@
     "tarball": "https://registry.npmjs.org/markdown-it-task-lists/-/markdown-it-task-lists-2.1.1.tgz",
     "sha256": "8e9ed515296f11d716a6460c0bd35ffa163003a373a6d8f65d53ea9f8aec667e",
     "license": "ISC"
+  },
+  {
+    "name": "mermaid",
+    "version": "12.2.0",
+    "tarball": "https://registry.npmjs.org/mermaid/-/mermaid-12.2.0.tgz",
+    "sha256": "071914164d0f6d53e5c26a10a220230d4ae8d37ed0f2263fbf072266f0af3a0a",
+    "integrity": "sha512-w7nr/SFrLO7BaVTs3dQTvYSV6nYSBj0Yy9DjBhsIJtAcHqRzXSq4Pg32ujHZ/AdWsAMNEvvhbm5dt9E2tOiHzw==",
+    "bundled_file_sha256": "a8a6a6f805b074a8261a2825c86f99c8054acb3b35f50bb7e24a4f9f2c3c3b9f",
+    "license": "MIT; bundled dependencies retain upstream license notices"
   }
 ]

@@ -15,6 +15,7 @@ mod chart_annotations;
 mod chart_preferences;
 mod code_review;
 mod code_sections;
+pub mod diagrams;
 mod drafts;
 mod mail_notes;
 mod python;
@@ -93,7 +94,7 @@ pub(super) fn work_log_outcome(result: &Value) -> Value {
 
 /// 回傳的 handle 保持到操作結束，拒絕目錄本身的寫入／刪除共用，
 /// 避免檢查後被重新命名、替換或改成 Junction；仍可在目錄內建立成果。
-pub(super) fn pin(path: &Path) -> AppResult<Vec<File>> {
+pub(crate) fn pin(path: &Path) -> AppResult<Vec<File>> {
     let path = super::setup::resolve_project_path(path)?;
     let mut current = PathBuf::new();
     let mut guards = Vec::new();
@@ -476,9 +477,13 @@ fn reserve_output(folder: &Path, name: &str) -> AppResult<(String, File)> {
         .file_stem()
         .and_then(|s| s.to_str())
         .ok_or("檔名無效。")?;
-    // PNG／CSV 僅由專用匯出流程建立，不擴大一般文件編輯的格式。
+    // 圖形／資料僅由專用匯出流程建立，不擴大一般文件編輯的格式。
     let ext = match path.extension().and_then(|s| s.to_str()) {
-        Some(ext) if ext.eq_ignore_ascii_case("png") || ext.eq_ignore_ascii_case("csv") => {
+        Some(ext)
+            if ["png", "csv", "mmd", "svg"]
+                .iter()
+                .any(|value| ext.eq_ignore_ascii_case(value)) =>
+        {
             ext.to_lowercase()
         }
         _ => extension(path)?,
@@ -806,6 +811,12 @@ pub(super) struct SavedBroker {
     #[serde(default)]
     charts: Vec<super::charts::Chart>,
     #[serde(default)]
+    diagrams: Vec<super::diagrams::Diagram>,
+    #[serde(default)]
+    diagram_sources: Vec<diagrams::SourceSlice>,
+    #[serde(default)]
+    diagram_exports: Vec<super::diagrams::Export>,
+    #[serde(default)]
     chart_exports: Vec<ChartExport>,
     #[serde(default)]
     datasets: Vec<super::datasets::Reference>,
@@ -861,6 +872,11 @@ pub struct Broker {
     txt_context: bool,
     loaded_skills: Vec<String>,
     charts: Vec<super::charts::Chart>,
+    diagrams: Vec<super::diagrams::Diagram>,
+    diagram_sources: Vec<diagrams::SourceSlice>,
+    diagram_renderer: Option<super::diagrams::Renderer>,
+    diagram_exports: Vec<super::diagrams::Export>,
+    previous_diagrams: BTreeMap<usize, Vec<super::diagrams::Diagram>>,
     chart_exports: Vec<ChartExport>,
     datasets: Vec<super::datasets::Reference>,
     python_artifacts: Vec<super::python::Artifact>,
@@ -914,6 +930,11 @@ impl Broker {
             txt_context: false,
             loaded_skills: vec![],
             charts: vec![],
+            diagrams: vec![],
+            diagram_sources: Vec::new(),
+            diagram_renderer: None,
+            diagram_exports: Vec::new(),
+            previous_diagrams: BTreeMap::new(),
             chart_exports: vec![],
             datasets: vec![],
             python_artifacts: vec![],
@@ -938,7 +959,7 @@ impl Broker {
         serde_json::from_value(
             json!({"analysis":self.analysis,"mail_notes":self.mail_notes,"mail_draft":self.mail_draft,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
             "cad_design":self.cad_design,
-            "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts,"cad_artifacts":self.cad_artifacts,"cad_failed":self.cad_failed,"cad_last_result":self.cad_last_result,"cad_attempts":self.cad_attempts,"cad_partial_plans":self.cad_partial_plans,"cad_reads":self.cad_reads,"cad_previews":self.cad_previews}),
+            "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"diagrams":self.diagrams,"diagram_sources":self.diagram_sources,"diagram_exports":self.diagram_exports,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts,"cad_artifacts":self.cad_artifacts,"cad_failed":self.cad_failed,"cad_last_result":self.cad_last_result,"cad_attempts":self.cad_attempts,"cad_partial_plans":self.cad_partial_plans,"cad_reads":self.cad_reads,"cad_previews":self.cad_previews}),
         )
         .map_err(|e| e.to_string())
     }
@@ -1002,6 +1023,22 @@ impl Broker {
             self.verify_draft(draft, state.output_folder.as_deref())?;
         }
         super::skills::context(&state.loaded_skills)?;
+        if state.diagrams.len() > super::diagrams::MAX_DIAGRAMS {
+            return Err("保存的 Mermaid 圖形超過上限。".into());
+        }
+        for diagram in &state.diagrams {
+            diagram.validate()?;
+            if read_cancel(&self.project, &diagram.path, cancel, None, None)?.0 != diagram.source {
+                return Err("Mermaid 成果已變更，未恢復舊任務。".into());
+            }
+        }
+        self.diagrams = state.diagrams;
+        diagrams::validate_sources(&state.diagram_sources)?;
+        self.diagram_sources = state.diagram_sources;
+        for export in &state.diagram_exports {
+            self.verify_diagram_export(export)?;
+        }
+        self.diagram_exports = state.diagram_exports;
         for chart in &state.charts {
             chart.validate()?;
         }
@@ -1115,6 +1152,12 @@ impl Broker {
         let mut context = super::skills::context_for(&self.loaded_skills, model)?;
         if self.cad_design.pending() && self.loaded_skills.iter().any(|id| id == "cad-new") {
             context.push_str("\n目前為新圖規劃階段，暫不提供cad_draw及其完整參數；不是缺少CAD能力。必要尺寸未齊先ask_user，條件足夠就compact_context保存短方案，下一輪才提供cad_plan_start分段工具。這一輪不展開全部座標。簡單新圖只需1–2句方案。不要重載技能找繪圖工具。");
+        }
+        if self.loaded_skills.iter().any(|id| id == "mermaid") {
+            context.push_str(&format!(
+                "\n本對話圖形索引（改圖先讀完整原始碼）：{}",
+                self.inspect_mermaid(None, None)?
+            ));
         }
         Ok(context)
     }
@@ -1687,6 +1730,9 @@ impl Broker {
         result: &Value,
     ) -> AppResult<()> {
         self.cached_result(id, tool)?;
+        if result["ok"] == true {
+            self.retain_diagram_read(tool, &result["result"]);
+        }
         if matches!(tool, Tool::ReadCodeSection { .. }) && result["ok"] == true {
             self.retain_code_section(&result["result"]);
         }
@@ -1841,6 +1887,9 @@ impl Broker {
                 json!({"ok":false,"operation_id":id,"error":error,"retry_same_operation":false})
             }
         };
+        if result["ok"] == true {
+            self.retain_diagram_read(tool, &result["result"]);
+        }
         if result["result"]["waiting_for_user"] != true {
             self.analysis.observe(tool, &result);
             self.analysis.completion = self.analysis.completion_summary();
@@ -2523,6 +2572,20 @@ impl Broker {
                 revision,
                 operations,
             } => self.office_batch(copy_id, revision, operations.clone(), cancel),
+            Tool::CreateMermaid {
+                name,
+                source,
+                based_on,
+            } => self.create_mermaid(name, source, based_on.as_deref(), cancel),
+            Tool::InspectMermaid {
+                message_index,
+                diagram_index,
+            } => self.inspect_mermaid(*message_index, *diagram_index),
+            Tool::ExportMermaid {
+                message_index,
+                diagram_index,
+                format,
+            } => self.export_mermaid(*message_index, *diagram_index, *format, cancel),
             Tool::CreateChart { chart } => {
                 if !self.excel_plans.is_empty() {
                     return Err("本任務已鎖定Excel分析欄位，請使用export_planned_excel及chart_dataset；不可手抄數列繞過來源核對。".into());
@@ -3333,6 +3396,23 @@ impl Broker {
             paths.push(artifact.path.clone());
         }
         // PNG 已由匯出工具發布，不是文字工作副本；自動併入交付清單並重新核對。
+        for diagram in &self.diagrams {
+            if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                return Err("成果檢查已取消。".into());
+            }
+            diagram.validate()?;
+            if read_cancel(&self.project, &diagram.path, cancel, None, None)?.0 != diagram.source {
+                return Err("Mermaid 原始碼成果已變更，不能交付。".into());
+            }
+            paths.push(diagram.path.clone());
+        }
+        for export in &self.diagram_exports {
+            if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                return Err("成果檢查已取消。".into());
+            }
+            self.verify_diagram_export(export)?;
+            paths.push(export.path.clone());
+        }
         for export in &self.chart_exports {
             if cancel.load(std::sync::atomic::Ordering::Relaxed) {
                 return Err("成果檢查已取消。".into());

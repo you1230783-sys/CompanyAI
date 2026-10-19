@@ -348,6 +348,19 @@ fn truncated_refused_multiple_or_wrong_identity_never_execute() {
         .unwrap();
     calls.push(calls[0].clone());
     assert!(parse(&multiple, &task, "p", "r").is_err());
+    multiple.result.as_mut().unwrap()["choices"][0]["message"]["tool_calls"][1]["id"] =
+        json!("call:002");
+    assert!(matches!(
+        parse(&multiple, &task, "p", "r").unwrap(),
+        Parsed::Repair {
+            message: None,
+            call_id: None,
+            ..
+        }
+    ));
+    multiple.result.as_mut().unwrap()["choices"][0]["message"]["tool_calls"][1]["function"]
+        ["name"] = json!("unknown_tool");
+    assert!(parse(&multiple, &task, "p", "r").is_err());
     let mut wrong = original;
     wrong.agent_envelope.insert("context".into(), json!({}));
     assert!(parse(&wrong, &task, "p", "r").is_err());

@@ -1607,3 +1607,14 @@ dialog button.icon-button { padding:6px; }
 .cad-read-notice{position:fixed;right:20px;top:64px;z-index:80;max-width:min(360px,calc(100vw - 40px));padding:16px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px #0003}
 .cad-read-notice[hidden]{display:none}
 .cad-read-notice p{margin:8px 0;line-height:1.5}
+/* 圖形工具列可換行；大圖保留原生比例，鍵盤也能捲動檢視。 */
+.mermaid-card { margin: 16px 0; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); }
+.mermaid-toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.mermaid-toolbar button { padding: 6px 10px; }
+.mermaid-viewport { overflow: auto; max-height: 640px; min-height: 80px; background: white; border: 1px solid #e3e6eb; border-radius: 8px; padding: 12px; }
+.mermaid-plot { width: max-content; min-width: 100%; }
+.mermaid-plot svg { max-width: none !important; }
+.mermaid-status { font-size: 13px; color: var(--muted, #626b7a); }
+.mermaid-card pre { white-space: pre; overflow: auto; max-height: 380px; }
+.mermaid-card:fullscreen { overflow: auto; background: var(--panel); color: var(--ink); padding: 24px; }
+.mermaid-card:fullscreen .mermaid-viewport { max-height: calc(100vh - 180px); }

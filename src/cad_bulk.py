@@ -346,6 +346,12 @@ def snapshot(doc, api, guard=None, handles_only=False, exclude_handles=frozenset
                 row = describe(entities[handle], api)
             # 固定原生欄位供2008原位改字／直徑標註使用；不把一般尺寸誤當直徑。
             d = fields(data)
+            if d.get(0)=='DIMENSION' and d.get(210,[0.,0.,1.])==[0.,0.,1.]:
+                dimension_type=d.get(70,-1)&7
+                if dimension_type==4 and all(code in d for code in (10,15,42)):
+                    row['dimension_geometry']=dict(kind='radius',center=d[10],chord=d[15],measurement=d[42])
+                elif dimension_type==5 and all(code in d for code in (13,14,15,42)):
+                    row['dimension_geometry']=dict(kind='angular',vertex=d[15],start=d[13],end=d[14],measurement=d[42])
             if d.get(0) in ('TEXT', 'MTEXT'):
                 row['native_text'] = ''.join(v for k, v in data if k == 3) + d.get(1, '')
             if (d.get(0) == 'DIMENSION' and d.get(70, -1) & 7 == 3
@@ -364,6 +370,22 @@ def snapshot(doc, api, guard=None, handles_only=False, exclude_handles=frozenset
                     allowed = ['diameter']
                 row['allowed_edits'] = allowed
                 row['editable'] = bool(allowed) and row['editable']
+            # 新增幾何修改只開放原生平面基本圖元；擴充字典／反應器／TrueColor先保留唯讀。
+            if (d.get(0) in ('LINE','CIRCLE','ARC','LWPOLYLINE')
+                    and not any(code in d for code in (102,360,420,430))
+                    and d.get(210,[0.,0.,1.]) == [0.,0.,1.]
+                    and (d.get(0) != 'LWPOLYLINE' or row.get('geometry',{}).get('straight_segments') is True)):
+                from cad_geometry import EDIT_KINDS
+                original = {'line':['color','linetype','move','delete'],
+                            'circle':['color','linetype','move','radius','delete'],
+                            'arc':['color','linetype','radius','delete']}.get(row['kind'],[])
+                allowed = set(row.get('allowed_edits', original if not legacy or guard is None else [])) | EDIT_KINDS
+                if row['kind'] != 'line':
+                    allowed -= {'trim','extend','fillet'}
+                if row['kind'] not in ('line','circle'):
+                    allowed.discard('offset')
+                row['allowed_edits'] = sorted(allowed)
+                row['editable'] = True
             row["native_revision"] = digest([data, children])
             size += len(json.dumps(row, ensure_ascii=False).encode("utf-8"))
             api.require(size <= 64*1024*1024, "CAD 本機索引超過 64 MiB，請分割圖面")

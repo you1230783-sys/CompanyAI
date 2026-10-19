@@ -1,4 +1,17 @@
-## 最優先：0.8.71 基本建置與NSIS完成（2026-10-19）
+## 目前任務：0.8.72 Mermaid、CAD擴充與等待確認通知（2026-10-19）
+
+- 使用者明確要求：Mermaid做在專案功能；原始碼複製、PNG/SVG/MMD保存、下輪讀原碼改圖；可以加入實用相關功能／套件。已同意沿用上版進版、基本／針對性驗證、NSIS與Git main推送。後續又要求合併建議的CAD擴充，並使用已開啟的本機Strata按需求實測，通過才發布；完整長流程／安裝生命週期仍不擅自擴大。
+- CAD本輪包含原生polyline/arc、半徑／小角尺寸、新圖層與圖元改層、有界原生圖塊、複製／旋轉／鏡射／矩形陣列、線／圓偏移及兩直線修剪／延伸／圓角。固定JSON與原生LISP模板，不開任意指令；既有2D修改限WCS Z=0、已讀主副目標、無TrueColor／反應器／擴充字典，依allowed_edits；新幾何與改字／半徑批次分開，2008通用新增／刪除仍不開放。新增指南cad-advanced。
+- 新增等待用戶操作的背景Windows托盤通知／工作列提示，點擊返回專案對話；相同request只提醒一次，前景不打擾，不代替同意，遵守通知設定。涵蓋CAD確認／檔案等待／Outlook範圍／圖表選擇與偏好問題。
+- Mermaid 12.2.0官方standalone已SHA512核對，固定離線dagre/strict並淨化SVG；Create/Inspect/ExportMermaid走真正WebView2 awaitPromise、來源版本與加密checkpoint。實際Strata三輪產生3圖／3 SVG／2 PNG，原碼及based_on、原件未變／舊版保留核對，兩PNG已目視。模型main.py行號引用不準，語意品質未核准。
+- 正式Build.ps1 -EmptyCargoCache -BasicValidation -IncludeInstaller於14:09:52退出0，RELEASE_0_8_72_BASIC_AND_NSIS_PASS。v142 14.29.30133、cl192930159 x64／link14.29，空快取frozen、fmt、Clippy、相關Rust篩選、99 CAD契約、原生UI與來源整合、NSIS及簽署清單核對完成；完整長流程／安裝生命週期／公司服務未重驗。
+- 最後runtime SHA256為4ff7453eb569f48a547b9b007389fee66a02548a35f7b825e1191d596fc0f6fc；EXE為4dd36ed85e86266d66070581fc4129665a4b7bec3e5e4a50b419429b41c5243f，Setup為4d83efc1626fbafb9a670c8975417c65d3db1871eb4319c83e057d129823da6a。finalize072.py已退出0並更新公開摘要／文件；Git交付以提交紀錄及.build/remote-delivery-072.json為準。排除.codex/、dist/onboarding-state.json、icon.png、.build/與私人連線／聊天。
+- 最後雙版原生新增重開根native072-new-4ef80e0a39034bb6bc6f817522b2f9e3，修改及一次Undo根native072-edit-afb6e9aabeac4e3f94bd1b30930a5be8，native072-final.json對應最後runtime。Strata實測找到並修正2008圖塊子圖元HandleToObject、順時針角度端點交換、圖塊名稱大寫讀回的相容性；皆有固定回歸，失敗未存檔圖與診斷保留。
+- 最後雙版Strata CAD根f974656eb457460dbbe8d4be7fdb57cd已完成並獨立原生讀回，結果忠實符合原始模型參數、DWG雜湊未變。兩模型把半徑標註點取近似值，R20意圖核對失敗：2008為19.996979771955555、2022為19.9998081990803。嚴格失敗保留，未放寬容差改判；公開結果PASS_BASIC_FOCUSED_FUNCTIONS_WITH_MODEL_CONTENT_ISSUES，不是設計通過。2022 INSERT容器0層，內部孔／中心線在指定層。CAD未做真窗口目視。
+- Mermaid證據另在9c64b7343c4044d1af5871fe20e52b36；255份Rust／UI／指南／Cargo／build來源核對未變，最後僅改CAD Python／runtime，雙版CAD以最後EXE測。公開摘要記不同EXE雜湊，不混稱同一二進位。正式App localhost隔離入口已實測，必要確認不代答，原始模型參數未改寫，Strata金鑰不落公開文件。
+- 使用者明確要求：先推送0.8.72及docs/COMPANY_TEST_PROMPTS_0_8_72.txt七組提示詞，再實作docs/NEXT_VERSION_NOTES.txt的1–7項（modal、快速模型確認、資料夾捷徑、VNC JSON、縮放、四字體、未知副檔名清單與文字副本編輯）。後續修改暫不進版、不編譯、不重新打包或擅自二次推送，等公司測試。字體預設霞鶩文楷繁中非等寬，三本機開源字型已與官方固定tag blob核對一致並取得授權，待推送後才加入來源。0.8.72交付前不混入後續功能。
+
+## 歷史：0.8.71 基本建置與NSIS完成（2026-10-19）
 
 - 使用者明確要求本輪實作：ICAD2008 文字／直徑標註更新、程式解析並回傳確切 CAD 版本、輸出額度耗盡後最多自動續接 5 次。完成後進版、v142 x64 編譯、NSIS 打包並推送既有 GitHub main（來源、EXE／Setup／更新清單及文件）；本輪僅小部分／針對性驗證，不跑完整驗證。
 - 延續既有排除清單與共享目錄界線。不得重播已成功 CAD 工具、執行截斷參數、擅自改用其他 CAD、修改使用者目前圖面進行實驗；實機使用私有新圖驗證修改及 Undo，保留既有圖面。

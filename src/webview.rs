@@ -228,6 +228,45 @@ impl WebView {
         unsafe { self.view.PostWebMessageAsJson(PCWSTR(value.as_ptr())) }
             .map_err(|_| "無法更新介面。".into())
     }
+    /// Mermaid API 非同步；固定的 Runtime.evaluate 只執行內嵌函式並等待 Promise。
+    /// source 以 JSON 作為資料傳入；沒有對模型開放 DevTools 或任意腳本入口。
+    pub fn render_mermaid(
+        &self,
+        source: &str,
+        format: crate::projects::diagrams::Format,
+        reply: mpsc::Sender<AppResult<String>>,
+    ) -> AppResult<()> {
+        crate::projects::diagrams::validate_source(source)?;
+        let source = serde_json::to_string(source).map_err(|e| e.to_string())?;
+        let format = serde_json::to_string(&format).map_err(|e| e.to_string())?;
+        let parameters = wide(&serde_json::json!({"expression":format!("window.DiagramUI.exportData({source},{format})"),"awaitPromise":true,"returnByValue":true}).to_string());
+        let method = wide("Runtime.evaluate");
+        let callback =
+            CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |status, result| {
+                let value = status
+                    .map_err(|e| format!("Mermaid 呈現失敗：{e}"))
+                    .and_then(|_| {
+                        serde_json::from_str::<serde_json::Value>(&result)
+                            .map_err(|e| e.to_string())
+                    })
+                    .and_then(|v| {
+                        v["result"]["value"]
+                            .as_str()
+                            .map(str::to_owned)
+                            .ok_or("Mermaid 呈現未完成。".into())
+                    });
+                let _ = reply.send(value);
+                Ok(())
+            }));
+        unsafe {
+            self.view.CallDevToolsProtocolMethod(
+                PCWSTR(method.as_ptr()),
+                PCWSTR(parameters.as_ptr()),
+                &callback,
+            )
+        }
+        .map_err(|e| format!("無法啟動 Mermaid：{e}"))
+    }
     /// 僅呼叫固定的內嵌繪圖函式。Chart 經 JSON 序列化為資料，禁止模型提供腳本。
     /// 非同步 callback 回到 UI 執行緒；PNG 解碼及落盤由等待結果的背景任務負責。
     pub fn export_chart_png(

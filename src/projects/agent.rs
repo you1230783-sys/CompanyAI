@@ -537,6 +537,25 @@ pub fn parse(
             call_id: None,
         });
     }
+    if reason == "tool_calls" && message.tool_calls.len() > 1 && expected_tools {
+        // 不拆開執行，也不選擇其中一項。確認封套與工具身分後，要求新一輪單項提交。
+        // 不保留未執行的call ID，避免下一輪產生缺少tool result的孤立工具訊息。
+        let mut ids = std::collections::BTreeSet::new();
+        for call in &message.tool_calls {
+            validate_call(call)?;
+            if !ids.insert(call["id"].as_str()) {
+                return Err("同一回覆的工具call ID重複，未執行工具。".into());
+            }
+            if !task.request["tools"].as_array().is_some_and(|tools| {
+                tools
+                    .iter()
+                    .any(|tool| tool["function"]["name"] == call["function"]["name"])
+            }) {
+                return Err("模型要求未提供的工具，已停止。".into());
+            }
+        }
+        return Ok(Parsed::Repair { reason:"本輪回傳多個工具，全部尚未執行。每輪只提交一個工具；多檔唯讀可使用run_batch。請沿用已完成進度，不重播成功操作。".into(), message:None, call_id:None });
+    }
     if reason != "tool_calls" || message.tool_calls.len() != 1 || !expected_tools {
         return Err("finish_reason／工具數量與本輪契約不一致，未執行任何工具。".into());
     }

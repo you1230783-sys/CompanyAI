@@ -90,17 +90,32 @@ struct Part {
 
 impl Part {
     /// 原生參數會移除可選null；查回時還原同一預設值的傳輸形狀，
-    /// 避免模型照抄已保存線段，卻因公開Schema要求line_style而再次被拒絕。
+    /// 查回內容可直接沿用公開Schema；包含圖層、線型與圖塊內的基本幾何。
     fn model_value(&self) -> Value {
-        let mut value = json!(self);
-        for operation in value["operations"].as_array_mut().unwrap() {
+        fn defaults(operation: &mut Value) {
             if matches!(
                 operation["kind"].as_str(),
-                Some("line" | "circle" | "curve")
+                Some("line" | "circle" | "curve" | "arc" | "polyline")
             ) && operation.get("line_style").is_none()
             {
                 operation["line_style"] = Value::Null;
             }
+            if operation["kind"]
+                .as_str()
+                .is_some_and(|kind| !matches!(kind, "command" | "layer" | "block_definition"))
+                && operation.get("layer").is_none()
+            {
+                operation["layer"] = Value::Null;
+            }
+            if let Some(children) = operation.get_mut("entities").and_then(Value::as_array_mut) {
+                for child in children {
+                    defaults(child);
+                }
+            }
+        }
+        let mut value = json!(self);
+        for operation in value["operations"].as_array_mut().unwrap() {
+            defaults(operation);
         }
         value
     }

@@ -1,9 +1,12 @@
 //! 專案 UI 控制器。只有使用者原生命令可新增授權，模型不能建立專案或擴大根目錄。
 use super::*;
 use crate::projects::{self, Store};
+mod attention;
 mod chart_edit;
 mod composer;
 mod composer_smoke;
+mod diagrams;
+pub(in crate::ui) mod local_scenario;
 mod quick;
 mod weekly;
 
@@ -28,6 +31,10 @@ pub(super) enum ProjectCommand {
     ChartCustomize {
         target: chart_edit::Target,
         style: Option<Box<projects::charts::style::Style>>,
+    },
+    DiagramSave {
+        target: diagrams::Target,
+        format: projects::diagrams::Format,
     },
     ChartSave {
         target: chart_edit::Target,
@@ -180,6 +187,13 @@ pub(super) enum ProjectEvent {
     CadClosed(String, String),
     CadConnect(String, String, serde_json::Value, mpsc::Sender<String>),
     UserChartSaved(String, AppResult<String>),
+    UserDiagramSaved(String, AppResult<String>),
+    RenderMermaid(
+        String,
+        String,
+        projects::diagrams::Format,
+        mpsc::Sender<AppResult<String>>,
+    ),
     FileBusy(String, String, String, mpsc::Sender<bool>),
     OutlookConsent(
         String,
@@ -241,6 +255,8 @@ pub(super) struct Running {
 }
 #[derive(Default)]
 pub(super) struct ProjectRuntime {
+    attention_seen: std::collections::BTreeSet<String>,
+    attention_conversation: Option<String>,
     weekly: Option<weekly::PendingWeekly>,
     quick: Option<quick::Pending>,
     pub store: Store,
@@ -405,6 +421,7 @@ impl App {
             message.project_activity =
                 projects::runner::recover_activity(&self.root, &id).unwrap_or_default();
             message.project_charts = projects::runner::recover_charts(&self.root, &id);
+            message.project_diagrams = projects::runner::recover_diagrams(&self.root, &id);
             message.request_id = Some(id);
             conversation.messages.push(message);
             changed = true;
@@ -475,6 +492,15 @@ impl App {
                 &json!({"type":"project_methods","conversation":conversation,"methods":methods}),
             )?;
             return Ok(());
+        }
+        match self.diagram_command(&command) {
+            Ok(true) => return Ok(()),
+            Ok(false) => (),
+            Err(error) => {
+                self.view
+                    .post(&json!({"type":"diagram_saved","ok":false,"message":error}))?;
+                return Ok(());
+            }
         }
         match self.chart_edit_command(&command) {
             Ok(true) => return Ok(()),
@@ -1018,6 +1044,7 @@ impl App {
             }
             ProjectCommand::Stop
             | ProjectCommand::ChartCustomize { .. }
+            | ProjectCommand::DiagramSave { .. }
             | ProjectCommand::ChartSave { .. }
             | ProjectCommand::WeeklyPrepare { .. }
             | ProjectCommand::WeeklySubmit { .. }
@@ -1335,6 +1362,8 @@ impl App {
         if self.active_id.as_deref() == Some(&conversation) {
             self.messages = messages;
         }
+        self.projects.attention_seen.clear();
+        self.projects.attention_conversation = None;
         self.projects.running = Some(Running {
             cad_read_progress: None,
             pending_cad: None,
@@ -1384,6 +1413,38 @@ impl App {
                     }
                 }
             });
+            let diagram_tx = tx.clone();
+            let diagram_id = id.clone();
+            let diagram_renderer: projects::diagrams::Renderer =
+                Box::new(move |source, format, cancel| {
+                    let (reply, response) = mpsc::channel();
+                    diagram_tx
+                        .send(Event::Project(ProjectEvent::RenderMermaid(
+                            diagram_id.clone(),
+                            source.into(),
+                            format,
+                            reply,
+                        )))
+                        .map_err(|_| "桌面介面已關閉。")?;
+                    let deadline = Instant::now() + Duration::from_secs(45);
+                    loop {
+                        if cancel.load(Ordering::Relaxed) {
+                            return Err("Mermaid 已取消。".into());
+                        }
+                        if Instant::now() >= deadline {
+                            return Err("Mermaid 呈現逾時，未儲存。".into());
+                        }
+                        match response.recv_timeout(Duration::from_millis(100)) {
+                            Ok(result) => {
+                                return projects::diagrams::decode_rendered(&result?, format)
+                            }
+                            Err(mpsc::RecvTimeoutError::Timeout) => (),
+                            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                                return Err("Mermaid 呈現中斷。".into())
+                            }
+                        }
+                    }
+                });
             let review_tx = tx.clone();
             let review_id = id.clone();
             let chooser: projects::charts::quality::Chooser =
@@ -1410,7 +1471,7 @@ impl App {
                 });
             let analysis_tx = tx.clone();
             let analysis_id = id.clone();
-            let result = projects::runner::run_with_chart_export(
+            let result = projects::runner::run_with_project_renderers(
                 run,
                 |text| {
                     let _ = tx.send(Event::Project(ProjectEvent::Progress(id.clone(), text)));
@@ -1424,7 +1485,7 @@ impl App {
                         value,
                     )));
                 },
-                renderer,
+                (renderer, diagram_renderer),
                 chooser,
             );
             let _ = tx.send(Event::Project(ProjectEvent::Finished(
@@ -1546,6 +1607,22 @@ impl App {
                     self.view.post(&json!({"type":"project_diagnostics","view_request":view_request,"conversation":conversation,"run_id":id,"text":result.unwrap_or_else(|e|self.friendly_error("diagnostics_read", &e))}))?;
                 }
             }
+            ProjectEvent::UserDiagramSaved(conversation, result) => {
+                self.view.post(&json!({"type":"diagram_saved","conversation":conversation,"ok":result.is_ok(),"message":result.unwrap_or_else(|e|e)}))?;
+            }
+            ProjectEvent::RenderMermaid(id, source, format, reply) => {
+                if !self
+                    .projects
+                    .running
+                    .as_ref()
+                    .is_some_and(|run| run.id == id && !run.cancel.load(Ordering::Relaxed))
+                {
+                    let _ = reply.send(Err("任務已結束或取消。".into()));
+                } else if let Err(error) = self.view.render_mermaid(&source, format, reply.clone())
+                {
+                    let _ = reply.send(Err(error));
+                }
+            }
             ProjectEvent::ExportPng(id, chart, reply) => {
                 if !self
                     .projects
@@ -1661,6 +1738,7 @@ impl App {
                 message.project_activity = activity;
                 message.project_analysis = projects::runner::recover_analysis(&self.root, &id);
                 message.project_charts = projects::runner::recover_charts(&self.root, &id);
+                message.project_diagrams = projects::runner::recover_diagrams(&self.root, &id);
                 message.request_id = Some(id.clone());
                 c.messages.push(message);
                 c.updated_at = crate::unix_now();
@@ -1763,6 +1841,8 @@ impl App {
                     crate::notifications::save(&self.root, &self.inbox)?;
                     self.toast(&self.projects.status.clone());
                     if self.config.notification_popups && !self.is_foreground() {
+                        self.projects.attention_conversation =
+                            waiting.then(|| conversation.clone());
                         self.work.task_balloon = true;
                         tray(self.window, NIM_MODIFY, Some(&self.projects.status));
                     }

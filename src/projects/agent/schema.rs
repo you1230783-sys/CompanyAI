@@ -400,6 +400,25 @@ fn restore(value: &mut Value, source: &Value) -> AppResult<()> {
                 return restore(value, variant);
             }
         }
+        // 舊checkpoint提交時可能還沒有新加入的可選欄位。只依唯一明示標籤
+        // 還原省略預設，不放寬decode驗證、不補必填值，也不猜測未知操作。
+        for tag in ["kind", "action"] {
+            if let Some(selected) = value.get(tag) {
+                let matching: Vec<_> = variants
+                    .iter()
+                    .filter(|variant| {
+                        variant["properties"][tag]["enum"]
+                            .as_array()
+                            .is_some_and(|values| {
+                                values.len() == 1 && values.first() == Some(selected)
+                            })
+                    })
+                    .collect();
+                if matching.len() == 1 {
+                    return restore(value, matching[0]);
+                }
+            }
+        }
     }
     if let (Some(object), Some(properties)) =
         (value.as_object_mut(), source["properties"].as_object())
@@ -588,6 +607,7 @@ mod tests {
         assert!(!error.contains("private annotation"));
         assert!(!matches(&args, &schema));
         args["operations"][0]["height"] = json!(3);
+        args["operations"][0]["layer"] = Value::Null;
         assert!(decode_arguments(&args.to_string(), &schema).is_ok());
         args["operations"][0] = json!({"kind":"command", "command":"ZOOM E", "color":7});
         let error = decode_arguments(&args.to_string(), &schema).unwrap_err();
@@ -599,7 +619,7 @@ mod tests {
             .remove("color");
         assert!(decode_arguments(&args.to_string(), &schema).is_ok());
         args["operations"][0] = json!({"kind":"circle", "color":4, "center":[0,0],
-            "radius":5, "line_style":{"name":"unsupported", "scale":1}});
+            "radius":5, "layer":null, "line_style":{"name":"unsupported", "scale":1}});
         let error = decode_arguments(&args.to_string(), &schema).unwrap_err();
         assert!(error.contains("$.operations[0].line_style.name: 值應為"));
     }
@@ -654,6 +674,9 @@ mod tests {
 
     #[test]
     fn cad_optional_line_style_uses_null_on_wire_and_is_omitted_for_original_tool() {
+        let old=restore_optional("cad_draw",json!({"name":"old.dwg","version":"Icad.Application.1","operations":[{"kind":"line","color":7,"start":[0,0],"end":[10,0],"line_style":null}]})).unwrap();
+        assert!(old["operations"][0].get("line_style").is_none());
+        assert!(old["operations"][0].get("layer").is_none());
         // 傳輸Schema採所有欄位必填；原工具的可選線型以null表示，不能教模型省略。
         for strict in [false, true] {
             let tools = definitions(strict).unwrap();
@@ -664,10 +687,11 @@ mod tests {
             let schema = &draw["function"]["parameters"];
             let args = json!({"name":"nullable-check.dwg","version":"Icad.Application.1",
                 "progress_note":"建立新圖測試可選線型，不讀取或修改其他文件。",
-                "operations":[{"kind":"line","color":7,"start":[0,0],"end":[10,0],"line_style":null}]});
+                "operations":[{"kind":"line","color":7,"start":[0,0],"end":[10,0],"line_style":null,"layer":null}]});
             assert!(decode_arguments(&args.to_string(), schema).is_ok());
             let restored = restore_optional("cad_draw", args.clone()).unwrap();
             assert!(restored["operations"][0].get("line_style").is_none());
+            assert!(restored["operations"][0].get("layer").is_none());
             assert_eq!(restored["operations"][0]["end"], json!([10, 0]));
             let mut missing = args;
             missing["operations"][0]

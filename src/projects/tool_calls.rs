@@ -98,6 +98,47 @@ pub(super) fn system_prompt_for(model: &str) -> AppResult<String> {
             }
         }
     }
+    // 同一份修改規格在目前圖面／副本重複；只壓縮文字提示，不放寬原生參數檢查。
+    let edits = definitions["tools"]
+        .as_array()
+        .and_then(|tools| {
+            tools
+                .iter()
+                .find(|t| t["function"]["name"] == "cad_active_edit")
+        })
+        .map(|t| t["function"]["parameters"]["properties"]["edits"]["items"].clone())
+        .ok_or("缺少CAD修改規格。")?;
+    for tool in definitions["tools"].as_array_mut().into_iter().flatten() {
+        if let Some(items) = tool.pointer_mut("/function/parameters/properties/edits/items") {
+            if *items == edits {
+                *items = json!({"$ref":"#/cad_edit"});
+            }
+        }
+    }
+    definitions["cad_edit"] = edits;
+    // Office單項／批次也使用相同操作型別；共用這份文字規格，保留64KB傳輸上限。
+    let office = definitions["tools"]
+        .as_array()
+        .and_then(|tools| {
+            tools
+                .iter()
+                .find(|t| t["function"]["name"] == "office_action")
+        })
+        .map(|t| t["function"]["parameters"]["properties"]["operation"].clone())
+        .ok_or("缺少Office操作規格。")?;
+    for tool in definitions["tools"].as_array_mut().into_iter().flatten() {
+        for pointer in [
+            "/function/parameters/properties/operation",
+            "/function/parameters/properties/operations/items",
+        ] {
+            if let Some(schema) = tool.pointer_mut(pointer) {
+                if *schema == office {
+                    *schema = json!({"$ref":"#/office_operation"});
+                }
+            }
+        }
+    }
+    definitions["office_operation"] = office;
     definitions["cad_operation"] = geometry;
     Ok(format!(
         "{}\n\n所有工具的 arguments 共用必填參數 progress_note:string，以下省略重複定義。請簡述已完成與下一步，不記內部思考、不把待辦稱為完成。operations.items中的$ref=#/cad_operation表示共用下方cad_operation幾何規格，提交時仍填實際操作物件。\n工具定義（OpenAI Chat Completions tools 形狀，僅為文字契約）：\n{}",
@@ -675,6 +716,9 @@ mod tests {
         ];
         let mut samples = samples.to_vec();
         samples.extend([
+            ("create_mermaid", json!({"name":"流程.mmd","source":"flowchart TD\nA-->B","based_on":null})),
+            ("inspect_mermaid", json!({"message_index":null,"diagram_index":null})),
+            ("export_mermaid", json!({"message_index":null,"diagram_index":0,"format":"png"})),
             ("record_log_events", json!({"events":[{"label":"起點","group":"A/1","phase":"start","evidence":{"operation_id":"read","pointer":"/lines/0"}}]})),
             ("plan_code_change", json!({"copy_id":"c","requirements":[{"id":"R1","description":"需求","origin":"user"}]})),
             ("test_python", json!({"copy_id":"c","revision":"r","tests":[{"id":"T1","requirement_ids":["R1"],"code":"pass","mocked_dependencies":[]}]})),

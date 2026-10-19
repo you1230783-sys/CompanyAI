@@ -81,13 +81,28 @@ def describe(entity, api):
         normal = row["properties"].get("Normal")
         if normal and all(abs(normal[i] - (1 if i == 2 else 0)) < 1e-9 for i in range(3)):
             try:
-                coords = list(entity.Coordinates)
-                stride = 2 if "lwpolyline" in lower else 3
-                count = len(coords) // stride
+                raw = entity.Coordinates
+                native_points = lower == 'lightweightpolyline' and hasattr(raw, '_oleobj_')
+                if native_points:
+                    # iCAD2008回傳Points物件，GetBulge為1起算，且沒有Elevation屬性。
+                    # 先限制Count，避免對大型集合逐點COM讀取；點本身已包含Z。
+                    count = int(raw.Count)
+                    if not 2 <= count <= 2048:
+                        raise ValueError('原生多段線頂點數超過有界讀取範圍')
+                    vertices = [api.coordinate(p) for p in iter_entities(raw)]
+                    if len(vertices) != count or any(len(p) != 3 for p in vertices):
+                        raise ValueError('原生多段線點集合不完整')
+                    coords = [v for p in vertices for v in p]
+                    stride, elevation, first_index = 3, 0.0, 1
+                else:
+                    coords = list(raw)
+                    stride = 2 if lower in ('acdbpolyline', 'lightweightpolyline', 'lwpolyline') else 3
+                    count = len(coords) // stride
+                    elevation = float(entity.Elevation) if stride == 2 else 0.0
+                    first_index = 0
                 if 2 <= count <= 2048 and len(coords) % stride == 0 and all(
                         isinstance(v, (float, int)) and math.isfinite(v) and abs(v) <= 1e12 for v in coords):
-                    if all(abs(float(entity.GetBulge(i))) < 1e-12 for i in range(count)):
-                        elevation = float(entity.Elevation) if stride == 2 else 0.0
+                    if all(abs(float(entity.GetBulge(i+first_index))) < 1e-12 for i in range(count)):
                         if math.isfinite(elevation):
                             points = [[coords[i], coords[i+1], elevation if stride == 2 else coords[i+2]]
                                       for i in range(0, len(coords), stride)]
@@ -217,6 +232,10 @@ def _edit_document(app, doc, legacy, request, report, api, entities, before, out
     report["step"] = "validate_edit"
     edits = request["edits"]
     api.require(isinstance(edits, list) and len(edits) <= 100, "每次最多修改 100 個圖元")
+    from cad_geometry import EDIT_KINDS
+    if any(isinstance(edit,dict) and edit.get('kind') in EDIT_KINDS for edit in edits):
+        from cad_geometry_edit import execute as execute_geometry
+        return execute_geometry(app,doc,legacy,request,report,api,entities,before,output,guard)
     additions = api.prepare(request["operations"]) if request["operations"] else []
     api.require(edits or additions, "請提供修改或新增操作")
     # 先驗證整份修改計畫；同一 Handle 只能一項修改，避免順序歧義。

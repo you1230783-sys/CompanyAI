@@ -181,5 +181,6 @@ def edit_capabilities(app, doc, legacy):
         return dict(method='icad_runcommand_native', edits={'radius':['circle'],
             'color':['line','circle','arc','text','mtext'], 'text':['text','mtext'],
             'diameter':['dimension_with_verified_diameter_endpoints']}, additions=False, deletion=False,
-            notice='2008原生Undo支援半徑、ACI、TEXT/MTEXT；平面直徑標註同圖替換並回傳replacement_handles。依allowed_edits，沒有通用新增／刪除／TrueColor覆寫')
+            geometry_edits=['copy','rotate','mirror','array','offset','trim','extend','fillet','layer'],geometry_copy_additions=True,
+            notice='2008原生Undo支援半徑、ACI、TEXT/MTEXT及有界2D幾何修改；副本／陣列／偏移／圓角可新增幾何，operations通用新增與刪除仍不開放。幾何與文字等修改分批。直徑標註替換回傳replacement_handles，依allowed_edits。')
     return dict(method='unavailable', notice='缺少已驗證的Undo方法，不可修改目前圖面')

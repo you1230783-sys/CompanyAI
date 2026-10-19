@@ -26,6 +26,20 @@ window.runSelfTest = async (structuredFixture) => {
     // 原生 ready 訊息可能早於後續 script；先等全部介面入口就緒再驗證動態節點。
     await waitFor(() => !!window.ProjectUI && !!window.AuthUI, "UI modules initialized");
     await window.runReviewTests(check);
+    // 使用真正的離線引擎驗證常用圖型與拒絕路徑，不以假 SVG 替代呈現。
+    for (const [kind, source] of [
+      ["flowchart", 'flowchart TD\n A["開始"] --> B{"通過？"}\n B -->|是| C["完成"]\n B -->|否| A'],
+      ["sequence", 'sequenceDiagram\n participant U as 使用者\n participant A as 應用程式\n U->>A: 請求流程圖\n A-->>U: 回傳結果'],
+      ["state", 'stateDiagram-v2\n [*] --> Ready\n Ready --> Done\n Done --> [*]'],
+      ["class", 'classDiagram\n class Project {\n +String name\n +run()\n }'],
+      ["er", 'erDiagram\n PROJECT ||--o{ DIAGRAM : contains\n DIAGRAM {\n string source\n }'],
+    ]) {
+      const result = JSON.parse(await DiagramUI.exportData(source, "svg"));
+      check(result.ok && result.data.startsWith("<svg") && !result.data.includes("foreignObject"), `Mermaid ${kind} renders offline as SVG`);
+    }
+    for (const source of ['flowchart TD\nA[', '%%{init: {securityLevel:"loose"}}%%\nflowchart TD', 'flowchart TD\nA-->B\nclick A "https://example.com"']) {
+      check(JSON.parse(await DiagramUI.exportData(source, "svg")).ok === false, "Mermaid invalid syntax/config/click returns explicit error");
+    }
     {
       const old=LMUI.getState(), originalSend=send, commands=[];
       try {

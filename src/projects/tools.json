@@ -1299,7 +1299,8 @@
                 "cad-new",
                 "cad-active",
                 "cad-copy",
-                "cad-excel"
+                "cad-excel",
+                "mermaid"
               ]
             },
             "progress_note": {
@@ -4686,6 +4687,9 @@
                         ],
                         "additionalProperties": false,
                         "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -4750,6 +4754,9 @@
                         ],
                         "additionalProperties": false,
                         "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -4788,6 +4795,9 @@
                       },
                       "height": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -4830,6 +4840,9 @@
                       },
                       "width": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -4876,6 +4889,9 @@
                       },
                       "height": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -4925,6 +4941,9 @@
                         },
                         "minItems": 2,
                         "maxItems": 2
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -4969,6 +4988,9 @@
                       },
                       "leader_length": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -5043,6 +5065,9 @@
                       },
                       "scale": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -5115,6 +5140,9 @@
                         ],
                         "additionalProperties": false,
                         "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -5147,6 +5175,663 @@
                     "required": [
                       "kind",
                       "command"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "arc"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "center": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "radius": {
+                        "type": "number"
+                      },
+                      "start_angle": {
+                        "type": "number"
+                      },
+                      "end_angle": {
+                        "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "center",
+                      "radius",
+                      "start_angle",
+                      "end_angle"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "polyline"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "points": {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "minItems": 2,
+                        "maxItems": 512
+                      },
+                      "closed": {
+                        "type": "boolean"
+                      },
+                      "layer": {
+                        "type": "string"
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "points",
+                      "closed"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "radius_dimension"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "center": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "chord": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "leader_length": {
+                        "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "center",
+                      "chord",
+                      "leader_length"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "angular_dimension"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "vertex": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "start": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "end": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "location": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "layer": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "vertex",
+                      "start",
+                      "end",
+                      "location"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "layer"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "linetype": {
+                        "type": "string",
+                        "enum": [
+                          "CONTINUOUS",
+                          "DASHED",
+                          "HIDDEN",
+                          "CENTER",
+                          "DASHDOT",
+                          "DOT",
+                          "BYLAYER",
+                          "BYBLOCK"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "name",
+                      "linetype"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "block_definition"
+                        ]
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "base": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "entities": {
+                        "type": "array",
+                        "items": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "line"
+                                  ]
+                                },
+                                "color": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 255,
+                                  "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                                },
+                                "start": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                },
+                                "end": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                },
+                                "line_style": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CONTINUOUS",
+                                        "DASHED",
+                                        "HIDDEN",
+                                        "CENTER",
+                                        "DASHDOT",
+                                        "DOT",
+                                        "BYLAYER",
+                                        "BYBLOCK"
+                                      ]
+                                    },
+                                    "scale": {
+                                      "type": "number",
+                                      "minimum": 1e-06,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "scale"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                                },
+                                "layer": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "color",
+                                "start",
+                                "end"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "circle"
+                                  ]
+                                },
+                                "color": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 255,
+                                  "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                                },
+                                "center": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                },
+                                "radius": {
+                                  "type": "number"
+                                },
+                                "line_style": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CONTINUOUS",
+                                        "DASHED",
+                                        "HIDDEN",
+                                        "CENTER",
+                                        "DASHDOT",
+                                        "DOT",
+                                        "BYLAYER",
+                                        "BYBLOCK"
+                                      ]
+                                    },
+                                    "scale": {
+                                      "type": "number",
+                                      "minimum": 1e-06,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "scale"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                                },
+                                "layer": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "color",
+                                "center",
+                                "radius"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "arc"
+                                  ]
+                                },
+                                "color": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 255
+                                },
+                                "center": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                },
+                                "radius": {
+                                  "type": "number"
+                                },
+                                "start_angle": {
+                                  "type": "number"
+                                },
+                                "end_angle": {
+                                  "type": "number"
+                                },
+                                "layer": {
+                                  "type": "string"
+                                },
+                                "line_style": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CONTINUOUS",
+                                        "DASHED",
+                                        "HIDDEN",
+                                        "CENTER",
+                                        "DASHDOT",
+                                        "DOT",
+                                        "BYLAYER",
+                                        "BYBLOCK"
+                                      ]
+                                    },
+                                    "scale": {
+                                      "type": "number",
+                                      "minimum": 1e-06,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "scale"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "color",
+                                "center",
+                                "radius",
+                                "start_angle",
+                                "end_angle"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "polyline"
+                                  ]
+                                },
+                                "color": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 255
+                                },
+                                "points": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "number"
+                                    },
+                                    "minItems": 2,
+                                    "maxItems": 2
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 512
+                                },
+                                "closed": {
+                                  "type": "boolean"
+                                },
+                                "layer": {
+                                  "type": "string"
+                                },
+                                "line_style": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CONTINUOUS",
+                                        "DASHED",
+                                        "HIDDEN",
+                                        "CENTER",
+                                        "DASHDOT",
+                                        "DOT",
+                                        "BYLAYER",
+                                        "BYBLOCK"
+                                      ]
+                                    },
+                                    "scale": {
+                                      "type": "number",
+                                      "minimum": 1e-06,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "scale"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "color",
+                                "points",
+                                "closed"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "minItems": 1,
+                        "maxItems": 50
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "name",
+                      "base",
+                      "entities"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "block_reference"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "position": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "scale": {
+                        "type": "number"
+                      },
+                      "rotation": {
+                        "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "name",
+                      "position",
+                      "scale",
+                      "rotation"
                     ],
                     "additionalProperties": false
                   }
@@ -5432,6 +6117,393 @@
                       "value"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "diameter"
+                        ]
+                      },
+                      "value": {
+                        "type": "number",
+                        "description": "目標直徑；只適用allowed_edits含diameter的2008平面直徑標註。在同圖替換該標註、保留位置方向樣式，回傳replacement_handles供後續使用；真正更新量測端點，不改圓。"
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "copy"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "offset": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          }
+                        },
+                        "required": [
+                          "offset"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "rotate"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "base": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          },
+                          "angle": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "base",
+                          "angle"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "mirror"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "axis_start": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          },
+                          "axis_end": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          },
+                          "copy": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "axis_start",
+                          "axis_end",
+                          "copy"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "array"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "rows": {
+                            "type": "integer"
+                          },
+                          "columns": {
+                            "type": "integer"
+                          },
+                          "row_spacing": {
+                            "type": "number"
+                          },
+                          "column_spacing": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "rows",
+                          "columns",
+                          "row_spacing",
+                          "column_spacing"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "offset"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "distance": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "distance"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "trim"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "boundary": {
+                            "type": "string"
+                          },
+                          "pick": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          }
+                        },
+                        "required": [
+                          "boundary",
+                          "pick"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "extend"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "boundary": {
+                            "type": "string"
+                          },
+                          "pick": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          }
+                        },
+                        "required": [
+                          "boundary",
+                          "pick"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "fillet"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "other_handle": {
+                            "type": "string"
+                          },
+                          "radius": {
+                            "type": "number"
+                          },
+                          "pick": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          },
+                          "other_pick": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          }
+                        },
+                        "required": [
+                          "other_handle",
+                          "radius",
+                          "pick",
+                          "other_pick"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "layer"
+                        ]
+                      },
+                      "value": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               }
@@ -5499,6 +6571,9 @@
                         ],
                         "additionalProperties": false,
                         "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -5563,6 +6638,9 @@
                         ],
                         "additionalProperties": false,
                         "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -5601,6 +6679,9 @@
                       },
                       "height": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -5643,6 +6724,9 @@
                       },
                       "width": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -5689,6 +6773,9 @@
                       },
                       "height": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -5738,6 +6825,9 @@
                         },
                         "minItems": 2,
                         "maxItems": 2
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -5782,6 +6872,9 @@
                       },
                       "leader_length": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -5856,6 +6949,9 @@
                       },
                       "scale": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -5928,6 +7024,9 @@
                         ],
                         "additionalProperties": false,
                         "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -5960,6 +7059,663 @@
                     "required": [
                       "kind",
                       "command"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "arc"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "center": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "radius": {
+                        "type": "number"
+                      },
+                      "start_angle": {
+                        "type": "number"
+                      },
+                      "end_angle": {
+                        "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "center",
+                      "radius",
+                      "start_angle",
+                      "end_angle"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "polyline"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "points": {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "minItems": 2,
+                        "maxItems": 512
+                      },
+                      "closed": {
+                        "type": "boolean"
+                      },
+                      "layer": {
+                        "type": "string"
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "points",
+                      "closed"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "radius_dimension"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "center": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "chord": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "leader_length": {
+                        "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "center",
+                      "chord",
+                      "leader_length"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "angular_dimension"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "vertex": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "start": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "end": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "location": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "layer": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "vertex",
+                      "start",
+                      "end",
+                      "location"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "layer"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "linetype": {
+                        "type": "string",
+                        "enum": [
+                          "CONTINUOUS",
+                          "DASHED",
+                          "HIDDEN",
+                          "CENTER",
+                          "DASHDOT",
+                          "DOT",
+                          "BYLAYER",
+                          "BYBLOCK"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "name",
+                      "linetype"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "block_definition"
+                        ]
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "base": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "entities": {
+                        "type": "array",
+                        "items": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "line"
+                                  ]
+                                },
+                                "color": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 255,
+                                  "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                                },
+                                "start": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                },
+                                "end": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                },
+                                "line_style": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CONTINUOUS",
+                                        "DASHED",
+                                        "HIDDEN",
+                                        "CENTER",
+                                        "DASHDOT",
+                                        "DOT",
+                                        "BYLAYER",
+                                        "BYBLOCK"
+                                      ]
+                                    },
+                                    "scale": {
+                                      "type": "number",
+                                      "minimum": 1e-06,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "scale"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                                },
+                                "layer": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "color",
+                                "start",
+                                "end"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "circle"
+                                  ]
+                                },
+                                "color": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 255,
+                                  "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                                },
+                                "center": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                },
+                                "radius": {
+                                  "type": "number"
+                                },
+                                "line_style": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CONTINUOUS",
+                                        "DASHED",
+                                        "HIDDEN",
+                                        "CENTER",
+                                        "DASHDOT",
+                                        "DOT",
+                                        "BYLAYER",
+                                        "BYBLOCK"
+                                      ]
+                                    },
+                                    "scale": {
+                                      "type": "number",
+                                      "minimum": 1e-06,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "scale"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                                },
+                                "layer": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "color",
+                                "center",
+                                "radius"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "arc"
+                                  ]
+                                },
+                                "color": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 255
+                                },
+                                "center": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                },
+                                "radius": {
+                                  "type": "number"
+                                },
+                                "start_angle": {
+                                  "type": "number"
+                                },
+                                "end_angle": {
+                                  "type": "number"
+                                },
+                                "layer": {
+                                  "type": "string"
+                                },
+                                "line_style": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CONTINUOUS",
+                                        "DASHED",
+                                        "HIDDEN",
+                                        "CENTER",
+                                        "DASHDOT",
+                                        "DOT",
+                                        "BYLAYER",
+                                        "BYBLOCK"
+                                      ]
+                                    },
+                                    "scale": {
+                                      "type": "number",
+                                      "minimum": 1e-06,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "scale"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "color",
+                                "center",
+                                "radius",
+                                "start_angle",
+                                "end_angle"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "polyline"
+                                  ]
+                                },
+                                "color": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 255
+                                },
+                                "points": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "number"
+                                    },
+                                    "minItems": 2,
+                                    "maxItems": 2
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 512
+                                },
+                                "closed": {
+                                  "type": "boolean"
+                                },
+                                "layer": {
+                                  "type": "string"
+                                },
+                                "line_style": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CONTINUOUS",
+                                        "DASHED",
+                                        "HIDDEN",
+                                        "CENTER",
+                                        "DASHDOT",
+                                        "DOT",
+                                        "BYLAYER",
+                                        "BYBLOCK"
+                                      ]
+                                    },
+                                    "scale": {
+                                      "type": "number",
+                                      "minimum": 1e-06,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "scale"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "color",
+                                "points",
+                                "closed"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "minItems": 1,
+                        "maxItems": 50
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "name",
+                      "base",
+                      "entities"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "block_reference"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "position": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "scale": {
+                        "type": "number"
+                      },
+                      "rotation": {
+                        "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "name",
+                      "position",
+                      "scale",
+                      "rotation"
                     ],
                     "additionalProperties": false
                   }
@@ -6250,6 +8006,369 @@
                       "value"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "copy"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "offset": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          }
+                        },
+                        "required": [
+                          "offset"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "rotate"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "base": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          },
+                          "angle": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "base",
+                          "angle"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "mirror"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "axis_start": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          },
+                          "axis_end": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          },
+                          "copy": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "axis_start",
+                          "axis_end",
+                          "copy"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "array"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "rows": {
+                            "type": "integer"
+                          },
+                          "columns": {
+                            "type": "integer"
+                          },
+                          "row_spacing": {
+                            "type": "number"
+                          },
+                          "column_spacing": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "rows",
+                          "columns",
+                          "row_spacing",
+                          "column_spacing"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "offset"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "distance": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "distance"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "trim"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "boundary": {
+                            "type": "string"
+                          },
+                          "pick": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          }
+                        },
+                        "required": [
+                          "boundary",
+                          "pick"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "extend"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "boundary": {
+                            "type": "string"
+                          },
+                          "pick": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          }
+                        },
+                        "required": [
+                          "boundary",
+                          "pick"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "fillet"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "other_handle": {
+                            "type": "string"
+                          },
+                          "radius": {
+                            "type": "number"
+                          },
+                          "pick": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          },
+                          "other_pick": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          }
+                        },
+                        "required": [
+                          "other_handle",
+                          "radius",
+                          "pick",
+                          "other_pick"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "layer"
+                        ]
+                      },
+                      "value": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               }
@@ -6317,6 +8436,9 @@
                         ],
                         "additionalProperties": false,
                         "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -6381,6 +8503,9 @@
                         ],
                         "additionalProperties": false,
                         "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -6419,6 +8544,9 @@
                       },
                       "height": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -6461,6 +8589,9 @@
                       },
                       "width": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -6507,6 +8638,9 @@
                       },
                       "height": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -6556,6 +8690,9 @@
                         },
                         "minItems": 2,
                         "maxItems": 2
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -6600,6 +8737,9 @@
                       },
                       "leader_length": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -6674,6 +8814,9 @@
                       },
                       "scale": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -6746,6 +8889,9 @@
                         ],
                         "additionalProperties": false,
                         "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -6778,6 +8924,663 @@
                     "required": [
                       "kind",
                       "command"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "arc"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "center": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "radius": {
+                        "type": "number"
+                      },
+                      "start_angle": {
+                        "type": "number"
+                      },
+                      "end_angle": {
+                        "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "center",
+                      "radius",
+                      "start_angle",
+                      "end_angle"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "polyline"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "points": {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "minItems": 2,
+                        "maxItems": 512
+                      },
+                      "closed": {
+                        "type": "boolean"
+                      },
+                      "layer": {
+                        "type": "string"
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "points",
+                      "closed"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "radius_dimension"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "center": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "chord": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "leader_length": {
+                        "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "center",
+                      "chord",
+                      "leader_length"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "angular_dimension"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "vertex": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "start": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "end": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "location": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "layer": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "vertex",
+                      "start",
+                      "end",
+                      "location"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "layer"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "linetype": {
+                        "type": "string",
+                        "enum": [
+                          "CONTINUOUS",
+                          "DASHED",
+                          "HIDDEN",
+                          "CENTER",
+                          "DASHDOT",
+                          "DOT",
+                          "BYLAYER",
+                          "BYBLOCK"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "name",
+                      "linetype"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "block_definition"
+                        ]
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "base": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "entities": {
+                        "type": "array",
+                        "items": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "line"
+                                  ]
+                                },
+                                "color": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 255,
+                                  "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                                },
+                                "start": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                },
+                                "end": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                },
+                                "line_style": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CONTINUOUS",
+                                        "DASHED",
+                                        "HIDDEN",
+                                        "CENTER",
+                                        "DASHDOT",
+                                        "DOT",
+                                        "BYLAYER",
+                                        "BYBLOCK"
+                                      ]
+                                    },
+                                    "scale": {
+                                      "type": "number",
+                                      "minimum": 1e-06,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "scale"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                                },
+                                "layer": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "color",
+                                "start",
+                                "end"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "circle"
+                                  ]
+                                },
+                                "color": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 255,
+                                  "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                                },
+                                "center": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                },
+                                "radius": {
+                                  "type": "number"
+                                },
+                                "line_style": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CONTINUOUS",
+                                        "DASHED",
+                                        "HIDDEN",
+                                        "CENTER",
+                                        "DASHDOT",
+                                        "DOT",
+                                        "BYLAYER",
+                                        "BYBLOCK"
+                                      ]
+                                    },
+                                    "scale": {
+                                      "type": "number",
+                                      "minimum": 1e-06,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "scale"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                                },
+                                "layer": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "color",
+                                "center",
+                                "radius"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "arc"
+                                  ]
+                                },
+                                "color": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 255
+                                },
+                                "center": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                },
+                                "radius": {
+                                  "type": "number"
+                                },
+                                "start_angle": {
+                                  "type": "number"
+                                },
+                                "end_angle": {
+                                  "type": "number"
+                                },
+                                "layer": {
+                                  "type": "string"
+                                },
+                                "line_style": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CONTINUOUS",
+                                        "DASHED",
+                                        "HIDDEN",
+                                        "CENTER",
+                                        "DASHDOT",
+                                        "DOT",
+                                        "BYLAYER",
+                                        "BYBLOCK"
+                                      ]
+                                    },
+                                    "scale": {
+                                      "type": "number",
+                                      "minimum": 1e-06,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "scale"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "color",
+                                "center",
+                                "radius",
+                                "start_angle",
+                                "end_angle"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "polyline"
+                                  ]
+                                },
+                                "color": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 255
+                                },
+                                "points": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "number"
+                                    },
+                                    "minItems": 2,
+                                    "maxItems": 2
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 512
+                                },
+                                "closed": {
+                                  "type": "boolean"
+                                },
+                                "layer": {
+                                  "type": "string"
+                                },
+                                "line_style": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CONTINUOUS",
+                                        "DASHED",
+                                        "HIDDEN",
+                                        "CENTER",
+                                        "DASHDOT",
+                                        "DOT",
+                                        "BYLAYER",
+                                        "BYBLOCK"
+                                      ]
+                                    },
+                                    "scale": {
+                                      "type": "number",
+                                      "minimum": 1e-06,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "scale"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "color",
+                                "points",
+                                "closed"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "minItems": 1,
+                        "maxItems": 50
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "name",
+                      "base",
+                      "entities"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "block_reference"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "position": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "scale": {
+                        "type": "number"
+                      },
+                      "rotation": {
+                        "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "name",
+                      "position",
+                      "scale",
+                      "rotation"
                     ],
                     "additionalProperties": false
                   }
@@ -7328,6 +10131,9 @@
                         ],
                         "additionalProperties": false,
                         "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -7392,6 +10198,9 @@
                         ],
                         "additionalProperties": false,
                         "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -7430,6 +10239,9 @@
                       },
                       "height": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -7472,6 +10284,9 @@
                       },
                       "width": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -7518,6 +10333,9 @@
                       },
                       "height": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -7567,6 +10385,9 @@
                         },
                         "minItems": 2,
                         "maxItems": 2
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -7611,6 +10432,9 @@
                       },
                       "leader_length": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -7685,6 +10509,9 @@
                       },
                       "scale": {
                         "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -7757,6 +10584,9 @@
                         ],
                         "additionalProperties": false,
                         "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      },
+                      "layer": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -7789,6 +10619,663 @@
                     "required": [
                       "kind",
                       "command"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "arc"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "center": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "radius": {
+                        "type": "number"
+                      },
+                      "start_angle": {
+                        "type": "number"
+                      },
+                      "end_angle": {
+                        "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "center",
+                      "radius",
+                      "start_angle",
+                      "end_angle"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "polyline"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "points": {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "minItems": 2,
+                        "maxItems": 512
+                      },
+                      "closed": {
+                        "type": "boolean"
+                      },
+                      "layer": {
+                        "type": "string"
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "points",
+                      "closed"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "radius_dimension"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "center": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "chord": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "leader_length": {
+                        "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "center",
+                      "chord",
+                      "leader_length"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "angular_dimension"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "vertex": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "start": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "end": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "location": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "layer": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "vertex",
+                      "start",
+                      "end",
+                      "location"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "layer"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "linetype": {
+                        "type": "string",
+                        "enum": [
+                          "CONTINUOUS",
+                          "DASHED",
+                          "HIDDEN",
+                          "CENTER",
+                          "DASHDOT",
+                          "DOT",
+                          "BYLAYER",
+                          "BYBLOCK"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "name",
+                      "linetype"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "block_definition"
+                        ]
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "base": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "entities": {
+                        "type": "array",
+                        "items": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "line"
+                                  ]
+                                },
+                                "color": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 255,
+                                  "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                                },
+                                "start": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                },
+                                "end": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                },
+                                "line_style": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CONTINUOUS",
+                                        "DASHED",
+                                        "HIDDEN",
+                                        "CENTER",
+                                        "DASHDOT",
+                                        "DOT",
+                                        "BYLAYER",
+                                        "BYBLOCK"
+                                      ]
+                                    },
+                                    "scale": {
+                                      "type": "number",
+                                      "minimum": 1e-06,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "scale"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                                },
+                                "layer": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "color",
+                                "start",
+                                "end"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "circle"
+                                  ]
+                                },
+                                "color": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 255,
+                                  "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                                },
+                                "center": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                },
+                                "radius": {
+                                  "type": "number"
+                                },
+                                "line_style": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CONTINUOUS",
+                                        "DASHED",
+                                        "HIDDEN",
+                                        "CENTER",
+                                        "DASHDOT",
+                                        "DOT",
+                                        "BYLAYER",
+                                        "BYBLOCK"
+                                      ]
+                                    },
+                                    "scale": {
+                                      "type": "number",
+                                      "minimum": 1e-06,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "scale"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                                },
+                                "layer": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "color",
+                                "center",
+                                "radius"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "arc"
+                                  ]
+                                },
+                                "color": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 255
+                                },
+                                "center": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                },
+                                "radius": {
+                                  "type": "number"
+                                },
+                                "start_angle": {
+                                  "type": "number"
+                                },
+                                "end_angle": {
+                                  "type": "number"
+                                },
+                                "layer": {
+                                  "type": "string"
+                                },
+                                "line_style": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CONTINUOUS",
+                                        "DASHED",
+                                        "HIDDEN",
+                                        "CENTER",
+                                        "DASHDOT",
+                                        "DOT",
+                                        "BYLAYER",
+                                        "BYBLOCK"
+                                      ]
+                                    },
+                                    "scale": {
+                                      "type": "number",
+                                      "minimum": 1e-06,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "scale"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "color",
+                                "center",
+                                "radius",
+                                "start_angle",
+                                "end_angle"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "polyline"
+                                  ]
+                                },
+                                "color": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 255
+                                },
+                                "points": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "number"
+                                    },
+                                    "minItems": 2,
+                                    "maxItems": 2
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 512
+                                },
+                                "closed": {
+                                  "type": "boolean"
+                                },
+                                "layer": {
+                                  "type": "string"
+                                },
+                                "line_style": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CONTINUOUS",
+                                        "DASHED",
+                                        "HIDDEN",
+                                        "CENTER",
+                                        "DASHDOT",
+                                        "DOT",
+                                        "BYLAYER",
+                                        "BYBLOCK"
+                                      ]
+                                    },
+                                    "scale": {
+                                      "type": "number",
+                                      "minimum": 1e-06,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "scale"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "color",
+                                "points",
+                                "closed"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "minItems": 1,
+                        "maxItems": 50
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "name",
+                      "base",
+                      "entities"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "block_reference"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "position": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "scale": {
+                        "type": "number"
+                      },
+                      "rotation": {
+                        "type": "number"
+                      },
+                      "layer": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "name",
+                      "position",
+                      "scale",
+                      "rotation"
                     ],
                     "additionalProperties": false
                   }
@@ -7871,6 +11358,118 @@
           "required": [
             "plan_id",
             "plan_revision"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "create_mermaid",
+        "description": "由離線Mermaid引擎驗證，保存.mmd並在完成對話顯示。改圖先inspect_mermaid取完整source與revision，based_on填原版本；新圖填null。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "based_on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
+            }
+          },
+          "required": [
+            "name",
+            "source",
+            "based_on",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_mermaid",
+        "description": "查詢同對話已保存圖形。兩索引null列目錄；diagram_index指定時傳回完整原始碼與版本。message_index=null代表本任務。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "message_index": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "diagram_index": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
+            }
+          },
+          "required": [
+            "message_index",
+            "diagram_index",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "export_mermaid",
+        "description": "由已保存的原始碼匯出PNG、SVG或MMD，另存新檔，不覆寫舊圖。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "message_index": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "diagram_index": {
+              "type": "integer"
+            },
+            "format": {
+              "type": "string",
+              "enum": [
+                "mmd",
+                "svg",
+                "png"
+              ]
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
+            }
+          },
+          "required": [
+            "message_index",
+            "diagram_index",
+            "format",
+            "progress_note"
           ],
           "additionalProperties": false
         }

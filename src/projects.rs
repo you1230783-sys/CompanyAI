@@ -8,6 +8,7 @@ pub mod context;
 pub mod datasets;
 mod delegation;
 pub mod diagnostics;
+pub mod diagrams;
 pub mod events;
 pub mod excel_plan;
 pub mod files;
@@ -386,6 +387,21 @@ pub enum Tool {
         revision: String,
         operations: Vec<office::Action>,
     },
+    /// 離線引擎驗證後保存 Mermaid 原始碼；修改建立新版本。
+    CreateMermaid {
+        name: String,
+        source: String,
+        based_on: Option<String>,
+    },
+    InspectMermaid {
+        message_index: Option<usize>,
+        diagram_index: Option<usize>,
+    },
+    ExportMermaid {
+        message_index: Option<usize>,
+        diagram_index: usize,
+        format: diagrams::Format,
+    },
     CreateChart {
         // 圖表點陣較大，工具列舉只持有指標，避免其他小型工具也承擔整份結構大小。
         chart: Box<charts::Chart>,
@@ -622,6 +638,9 @@ impl Tool {
             Self::AskPreference { .. } => "詢問可選偏好並繼續工作",
             Self::SearchFiles { .. } => "跨文件搜尋",
             Self::OfficeBatch { .. } => "批次編輯 Office",
+            Self::CreateMermaid { .. } => "產生並驗證 Mermaid 圖形",
+            Self::InspectMermaid { .. } => "讀取 Mermaid 原始碼與版本",
+            Self::ExportMermaid { .. } => "匯出 Mermaid 圖形檔案",
             Self::CreateChart { .. } | Self::ChartFromExcel { .. } => "建立圖表",
             Self::ExportChartPng { .. } => "儲存圖表 PNG",
             Self::PlanCodeChange { .. } => "建立程式需求清單",

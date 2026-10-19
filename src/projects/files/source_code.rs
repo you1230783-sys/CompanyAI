@@ -45,7 +45,10 @@ pub(super) fn supported(path: &Path) -> bool {
         .to_ascii_lowercase();
     matches!(
         ext.as_str(),
-        "c" | "cc"
+        "mmd"
+            | "mermaid"
+            | "c"
+            | "cc"
             | "cpp"
             | "cxx"
             | "h"

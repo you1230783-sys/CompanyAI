@@ -1,5 +1,7 @@
 # 目前 CAD 圖面，不儲存
 
+複製、旋轉、鏡射、陣列、偏移、兩直線修剪／延伸／圓角或圖元改層，按需讀cad-advanced。依allowed_edits，所有副目標也先查詳細資料；新幾何修改與改字／半徑分批，operations填[]。
+
 正常流程：cad_snapshot → cad_query(details=true) → cad_active_edit → finish。資料足夠就執行下一步，不為重述計畫重載技能、讀指南或重查同一圖元。
 
 首次cad_snapshot(version=使用者指定ProgID,path=null,refresh=false)。本任務固定該版本與文件；latest只在首次選新版。已有snapshot_id就沿用；使用者確實改圖或工具明示失效才refresh=true。不逐頁讀全圖。

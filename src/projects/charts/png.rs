@@ -13,6 +13,14 @@ pub type Renderer = Box<dyn FnMut(&Chart, &AtomicBool) -> AppResult<Vec<u8>>>;
 
 /// 回應從 WebView2 的原生 ExecuteScript callback 取得，不經模型或一般訊息命令。
 pub fn decode_url(url: &str) -> AppResult<Vec<u8>> {
+    let bytes = decode_image_url(url)?;
+    validate(&bytes)?;
+    Ok(bytes)
+}
+
+/// Mermaid沿用有界Base64及PNG容器／CRC檢查，尺寸由其功能另外限制。
+/// ECharts的decode_url仍要求固定1600×1000，不因新功能放寬原契約。
+pub(crate) fn decode_image_url(url: &str) -> AppResult<Vec<u8>> {
     let encoded = url
         .strip_prefix("data:image/png;base64,")
         .ok_or("圖表未回傳 PNG。")?;
@@ -42,7 +50,7 @@ pub fn decode_url(url: &str) -> AppResult<Vec<u8>> {
         return Err("圖表 PNG 解碼失敗。".into());
     }
     bytes.truncate(size as usize);
-    validate(&bytes)?;
+    dimensions(&bytes)?;
     Ok(bytes)
 }
 

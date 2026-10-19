@@ -606,6 +606,10 @@ function renderMessages() {
         }
       }
     }
+    if (message.project_diagrams?.length) {
+      const diagrams=node("div","project-diagrams");content.append(diagrams);
+      DiagramUI.render(diagrams,message.project_diagrams,{conversation:state.active_id,message_index:index,request_id:message.request_id});
+    }
     if (message.project_charts?.length) {
       const charts = node("div", "project-charts"); content.append(charts);
       ChartUI.render(charts, message.project_charts, {conversation:state.active_id,message_index:index,request_id:message.request_id,styles:message.project_chart_styles || {}});
@@ -1215,6 +1219,7 @@ if (bridge) {
         window.SettingsUI?.receive(event.data);
         window.ProjectUI?.receive(event.data);
         window.ChartUI?.receive(event.data);
+        window.DiagramUI?.receive(event.data);
       window.WeeklyUI?.receive(event.data);
       window.ProjectQuickUI?.receive(event.data);
       window.ProjectComposer?.receive(event.data);

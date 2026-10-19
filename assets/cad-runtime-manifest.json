@@ -1,9 +1,11 @@
 {
   "cad.py": "9fa08d20e1a47d33bbd3eabf65bce5bb6dead824369bac0256e67e2d59e78804",
-  "cad_active.py": "be23d8d758b68fcd286b7fedf96b9056df7c49c3e851c04e99744786c020c91c",
-  "cad_bulk.py": "685bf38fea565ec1a8997a77e2563104ecdaeacd9d06588da6cd0902967022e5",
-  "cad_existing.py": "9813637df8a02950eb9857eb8145a59ea7f4e10b6070350217e81289232109e8",
+  "cad_active.py": "6e9078111ad778a823714489e1ef8245446f9075abfe2c03d486b4a577fbdf4e",
+  "cad_bulk.py": "864e683ca620282ee621cbeb7127e20fffef5d96f4624cfb5086cae1deee58a2",
+  "cad_existing.py": "fc89461fc36a2f070d8a99a97b0ca25d3063b8dc972a8f730c36092c6035af29",
   "cad_export.lsp": "bd30d7c2f8bd95477a1fef51286ce0a44c5ddb5f235c5fc342e047ebadd9ab15",
+  "cad_geometry.py": "a2aeda43ae07eb7833f7cd5d355449e6cc890753686d5b6e787946e092be47bc",
+  "cad_geometry_edit.py": "935ba7fe4da7f66ad53bba97ee11186e28afdb5a760b47c90bb8205f8bc36e3d",
   "cad_undo.py": "1f192daec85e9e7e199a87d8e5479fb1cb7d9cb89cacf1e1010884f748b72c4b",
   "registry.py": "5fae074dc6a7fe4b8c98919d257270c2cc08adf787fe49c9fd384259c93d5c68",
   "runtime/__install__.json": "a9c8d2bc5d3ee8aa7d8127cbf2c0b192a0fa0a7b0f4400c69f1cf809e41897a7",
@@ -641,5 +643,5 @@
   "runtime/vcruntime140.dll": "052ad6a20d375957e82aa6a3c441ea548d89be0981516ca7eb306e063d5027f4",
   "runtime/vcruntime140_1.dll": "6a99bc0128e0c7d6cbbf615fcc26909565e17d4ca3451b97f8987f9c6acbc6c8",
   "runtime/winsound.pyd": "19f4c04717d5ab47de5bcce2e067991ce3224c3c82073abe684695cc8e800648",
-  "worker.py": "06e0a586865f886e07d9d6c3936299b1c21ba696bf080fd7ac4db05d0cbc267e"
+  "worker.py": "055163793e09ebd14451f100514e96a1c3976de3cf764cf25b8ad2253fafff03"
 }

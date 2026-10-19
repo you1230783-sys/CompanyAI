@@ -3,6 +3,11 @@ use crate::AppResult;
 use serde_json::{json, Value};
 mod core;
 const SKILLS: &[(&str, &str, &str)] = &[
+    (
+        "mermaid",
+        "文字／程式碼專案轉流程圖、時序圖、狀態圖與原始碼修改",
+        include_str!("skills/mermaid.md"),
+    ),
     ("cad-new", "CAD新建圖面", include_str!("skills/cad-new.md")),
     (
         "cad-active",
@@ -115,7 +120,7 @@ pub fn catalog_for(_model: &str) -> Value {
             let category = match *id {
                 "python-analysis" | "python-edit" | "log-analysis" | "excel-read"
                 | "multi-file-excel" => "資料分析",
-                "charts" | "dataset-charts" | "chart-edit" => "圖表",
+                "charts" | "dataset-charts" | "chart-edit" | "mermaid" => "圖表",
                 "cad-new" | "cad-active" | "cad-copy" | "cad-excel" => "CAD",
                 _ => "文件與郵件",
             };
@@ -141,6 +146,7 @@ pub fn load(id: &str) -> AppResult<&'static str> {
 pub fn read_guide(id: &str) -> AppResult<&'static str> {
     match id {
         "cad-geometry" => Ok(include_str!("skills/cad-geometry.md")),
+        "cad-advanced" => Ok(include_str!("skills/cad-advanced.md")),
         "cad-edits" => Ok(include_str!("skills/cad-edits.md")),
         "cad-commands" => Ok(include_str!("skills/cad-commands.md")),
         "python-tables" => Ok(include_str!("skills/python-tables.md")),
@@ -227,6 +233,7 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
     let has = |id: &str| ids.iter().any(|i| i == id);
     match tool {
         // 舊 checkpoint 保留原工具權限；新任務只公告與目標文件相關的工具。
+        "create_mermaid" | "inspect_mermaid" | "export_mermaid" => has("mermaid"),
         "cad_inventory" => ids.iter().any(|id| id.starts_with("cad-")),
         "cad_snapshot" | "cad_query" | "cad_preview" => {
             has("cad-active") || has("cad-copy") || has("cad-excel") || has("cad-drawing")
@@ -315,7 +322,7 @@ mod tests {
             .collect();
         let guide = load("cad-new").unwrap();
         assert!(kinds.contains(&"line"));
-        assert!(guide.contains("矩形外框需4項line"));
+        assert!(guide.contains("使用原生封閉折線polyline"));
         if guide.contains("使用原生封閉折線") {
             assert!(kinds.contains(&"polyline"), "提示不能推薦尚未提供的操作");
         }

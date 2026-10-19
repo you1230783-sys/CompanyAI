@@ -1,6 +1,6 @@
 {
-  "recorded_at": "2026-10-19T10:23:07.7163035+08:00",
-  "version": "0.8.71.0",
+  "recorded_at": "2026-10-19T14:07:52.1840292+08:00",
+  "version": "0.8.72.0",
   "result": "PASS_BASIC",
   "validation_scope": "basic; full validation deferred by user",
   "msvc": "14.29.30133",
@@ -12,7 +12,7 @@
   "linker": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\link.exe",
   "windows_sdk": "10.0.19041.0\\",
   "empty_cargo_cache": true,
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-5f58a7454a5f4b85a4f3a6376fab6143",
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-7c8cda3ecb514744ac7e0d1c123e5ed6",
   "checks": [
     "v142 x64 actual compiler probe",
     "fmt",
@@ -35,7 +35,7 @@
     "changing errors and successful GET reset the consecutive failure count",
     "SSE task ID supersedes late by-request errors without counting them"
   ],
-  "exe_sha256": "84a38d7d1509f7d734cc64ea5a5faa35f1f73a7926ff490e37b86bcc05ffbbfa",
+  "exe_sha256": "4dd36ed85e86266d66070581fc4129665a4b7bec3e5e4a50b419429b41c5243f",
   "installer_built": true,
   "installer_installation_tested": false,
   "full_validation_completed": false,
@@ -47,5 +47,5 @@
     "NSIS install/update/rollback/uninstall integration",
     "company PDF and chat service acceptance"
   ],
-  "installer_sha256": "c5d8de1ca495329968e441d9eb753960cd79b8b8bbea7710a58ce10093f6f648"
+  "installer_sha256": "4d83efc1626fbafb9a670c8975417c65d3db1871eb4319c83e057d129823da6a"
 }

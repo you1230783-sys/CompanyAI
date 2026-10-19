@@ -45,6 +45,8 @@ def main():
     shutil.copyfile(ROOT / "src/cad_active.py", stage / "cad_active.py")
     shutil.copyfile(ROOT / "src/cad_bulk.py", stage / "cad_bulk.py")
     shutil.copyfile(ROOT / "src/cad_undo.py", stage / "cad_undo.py")
+    shutil.copyfile(ROOT / "src/cad_geometry.py", stage / "cad_geometry.py")
+    shutil.copyfile(ROOT / "src/cad_geometry_edit.py", stage / "cad_geometry_edit.py")
     shutil.copyfile(ROOT / "src/cad_export.lsp", stage / "cad_export.lsp")
     for name in ("cad.py", "registry.py"):
         shutil.copyfile(ROOT / "tools/gstarcad-probe" / name, stage / name)

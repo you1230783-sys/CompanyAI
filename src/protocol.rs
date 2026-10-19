@@ -48,6 +48,9 @@ pub struct Message {
     pub project_analysis: Option<crate::projects::analysis::State>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub project_charts: Vec<crate::projects::charts::Chart>,
+    /// 圖形保留完整原始碼，後續任務可讀取修改；舊訊息不覆寫。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub project_diagrams: Vec<crate::projects::diagrams::Diagram>,
     /// 使用者的顯示設定只在本機加密歷史保存，不送模型、不改圖表原始值。
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub project_chart_styles:
@@ -76,6 +79,7 @@ impl Message {
             project_activity: Vec::new(),
             project_analysis: None,
             project_charts: Vec::new(),
+            project_diagrams: Vec::new(),
             project_chart_styles: Default::default(),
             project_paused: false,
             retry_settings: None,
@@ -95,6 +99,7 @@ impl Message {
             project_activity: Vec::new(),
             project_analysis: None,
             project_charts: Vec::new(),
+            project_diagrams: Vec::new(),
             project_chart_styles: Default::default(),
             project_paused: false,
             retry_settings: None,

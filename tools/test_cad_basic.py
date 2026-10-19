@@ -1201,5 +1201,199 @@ class BasicTests(unittest.TestCase):
         self.assertEqual([r["year"] for r in sorted(rows, key=worker.registry.preference, reverse=True)], [2027,2026,2022,2008])
 
 
+class GeometryTests(unittest.TestCase):
+    """新幾何的純計算／前置拒絕；真正CAD與Undo另以私有圖驗證。"""
+    def setUp(self):
+        import cad_geometry_edit
+        from cad_geometry import EDIT_KINDS
+        self.engine=cad_geometry_edit
+        self.allowed=sorted(EDIT_KINDS)
+        self.layers={'0':dict(name='0',locked=False),'target':dict(name='target',locked=False)}
+
+    def line(self, handle, start, end):
+        return dict(handle=handle,type='Line',kind='line',editable=True,allowed_edits=self.allowed,
+                    properties=dict(Layer='0',Color=7,Linetype='ByLayer',LinetypeScale=1.,Thickness=0.,Normal=[0.,0.,1.],StartPoint=start+[0.],EndPoint=end+[0.]))
+
+    def plan(self, rows, handle, kind, value):
+        return self.engine.prepare([dict(handle=handle,kind=kind,value=value)],{r['handle']:r for r in rows},self.layers)[0]
+
+    def test_native_shapes_are_preflighted_without_cad(self):
+        operations=[dict(kind='polyline',color=7,points=[[0,0],[30,0],[30,20]],closed=True),
+                    dict(kind='arc',color=1,center=[0,0],radius=5,start_angle=0,end_angle=90),
+                    dict(kind='angular_dimension',color=2,vertex=[0,0],start=[20,0],end=[0,20],location=[10,10])]
+        result=worker.prepare(operations)
+        self.assertAlmostEqual(result[1]['end_angle'],math.pi/2)
+        self.assertTrue(result[0]['closed'])
+        for operation in [dict(kind='arc',color=1,center=[0,0],radius=5,start_angle=0,end_angle=360),
+                          dict(kind='polyline',color=7,points=[[0,0],[0,0]],closed=False),
+                          dict(kind='layer',name='C:/external',color=1,linetype='CONTINUOUS'),
+                          dict(kind='angular_dimension',color=2,vertex=[0,0],start=[20,0],end=[0,20],location=[-10,10])]:
+            with self.assertRaises(ValueError):worker.prepare([operation])
+
+    def test_clockwise_angular_dimension_normalizes_minor_wedge_endpoints(self):
+        operation = dict(kind='angular_dimension', color=7, vertex=[60,-20],
+                         start=[90,-20], end=[60,-50], location=[72,-32])
+        prepared = worker.prepare([operation])[0]
+        self.assertEqual(prepared['start'], [60.,-50.,0.])
+        self.assertEqual(prepared['end'], [90.,-20.,0.])
+        # 不改呼叫方的來源；逆時針輸入及正規化後重驗均維持原資料。
+        self.assertEqual(operation['start'], [90,-20])
+        self.assertEqual(worker.prepare([operation])[0], prepared)
+        operation['start'], operation['end'] = operation['end'], operation['start']
+        self.assertEqual(worker.prepare([operation])[0], prepared)
+        operation['location'] = [48,-8]
+        with self.assertRaises(ValueError):
+            worker.prepare([operation])
+
+    def test_native_block_name_case_preserves_exact_symbol_and_scale_checks(self):
+        from types import SimpleNamespace
+        from cad_geometry import verify_extra
+        drawing = SimpleNamespace(expected=[dict(handle='AB', block_name='HoleBlock', block_scale=1)])
+        entity = SimpleNamespace(Name='HOLEBLOCK', XScaleFactor=1, YScaleFactor=1, ZScaleFactor=1)
+        verify_extra(drawing, None, {'AB':entity}, [])
+        entity.Name = 'OtherBlock'
+        with self.assertRaises(ValueError):
+            verify_extra(drawing, None, {'AB':entity}, [])
+        entity.Name, entity.XScaleFactor = 'HoleBlock', 2
+        with self.assertRaises(ValueError):
+            verify_extra(drawing, None, {'AB':entity}, [])
+
+    def test_legacy_polyline_points_use_one_based_bulges_without_elevation(self):
+        class Points(list):
+            _oleobj_=None
+            @property
+            def Count(self):return len(self)
+        indices=[]
+        def bulge(index):
+            self.assertIn(index,(1,2,3))
+            indices.append(index)
+            return 0.
+        entity=SimpleNamespace(Handle='A',EntityName='LightWeightPolyline',Closed=True,
+            Coordinates=Points([SimpleNamespace(x=0.,y=0.,z=0.),SimpleNamespace(x=1/30,y=0.,z=0.),SimpleNamespace(x=0.,y=1/30,z=0.)]),
+            Normal=SimpleNamespace(x=0.,y=0.,z=1.),GetBulge=bulge)
+        row=cad_existing.describe(entity,worker)
+        self.assertEqual(indices,[1,2,3])
+        self.assertEqual(row['geometry']['vertices'][1],[1/30,0.,0.])
+
+    def test_polyline_verification_uses_existing_numeric_tolerance(self):
+        import cad_geometry
+        expected=dict(vertices=[[0.,0.,0.],[1/30,0.,0.],[0.,1/30,0.]],closed=True,coordinates='WCS',straight_segments=True)
+        observed=dict(expected,vertices=[[0.,0.,0.],[.0333333333333333,0.,0.],[0.,.0333333333333333,0.]])
+        drawing=SimpleNamespace(expected=[dict(handle='A',geometry=expected)])
+        cad_geometry.verify_extra(drawing,None,{},[dict(handle='A',geometry=observed)])
+        observed['vertices'][1][0]=.04
+        with self.assertRaises(ValueError):cad_geometry.verify_extra(drawing,None,{},[dict(handle='A',geometry=observed)])
+
+    def test_block_members_use_created_objects_without_document_handle_lookup(self):
+        import cad_geometry
+        class Block(list):
+            def AddCircle(self, center, radius):
+                obj=SimpleNamespace(Handle=f'{len(self)+1:X}',Center=center,Radius=radius)
+                self.append(obj)
+                return obj
+            def AddLine(self, start, end):
+                obj=SimpleNamespace(Handle=f'{len(self)+1:X}',StartPoint=start,EndPoint=end)
+                self.append(obj)
+                return obj
+        class Blocks(list):
+            def Add(self, base, name):
+                block=Block()
+                block.Name=name
+                self.append(block)
+                return block
+        def unsupported_lookup(handle):
+            raise AssertionError('2008圖塊成員不能經文件HandleToObject查回')
+        blocks=Blocks()
+        drawing=worker.Drawing.__new__(worker.Drawing)
+        drawing.app=SimpleNamespace(Library=SimpleNamespace(CreatePoint=lambda *p:p))
+        drawing.doc=SimpleNamespace(Blocks=blocks,HandleToObject=unsupported_lookup)
+        drawing.model=[]
+        drawing.legacy=True
+        drawing.expected=[]
+        drawing.report={}
+        drawing.linetype_names={'CENTER':'CENTER'}
+        operation=worker.prepare([dict(kind='block_definition',name='HOLE',base=[0,0],entities=[
+            dict(kind='circle',center=[0,0],radius=3,color=1,layer='孔位'),
+            dict(kind='line',start=[-8,0],end=[8,0],color=8,layer='中心線',line_style=dict(name='CENTER',scale=1))])])[0]
+        self.assertTrue(cad_geometry.draw_extra(drawing,operation))
+        self.assertEqual(blocks[0][0].Layer,'孔位')
+        self.assertEqual(blocks[0][1].Layer,'中心線')
+        self.assertEqual(blocks[0][1].Linetype,'CENTER')
+        self.assertEqual(blocks[0][1].LinetypeScale,1)
+        self.assertEqual(len(drawing.block_expected['HOLE']),2)
+
+    def test_copy_rotate_mirror_and_array_preserve_sources(self):
+        line=self.line('A',[0,0],[20,0])
+        copied=self.plan([line],'A','copy',dict(offset=[5,10]))[0]
+        self.assertEqual(copied['mode'],'copy')
+        self.assertEqual(copied['updated']['properties']['EndPoint'],[25.,10.,0.])
+        rotated=self.plan([line],'A','rotate',dict(base=[0,0],angle=90))[0]
+        self.assertAlmostEqual(rotated['updated']['properties']['EndPoint'][0],0.)
+        self.assertAlmostEqual(rotated['updated']['properties']['EndPoint'][1],20.)
+        mirrored=self.plan([line],'A','mirror',dict(axis_start=[0,0],axis_end=[0,10],copy=True))[0]
+        self.assertEqual(mirrored['updated']['properties']['EndPoint'],[-20.,0.,0.])
+        array=self.plan([line],'A','array',dict(rows=2,columns=3,row_spacing=10,column_spacing=30))
+        self.assertEqual(len(array),5)
+        self.assertEqual(line['properties']['EndPoint'],[20,0,0.])
+        with self.assertRaises(ValueError):self.plan([line],'A','array',dict(rows=100,columns=100,row_spacing=10,column_spacing=30))
+
+    def test_signed_offset_and_invalid_radius(self):
+        line=self.line('A',[0,0],[20,0])
+        left=self.plan([line],'A','offset',dict(distance=3))[0]['updated']['properties']
+        right=self.plan([line],'A','offset',dict(distance=-3))[0]['updated']['properties']
+        self.assertEqual(left['StartPoint'],[0.,3.,0.])
+        self.assertEqual(right['EndPoint'],[20.,-3.,0.])
+        circle=dict(handle='C',kind='circle',type='Circle',editable=True,allowed_edits=self.allowed,
+                    properties=dict(Layer='0',Color=1,Linetype='ByLayer',LinetypeScale=1.,Normal=[0.,0.,1.],Center=[0.,0.,0.],Radius=5.))
+        with self.assertRaises(ValueError):self.plan([circle],'C','offset',dict(distance=-6))
+
+    def test_trim_extend_and_fillet_have_explicit_sides(self):
+        target=self.line('A',[-10,0],[30,0]);boundary=self.line('B',[10,-10],[10,10])
+        trimmed=self.plan([target,boundary],'A','trim',dict(boundary='B',pick=[-10,0]))[0]
+        self.assertEqual(trimmed['updated']['properties']['StartPoint'],[10.,0.,0.])
+        short=self.line('S',[0,0],[5,0])
+        extended=self.plan([short,boundary],'S','extend',dict(boundary='B',pick=[5,0]))[0]
+        self.assertEqual(extended['updated']['properties']['EndPoint'],[10.,0.,0.])
+        a=self.line('A',[0,0],[40,0]);b=self.line('B',[0,0],[0,40])
+        plans=self.plan([a,b],'A','fillet',dict(other_handle='B',radius=10,pick=[40,0],other_pick=[0,40]))
+        self.assertEqual(len(plans),3)
+        self.assertAlmostEqual(plans[0]['updated']['properties']['StartPoint'][0],10.)
+        self.assertAlmostEqual(plans[2]['updated']['properties']['Center'][0],10.)
+        self.assertAlmostEqual(plans[2]['updated']['properties']['Center'][1],10.)
+        self.assertEqual(plans[2]['mode'],'arc')
+        with self.assertRaises(ValueError):self.plan([a,b],'A','fillet',dict(other_handle='B',radius=100,pick=[40,0],other_pick=[0,40]))
+        with self.assertRaises(ValueError):self.plan([target,boundary],'A','trim',dict(boundary='B',pick=[10,0]))
+
+    def test_locked_unsupported_and_secondary_targets_stop_before_writing(self):
+        line=self.line('A',[0,0],[20,0])
+        self.layers['0']['locked']=True
+        with self.assertRaises(ValueError):self.plan([line],'A','copy',dict(offset=[0,10]))
+        self.layers['0']['locked']=False
+        line['allowed_edits']=[]
+        with self.assertRaises(ValueError):self.plan([line],'A','rotate',dict(base=[0,0],angle=90))
+        line['allowed_edits']=self.allowed
+        with self.assertRaises(ValueError):self.plan([line],'A','trim',dict(boundary='missing',pick=[0,0]))
+        with self.assertRaises(ValueError):self.plan([line],'A','layer','missing')
+        with self.assertRaises(ValueError):self.plan([line],'A','copy',dict(offset=[1000000,0]))
+
+    def test_fixed_lisp_template_is_balanced_and_data_is_escaped(self):
+        line=self.line('A',[0,0],[20,0])
+        plans=self.plan([line],'A','copy',dict(offset=[0,10]))
+        doc=SimpleNamespace(GetVariable=lambda key: {'DWGNAME':'test.dwg','DWGPREFIX':'C:\\fixture\\','INSUNITS':4}[key])
+        source=self.engine.source(plans,Path('C:/fixture/result.txt'),'nonce',doc)
+        depth=0;quoted=False;escaped=False
+        for char in source:
+            if escaped:escaped=False;continue
+            if char=='\\' and quoted:escaped=True;continue
+            if char=='"':quoted=not quoted;continue
+            if not quoted:
+                depth+=(char=='(')-(char==')')
+                self.assertGreaterEqual(depth,0)
+        self.assertEqual(depth,0)
+        self.assertFalse(quoted)
+        self.assertNotIn('@@PLAN@@',source)
+        self.assertNotIn('vl-remove',source)
+
+
 if __name__ == "__main__":
     unittest.main()
