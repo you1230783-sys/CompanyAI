@@ -178,6 +178,26 @@ pub enum Tool {
         version: String,
         operations: Vec<serde_json::Value>,
     },
+    /// 分段只累積本任務的新圖計畫；commit前不連線或修改CAD。
+    CadPlanStart {
+        name: String,
+        version: String,
+    },
+    CadPlanPart {
+        plan_id: String,
+        plan_revision: u64,
+        part_id: String,
+        summary: String,
+        operations: Vec<serde_json::Value>,
+    },
+    CadPlanInspect {
+        plan_id: String,
+        part_id: Option<String>,
+    },
+    CadPlanCommit {
+        plan_id: String,
+        plan_revision: u64,
+    },
     RunBatch {
         tasks: Vec<files::batch::Task>,
     },
@@ -571,6 +591,10 @@ impl Tool {
             Self::CadRead { .. } => "讀取 DWG 工作副本",
             Self::CadEdit { .. } => "修改 DWG 新副本並核對",
             Self::CadDraw { .. } => "CAD 新建圖面、顏色及存檔核對",
+            Self::CadPlanStart { .. } => "建立 CAD 分段計畫",
+            Self::CadPlanPart { .. } => "保存 CAD 計畫區段（尚未繪圖）",
+            Self::CadPlanInspect { .. } => "查閱 CAD 已保存的計畫",
+            Self::CadPlanCommit { .. } => "合併 CAD 計畫並繪製同一張圖",
             Self::RunBatch { .. } => "並行處理獨立工作",
             Self::RecordLogEvents { .. } => "整理有原文依據的 LOG 事件",
             Self::RecordAnalysis { .. } => "保存分析狀態、證據與核對結果",

@@ -638,3 +638,14 @@ read_work_log目錄offset按筆數，每頁20筆固定快照；指定operation_i
 讀取數量及經過時間只在桌面非模態提示顯示，不加入 AI messages 或網站 API。
 完整索引成功後才提供原有 `cad_snapshot`／`cad_query` 結果；取消及失敗不提供部分快照。
 這項變更不需要網站新增路由，快速模型仍不接收圖片。實測與限制見 `VALIDATION_LUNA_CAD_INDEX.md`。
+
+## 待發行：新建CAD使用確切版本（2026-10-19）
+
+`cad_draw.version`只接受使用者指定或`cad_inventory`回傳的確切ProgID，不接受`latest`。未知時先查清單；桌面與原生worker在建圖前拒絕別名，不由網站改寫模型參數、不新增路由。實測驗收比對原生報告的實際版本，錯版產物標記`WRONG_CAD_VERSION`，不能算指定版本通過。此修正尚未發布，進度見專案驗證文件。
+## 0.8.70 CAD分段工具補充
+
+專案agent傳入的工具目錄新增cad_plan_start、cad_plan_part、cad_plan_inspect、cad_plan_commit；沿用既有turns傳輸與單一工具回覆格式，不新增網站路由。工具參數仍以該輪桌面提供的Schema為準，網站若有固定名稱白名單須同步接受這四個名稱，不能在網站重組或自動執行分段參數。
+
+桌面依狀態公告工具：短方案完成後可開始計畫，開始後每段1–20項；最後commit僅帶plan_id與plan_revision。完整幾何保存在桌面，後續請求帶區段目錄與最新版本；只有inspect指定區段才回傳該段。此狀態不是CAD圖面讀取快照、寫入授權或繪圖成功證據。
+
+本機真模型驗證不代表公司網站已部署、支援所有供應商工具子集或完成公司模型驗收。測試連線與原始模型資料不納入應用程式、Git或使用者教學。

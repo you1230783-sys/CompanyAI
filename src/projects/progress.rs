@@ -127,6 +127,10 @@ pub(super) struct Progress {
     python_failures: usize,
     #[serde(default)]
     other_failures: usize,
+    /// 最近一次工具失敗的有界事實；讀指南／改筆記不能將真正原因擠出上下文。
+    /// 同類工具後續成功才清除，不恢復任何寫入授權。
+    #[serde(default)]
+    last_tool_failure: Option<Value>,
 }
 impl Progress {
     pub fn new(base: Vec<Message>) -> Self {
@@ -161,6 +165,7 @@ impl Progress {
             no_progress_reason: String::new(),
             python_failures: 0,
             other_failures: 0,
+            last_tool_failure: None,
         }
     }
     pub fn calendar_context(&self) -> AppResult<String> {
@@ -322,12 +327,12 @@ impl Progress {
             .iter()
             .rev()
             .take(3)
-            .map(|op| json!({"id":op["id"],"tool":op["tool"],"ok":op["result"]["ok"]}))
+            .map(|op| json!({"id":op["id"],"tool":op["tool"],"ok":op["result"]["ok"],"outcome":super::files::work_log_outcome(&op["result"])}))
             .collect();
         json!({"working_note":self.note.as_ref().map(|n| &n.text),
             "superseded":self.superseded,"next_step":self.next_step,
             "review_required":self.instruction_review_required,"copies":copies,
-            "recent_operations":operations,"readings":readings,
+            "recent_operations":operations,"last_tool_failure":self.last_tool_failure,"readings":readings,
             "outlook_paging":self.coverage.mail_index(),
             "cad_paging":self.coverage.cad_index(),
             "tool_failures":{"python":self.python_failures,"other":self.other_failures},"total_repairs":self.total_repairs,
@@ -401,6 +406,18 @@ impl Progress {
             result["ok"] == false,
         );
         *self.tool_usage.entry(tool.label().into()).or_default() += 1;
+        if result["ok"] == false || result["result"]["status"] == "FAILED" {
+            self.last_tool_failure = Some(json!({"id":id,"tool":tool.label(),
+                "outcome":super::files::work_log_outcome(result),
+                "notice":"此為最近工具失敗原文摘要；模型筆記不能改寫原因，必要時依id查回完整紀錄。"}));
+        } else if result["ok"] == true
+            && self
+                .last_tool_failure
+                .as_ref()
+                .is_some_and(|last| last["tool"] == tool.label())
+        {
+            self.last_tool_failure = None;
+        }
         let mut metadata = result.clone();
         if let Some(object) = metadata.get_mut("result").and_then(Value::as_object_mut) {
             object.remove("text");
@@ -668,6 +685,50 @@ impl Progress {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn exact_tool_failure_survives_compaction_and_unrelated_success() {
+        let mut state = Progress::new(vec![]);
+        let draw = Tool::CadDraw {
+            name: "rack.dwg".into(),
+            version: "Icad.Application.1".into(),
+            operations: vec![],
+        };
+        state.observe(
+            "bad-plan",
+            &draw,
+            &json!({"ok":false,"error":"收到101項operations，上限100"}),
+        );
+        for index in 0..30 {
+            state.observe(
+                &format!("guide{index}"),
+                &Tool::LoadSkill {
+                    id: "cad-new".into(),
+                },
+                &json!({"ok":true,"result":{"text":"method"}}),
+            );
+        }
+        state.compact_now();
+        let mut saved: Progress =
+            serde_json::from_value(serde_json::to_value(&state).unwrap()).unwrap();
+        let snapshot = saved.model_snapshot(Value::Null);
+        assert_eq!(snapshot["last_tool_failure"]["id"], "bad-plan");
+        assert_eq!(
+            snapshot["last_tool_failure"]["outcome"]["error"],
+            "收到101項operations，上限100"
+        );
+        saved.observe(
+            "good-plan",
+            &draw,
+            &json!({"ok":true,"result":{"status":"DATA_VERIFIED_VISUAL_PENDING"}}),
+        );
+        assert!(saved.model_snapshot(Value::Null)["last_tool_failure"].is_null());
+        let mut old = serde_json::to_value(&saved).unwrap();
+        old.as_object_mut().unwrap().remove("last_tool_failure");
+        assert!(serde_json::from_value::<Progress>(old)
+            .unwrap()
+            .last_tool_failure
+            .is_none());
+    }
     #[test]
     fn repeated_batch_counts_one_decision_and_failed_children_do_not_consume_stall_budget() {
         let mut state = Progress::new(vec![]);

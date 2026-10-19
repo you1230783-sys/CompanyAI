@@ -20,10 +20,31 @@ impl Broker {
         operations: &[Value],
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
+        if self.cad_design.plan.is_some() {
+            return Err(
+                "已有本機分段計畫；請以cad_plan_commit合併，不要重送cad_draw。尚未建立新圖面。"
+                    .into(),
+            );
+        }
+        self.draw_cad_with_limit(name, version, operations, 100, cancel)
+    }
+
+    /// 上限由固定的呼叫入口決定，模型不能自行提高。分段計畫仍一次原生執行。
+    pub(super) fn draw_cad_with_limit(
+        &mut self,
+        name: &str,
+        version: &str,
+        operations: &[Value],
+        limit: usize,
+        cancel: &AtomicBool,
+    ) -> AppResult<Value> {
         if self.cad_failed {
             return Err(
                 "本任務先前 CAD 結果未確認，已停止後續繪圖；請人工檢查後另開新任務。".into(),
             );
+        }
+        if self.cad_design.pending() {
+            return Err("尚未保存新圖配置方案；先compact_context保存已知條件、假設與配置，再提交完整cad_draw。尚未建立圖面。".into());
         }
         if self.cad_artifacts.len() >= 10 {
             return Err("每個任務最多建立十份 CAD 圖面。".into());
@@ -54,12 +75,19 @@ impl Broker {
         if rel.components().count() != 1 || !name.to_ascii_lowercase().ends_with(".dwg") {
             return Err("CAD 名稱需為單一 .dwg 檔名。".into());
         }
-        if version.is_empty()
-            || version.len() > 100
-            || operations.is_empty()
-            || operations.len() > 100
-        {
-            return Err("CAD 版本或操作數量不合法。".into());
+        if version.is_empty() || version.len() > 100 {
+            return Err("新圖需使用已確認的 CAD ProgID，長度為1至100字元。".into());
+        }
+        // 新圖不能讓latest重新選到另一套CAD；不替模型猜測或改寫使用者的版本。
+        // 使用者未指定時，可先inventory取得確切ProgID，再自行選擇並提交。
+        if version.eq_ignore_ascii_case("latest") {
+            return Err("cad_draw需使用使用者指定或cad_inventory回傳的確切ProgID，不接受latest；尚未建立圖面。請依原要求重送正確版本，未指定版本時先查inventory。".into());
+        }
+        if operations.is_empty() || operations.len() > limit {
+            return Err(format!(
+                "CAD 收到{}項operations，本入口必須為1至{limit}項；尚未建立圖面。請重新規劃，勿刪減使用者要求後宣稱完成。",
+                operations.len()
+            ));
         }
         let _root = pin(&self.project.root)?;
         let base = self.project.root.join("_AI_Output");
@@ -75,10 +103,13 @@ impl Broker {
         let _folder = pin_stage(&folder)?;
         let path = format!("_AI_Output/{folder_name}/{name}");
         self.cad_failed = true; // 出現錯誤或未知結果時，不允許模型換 operation_id 立即重播。
+        self.cad_last_result = Some(json!({"status":"UNKNOWN","saved":false,
+            "report_path":format!("_AI_Output/{folder_name}/cad-report.json"),
+            "notice":"尚未收到原生結果；程序中斷時不能憑檔案不存在判斷可重送。"}));
         self.cad_attempts += 1;
         let mut result = crate::cad::execute_interactive(
             json!({"action":"draw", "version":version,
-            "operations":operations,"output":folder.join(name)}),
+            "operations":operations,"staged_plan":limit>100,"output":folder.join(name)}),
             cancel,
             self.cad_waiter.as_mut(),
             self.cad_progress.as_mut(),
@@ -87,6 +118,13 @@ impl Broker {
             self.cad_attempts -= 1;
         }
         result["intended_path"] = json!(path);
+        self.cad_last_result = Some(json!({"status":result["status"],"step":result["step"],
+            "error":result["error"].as_str().map(|s|s.chars().take(4096).collect::<String>()),
+            "recovery":result["recovery"],"drawing_started":result["drawing_started"],
+            "completed_operations":result["completed_operations"],"saved":result["saved"],
+            "file_exists":result["file_exists"],"intended_path":path,
+            "report_path":format!("_AI_Output/{folder_name}/cad-report.json"),
+            "verification_difference":result["verification_difference"]}));
         if result["status"] == "DATA_VERIFIED_VISUAL_PENDING" {
             result["path"] = json!(path);
         }
@@ -152,6 +190,30 @@ impl Broker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn new_drawing_rejects_latest_before_creating_output_or_calling_cad() {
+        let root = std::env::temp_dir().join(format!(
+            "lmai-cad-version-{}",
+            crate::jobs::new_id().unwrap()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let project = Project {
+            id: "version".into(),
+            name: "CAD".into(),
+            root: root.clone(),
+            imports: Default::default(),
+        };
+        let mut broker = Broker::new(project, "task".into()).unwrap();
+        let operations = [json!({"kind":"line","start":[0,0],"end":[1,0],"color":7})];
+        let error = broker
+            .draw_cad("test.dwg", "LaTeSt", &operations, &AtomicBool::new(false))
+            .unwrap_err();
+        assert!(error.contains("確切ProgID"));
+        assert_eq!(broker.cad_attempts, 0);
+        assert!(!broker.cad_failed);
+        assert!(!root.join("_AI_Output").exists());
+    }
 
     #[test]
     fn cad_recovery_requires_explicit_evidence() {

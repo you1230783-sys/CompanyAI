@@ -12,10 +12,261 @@ import worker
 import cad_existing
 import cad_active
 import cad_bulk
+import cad_undo
 from unittest.mock import patch
 
 
 class BasicTests(unittest.TestCase):
+    def test_staged_plan_has_separate_bounded_native_limit(self):
+        op = dict(kind='line', color=7, start=[0, 0], end=[10, 0])
+        with self.assertRaises(ValueError):
+            worker.prepare([op] * 101)
+        self.assertEqual(len(worker.prepare([op] * 400, 400)), 400)
+        with self.assertRaises(ValueError):
+            worker.prepare([op] * 401, 400)
+        with self.assertRaises(ValueError):
+            worker.prepare([op], 10000)
+
+    def test_new_drawing_guidance_preserves_unsaved_failure_and_geometry_limits(self):
+        text = (Path(__file__).resolve().parents[1] / 'src/projects/skills/cad-new.md').read_text(encoding='utf-8')
+        self.assertIn('保留未存檔圖面供核對', text)
+        self.assertIn('不推論圖面超出CAD能力', text)
+        self.assertIn('實際幾何、簡化占位及未完成需求', text)
+        self.assertIn('finish.artifacts填[]', text)
+        self.assertIn('含支撐、背板與墊片的整體外廓', text)
+        self.assertLess(len(text.encode('utf-8')), 5000)
+
+    def test_bulk_document_name_accepts_only_exact_ansi_representation(self):
+        self.assertTrue(cad_bulk.exported_name_matches('陽台.dwg', '陽台.dwg', 'cp950'))
+        self.assertTrue(cad_bulk.exported_name_matches(r'\U+9633台_\U+89C6\U+56FE.dwg', '阳台_视图.dwg', 'cp950'))
+        self.assertFalse(cad_bulk.exported_name_matches(r'\U+9634台.dwg', '阳台.dwg', 'cp950'))
+        self.assertFalse(cad_bulk.exported_name_matches('陽台.dwg', '阳台.dwg', 'cp950'))
+        self.assertFalse(cad_bulk.exported_name_matches(r'\U+1F600.dwg', '😀.dwg', 'cp950'))
+        # UTF-8可直接表達簡體字，不額外接受未經證實的ANSI跳脫表示法。
+        self.assertFalse(cad_bulk.exported_name_matches(r'\U+9633台.dwg', '阳台.dwg', 'utf-8'))
+
+    def test_bulk_document_path_checks_prefix_and_escaped_name_separately(self):
+        self.assertTrue(cad_bulk.exported_path_matches(r'\U+9633台.dwg', 'C:\\CAD\\', 'C:\\CAD\\阳台.dwg', 'cp950'))
+        self.assertTrue(cad_bulk.exported_path_matches('test.DWG', 'c:\\cad\\', 'C:\\CAD\\test.dwg', 'cp950'))
+        self.assertTrue(cad_bulk.exported_path_matches('test.dwg', 'C:\\CAD\\\\U+9633台\\', 'C:\\CAD\\阳台\\test.dwg', 'cp950'))
+        self.assertFalse(cad_bulk.exported_path_matches(r'\U+9633台.dwg', 'D:\\CAD\\', 'C:\\CAD\\阳台.dwg', 'cp950'))
+        self.assertFalse(cad_bulk.exported_path_matches('other.dwg', 'C:\\CAD\\', 'C:\\CAD\\阳台.dwg', 'cp950'))
+        self.assertFalse(cad_bulk.exported_path_matches('test.dwg', 'CAD', 'C:\\CAD\\test.dwg', 'cp950'))
+
+    def test_new_drawing_requires_exact_version_before_connecting(self):
+        report = {}
+        operations = [dict(kind="line", start=[0, 0], end=[1, 0], color=7)]
+        with patch.object(worker.registry, 'discover', return_value=([], [])), \
+             patch.object(worker, 'connect_application') as connect:
+            with self.assertRaisesRegex(ValueError, '確切ProgID'):
+                worker.execute(dict(action='draw', version='LaTeSt', operations=operations), report)
+            connect.assert_not_called()
+        self.assertFalse(report['drawing_started'])
+        self.assertEqual(report['completed_operations'], 0)
+        self.assertNotIn('selected', report)
+
+    def test_leader_schema_explains_point_order_and_horizontal_segment(self):
+        # 新建／副本／目前圖面新增／分段計畫的四份Schema都要自足。
+        catalog = json.loads((Path(__file__).resolve().parents[1] / "src/projects/tools.json").read_text(encoding="utf-8"))
+
+        def objects(value):
+            if isinstance(value, dict):
+                yield value
+                for child in value.values():
+                    yield from objects(child)
+            elif isinstance(value, list):
+                for child in value:
+                    yield from objects(child)
+
+        leaders = [obj for obj in objects(catalog)
+                   if obj.get("properties", {}).get("kind", {}).get("enum") == ["leader"]]
+        self.assertEqual(len(leaders), 4)
+        for leader in leaders:
+            description = leader["properties"]["points"]["description"]
+            self.assertIn("箭頭端", description)
+            self.assertIn("第二與第三點的y座標必須相同", description)
+
+    def test_legacy_text_encoding_rejects_loss_before_creating_document(self):
+        good = [dict(kind='text',text='現場確認；不鏽鋼 600 mm')]
+        worker.preflight_text_encoding(good, True, 950)
+        bad = [dict(kind='text',text='现场确认')]
+        with self.assertRaisesRegex(ValueError, '第1操作.*CP950.*尚未建立圖面'):
+            worker.preflight_text_encoding(bad, True, 950)
+        self.assertEqual(bad[0]['text'], '现场确认')
+        worker.preflight_text_encoding(bad, False, 950)
+        for kind in ('mtext','leader'):
+            with self.assertRaises(ValueError):
+                worker.preflight_text_encoding([dict(kind=kind,text='现场')], True, 950)
+
+    def test_legacy_text_encoding_reports_all_bad_texts_and_distinct_characters(self):
+        operations = [dict(kind='text', text='楼层 发'),
+                      dict(kind='text', text='樓層'),
+                      dict(kind='mtext', text='现场')]
+        original = json.dumps(operations, ensure_ascii=False)
+        with self.assertRaises(ValueError) as raised:
+            worker.preflight_text_encoding(operations, True, 950)
+        error = str(raised.exception)
+        for value in ('第1操作', '第3操作', 'U+697C', 'U+53D1', 'U+73B0', '尚未建立圖面'):
+            self.assertIn(value, error)
+        self.assertNotIn('第2操作', error)
+        self.assertEqual(json.dumps(operations, ensure_ascii=False), original)
+
+    def test_legacy_text_encoding_bounds_issue_report_and_marks_omitted_operations(self):
+        operations = [dict(kind='text', text='楼') for _ in range(100)]
+        with self.assertRaises(ValueError) as raised:
+            worker.preflight_text_encoding(operations, True, 950)
+        error = str(raised.exception)
+        self.assertIn('第20操作', error)
+        self.assertNotIn('第21操作', error)
+        self.assertIn('另有80項文字不支援', error)
+        self.assertLess(len(error), 4096)
+
+    def test_legacy_zoom_rejects_bad_view_and_uses_native_xy_window(self):
+        drawing=worker.Drawing.__new__(worker.Drawing)
+        variables=dict(VIEWSIZE=2.04e20,VIEWDIR=[0,0,1],UCSXDIR=[1,0,0],UCSYDIR=[0,1,0],
+                       EXTMIN=[0,0,0],EXTMAX=[600,550,0])
+        calls=[]
+        def zoom(low,high):
+            calls.append((low,high))
+            variables['VIEWSIZE']=610
+        drawing.doc=SimpleNamespace(GetVariable=lambda key:variables[key],
+                                    ActiveViewport=SimpleNamespace(ZoomWindow=zoom))
+        drawing.point=lambda point:point
+        entry={}
+        drawing.verify_legacy_zoom('ZOOM EXTENTS',entry)
+        self.assertEqual(calls,[([-30.,-30.,0.],[630.,580.,0.])])
+        self.assertTrue(entry['view_verified'])
+        variables.update(VIEWSIZE=2.04e20,VIEWDIR=[1,0,0])
+        with self.assertRaisesRegex(ValueError,'不是世界XY'):
+            drawing.verify_legacy_zoom('ZOOM EXTENTS',{})
+        self.assertEqual(len(calls),1)
+
+    def test_legacy_zoom_uses_all_native_entity_bounds_when_system_extents_unset(self):
+        drawing = worker.Drawing.__new__(worker.Drawing)
+        variables = dict(VIEWSIZE=2.04e20, VIEWDIR=[0,0,1], UCSXDIR=[1,0,0], UCSYDIR=[0,1,0],
+                         EXTMIN=[1e20]*3, EXTMAX=[-1e20]*3, TILEMODE=1, DBMOD=21)
+        drawing.model = SimpleNamespace(Count=2)
+        drawing.doc = SimpleNamespace(GetVariable=lambda name:variables[name], _oleobj_=object(), Regen=lambda:None)
+        drawing.app = SimpleNamespace(ActiveDocument=drawing.doc)
+        drawing.point = lambda point:point
+        calls = []
+        def zoom(low, high):
+            calls.append((low, high))
+            variables['VIEWSIZE'] = high[1] - low[1]
+        drawing.doc.ActiveViewport = SimpleNamespace(ZoomWindow=zoom)
+        entities = [SimpleNamespace(Handle='A', GetBoundingBox=lambda:([-800,-800,0],[8000,12000,0])),
+                    SimpleNamespace(Handle='B', GetBoundingBox=lambda:([10000,0,0],[18000,12900,0]))]
+        with patch.object(worker, 'iter_entities', return_value=iter(entities)):
+            entry = {}
+            drawing.verify_legacy_zoom('ZOOM EXTENTS', entry)
+        self.assertEqual(calls, [([-1740,-1740,0],[18940,13840,0])])
+        self.assertEqual(entry['native_bounds_fallback']['entities'], 2)
+        self.assertTrue(entry['view_verified'])
+
+    def test_legacy_native_bounds_reject_missing_invalid_or_changed_entities(self):
+        drawing = worker.Drawing.__new__(worker.Drawing)
+        variables = dict(TILEMODE=1, DBMOD=1)
+        drawing.model = SimpleNamespace(Count=2)
+        drawing.doc = SimpleNamespace(GetVariable=lambda name:variables[name], _oleobj_=object(), Regen=lambda:None)
+        drawing.app = SimpleNamespace(ActiveDocument=drawing.doc)
+        good = SimpleNamespace(Handle='A', GetBoundingBox=lambda:([0,0,0],[10,20,0]))
+        bad = SimpleNamespace(Handle='B', GetBoundingBox=lambda:([1e20]*3,[-1e20]*3))
+        with patch.object(worker, 'iter_entities', return_value=iter([good, bad])):
+            with self.assertRaisesRegex(ValueError, '原生範圍異常'):
+                drawing.native_model_bounds()
+        with patch.object(worker, 'iter_entities', return_value=iter([good])):
+            with self.assertRaisesRegex(ValueError, '已變更'):
+                drawing.native_model_bounds()
+        with patch.object(worker, 'iter_entities', return_value=iter([good, good])):
+            with self.assertRaisesRegex(ValueError, 'Handle重複'):
+                drawing.native_model_bounds()
+        def changed():
+            variables['DBMOD'] = 2
+            return [0,0,0], [10,20,0]
+        second = SimpleNamespace(Handle='B', GetBoundingBox=changed)
+        with patch.object(worker, 'iter_entities', return_value=iter([good, second])):
+            with self.assertRaisesRegex(ValueError, '已變更'):
+                drawing.native_model_bounds()
+        variables['TILEMODE'] = 0
+        with self.assertRaisesRegex(ValueError, '不在模型空間'):
+            drawing.native_model_bounds()
+
+    def test_legacy_bounds_refresh_cache_and_reject_persistent_zero_bounds(self):
+        drawing = worker.Drawing.__new__(worker.Drawing)
+        state = dict(refreshed=False)
+        def refresh():
+            state['refreshed'] = True
+        drawing.model = SimpleNamespace(Count=1)
+        drawing.doc = SimpleNamespace(GetVariable=lambda name:1, _oleobj_=object(), Regen=refresh)
+        drawing.app = SimpleNamespace(ActiveDocument=drawing.doc)
+        entity = SimpleNamespace(Handle='A', GetBoundingBox=lambda:
+                                 ([0,0,0], [10000,8000,0]) if state['refreshed'] else ([0,0,0], [0,0,0]))
+        with patch.object(worker, 'iter_entities', return_value=iter([entity])):
+            self.assertEqual(drawing.native_model_bounds(), ([0,0,0], [10000,8000,0], 1))
+        self.assertTrue(state['refreshed'])
+        entity.GetBoundingBox = lambda:([0,0,0], [0,0,0])
+        with patch.object(worker, 'iter_entities', return_value=iter([entity])):
+            with self.assertRaisesRegex(ValueError, '沒有有效XY範圍'):
+                drawing.native_model_bounds()
+
+    def test_legacy_native_edit_plan_rejects_unsupported_before_undo(self):
+        rows = {'A': dict(kind='circle', properties=dict(Radius=30., Color=4))}
+        self.assertEqual(cad_undo.prepare([dict(handle='A',kind='radius',value=40)],rows),
+                         [dict(handle='A',code=40,old=30.,value=40)])
+        with self.assertRaises(AttributeError):
+            cad_undo.prepare([dict(handle='A',kind='move',value=[1,0,0])],rows)
+        with self.assertRaises(ValueError):
+            cad_undo.prepare([dict(handle='A\") (command)',kind='radius',value=40)],rows)
+
+    def test_legacy_native_template_preserves_system_variables_and_escapes_names(self):
+        plan = [dict(handle='A',code=40,old=30.,value=40)]
+        text = cad_undo.source(plan, '@@UNITS@@.dwg', 'C:\\test\\', 4, Path('C:/test/result.txt'), 'a'*32)
+        self.assertIn('(getvar "DWGNAME") "@@UNITS@@.dwg"', text)
+        self.assertIn('(getvar "INSUNITS") 4', text)
+        self.assertNotIn('(command', text)
+        depth, quoted, escaped = 0, False, False
+        for char in text:
+            if quoted:
+                if escaped:
+                    escaped = False
+                elif char == '\\':
+                    escaped = True
+                elif char == '"':
+                    quoted = False
+            elif char == '"':
+                quoted = True
+            elif char == '(':
+                depth += 1
+            elif char == ')':
+                depth -= 1
+                self.assertGreaterEqual(depth, 0, '原生模板括號提早結束')
+        self.assertFalse(quoted)
+        self.assertEqual(depth, 0)
+        self.assertEqual(cad_undo.lisp_string('a"b\\c'), '"a\\"b\\\\c"')
+        with self.assertRaises(ValueError):
+            cad_undo.lisp_string('bad\nname')
+        with self.assertRaises(ValueError):
+            cad_undo.source([dict(handle='A',code=40,old=30.,value=float('nan'))],
+                            'Drawing1','',4,Path('C:/test/result.txt'),'b'*32)
+
+    def test_legacy_save_path_encoding_is_checked_before_drawing(self):
+        operations = [dict(kind="text", text="陽台花架")]
+        worker.preflight_text_encoding(operations, True, 950, r"C:\工作\陽台花架.dwg")
+        for path in (r"C:\工作\阳台花架.dwg", r"C:\阳台專案\花架.dwg"):
+            with self.assertRaisesRegex(ValueError, "存檔路徑.*CP950.*尚未建立圖面"):
+                worker.preflight_text_encoding(operations, True, 950, path)
+        # 2022保留Unicode，不因2008相容限制擅改檔名。
+        worker.preflight_text_encoding(operations, False, 950, r"C:\阳台專案\花架.dwg")
+
+    def test_bulk_ansi_lead_ranges_use_real_windows_codepage_and_fail_closed(self):
+        self.assertEqual(cad_bulk.ansi_lead_bytes(950), [129, 254])
+        self.assertEqual(cad_bulk.ansi_lead_bytes(932), [129, 159, 224, 252])
+        self.assertEqual(cad_bulk.ansi_lead_bytes(1252), [])
+        self.assertEqual(cad_bulk.ansi_lead_bytes(65001), [])
+        with patch('cad_bulk.ctypes.windll.kernel32.GetCPInfo', return_value=0):
+            with self.assertRaisesRegex(ValueError, '無法確認'):
+                cad_bulk.ansi_lead_bytes(950)
+
     def test_bulk_geometry_preserves_native_values_and_defers_com(self):
         row = cad_bulk.convert([[0,"CIRCLE"],[5,"A"],[8,"holes"],[62,1],[10,[30.,25.,0.]],[40,6.]], [], True)
         self.assertEqual(row["properties"]["Radius"], 6.)
@@ -31,6 +282,20 @@ class BasicTests(unittest.TestCase):
         self.assertEqual(entities["A"], "A")
         self.assertEqual(entities["A"], "A")
         self.assertEqual(calls, ["A"])
+
+    def test_bulk_unicode_text_uses_native_com_instead_of_comparing_dxf_escapes(self):
+        for legacy in (False, True):
+            for kind in ("TEXT", "MTEXT", "ATTRIB"):
+                data = [[0, kind], [5, "A"], [10, [0., 0., 0.]], [40, 3.],
+                        [1, r"正\U+89C6\U+56FE"]]
+                self.assertIsNone(cad_bulk.convert(data, [], legacy))
+                data[-1] = [1, r"正視圖\P尺寸 300 mm"]
+                row = cad_bulk.convert(data, [], legacy)
+                self.assertEqual(row["properties"]["TextString"], r"正視圖\P尺寸 300 mm")
+            # MTEXT群組分段可能剛好切在跳脫碼中間，必須合併後再判斷。
+            chunks = [[0, "MTEXT"], [5, "B"], [10, [0., 0., 0.]], [40, 3.],
+                      [3, "正\\U"], [1, "+89C6"]]
+            self.assertIsNone(cad_bulk.convert(chunks, [], legacy))
 
     def test_bulk_reads_polyline_children_and_block_attributes(self):
         poly=cad_bulk.convert([[0,"POLYLINE"],[5,"A"],[10,[0.,0.,5.]],[70,1]],
@@ -59,6 +324,28 @@ class BasicTests(unittest.TestCase):
             path.write_text("\n".join(json.dumps(v) for v in data[:-1]), encoding="ascii")
             with self.assertRaisesRegex(ValueError,"完整結尾"):
                 cad_bulk.read_export(path,"nonce","ascii")
+
+    def test_bulk_undecodable_entity_bytes_defer_to_com_without_losing_revision(self):
+        # 真實2022匯出的m²末字為單一B2；保留位元組供版本核對，不能猜成其他字。
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "export.jsonl"
+            header = ["HEADER", 2, "nonce", "a.dwg", "Y:/", 4, 0, "ANSI_950"]
+            record = ["ENTITY", [[0, "TEXT"], [5, "A"], [1, "area mPLACEHOLDER"]], None]
+            lines = [header, record, ["COMPLETE", "nonce", 1, 0]]
+            raw = "\n".join(json.dumps(line) for line in lines).encode("ascii").replace(b"PLACEHOLDER", b"\xb2")
+            path.write_bytes(raw)
+            _, rows = cad_bulk.read_export(path, "nonce", "cp950")
+            data, children = rows["A"]
+            self.assertTrue(cad_bulk.has_undecodable_bytes(data))
+            self.assertIsNone(cad_bulk.convert(data, children, False))
+            self.assertEqual(dict(data)[1], "area m\udcb2")
+            self.assertNotEqual(cad_bulk.digest(data), cad_bulk.digest([[0, "TEXT"], [5, "A"], [1, "area m\udcb3"]]))
+            # 子圖元也不能把不明字碼當成正常圖塊屬性。
+            self.assertIsNone(cad_bulk.convert([[0, "INSERT"], [5, "B"]], [data], False))
+            # 文件身分不能套用圖元備援；仍須明確停止。
+            path.write_bytes(raw.replace(b"a.dwg", b"a\xb2.dwg"))
+            with self.assertRaisesRegex(ValueError, "標頭或結尾字碼"):
+                cad_bulk.read_export(path, "nonce", "cp950")
 
     def test_known_geometry_skips_unrelated_com_properties(self):
         fields = []
@@ -123,7 +410,7 @@ class BasicTests(unittest.TestCase):
         drawing.legacy, drawing.report = True, {}
         entity = SimpleNamespace(Handle="A", EntityName="DimAligned", Color=7)
         drawing.doc = SimpleNamespace(ModelSpace=[entity], PaperSpace=[],
-            GetVariable=lambda key:0, Activate=lambda:None,
+            GetVariable=lambda key:1000 if key=='VIEWSIZE' else 0, Activate=lambda:None,
             ActiveViewport=SimpleNamespace(ZoomExtents=lambda:setattr(entity, "TextString", "220.0000")))
         drawing.run_command("ZOOM EXTENTS")
         self.assertEqual(drawing.report["commands"][0]["dimension_text_first_readable"][0]["TextString"], "220.0000")
@@ -234,7 +521,7 @@ class BasicTests(unittest.TestCase):
         del doc.StartUndoMark
         del doc.EndUndoMark
         doc.PaperSpace = []
-        doc.GetVariable = lambda key: 0
+        doc.GetVariable = lambda key: 1000 if key == 'VIEWSIZE' else 0
         doc.Activate = lambda: calls.append("activate")
         doc.ActiveViewport = SimpleNamespace(ZoomExtents=lambda:calls.append("zoom"))
         _, rows = cad_existing.snapshot(doc,worker)
@@ -270,7 +557,7 @@ class BasicTests(unittest.TestCase):
         self.assertEqual(entity.Linetype,"DASHED")
         self.assertEqual(entity.LinetypeScale,2.0)
         self.assertFalse(result["saved"])
-        self.assertEqual(calls,["begin","end","regen"])
+        self.assertEqual(calls,["begin","regen","end"])
 
     def test_process_identity_reads_current_windows_process(self):
         record = cad_active.process_record(os.getpid())
@@ -340,7 +627,7 @@ class BasicTests(unittest.TestCase):
         blocks = [SimpleNamespace(Name="unused")]
         drawing.app = SimpleNamespace(ZoomExtents=lambda:calls.append("zoom"),ZoomAll=lambda:calls.append("all"))
         drawing.doc = SimpleNamespace(ModelSpace=[entity],PaperSpace=[],Blocks=blocks,Layers=[],
-            Linetypes=[],TextStyles=[],DimensionStyles=[],GetVariable=lambda key:0,
+            Linetypes=[],TextStyles=[],DimensionStyles=[],GetVariable=lambda key:1000 if key=='VIEWSIZE' else 0,
             ActiveViewport=SimpleNamespace(ZoomExtents=lambda:calls.append("viewport_zoom"),ZoomAll=lambda:calls.append("viewport_all")),
             Activate=lambda:calls.append("activate"),Regen=lambda:calls.append("regen"),
             PurgeAll=lambda:blocks.clear(),AuditInfo=lambda fix:calls.append(("audit",fix)))
@@ -381,7 +668,8 @@ class BasicTests(unittest.TestCase):
              patch.object(worker.dynamic,"Dispatch",return_value=app), \
              patch.object(worker,"identify_product",return_value="yoda_icad_2008"), \
              self.assertRaises(worker.CommandCapabilityError) as caught:
-            worker.execute(dict(action="draw",version="latest",operations=[dict(kind="command",command="ZOOM E")]),report)
+                worker.execute(dict(action="draw",version="Icad.Application.1",output=str(Path.cwd()/".build/should-not-create.dwg"),
+                                    operations=[dict(kind="command",command="ZOOM E")]),report)
         self.assertFalse(report["drawing_started"])
         self.assertEqual(report["step"],"validate_commands")
         self.assertEqual(report["unsupported_commands"],["ZOOM EXTENTS"])
@@ -643,7 +931,7 @@ class BasicTests(unittest.TestCase):
         self.assertEqual(result["status"],"EDITED_UNSAVED")
         self.assertFalse(result["saved"])
         self.assertEqual(entity.Radius,10)
-        self.assertEqual(calls,["begin","end","regen"])
+        self.assertEqual(calls,["begin","regen","end"])
 
     def test_arc_radius_recomputes_readonly_endpoints(self):
         app,doc,_,calls=self.active_fixture()

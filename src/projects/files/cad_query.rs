@@ -1,4 +1,4 @@
-//! 快照、候選查詢及局部預覽的 Broker 邊界；原始圖元不放入模型工具結果。
+//! 快照、候選查詢及局部預覽的 Broker 邊界；完整圖面留在本機，按需交付詳細資料。
 use super::*;
 use crate::projects::{
     cad_index::{Filter, Snapshot},
@@ -30,14 +30,40 @@ impl Broker {
         Ok(())
     }
     pub(in crate::projects) fn cad_snapshot_index(&self) -> Value {
-        let missing = if self.loaded_skills.iter().any(|id| id.starts_with("cad-")) {
+        let session = self.cad_session.context();
+        if self.cad_snapshot.is_none()
+            && session["binding"].is_null()
+            && session["last_edit"].is_null()
+            && self.loaded_skills.iter().any(|id| id == "cad-new")
+        {
+            return json!({"available":false,"mode":"new_drawing",
+                "notice":"本任務為新建設計，不需要目前圖面快照。依cad_artifacts.last_execution及原要求繼續；已停止時finish回報，不為缺少快照改讀舊圖。"});
+        }
+        let missing = if self.loaded_skills.iter().any(|id| id.starts_with("cad-"))
+            || !session["binding"].is_null()
+            || !session["last_edit"].is_null()
+        {
             json!({"available":false,"notice":"本次執行沒有有效CAD快照；先cad_snapshot取得總覽，再按需查詢。舊工具紀錄是歷史資料，不能恢復目前圖面的修改授權。"})
         } else {
             Value::Null
         };
-        self.cad_snapshot.as_ref().map_or(missing, |s| json!({
+        let mut context = self.cad_snapshot.as_ref().map_or(missing, |s| json!({
             "snapshot_id":s.id,"revision":s.data["revision"],"document":s.data["document"],"source":s.data["source"],
-            "entity_count":s.rows.len(),"notice":"完整快照仍在本機；以cad_query取得指定候選詳細資料，不因上下文整理重讀CAD。作用中快照不等同即時狀態，修改前重新核對。"}))
+            "units_code":s.data["units_code"],"edit_capabilities":s.data["edit_capabilities"],"entity_count":s.rows.len(),"recent_details":s.recent_details(),
+            "notice":"recent_details是同一快照中實際已讀的精確資料，可直接沿用編輯；不因上下文整理重查相同候選。未取得所需資料才cad_query。修改前原生端仍核對全圖。"}));
+        if !context.is_null() {
+            context["cad_session"] = session;
+            if self.cad_session.stopped() {
+                context["notice"] = json!(
+                    "本次操作已停止，依cad_session.last_edit回報。缺少快照不代表需要重讀或換CAD。"
+                );
+            } else if self.cad_snapshot.is_none()
+                && context["cad_session"]["last_edit"]["status"] == "EDITED_UNSAVED"
+            {
+                context["notice"] = json!("修改已由原生端完整核對；舊快照撤銷是正常結果，可直接finish，不必為恢復快照重讀CAD。若使用者需要額外量測才刷新同一文件。");
+            }
+        }
+        context
     }
 
     /// 去重結果可以保留歷史，但失效快照不能再冒充可使用的候選。
@@ -102,6 +128,17 @@ impl Broker {
         refresh: bool,
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
+        // 固定的是首次成功讀取的實際版本；即使舊快照已作廢也不退回 latest。
+        let bound_version;
+        let version = if path.is_none() {
+            bound_version = self.cad_session.version(version)?;
+            bound_version.as_str()
+        } else {
+            if self.cad_session.stopped() {
+                return Err("目前圖面操作已停止，不能改走副本流程；請回報原生失敗。".into());
+            }
+            version
+        };
         if !refresh {
             if let Some(s) = self.cad_snapshot.as_ref() {
                 if s.data["source"].as_str() == path
@@ -168,6 +205,12 @@ impl Broker {
         let snapshot = Snapshot::new(data)?;
         // 只有完整索引通過檢查後才建立可用的文件狀態。
         if snapshot.data["source"].is_null() {
+            self.cad_session.bind(
+                snapshot.data["selected"]["progid"]
+                    .as_str()
+                    .ok_or("缺少實際CAD版本。")?,
+                &snapshot.data["document"],
+            )?;
             self.cad_active = Some(
                 json!({"document":snapshot.data["document"],"revision":snapshot.data["revision"],
                 "version":snapshot.data["selected"]["progid"],"units_code":snapshot.data["units_code"],"handles":[]}),
@@ -189,10 +232,11 @@ impl Broker {
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
         self.guard_cad_snapshot(id, cancel)?;
-        let snapshot = self.cad_snapshot.as_ref().ok_or("缺少快照。")?;
+        let snapshot = self.cad_snapshot.as_mut().ok_or("缺少快照。")?;
         let result = snapshot.query(filter, offset, limit, details)?;
         // 只有實際交付詳細資料才授予已讀 Handle；索引、候選或縮圖不等於已核對。
         if details {
+            snapshot.remember_details(&result);
             let rows: Vec<_> = result["candidates"]
                 .as_array()
                 .into_iter()

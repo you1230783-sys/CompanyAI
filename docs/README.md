@@ -1,6 +1,6 @@
 # 技術文件索引
 
-目前 EXE／NSIS：[0.8.69 驗證紀錄](VALIDATION_0_8_69.md)，CAD 程序內批次讀取與修改核對。歷史驗證文件保留其當時版本的限制。
+目前 EXE／NSIS：[0.8.70 驗證紀錄](VALIDATION_0_8_70.md)，CAD 同圖分段累積與相容修正。歷史驗證文件保留其當時版本的限制。
 
 前置設計：[參考線文字排版與預設配色](PENDING_CHART_LAYOUT.md)，已併入0.8.48；該文件保留當時只修改來源的驗證界線。
 
@@ -9,6 +9,9 @@
 一般操作請先閱讀使用指南。以下為開發、串接及問題追蹤文件；以版本命名的文件記錄當時契約，後續版本可能覆蓋部分規則，不應直接視為目前操作方式。
 
 ## 目前版本
+
+- [0.8.70 分段計畫與真 Strata 雙版驗證](VALIDATION_0_8_70.md) · [雙版 DWG ZIP](../examples/cad/cad-segmented-0.8.70.zip)。
+- [本機模型驗證流程與分級](LOCAL_MODEL_VALIDATION.md) · [多類使用者 CAD 圖型矩陣](VALIDATION_CAD_USER_SCENARIOS.md)。
 
 - [0.8.69 CAD 批次讀取、Luna 與實機驗證](VALIDATION_0_8_69.md)。
 - [CAD 本機快照、候選查詢與局部預覽](CAD_SNAPSHOT_QUERY.md)。

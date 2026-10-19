@@ -1,6 +1,7 @@
 //! 可選偏好不阻塞 worker。答案與補充指示在同一把鎖及同一份加密檔內提交，
 //! 避免 UI 顯示已回答卻未進入下一輪。登入、Outlook 同意及必要資訊不走此入口。
 use super::*;
+use serde_json::{json, Value};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Question {
@@ -12,6 +13,32 @@ pub struct Question {
     pub state: String,
 }
 impl Inbox {
+    /// 每輪固定提供最近偏好，避免工具歷史整理後再次詢問同題。
+    /// 只讀狀態，不替使用者回答，也不將預設變成授權或已量測的條件。
+    pub fn model_context(&self) -> AppResult<Value> {
+        let questions = self.questions()?;
+        let recent: Vec<_> = questions
+            .iter()
+            .rev()
+            .take(8)
+            .rev()
+            .map(|q| {
+                json!({
+                    "question_id":q.id,"question":q.question.chars().take(180).collect::<String>(),
+                    "question_truncated":q.question.chars().count()>180,
+                    "state":q.state,"default":q.default,
+                    "answer":q.answer.as_ref().map(|a| a.chars().take(240).collect::<String>()),
+                    "answer_truncated":q.answer.as_ref().is_some_and(|a| a.chars().count()>240),
+                })
+            })
+            .collect();
+        Ok(
+            json!({"total":questions.len(),"omitted":questions.len().saturating_sub(recent.len()),
+            "pending":questions.iter().filter(|q| q.state=="pending").count(),"recent":recent,
+            "rule":"不要重問已列出的可選問題。未回答時依已公告預設處理可先做的工作，不因此停住；預設不是使用者回答，不能當成實測條件或寫入授權。節錄不取代原始工具紀錄與使用者指示。"}),
+        )
+    }
+
     pub fn questions(&self) -> AppResult<Vec<Question>> {
         Ok(self
             .state
@@ -105,6 +132,48 @@ impl Inbox {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn preference_context_keeps_state_after_reload_and_bounds_text() {
+        let root =
+            std::env::temp_dir().join(format!("lmai-pref-context-{}", jobs::new_id().unwrap()));
+        let inbox = Inbox::open(&root, "run").unwrap();
+        assert_eq!(inbox.model_context().unwrap()["total"], 0);
+        inbox
+            .ask(
+                "q",
+                "視圖如何安排",
+                &["正側視圖".into(), "正視圖".into()],
+                "正側視圖",
+            )
+            .unwrap();
+        let pending = inbox.model_context().unwrap();
+        assert_eq!(pending["recent"][0]["state"], "pending");
+        assert_eq!(pending["recent"][0]["default"], "正側視圖");
+        assert!(pending["recent"][0]["answer"].is_null());
+        inbox.answer("q", "其他你安排，門縫沒量仍待確認").unwrap();
+        let restored = Inbox::open(&root, "run").unwrap();
+        let answered = restored.model_context().unwrap();
+        assert_eq!(answered["pending"], 0);
+        assert_eq!(
+            answered["recent"][0]["answer"],
+            "其他你安排，門縫沒量仍待確認"
+        );
+        for index in 0..10 {
+            let id = format!("q{index}");
+            let question = format!("{index}{}", "問".repeat(900));
+            restored
+                .ask(&id, &question, &["甲".into(), "乙".into()], "甲")
+                .unwrap();
+            restored.answer(&id, &"答".repeat(900)).unwrap();
+        }
+        let bounded = restored.model_context().unwrap();
+        assert_eq!(bounded["recent"].as_array().unwrap().len(), 8);
+        assert_eq!(bounded["omitted"], 3);
+        assert_eq!(bounded["recent"][0]["question_truncated"], true);
+        assert_eq!(bounded["recent"][0]["answer_truncated"], true);
+        assert!(bounded.to_string().len() < 20000);
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn pending_preferences_finish_with_defaults_and_late_answers_do_not_change_results() {
         let root =

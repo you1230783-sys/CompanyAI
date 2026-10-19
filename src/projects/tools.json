@@ -1272,7 +1272,7 @@
       "type": "function",
       "function": {
         "name": "load_skill",
-        "description": "切換工作階段；下一輪只載入此技能與必要工具，旧成果保留。",
+        "description": "啟用內建能力並切換階段，下一輪提供相關工具。CAD畫圖／設計新物件且未指向既有圖時用cad-new，不先讀目前圖面；明確要求目前圖面閱讀／修改才用cad-active，指定磁碟DWG副本用cad-copy。只指定CAD版本不代表修改舊圖。不需另問是否啟用，目前沒有CAD工具不代表桌面不支援。舊成果保留，實際修改仍需桌面確認。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -4612,7 +4612,7 @@
       "type": "function",
       "function": {
         "name": "cad_draw",
-        "description": "測試版：浩辰 GstarCAD／佑達 iCAD 新建2D DWG並存檔重開核對，不修改現有文件。color為ACI；公式為分段直線近似，外觀待人工確認。",
+        "description": "測試版：浩辰GstarCAD／佑達iCAD新建2D DWG並存檔重開核對。每次呼叫都建立獨立新圖，不會追加到上次圖面；本次要交付的幾何、必要尺寸與註記須一起規劃，不要先畫幾何再另次只送尺寸。不修改現有文件。color為ACI；公式為分段直線近似，外觀待人工確認。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -4621,7 +4621,7 @@
             },
             "version": {
               "type": "string",
-              "description": "latest 或 cad_inventory 回傳的確切 progid"
+              "description": "使用者指定或 cad_inventory 回傳的確切 ProgID，例如 Icad.Application.1；新圖不接受 latest，以免誤連另一版本。未指定版本時先查 inventory。"
             },
             "operations": {
               "type": "array",
@@ -4685,7 +4685,7 @@
                           "scale"
                         ],
                         "additionalProperties": false,
-                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
                       }
                     },
                     "required": [
@@ -4749,7 +4749,7 @@
                           "scale"
                         ],
                         "additionalProperties": false,
-                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
                       }
                     },
                     "required": [
@@ -4859,6 +4859,7 @@
                       },
                       "points": {
                         "type": "array",
+                        "description": "引線三點依序為箭頭端、轉折點、水平段末端；第二與第三點的y座標必須相同，文字自動放在水平段上方。",
                         "items": {
                           "type": "array",
                           "items": {
@@ -5113,7 +5114,7 @@
                           "scale"
                         ],
                         "additionalProperties": false,
-                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
                       }
                     },
                     "required": [
@@ -5497,7 +5498,7 @@
                           "scale"
                         ],
                         "additionalProperties": false,
-                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
                       }
                     },
                     "required": [
@@ -5561,7 +5562,7 @@
                           "scale"
                         ],
                         "additionalProperties": false,
-                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
                       }
                     },
                     "required": [
@@ -5671,6 +5672,7 @@
                       },
                       "points": {
                         "type": "array",
+                        "description": "引線三點依序為箭頭端、轉折點、水平段末端；第二與第三點的y座標必須相同，文字自動放在水平段上方。",
                         "items": {
                           "type": "array",
                           "items": {
@@ -5925,7 +5927,7 @@
                           "scale"
                         ],
                         "additionalProperties": false,
-                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
                       }
                     },
                     "required": [
@@ -6290,7 +6292,7 @@
                           "scale"
                         ],
                         "additionalProperties": false,
-                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
                       }
                     },
                     "required": [
@@ -6354,7 +6356,7 @@
                           "scale"
                         ],
                         "additionalProperties": false,
-                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
                       }
                     },
                     "required": [
@@ -6464,6 +6466,7 @@
                       },
                       "points": {
                         "type": "array",
+                        "description": "引線三點依序為箭頭端、轉折點、水平段末端；第二與第三點的y座標必須相同，文字自動放在水平段上方。",
                         "items": {
                           "type": "array",
                           "items": {
@@ -6718,7 +6721,7 @@
                           "scale"
                         ],
                         "additionalProperties": false,
-                        "description": "可選原生線型與圖元比例；省略則沿用 CAD 預設，不改全圖 LTSCALE。"
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
                       }
                     },
                     "required": [
@@ -7179,6 +7182,671 @@
             "region",
             "progress_note",
             "show_user"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "cad_plan_start",
+        "description": "建立同一張新DWG的本機分段計畫，不連線CAD。沿用短方案，接著每輪cad_plan_part提交1–20項，勿一次想完全部座標。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string",
+              "description": "已確認的確切CAD ProgID，不接受latest。"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "簡短記本段完成及下一段，勿抄寫全部operations。"
+            }
+          },
+          "required": [
+            "name",
+            "version"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "cad_plan_part",
+        "description": "只產生並保存下一小段1–20項。程式累積同一張圖，不需重送舊段；尚未繪圖。相同part_id以最新plan_revision整段替換。最多40段、整圖400項及500KB。指令在commit時統一放到幾何之後。 最近新增或查回的4段精確資料在recent_details，直接沿用，不反覆inspect。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "plan_id": {
+              "type": "string"
+            },
+            "plan_revision": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "沿用常駐計畫目錄的plan_revision；每次新增或替換後使用新值。"
+            },
+            "part_id": {
+              "type": "string",
+              "description": "穩定英數識別碼，例如floor1_walls_a；同ID替換，不同ID追加。"
+            },
+            "summary": {
+              "type": "string",
+              "maxLength": 160,
+              "description": "本段構件、視圖、座標範圍／接點。下一輪據此接續，不抄全部參數。"
+            },
+            "operations": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "line"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "start": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "end": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "start",
+                      "end"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "circle"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "center": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "radius": {
+                        "type": "number"
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "center",
+                      "radius"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "text"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "position": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "position",
+                      "text",
+                      "height"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "mtext"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "position": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "height": {
+                        "type": "number"
+                      },
+                      "width": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "position",
+                      "text",
+                      "height",
+                      "width"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "leader"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "points": {
+                        "type": "array",
+                        "description": "引線三點依序為箭頭端、轉折點、水平段末端；第二與第三點的y座標必須相同，文字自動放在水平段上方。",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "points",
+                      "text",
+                      "height"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "aligned_dimension"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "start": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "end": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "location": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "start",
+                      "end",
+                      "location"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "diameter_dimension"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "start": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "end": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "leader_length": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "start",
+                      "end",
+                      "leader_length"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "hatch"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "boundary": {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "minItems": 3,
+                        "maxItems": 100
+                      },
+                      "holes": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "center": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 2,
+                              "maxItems": 2
+                            },
+                            "radius": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "center",
+                            "radius"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 20
+                      },
+                      "seed": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "scale": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "boundary",
+                      "holes",
+                      "seed",
+                      "scale"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "curve"
+                        ]
+                      },
+                      "color": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255,
+                        "description": "ACI 色碼，1紅2黃3綠4青5藍6洋紅7黑白8深灰9淺灰"
+                      },
+                      "x": {
+                        "type": "string"
+                      },
+                      "y": {
+                        "type": "string"
+                      },
+                      "t_start": {
+                        "type": "number"
+                      },
+                      "t_end": {
+                        "type": "number"
+                      },
+                      "segments": {
+                        "type": "integer",
+                        "minimum": 2,
+                        "maximum": 1000
+                      },
+                      "line_style": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "CONTINUOUS",
+                              "DASHED",
+                              "HIDDEN",
+                              "CENTER",
+                              "DASHDOT",
+                              "DOT",
+                              "BYLAYER",
+                              "BYBLOCK"
+                            ]
+                          },
+                          "scale": {
+                            "type": "number",
+                            "minimum": 1e-06,
+                            "maximum": 1000000
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "scale"
+                        ],
+                        "additionalProperties": false,
+                        "description": "可選原生線型與圖元比例；若當輪Schema列required，未指定請填null，程式沿用CAD預設，不改全圖LTSCALE。"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "color",
+                      "x",
+                      "y",
+                      "t_start",
+                      "t_end",
+                      "segments"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "command"
+                        ]
+                      },
+                      "command": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "description": "只允許 ZOOM E/A、REGEN、PURGE、AUDIT N。放在幾何操作後；PURGE 清理所有未使用定義，AUDIT N 不修復。禁止任意指令、LISP、存檔及載入程式。"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "command"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "minItems": 1,
+              "maxItems": 20,
+              "description": "本輪只送一個區段的1–20項；不要展開下一段或整張圖。參數保存成功後再續接下一段。"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "簡短記本段完成及下一段，勿抄寫全部operations。"
+            }
+          },
+          "required": [
+            "plan_id",
+            "plan_revision",
+            "part_id",
+            "summary",
+            "operations"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "cad_plan_inspect",
+        "description": "只查常駐recent_details未提供的舊區段；已提供的精確參數直接沿用，不反覆查牆線與家具。part_id=null只取目錄，指定ID取該段並加入最近4段工作集，合計最多32KB。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "plan_id": {
+              "type": "string"
+            },
+            "part_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "簡短記本段完成及下一段，勿抄寫全部operations。"
+            }
+          },
+          "required": [
+            "plan_id",
+            "part_id"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "cad_plan_commit",
+        "description": "全部必要幾何、尺寸及註記的區段齊備後才提交。只送plan_id和plan_revision，由程式合併並一次建立同一張新DWG、存檔重開。不是逐段操作現有CAD，不要再送全部operations。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "plan_id": {
+              "type": "string"
+            },
+            "plan_revision": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "沿用常駐計畫目錄的plan_revision；每次新增或替換後使用新值。"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "簡短記本段完成及下一段，勿抄寫全部operations。"
+            }
+          },
+          "required": [
+            "plan_id",
+            "plan_revision"
           ],
           "additionalProperties": false
         }

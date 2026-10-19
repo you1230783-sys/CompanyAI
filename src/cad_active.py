@@ -140,6 +140,7 @@ def execute_active(app, legacy, request, report, api):
     guard()
     if request["action"] == "active_snapshot":
         return {"status": "READ_ACTIVE", "document": current, "revision": stamp,
+                "edit_capabilities": edit_capabilities(app, doc, legacy),
                 "units_code": doc.GetVariable("INSUNITS"), "entity_count": len(rows),
                 "reported_count": int(doc.ModelSpace.Count), "entities": rows,
                 "saved": False, "scope": "ModelSpace; currently readable properties only"}
@@ -168,3 +169,16 @@ def execute_active(app, legacy, request, report, api):
                            entities, rows, guard=guard)
     result["document"] = current
     return result
+
+
+def edit_capabilities(app, doc, legacy):
+    """只查詢介面，不執行 Undo；真正寫入仍由編輯引擎完整前置檢查。"""
+    if not legacy and callable(optional(doc, 'SendCommand')):
+        return dict(method='native_command_group_with_com_edits', scope='原有已讀圖元修改及新增；群組涵蓋完整核對')
+    if callable(optional(doc, 'StartUndoMark')) and callable(optional(doc, 'EndUndoMark')):
+        return dict(method='com_start_end_marks', scope='原有已讀圖元修改及新增；仍需確認與原生核對')
+    if legacy and callable(optional(app, 'RunCommand')) and callable(optional(app, 'LoadLISP')):
+        return dict(method='icad_runcommand_native', edits={'radius':['circle'],
+            'color':['line','circle','arc','text','mtext']}, additions=False,
+            notice='舊版原生Undo備援僅支援圓半徑及ACI顏色；不支援TrueColor顏色覆寫、其他修改或混合操作')
+    return dict(method='unavailable', notice='缺少已驗證的Undo方法，不可修改目前圖面')

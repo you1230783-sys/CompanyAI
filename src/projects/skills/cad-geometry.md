@@ -12,7 +12,7 @@
 ## 線型
 
 
-- 新增 line／circle／curve 可選 line_style={"name":"DASHED","scale":1}；省略則保留 CAD 預設。既有已讀線／圓／弧使用 edits 的 kind="linetype"、value={"name":"CENTER","scale":1}，仍需 handle、revision 與可讀線型屬性。
+- 新增 line／circle／curve 可選 line_style={"name":"DASHED","scale":1}；未指定時依當輪Schema處理：若列required且允許null，請填null，程式還原為原工具的省略預設。既有已讀線／圓／弧使用 edits 的 kind="linetype"、value={"name":"CENTER","scale":1}，仍需 handle、revision 與可讀線型屬性。
 - 名稱：CONTINUOUS 實線、DASHED 虛線、HIDDEN 隱藏線、CENTER 中心線、DASHDOT 點畫線、DOT 點線、BYLAYER、BYBLOCK；scale 必須介於 0.000001–1000000。
 - 不調整全圖 LTSCALE，不修改尺寸／引線／圖塊內部線型。曲線為取樣線段，線型會逐段重新起算；外觀需目視確認，不保證短線段看得到虛線。
 - 先沿用已有定義；缺少時只查 CAD 安裝目錄的標準 LIN 檔。找不到則請使用者先在 CAD 載入，不能聲稱已套用或自動改實線。取得失敗後依 recovery 處理。

@@ -9,6 +9,39 @@ fn catalog() -> AppResult<Value> {
     serde_json::from_str(include_str!("../tools.json")).map_err(|e| e.to_string())
 }
 
+/// 暫存區段沿用同一份內建幾何白名單，不讓Broker直呼繞過工具參數結構。
+pub(super) fn validate_cad_operations(operations: &[Value]) -> AppResult<()> {
+    let source = catalog()?;
+    let draw = source["tools"]
+        .as_array()
+        .and_then(|t| t.iter().find(|t| t["function"]["name"] == "cad_draw"))
+        .ok_or("缺少CAD幾何規格。")?;
+    let mut schema = json!({"type":"object","properties":{"operations":draw["function"]["parameters"]["properties"]["operations"]},"required":["operations"],"additionalProperties":false});
+    // Broker收到的是optional null已還原的內部資料，不能用會將所有欄位列為required
+    // 的傳輸normalize再驗一次。只將明確kind區分的oneOf改為matcher認得的anyOf。
+    fn variants(value: &mut Value) {
+        match value {
+            Value::Object(map) => {
+                if let Some(branches) = map.remove("oneOf") {
+                    map.insert("anyOf".into(), branches);
+                }
+                for child in map.values_mut() {
+                    variants(child);
+                }
+            }
+            Value::Array(items) => {
+                for child in items {
+                    variants(child);
+                }
+            }
+            _ => (),
+        }
+    }
+    variants(&mut schema);
+    decode_arguments(&json!({"operations":operations}).to_string(), &schema)?;
+    Ok(())
+}
+
 pub(super) fn definitions(strict: bool) -> AppResult<Vec<Value>> {
     let source = catalog()?;
     source["tools"]
@@ -255,7 +288,7 @@ fn diagnose(value: &Value, schema: &Value, path: &str, errors: &mut Vec<String>)
     }
     if let Some(choices) = schema["anyOf"].as_array() {
         if !choices.iter().any(|s| matches(value, s)) {
-            // nullable 包裝中，非 null 值只需檢查原分支；多個可用分支則不猜。
+            // nullable 包裝中，非 null 值只需檢查原分支。
             let candidates: Vec<_> = choices
                 .iter()
                 .filter(|s| {
@@ -263,7 +296,28 @@ fn diagnose(value: &Value, schema: &Value, path: &str, errors: &mut Vec<String>)
                         .is_none_or(|t| matches(value, &json!({"type": t})))
                 })
                 .collect();
-            if candidates.len() == 1 {
+            // 操作聯集已有kind/action常數時，可依模型明示的標籤定位欄位錯誤。
+            // 所有分支都須有單一常數，且只能命中一支；其餘情況保留一般診斷。
+            // 這裡只改善拒絕後的訊息，matches的接受條件完全不變。
+            let tagged = ["kind", "action"].into_iter().find_map(|tag| {
+                let selected = value.get(tag)?;
+                if !candidates.iter().all(|choice| {
+                    choice["properties"][tag]["enum"]
+                        .as_array()
+                        .is_some_and(|values| values.len() == 1)
+                }) {
+                    return None;
+                }
+                let mut matching = candidates
+                    .iter()
+                    .copied()
+                    .filter(|choice| choice["properties"][tag]["enum"].get(0) == Some(selected));
+                let first = matching.next()?;
+                matching.next().is_none().then_some(first)
+            });
+            if let Some(rule) = tagged {
+                diagnose(value, rule, path, errors);
+            } else if candidates.len() == 1 {
                 diagnose(value, candidates[0], path, errors);
             } else {
                 errors.push(format!("{path}: 不符合允許的型別或任一參數格式"));
@@ -512,6 +566,64 @@ mod tests {
     }
 
     #[test]
+    fn cad_operation_diagnostics_follow_kind_for_missing_and_extra_fields() {
+        let source = catalog().unwrap();
+        let operation = source["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["function"]["name"] == "cad_draw")
+            .unwrap()["function"]["parameters"]["properties"]["operations"]["items"]
+            .clone();
+        let schema = normalize(&json!({"type":"object", "required":["operations"],
+            "properties":{"operations":{"type":"array", "items":operation}}}))
+        .unwrap();
+        let mut args = json!({"operations":[{"kind":"leader", "color":1,
+            "points":[[100,390],[150,470],[230,470]], "text":"private annotation"}]});
+        let error = decode_arguments(&args.to_string(), &schema).unwrap_err();
+        assert!(
+            error.contains("$.operations[0].height: 缺少必填欄位"),
+            "{error}"
+        );
+        assert!(!error.contains("private annotation"));
+        assert!(!matches(&args, &schema));
+        args["operations"][0]["height"] = json!(3);
+        assert!(decode_arguments(&args.to_string(), &schema).is_ok());
+        args["operations"][0] = json!({"kind":"command", "command":"ZOOM E", "color":7});
+        let error = decode_arguments(&args.to_string(), &schema).unwrap_err();
+        assert!(error.contains("$.operations[0].color: 未提供的欄位"));
+        // ZOOM E原本就是合法別名，不能為改善診斷而改動接受條件。
+        args["operations"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("color");
+        assert!(decode_arguments(&args.to_string(), &schema).is_ok());
+        args["operations"][0] = json!({"kind":"circle", "color":4, "center":[0,0],
+            "radius":5, "line_style":{"name":"unsupported", "scale":1}});
+        let error = decode_arguments(&args.to_string(), &schema).unwrap_err();
+        assert!(error.contains("$.operations[0].line_style.name: 值應為"));
+    }
+
+    #[test]
+    fn union_diagnostics_do_not_choose_ambiguous_or_unknown_tags() {
+        let schema = normalize(&json!({"type":"object", "required":["operation"],
+        "properties":{"operation":{"oneOf":[
+            {"type":"object", "required":["kind","value"], "properties":{
+                "kind":{"const":"item"},"value":{"type":"string"}}},
+            {"type":"object", "required":["kind","value"], "properties":{
+                "kind":{"const":"item"},"value":{"type":"number"}}}
+        ]}}}))
+        .unwrap();
+        for tag in ["item", "unknown"] {
+            let args = json!({"operation":{"kind":tag,"value":false}});
+            let error = decode_arguments(&args.to_string(), &schema).unwrap_err();
+            assert!(error.contains("$.operation: 不符合允許"));
+            assert!(!error.contains("$.operation.value"));
+            assert!(!matches(&args, &schema));
+        }
+    }
+
+    #[test]
     fn mixed_types_preserve_values_and_existing_constraints() {
         // Office 表格允許空白；圖表橫軸不允許 null，兩者不可互相放寬。
         for nullable in [false, true] {
@@ -538,6 +650,32 @@ mod tests {
         assert!(matches(&json!(2), &constrained));
         assert!(!matches(&json!("B"), &constrained));
         assert!(!matches(&json!(3), &constrained));
+    }
+
+    #[test]
+    fn cad_optional_line_style_uses_null_on_wire_and_is_omitted_for_original_tool() {
+        // 傳輸Schema採所有欄位必填；原工具的可選線型以null表示，不能教模型省略。
+        for strict in [false, true] {
+            let tools = definitions(strict).unwrap();
+            let draw = tools
+                .iter()
+                .find(|tool| tool["function"]["name"] == "cad_draw")
+                .unwrap();
+            let schema = &draw["function"]["parameters"];
+            let args = json!({"name":"nullable-check.dwg","version":"Icad.Application.1",
+                "progress_note":"建立新圖測試可選線型，不讀取或修改其他文件。",
+                "operations":[{"kind":"line","color":7,"start":[0,0],"end":[10,0],"line_style":null}]});
+            assert!(decode_arguments(&args.to_string(), schema).is_ok());
+            let restored = restore_optional("cad_draw", args.clone()).unwrap();
+            assert!(restored["operations"][0].get("line_style").is_none());
+            assert_eq!(restored["operations"][0]["end"], json!([10, 0]));
+            let mut missing = args;
+            missing["operations"][0]
+                .as_object_mut()
+                .unwrap()
+                .remove("line_style");
+            assert!(decode_arguments(&missing.to_string(), schema).is_err());
+        }
     }
 
     #[test]

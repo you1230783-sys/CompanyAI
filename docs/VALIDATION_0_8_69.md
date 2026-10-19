@@ -82,6 +82,101 @@ GUI 工具起初無法切換前景（`foreground window did not report a process
 - `node tools/test_onboarding.cjs`、`node scripts/Test-Settings.cjs` 通過；保留教學、本版更新日誌與窄視窗操作。
 - 本輪未選用真實 Office／SMB／VNC 選項，歷史報告不冒充本版驗收。公司服務、建築圖及完整外觀仍需實測。
 
+## 公司回報後補測：目前圖面 revision 與 Undo（2026-10-17）
+
+使用者在公司 iCAD 2008 的未儲存 Drawing1（250 圖元）要求中心圓 Ø60→Ø80：第一次被「文件身分或內容已變更」拒絕；重新建立快照後，在 StartUndoMark 前置檢查停止。兩個錯誤須分開處理，不能由這句合併錯誤推定使用者手動改過圖。
+
+本輪使用已發行的鎖定 runtime，不修改產品來源、不建置、不進版、不更新安裝包。僅在新建文件／私有副本重現同一份法蘭需求；合成資料包含原生尺寸、引線、剖面、文字、線型與曲線。公司實際 DWG 與兩次完整原始快照尚未取得，因此不能把本機合成案例當成公司誤報已修復。
+
+| 案例 | iCAD 2008 | CAD 2022 |
+| --- | --- | --- |
+| 已存檔 645 圖元法蘭：連續三次快照、ZoomExtents 後第四次快照 | 文件身分、全部圖元列與 revision 相同 | 相同 |
+| 新建未儲存 250 圖元法蘭：同樣四次核對 | 相同，未重現版本拒絕 | 相同，未重現版本拒絕 |
+| 以全新正式 worker 分別讀取同一副本，共三次 | revision 與文件身分相同 | 相同 |
+| 目前圖面中心圓 Ø60→Ø80，不儲存 | StartUndoMark 缺少，寫入前停止，半徑仍30 | EDITED_UNSAVED，半徑40；645與250圖元案例均通過 |
+| 正式 COM Undo 群組：同一輪改半徑與顏色，結束群組、重繪，再原生 Undo 一次 | 缺少介面，未放行 | 兩個屬性同時還原，通過 |
+
+上表的縮放只是在測試私有副本時主動加入的診斷步驟，不改寫使用者原本「繪圖時不加入 ZOOM」的需求。沒有自動化實際滑鼠移動測試；原始碼的 revision 未納入滑鼠位置或視野倍率。所有本輪測試文件已不儲存關閉，來源 DWG 與私有副本的磁碟雜湊一致；沒有關閉其他使用者文件。
+
+原生 Undo 備援也做了獨立實驗，不能僅以指令送出成功視為可用：2008 以固定 LISP 載入 UNDO Begin 後，未觀察到跨呼叫的活動群組旗標，因而在寫圖前停止；2022 同樣以分次載入 Begin／End 搭配 COM 寫入，再由載入腳本呼叫一次 Undo，實際沒有還原兩個屬性。此備援未通過、未接入產品。2022 正式 COM 群組則另以實際還原驗證通過，不能將前述備援失敗混為正式群組也失敗。
+
+測試助手亦曾發生兩次準備錯誤：第一次傳入錯誤的 2022 Handle，在取物件時停止；第二次把 UNDOCTL 的命令群組旗標誤當成 COM StartUndoMark 的必要條件，在寫圖前停止。修正助手後以半徑、顏色實際還原為準通過，錯誤紀錄保留，不算產品失敗或通過證據。
+
+本機證據（皆不隨 Git／安裝包交付）：
+
+- 2008 已存檔／未儲存：`.build/revision-diagnosis-238fc6ac7077475c8b5a103923175b39/result.json`、`.build/revision-diagnosis-53cebbf0c8cb493cb929cd23f13ea82c/result.json`。
+- 2022 已存檔／未儲存：`.build/revision-diagnosis-9ea098b74b0241289b8703c157b708b3/result.json`、`.build/revision-diagnosis-b6026bc24056430fa36ce54bbbd09e24/result.json`。
+- 不同程序：`.build/revision-process-4a39f1637eea450485f597cb87eec263/result.json`（2008）、`.build/revision-process-218dd0042b2a496f84517298cac9f582/result.json`（2022）。
+- 原生指令備援失敗：`.build/native-undo-diagnosis-5fc363e415544c9b846c8a0c08751757/result.json`（2008）、`.build/native-undo-diagnosis-5fc71c661f514675bc5f283042b316ce/result.json`（2022）。
+- 2022 正式 COM 群組實際還原通過：`.build/native-undo-diagnosis-7569466836a04452bfaa70ba0408608d/result.json`。
+
+待處理：版本拒絕目前只顯示合併訊息與整體雜湊，未列身分／單位／圖層鎖／圖元屬性的差異；需先增加可核對的差異診斷，再判斷是否為尺寸計算屬性首次可讀、浮點差異或真正改圖，不應直接放寬內容核對。2008 的作用中圖元修改仍需另外實作並驗證可復原的相容方案；0.8.64 的例外僅限純縮放，先前副本修改成功不代表已支援此路徑。公司紀錄另顯示 INSUNITS=1（英吋），與要求毫米不符；本機新建250圖元使用正式 Drawing 初始化為4（毫米），尚不能解釋公司圖面的單位來源。最後的工具原始結果校驗／記憶未保存是另一條流程，本輪未重現或修復。
+
+## Strata 128K 真實模型／GUI 補測（2026-10-18）
+
+使用者要求先確認調整為128K的本機Strata，連線成功後送先前CAD驗證。這輪測的是**已存在的645圖元合成法蘭板：讀取目前圖面、定位中心圓、Ø60改Ø80且不儲存**；沒有讓Strata重新產生完整法蘭板或第三項控制盒底板。未修改產品來源、編譯、進版、更新安裝包或推送。
+
+- MCP stdio實際呼叫strata_status／strata_chat成功；health回報`qwen3.8-flash-next-iq3_s`、loaded=true、max_context=131072。單次短問答約1.1秒；以獨立請求詢問先前隨機代碼回答不知道，這只是行為抽測，不證明服務所有內部狀態。
+- 既有正式0.8.69 GUI → 127.0.0.1:8771測試轉接 → 127.0.0.1:8085 Strata原生Chat Completions。reasoning_effort=none、每輪最多8192輸出tokens。完整轉送CompanyAI提供的messages／tools，不裁切或補入先前會話，不替模型產生工具參數；每輪輸入與原生回覆保留本機。金鑰由使用者既有接口助手讀入記憶體，不複製到CompanyAI設定或紀錄。
+- 2008與2022使用不同專案與對話。兩個正式流程的首次請求均為空白專案上下文；模型端收到的只有各輪明確快照。快速模式沒有圖片輸入或analyze_image工具。Strata回報的cached_tokens是同前綴計算重用，不能單憑這個數字推定附帶了未提供的聊天歷史。
+- GUI沿用原生修改確認。確認畫面明列本輪私有DWG路徑，測試操作才按「修改此圖面，不儲存」；沒有同意修改使用者其他文件。
+
+| 實測 | iCAD 2008 | CAD 2022 |
+| --- | --- | --- |
+| 工具流程 | 載入技能、inventory、一次snapshot、一次圓查詢、編輯指南、active_edit、finish | 載入技能、snapshot、圓查詢、兩次指南、active_edit、修改後snapshot／圓查詢、finish |
+| 中心圓提交 | Handle162，radius40 | Handle26C，radius40 |
+| 原生結果 | prepare_undo_group：StartUndoMark缺少；drawing_started=false、completed_operations=0 | EDITED_UNSAVED、saved=false，僅modified_handles=[26C] |
+| 獨立核對 | 半徑30、645圖元列全部相同 | 半徑40、645圖元中只有26C不同；圓心、顏色與其他屬性未變 |
+| 模型輪數／模型總耗時 | 8輪／156.207秒 | 9輪／189.945秒 |
+| 生成速度（服務原生timings加權） | 27.75 tokens/s | 28.70 tokens/s |
+| 最後finish回覆 | 1512 tokens／59.770秒 | 1175 tokens／43.587秒 |
+
+兩個來源DWG與私有副本的磁碟SHA256均保持不變，2022修改只在作用中文件、未存檔。2008與2022的修改前完整核對都沒有發生舊revision拒絕；沒有cad_active_read或0/100全圖分頁循環。2022的第二次snapshot在修改完成後用於讀回，不是回到舊圖反覆讀取。
+
+這不是零錯誤自主流程：2008有一輪只回文字沒有工具，runner要求修正後續行；2022先讀cad-copy指南再讀cad-edits，多一輪非必要閱讀。一般決策多為7–22秒，進度筆記常數百tokens；模型總耗時不含CAD操作、輪詢與人工確認。最大實際prompt分別為14027／13974tokens，不能據此宣稱已驗證128K填滿時的速度或正確性。此處沒有量化版本A/B，不能保證換模型會達70tokens/s。
+
+測試準備問題保留：第一個預設專案位於WebView資料目錄內，pin父目錄遇sharing violation，在推論前停止；另建分離的空白專案後繼續。第一輪轉接原樣回傳Strata的實際model名稱，與桌面fast/quality路由契約不符；只修正測試轉接封套、保留原始模型回覆後重試。該失敗輪不計入正式速度。資料夾選擇UI的操作工具曾失去可用索引，重設後改以已目視確認焦點的鍵盤輸入恢復；這段人工操作不計入模型生成速度。
+
+本機證據根目錄`.build/strata-cad-52b90292a28c4086be28dae907776dea/`：`summary.json`、`turn-*.request.json`、`turn-*.strata-request.json`、`turn-*.response.json`、`2008/independent-verification.json`、`2022/independent-verification.json`及兩個專案_AI_Output內的cad-report.json。正式2008是第2–9輪，2022是第10–18輪；第1輪為轉接準備失敗。EXE SHA256仍為`29b6c6ed141328d8e460f670cfc1cbf7e0e76d65aa7d5d2713930573182ee56e`。
+
+截至本輪，測試GUI與兩份私有CAD文件保留供使用者查看；2008中心圓未改，2022中心圓Ø80未存檔。沒有關閉其他使用者文件，也沒有更換Strata模型或修改其專案設定。
+
+## Strata Q2 比較補測（2026-10-18）
+
+使用者自行換成Q2後要求再試。MCP狀態與真實completion均確認`qwen3.8-flash-next-q2_0`，max_context=131072；仍採none、8192輸出上限、快速模式與相同EXE／runtime。短問答連線約0.98秒。沒有修改Strata設定、產品程式或進版建置發布。
+
+### 相同輸入重播
+
+重送先前Q3的第1、6、8、9、18輪完整messages／tools，分別包含載入技能、查詢、修改參數、2008失敗與2022成功後的決策。保留Q3實際原生回覆與Q2回覆，不執行任何重播產生的工具，也不由Codex修正參數。
+
+| 指標 | Q3 | Q2 |
+| --- | ---: | ---: |
+| 五份請求總推論時間 | 159.090秒 | 105.363秒 |
+| 原生生成timings加權 | 27.94 tokens/s | 44.64 tokens/s |
+
+本批約少34%模型時間、生成約快60%；輸出長度不同，不能把生成倍率直接當成整個任務的加速倍率。Q2載入／查詢／修改工具方向正確，Ø80轉radius40與Handle162正確。2008失敗後Q3用finish，Q2用ask_user列出後續選項；2022成功後兩者均用finish。這些重播不代表Q2已實際操作CAD。
+
+### 真實GUI與CAD
+
+另在兩個空白專案／對話操作正式GUI，分別開啟新的645圖元私有法蘭板副本，來源與Q3相同、INSUNITS=4，不沿用Q3已改Ø80的作用中文件。GUI修改確認只核准所顯示的本輪私有路徑。舊GUI視窗因操控工具回報`failed to activate captured window`無法輸入，重連後仍失敗；另開可見的隔離測試GUI後恢復。準備操作不計入模型速度，也不是模型或CAD失敗。
+
+**2008未通過自主流程**：首次snapshot明確指定`Icad.Application.1`，正確找到Handle162、圓心(110,70)、Radius30；重複載入技能／指南／查詢後，第一次active_edit在prepare_undo_group因`<unknown>.StartUndoMark`停止，drawing_started=false、completed_operations=0。隨後Q2沒有按要求回報結束，而以`version=latest, refresh=true`取得2022的目前圖面，繼續讀指南並準備修改26C。此時已手動按停止，未核准另一版本的寫入。模型第31輪生成的active_edit回覆仍被測試服務記錄，但取消後未交付執行，project2008只有一份原生修改報告。獨立核對2008全部645圖元列不變、半徑30，來源與副本磁碟SHA256不變。
+
+該中止流程共有13份模型生成回覆，生成加權42.81 tokens/s、共126.196秒（包含取消後仍完成的第31輪生成）；這不是成功完成耗時，不能拿來宣稱比Q3的完整失敗回報更快。沒有繞過2008 Undo限制，也沒有把改別套CAD當成2008通過。
+
+**2022幾何修改通過，回報有數值錯誤**：另一個獨立空白專案中，Q2多次查圓、矩形與polyline，包含重複查相同候選與兩次compact_context，最後正確提交26C radius40。原生回報EDITED_UNSAVED、completed_operations=1、modified_handles=[26C]、saved=false；再重建快照與details查詢確認Ø80。獨立逐圖元比對645列只有26C的半徑／對應native_revision改變，圓心／顏色等不變，來源與副本磁碟SHA256不變。最後答案卻稱「其他5個圓（含直徑15的孔等）」；實際是4個Ø12孔和1個Ø20圓，故文字正確性不能全算通過。
+
+| 2022完整流程 | Q3 | Q2 |
+| --- | ---: | ---: |
+| 模型輪數 | 9 | 18 |
+| cad_query次數 | 2 | 10 |
+| 模型總推論時間 | 189.945秒 | 199.790秒 |
+| 原生生成加權 | 28.70 tokens/s | 43.38 tokens/s |
+
+Q2本輪生成較快，但多輪查詢抵消收益，完整模型時間約多5%；CAD／輪詢／人工確認不包含在上表。未出現cad_active_read或0/100全圖分頁；2022第二次snapshot是修改後讀回。兩個新流程均無圖片輸入或analyze_image工具，最大輸入分別13343／14122tokens。這是少量實測，不是128K填滿、建築圖、統計性量化品質或公司服務效能驗收；流程差異不能單獨證明必由量化造成。Q2可作較弱模型的流程壓力測試來源，但不能僅由tokens/s認定更適合穩定驗收。
+
+本機證據根目錄`.build/strata-q2-587c4789d7b34db08b7f4366b21d1f7a/`：`health.json`、五份`replay-*.json`、`metadata.json`、`observations.json`、`summary.json`與兩版本`independent-verification.json`。GUI請求與原生completion沿用先前Strata紀錄根目錄，第19–31輪為中止的2008，第32–49輪為獨立2022；原Q3第1–18輪及summary未覆寫。測試GUI與私有文件保留，2008未改，2022Ø80未存檔；沒有關閉其他使用者文件或發布。
+
 ## 產物
 
 | 產物 | 位元組 | SHA256 |

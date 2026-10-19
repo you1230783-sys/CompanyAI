@@ -41,11 +41,55 @@ def fields(data):
 
 
 def digest(data):
-    return hashlib.sha256(json.dumps(data, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+    # ASCII JSON也能無損保留原生ANSI匯出中無法解碼的位元組代理字元。
+    # 不用replacement，避免不同原始資料得到同一個版本指紋。
+    return hashlib.sha256(json.dumps(data, ensure_ascii=True, sort_keys=True).encode("ascii")).hexdigest()
+
+
+def has_undecodable_bytes(value):
+    """檢查surrogateescape保留的原始位元組；這些內容只能交由原生COM詳讀。"""
+    if isinstance(value, str):
+        return any(0xDC80 <= ord(character) <= 0xDCFF for character in value)
+    if isinstance(value, list):
+        return any(has_undecodable_bytes(item) for item in value)
+    return False
+
+
+def ansi_lead_bytes(codepage):
+    """取得Windows實際DBCS前導位元組範圍，不把Big5尾碼0x5C誤當反斜線。
+
+    單位元組／UTF-8字碼頁沒有這些範圍，回傳空清單；查詢失敗即停止，
+    不以猜測的範圍繼續輸出可能毀損的資料。
+    """
+    from ctypes import wintypes
+
+    class CodePageInfo(ctypes.Structure):
+        _fields_ = [('max_char_size', wintypes.UINT), ('default_char', ctypes.c_ubyte * 2),
+                    ('lead_bytes', ctypes.c_ubyte * 12)]
+
+    info = CodePageInfo()
+    get_info = ctypes.windll.kernel32.GetCPInfo
+    get_info.argtypes = [wintypes.UINT, ctypes.POINTER(CodePageInfo)]
+    get_info.restype = wintypes.BOOL
+    if not get_info(codepage, ctypes.byref(info)):
+        raise ValueError('無法確認CAD匯出字碼頁的雙位元組範圍')
+    ranges = []
+    for index in range(0, len(info.lead_bytes), 2):
+        low, high = info.lead_bytes[index:index + 2]
+        if low == 0 and high == 0:
+            break
+        if not 128 <= low <= high <= 255:
+            raise ValueError('CAD匯出字碼頁的雙位元組範圍不合法')
+        ranges.extend((low, high))
+    return ranges
 
 
 def convert(data, children, legacy):
     """只轉換能與既有 COM 屬性對應的類型；傾斜 OCS 由 COM 讀取 WCS。"""
+    # 部分ANSI LISP會把m²中的²寫成單一B2，與Big5中文字混用。
+    # 僅這筆主／子圖元沿用COM描述器；不能猜字碼、刪字或重讀整張圖。
+    if has_undecodable_bytes(data) or has_undecodable_bytes(children):
+        return None
     d = fields(data)
     kind = {"LINE":"line", "CIRCLE":"circle", "ARC":"arc", "TEXT":"text", "MTEXT":"mtext", "ATTRIB":"attribute",
             "LWPOLYLINE":"polyline", "POLYLINE":"polyline", "INSERT":"blockreference"}.get(d.get(0))
@@ -73,6 +117,11 @@ def convert(data, children, legacy):
                 p[field] = [d[10][0]+d[40]*math.cos(angle), d[10][1]+d[40]*math.sin(angle), d[10][2]]
     elif kind in ("text", "mtext", "attribute"):
         text = ("".join(v for k, v in data if k == 3) if kind == "mtext" else "") + d.get(1, "")
+        # DXF可能保留CAD的Unicode表示法，例如\U+89C6；COM TextString則會回傳實際字元。
+        # 僅對這類文字沿用COM描述器，不自行展開跳脫碼，以免誤改字面反斜線或MTEXT控制碼。
+        # 一般圖形與不含這種表示法的文字仍走批次路徑。
+        if "\\u+" in text.lower():
+            return None
         if len(text) > 2000:
             row.update(editable=False, unavailable_properties=["TextString"])
         else:
@@ -120,9 +169,14 @@ def read_export(output, nonce, encoding):
         raw = file.read(128*1024*1024+1)
     if len(raw) > 128*1024*1024:
         raise ValueError("CAD 批次匯出超過 128 MiB，請分割圖面")
-    lines = [json.loads(line, parse_constant=invalid) for line in raw.decode(encoding).splitlines() if line]
+    # 保留每個無法解碼的位元組，不讓一個文字圖元阻斷整張幾何索引。
+    # JSON結構仍嚴格解析；出問題的圖元不使用這份文字，而由COM取得原值。
+    lines = [json.loads(line, parse_constant=invalid)
+             for line in raw.decode(encoding, errors="surrogateescape").splitlines() if line]
     if not lines or lines[0][:3] != ["HEADER", 2, nonce] or len(lines[0]) != 8:
         raise ValueError("CAD 匯出標頭不符")
+    if has_undecodable_bytes(lines[0]) or has_undecodable_bytes(lines[-1]):
+        raise ValueError("CAD 匯出文件標頭或結尾字碼不符")
     if lines[-1][:2] != ["COMPLETE", nonce] or len(lines[-1]) != 4 or lines[-1][2] != len(lines)-2:
         raise ValueError("CAD 匯出沒有完整結尾或數量不符")
     if lines[0][6] != lines[-1][3]:
@@ -140,6 +194,57 @@ def read_export(output, nonce, encoding):
     return lines[0], rows
 
 
+def ansi_lisp_representation(value, encoding):
+    """由COM原值正向產生已實測的ANSI LISP表示法，未知表示法回傳None。
+
+    實測2022的DWGNAME會將CP950以外的BMP字元回傳成\\U+XXXX，
+    COM則保留原Unicode。以COM原值正向產生可接受的表示法，避免猜字、
+    replacement或把其他文件當成同一份。尚未驗證的非BMP表示法仍拒絕。
+    """
+    encoded = []
+    for character in value:
+        try:
+            character.encode(encoding)
+        except UnicodeEncodeError:
+            codepoint = ord(character)
+            if not 0 <= codepoint <= 0xFFFF or 0xD800 <= codepoint <= 0xDFFF:
+                return None
+            encoded.append("\\U+" + format(codepoint, "04X"))
+        else:
+            encoded.append(character)
+    return "".join(encoded)
+
+
+def exported_name_matches(actual, expected, encoding):
+    """文件名稱只接受原字串或該原值的表示法，不做一般反斜線解碼。"""
+    if not isinstance(actual, str) or not isinstance(expected, str):
+        return False
+    if actual.casefold() == expected.casefold():
+        return True
+    encoded = ansi_lisp_representation(expected, encoding)
+    return encoded is not None and actual.casefold() == encoded.casefold()
+
+
+def exported_path_matches(name, prefix, full_name, encoding):
+    """分開比對文件名稱及目錄，保留完整文件身分檢查。
+
+    名稱可能以\\U+開頭，不能先用os.path.join：Windows會把開頭反斜線
+    誤當根目錄而丟棄DWGPREFIX。目錄仍須絕對路徑，並完整核對正規化後的值。
+    """
+    if not isinstance(prefix, str) or not os.path.isabs(prefix):
+        return False
+    expected = os.path.abspath(full_name)
+    if not exported_name_matches(name, os.path.basename(expected), encoding):
+        return False
+    expected_prefix = os.path.dirname(expected)
+    actual_prefix = os.path.normcase(os.path.normpath(prefix))
+    if actual_prefix == os.path.normcase(expected_prefix):
+        return True
+    encoded_prefix = ansi_lisp_representation(expected_prefix, encoding)
+    # 路徑分隔符與字元表示法可能產生相鄰反斜線，兩邊套相同路徑正規化。
+    return encoded_prefix is not None and actual_prefix == os.path.normcase(os.path.normpath(encoded_prefix))
+
+
 def snapshot(doc, api, guard=None, handles_only=False, exclude_handles=frozenset()):
     """執行固定匯出器；逾時／格式錯誤不重送，明確數量不符才走 COM。"""
     import pythoncom
@@ -151,7 +256,15 @@ def snapshot(doc, api, guard=None, handles_only=False, exclude_handles=frozenset
               doc.GetVariable("INSUNITS"), doc.GetVariable("DBMOD"))
     api.require(before[2] <= 200000, "最多讀取 200000 個 ModelSpace 圖元，請分割圖面")
     # CAD 依本機字碼頁寫出；嚴格解碼，不用 replacement 隱藏中文字資料損失。
-    encoding = "cp" + str(ctypes.windll.kernel32.GetACP())
+    codepage = ctypes.windll.kernel32.GetACP()
+    encoding = "cp" + str(codepage)
+    # 實測2008與2022均為ANSI LISP；支援LISPSYS的Unicode引擎不套用位元組切分。
+    # 只查詢，不變更使用者的LISP環境。
+    try:
+        unicode_strings = int(doc.GetVariable('LISPSYS')) in (1, 2)
+    except Exception:
+        unicode_strings = False
+    leads = [] if unicode_strings else ansi_lead_bytes(codepage)
     folder = Path(tempfile.mkdtemp(prefix="LM_AI_CAD_"))
     output, progress, script = folder/"entities.jsonl", folder/"progress.json", folder/"export.lsp"
     nonce = uuid.uuid4().hex
@@ -164,6 +277,7 @@ def snapshot(doc, api, guard=None, handles_only=False, exclude_handles=frozenset
         def path_text(path):
             return json.dumps(path.as_posix(), ensure_ascii=False)[1:-1]
         source = source.replace("@@OUTPUT@@", path_text(output)).replace("@@PROGRESS@@", path_text(progress)).replace("@@NONCE@@", nonce).replace("@@HANDLES@@", "T" if handles_only else "nil")
+        source = source.replace('@@LEAD_BYTES@@', '(' + ' '.join(map(str, leads)) + ')' if leads else 'nil')
         script.write_text(source, encoding=encoding)
         notify(0, before[2], "reading")
         if guard:
@@ -198,9 +312,11 @@ def snapshot(doc, api, guard=None, handles_only=False, exclude_handles=frozenset
         api.require(before == after and app.ActiveDocument._oleobj_ == doc._oleobj_, "CAD 匯出期間文件或狀態已變更")
         api.require(header[5] == before[3], "CAD 內部匯出單位不符")
         if before[1] and os.path.isabs(before[1]):
-            api.require(os.path.normcase(os.path.abspath(os.path.join(header[4], header[3]))) == os.path.normcase(os.path.abspath(before[1])), "CAD 內部匯出文件路徑不符")
+            api.require(exported_path_matches(header[3], header[4], before[1], encoding), "CAD 內部匯出文件路徑不符")
         else:
-            api.require(Path(header[3]).stem == Path(before[0]).stem, "CAD 未儲存文件名稱不符")
+            api.require(exported_name_matches(os.path.splitext(header[3])[0],
+                                             os.path.splitext(before[0])[0], encoding),
+                        "CAD 未儲存文件名稱不符")
         if legacy:
             # iCAD 2008 的 ModelSpace COM 另外列出附屬 ATTRIB；ssget 只列主 INSERT。
             # 依已匯出的真實子 Handle 補齊，不能用虛構數量或重新編號湊數。

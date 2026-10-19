@@ -26,11 +26,11 @@
     "original unchanged",
     "modified output rejected at finish"
   ],
-  "duration_seconds": 256.1345227,
+  "duration_seconds": 216.1086408,
   "numpy": "2.2.6",
   "openpyxl": "3.1.5",
   "pandas": "2.2.3",
   "python": "3.13.12",
   "result": "PASS",
-  "version": "0.8.69"
+  "version": "0.8.70"
 }

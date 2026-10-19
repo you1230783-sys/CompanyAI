@@ -1,3 +1,272 @@
+## 最優先：0.8.70 正式建置與恢復核對完成（2026-10-19 09:00）
+
+- 使用者要求查看斷線前進度並繼續。原 pwsh23376 仍在執行，沒有重啟建置；08:59:37 完成完整 Build.ps1 -EmptyCargoCache -IncludeInstaller，日誌 `.build/cad-segment-release.log` 已有 `CAD_SEGMENT_RELEASE_BUILD_AND_INSTALLER_VALIDATED`。
+- 實際 v142 14.29.30133、cl `_MSC_FULL_VER=192930159` x64、link14.29.30159；377 Rust／87 CAD、專案與 Python 隔離長流程、完整 NSIS 安裝／更新／回復／修復／移除全部通過。`offline/exe-verification.json` 與 `offline/installer-verification.json` 均為 0.8.70.0 PASS。空 Cargo 快取只有 registry/CACHEDIR.TAG，124 份 vendor 套件沿用，Cargo.lock 只有本專案版本改動。
+- 原建置程序退出碼無法重新取得（觀察器得到 null，不當成 0）。恢復後 `.build/finalize_segment_release.py` 獨立核對報告、雜湊及兩份更新清單，實際退出 0；`.build/resumed-release-artifact-verification.json` 保存結果。README、docs 索引及驗證文件已更新 0.8.70。
+- EXE SHA256 `75a11583da9d8643eccfebc9ce0669f432fc66af3cb312ce72aaea2195186f4a`；Setup SHA256 `458e6f3956757b846374cc94ab52cdedf55de8aa00e847e413258bf6aaed8525`。雙版 ZIP 仍為 43879 bytes／SHA256 `5ee41c6bfaa83ba823fff19289e29916e42f557447228d7007203725ed0c732c`。
+- Git 交付採白名單提交與既有 main，並核對遠端 OID／LFS；實際提交以 Git 紀錄為準。排除 `.codex/`、`dist/onboarding-state.json`、`icon.png`、`.build/`；歷史完整離線 ZIP 不重製。兩份住宅的設計品質仍 ISSUES，不能改稱設計通過。
+
+## 歷史：雙版已完成，正式發行執行中（2026-10-19 08:34）
+
+- 使用者新增授權：測試後將2008／2022 DWG包一個ZIP推Git；已明示本輪分段最後雙版樣本，放examples/cad。.build/package_cad_examples.py已成功；xamples/cad/cad-segmented-0.8.70.zip為43879bytes，SHA5ee41c6bfaa83ba823fff19289e29916e42f557447228d7007203725ed0c732c，含2008/兩層樓住宅平面圖.dwg、2022/兩層樓概念平面圖.dwg、README及公開manifest；CRC／逐位元核對通過，無聊天／Token／絕對路徑。旁邊README也要commit。ZIP小檔可直接Git，不需新增LFS規則。
+- 最終details838候選**雙版完整結束，controller22009退出0，progress complete2**。2008九段160操作160圖元，27輪1615.936模型秒／67579輸出／峰12183；2022七段116操作116圖元，12輪630.439秒／24256輸出／峰6097。均0 length、同一DWG原生存檔重開／獨立資料及真窗口覆核，兩案都超100原生入口，不跑固定120fixture。
+- 新.build/check_segment_feature.py已完整PASS_STAGED_PROTOCOL，根內feature-proof.json可用；summary已重跑。接受／拒絕以實際tool_call_id結果區分，200821項超量失敗後自行拆段；首次commit因CP950建圖前拒絕，只修兩段後第二次成功。2022一次commit，無inspect。
+- **兩案設計仍ISSUES**。2008缺尺寸／門線未斷／500mm廚門／衣柜?，2022缺尺寸／封閉房間無門窗／楼梯顯示?梯／陽台實際上側但答覆說下側；詳各review及重寫後docs/VALIDATION_0_8_70.md。2022沒有ask_user，角色的8×12與一樓廁所補充未送，不能視為已知要求；自行假設12×10。DWG SHA2008 444a1f02776b16c6e381f3672cf87d7daab24f4d343c00d1b21bff0670324b24，2022 5b52ac74eaabaae6e486ff67083c25a8847a3b4ecfdcf9920d687c350514bfcd。真窗口調視野後SHA均未變，文件留開。
+- **正式發行在跑exec43511**：.build/release_cad_segment.ps1→完整Build.ps1 -EmptyCargoCache -IncludeInstaller，log .build/cad-segment-release.log。實際v142 cl192930159/link14.29、377workspace及87CAD已過，正往Python／project長流程；尚未到NSIS，不能稱發行完成。必須exit0及CAD_SEGMENT_RELEASE_BUILD_AND_INSTALLER_VALIDATED。後續README/current版本0.8.70、docs索引／驗證最終buildhashes、同版dist／offline報告、AGENTS收尾、白名單git add（含CAD ZIP）、commit/push main並驗remote/LFS。
+- Git最後查main仍f43d9fcaffc33d214abf5328ec11c814a886b736，LFS3.5.1。排除.codex、dist/onboarding-state.json、icon.png及.build。無Git提交／推送完成，README仍0.8.69。
+- 使用者公司輸出已重設20000。已解釋分段兩例零length不保證永不超限；caps可看default_max_completion_tokens／limits.max_completion_tokens（公告未必實效），DEBUG原始finish_reason／用量可判斷。空length目前保存進度暫停，不保證自動2–3重試成功。不新增公司API測試或中途改凍結來源。
+
+## 即時進度：最終候選雙版回歸（優先於下方歷史）
+
+- 最新使用者詢問進度，已回答約70%、剩45–90分鐘估算，**仍繼續原任務，未暫停**。不要結束在進度回覆；必須完成正式發行與Git推送。
+- 最終details838根2008已完整：27模型輪1615.936秒，9段160項→160圖元，一份DWG存檔重開；同段替換成功，超20拒絕後拆段，commit先CP950拒絕且未建圖、只修兩段再commit成功。0 length。真窗口全圖／近看已完成，visual-review ISSUES＋staged_protocol_pass true；缺尺寸、大門原線未斷、廚房僅500mm開口、衣柜顯示問號，不能稱設計PASS。SHA444a1f02776b16c6e381f3672cf87d7daab24f4d343c00d1b21bff0670324b24，圖保留未改／補存。
+- 同controller22009正跑2022，8793，產品來源仍凍結，segment-current不變。t028 load_skill已完成、029推論中。等待await_visual後獨立資料＋真窗口覆核；用inspect_segment_progress.py。
+- .build/check_segment_feature.py已補按真tool_call_id的實際ok結果區分接受與拒絕，僅接受段才計入總數，另保存rejected_part_attempts；不可把有效超限復原樣本判為全部參數接受或擅自刪除原模型錯誤。兩案完成後正式執行proof。
+- 2008已真模型走超100原生入口，不需額外固定120操作fixture。兩案完成→summary／feature-proof→release_cad_segment.ps1（完整v142空快取frozen＋NSIS安裝生命週期）→同版README／文件／Git LFS commit push main及遠端核對。尚未改dist、尚未推送。
+
+## 最新任務：0.8.70分段計畫與發行（2026-10-19，優先於下方歷史）
+
+- **07:43最優先現況：新版已開始真模型重測，不能停工**。最終wire候選完整通過，exec30576退出0＋CAD_SEGMENT_CANDIDATE_VALIDATED；`.build/cad-segment-details-wire-build.log`為377 Rust／87 CAD／2角色／15harness及v142 cl192930159 x64／link14.29、空快取frozen。runtime仍完整SHA b9c37d239820b4f1924457c04d7e4551693f91045bc9432e9c55041122492c33；新model EXE SHA `c6542823c7e95d1fb32763ed58502f04f088087f3b0c336128598bfde5b890c8`，built.json已更新確切來源hash。
+- **目前controller exec22009**，`.build/cad-segment-details-model-controller.log`；segment-current→`.build/cad-user-segment-details-8381802ad695433dbba43d443e536d91`／8793／Q2 low20k128K，住宅2008→2022。剛t001推論，尚無CAD產物。用`.build/inspect_segment_progress.py`看最新4輪／pending，進await_visual或await_failure_review必須獨立資料＋真CAD窗口覆核。此新根與舊b6中斷根分開保存；產品來源現在凍結，避免再中途修改。
+- 最近4段32KB精確工作集／inspect生命週期已整合；另Part.model_value還原預設line_style:null供模型查回，與公開schema一致，**原生計畫仍省略可選null**，不改座標／線型。這是針對舊案例照抄有效區段卻缺line_style的錯誤，非測試程式代改模型參數。新377測試已含wire斷言。
+- 後續依下方準備腳本：雙版逐案覆核→summarize及check_segment_feature產生feature-proof→必要120操作native邊界（僅若兩案未超100；腳本guard要求complete2，不是模型測試）→正式release_cad_segment.ps1執行完整Build -EmptyCargoCache -IncludeInstaller→同版README／CHANGELOG／驗證文件→Git LFS commit/push main驗遠端。**使用者已授權完成後發行推送，不能只回報部分實測就結束。** 尚未更新dist或推送，README仍0.8.69，CHANGELOG已加0.8.70來源功能。
+
+- **07:35最新，不能發行舊候選**：第一候選2008在75項後反覆inspect floor2_walls／floor2_furniture_a；實際每輪只保留最近一個tool body，缺另一段精確資料，與原0/100問題同類。已主動取消turn041，再核對PID後停止runner14024／controller16304，session38336退出1為除錯中斷；2008 **0 cad-report／0新DWG**，CAD程序及原圖未動。舊根b6c0ac42… progress=stopped_for_plan_detail_retention_fix，interruption.json保存，041晚到仍inspect、取消後未執行。2022先前真窗口ISSUES不覆蓋，不稱完整雙版通過。
+- **修正已實作**：Plan.recent存ID，最近新增或查回4段完整精確資料以recent_details常駐，合計32KB，超額明列recent_details_omitted，原計畫不刪。替換後投影取新座標；checkpoint及compact_context不清工作集。全部所需段已完整常駐時不公告cad_plan_inspect；有舊段未列才公告，part_id enum只列缺少的ID及null，避免已知段互查。新增2項回歸＋既有Broker還原測試補斷言，5項cad_plan定向已過；workspace新版預計377。guide/catalog已同步。
+- **正在新版完整候選建置**：exec92237，`.build/cad-segment-details-build.log`。v142 release及87 CAD已過，仍待原生自檢／workspace／example收尾，只有exit0＋CAD_SEGMENT_CANDIDATE_VALIDATED才能算完成。runtime仍b9c37d239820b4f1…（Python未改），新版EXE hash以完成後`.build/cad-segment-built.json`為準，不能拿舊11d394…當新版。
+- 下一步執行`.build/start_cad_segment_details_model.ps1`（已準備**尚未執行**），8793／新`cad-user-segment-details-*`根、更新segment-current；先住宅2008再2022。腳本要求舊根已停止且所有原推論回覆已落盤（041已落盤）。真模型不能代填參數，每案獨立資料與真CAD窗口覆核後寫review；尤其檢查不再牆線家具互查、每段≤20、無length、同DWG commit。模型品質問題仍分開標。
+- 已準備`.build/check_segment_feature.py`：完成2案後核對真模型分段／常駐數量／單次DWG／原生完成／磁碟SHA／真窗口review，產生本根feature-proof.json。`.build/run_staged_native_limit.py`可在雙案完成後做私有2008固定120操作原生邊界（不是模型測試），若兩案仍未超過100可補測，執行前guard要求progress complete2；結果指標`.build/cad-segment-native-limit-current.txt`，有失敗先保留不重畫。
+- **必須繼續做到發行推送**：`.build/release_cad_segment.ps1`已準備，要求雙版feature-proof後執行正式Build.ps1 -EmptyCargoCache -IncludeInstaller（完整workspace／專案Python隔離／NSIS生命週期，無Office／SMB選項），確認0.8.70.0及CAD_SEGMENT_RELEASE_BUILD_AND_INSTALLER_VALIDATED。尚未執行。然後README／CHANGELOG／0.8.70驗證文件／AGENTS更新同版，檢查私有資料、Git LFS後commit/push main，驗遠端OID。Git遠端仍f43d9fc，未改dist／未推。user已明確授權，不再問批准、不停在候選實測。
+
+- **07:07實測進度**：同controller38336／8792／segment根b6c0ac42…，2022住宅已完整資料＋真窗口覆核、visual-review=ISSUES，將進2008。產品來源仍凍結。2022確實5段12/12/10/16/8，常駐計畫累積12/24/34/50/58，模型另inspect floor2_walls取精確座標，單次commit無operations；58操作→78圖元同一DWG存檔重開核對通過。14模型輪539.444秒／24430輸出tokens，**0 length**；最大單輪6845（額外compact），實際part最大3566。原2022住宅3×20k失敗，本次分段傳輸功能確實走通，但不可當設計通過。
+- 2022設計品質問題是真實：floor2牆y14000–26000，floor2_labels八文字仍y2500–12500，模型漏+14000而標到一樓；無原生尺寸，independent DATA_ISSUES非Oracle誤判；樓梯只有區域／文字、門口動線未驗。地面家具是5個hatch矩形占位，不能說完全無圖；二樓床/衛浴用矩形及圓。真窗口已全圖與局部看完，中文可見但小字簡繁混用。DWG SHA bf2e181159addd2551a0602cf0cd22331db5f53a1a4947ef722f928e7ea03161，仍開不補存／關閉。
+- 目前功能修復目標是同圖分段與避免單輪額度，**不是宣稱全面改善CAD設計品質**。後續2008仍須跑完原生／獨立資料／真窗口，結果記錄後正式v142 Build -EmptyCargoCache -IncludeInstaller與同版文件、Git推送；不要停在此樣本。不把本輪已觀察的模型錯座標說成程式漏存資料。常駐目錄不額外複製幾何，但最近工具歷史仍含當輪參數；先前已向用戶精確補充。
+
+- **06:55進度**：最終候選完整通過，exec84304退出0＋CAD_SEGMENT_CANDIDATE_VALIDATED；375 Rust／87 CAD／2角色／15harness，實際v142 cl192930159 x64／link14.29，空快取frozen。runtime完整SHA `b9c37d239820b4f1924457c04d7e4551693f91045bc9432e9c55041122492c33`；model EXE SHA `11d3940702372a3b67979c3641b2ff041970e7b1121a0561964a6596ae8382fe`。built.json記確切來源hash。
+- **真Strata分段實測已啟動，未暫停**：controller exec38336，`.build/cad-segment-model-controller.log`；`.build/cad-user-segment-current.txt`→`.build/cad-user-segment-b6c0ac42f26a4f1fbc15b133bc3bd17a`，8792／Q2 low20k128K。先two_floor_house-2022，再2008；目前2022 t001 load_skill10.773秒，t002推論中。監看`.build/inspect_segment_progress.py`。產品來源凍結，勿中途修改；必要原生問題才另候選。
+- 每案必須等cases/progress的await_visual或await_failure_review，獨立資料＋**實際CAD窗口**覆核後寫visual-review／failure-review，不用資料成功代替外觀。核對模型確實cad_plan_start→多段part≤20→commit只送ID版本→一份DWG，記length輪數及模型時間。`tools/summarize_cad_user_cases.py`已增staged_parts／plan_commits／output_limit_rounds／staged_limits_observed，完成後跑本根總結，不能拿之前原14／浴室2案當本版模型通過。
+
+- **06:54即時狀態**：最終候選建置在exec84304／`.build/cad-segment-build-final.log`，v142 cl192930159／實際link14.29、87 CAD已通過，正在workspace／example收尾，必須exit0＋CAD_SEGMENT_CANDIDATE_VALIDATED。新runtime `b9c37d239820b4f1…`。第一完整候選曾通過374 Rust／87 CAD／2角色／15harness，但其後加入commit成功結果有界摘要與1項新測試，不能拿374當最新版完整結果。最新預計375。原生完整報告仍存本機、模型只收交付事實／量測不可用計數／最多8條400字警告，避免400操作成果填滿128K。
+- 完成後執行`.build/start_cad_segment_model.ps1`（已準備，**尚未開始**），8792／新的segment-current／Q2 low20k128K，先two_floor_house-2022→2008。腳本核對built.json所有來源hash／EXE／runtime再凍結；監控`.build/inspect_segment_progress.py`。原主current及targeted-current不覆蓋。本機Strata仍可用，舊模型均完成。
+- 最新2個既有缺漏已修：新增4工具讓舊文字目錄破64KB，改同一份幾何規格文字JSON Pointer參照（原生完整Schema不改），並測試不對無operations的工具憑空加欄；工具樣本加4、引線契約份數改4。第一次build log `cad-segment-build.log`因此舊3份斷言失敗；rerun完整通過，final是摘要補強後重驗。
+- 發行仍未開始。C:/largan/LM_AI與LM_AI_Installer_Test都不存在，標準Test-Installer可用；Git main遠端仍f43d9fc、LFS3.5.1可用，未提交或推送。README／CHANGELOG待模型結果後更新。`docs/VALIDATION_0_8_70.md`已建尚待實測結果；來源說明已補CAD_DRAWING／WEB_INTEGRATION。最終必須Build.ps1 -EmptyCargoCache -IncludeInstaller成功、更新版本與驗證文件、提交白名單來源及同版產物並推送，別停在候選測試。
+
+- 使用者最新明確要求：先實作同圖分段累積，真Strata測是否能逐段交工具避免單輪20k，完成後**進版、編譯、NSIS打包及推送既有Git main**，供公司實測。此條取代本輪下方不發行限制；不重製歷史整套離線ZIP。
+- 已新增本機cad_plan_start／part／inspect／commit，fresh cad-new短方案後公告分段入口，不公告需一次送整圖的cad_draw。每段1–20、總400項／40段／500KB；checkpoint保存精確資料，每輪只帶目錄。相同part_id按最新plan_revision整段替換、過期拒絕、完全相同重送不追加。commit才合併同一張DWG，native整份預驗後繪製，既有CAD不修改。舊直接cad_draw維持100，原生staged_plan固定400、4000圖元與600秒仍有界。版本已改0.8.70，尚未發行。
+- 正在v142編譯單元／Clippy：exec9687，`.build/cad-segment-unit.log`、`cad-segment-clippy.log`。初版2項新測試抓到Broker原始Schema oneOf未轉anyOf而漏查必填欄位，已修成只轉branch別名保留內部optional語意，2項定向重跑通過；新增Broker checkpoint／工具可見／取消未繪圖測試待本次完整結果。不可稱整體通過。
+- 下一步完成新runtime、v142空快取frozen驗證及release model example，再以**新隔離根、端口**跑原兩層住宅模糊需求（先2022以前撞20k，再2008）。保留資料、模型原始往返與真CAD畫面覆核；檢查每段≤20及commit無operations且一份DWG。必要時據失敗修正再新候選，不替模型補參數。
+- 模型實測後正式Build.ps1 -EmptyCargoCache -IncludeInstaller及必要安裝生命週期驗證，更新README／0.8.70驗證記錄與使用者公告；Git提交所有本輪應用程式來源／同版產物與文件，排除.build、.codex、icon.png及dist/onboarding-state.json等個人檔。不納入其他專案或改遠端／強推。測試紀錄不放應用教學。
+
+## 即時交接（2026-10-19 06:20，優先於下方歷史）
+
+- **本輪矩陣及修正回歸收尾完成**：原14案（11 VISUAL_ISSUES、2 CAD_FAILED、1 PAUSED_OUTPUT_LIMIT）保持原結果；V2原生兩修正與真窗口回歸已通過；新Strata浴室雙版代表回歸亦逐案存檔重開、獨立資料及真窗口覆核完成。controller56255自然退出0，targeted progress complete／cases2；沒有任何執行中CAD寫入或待模型回覆。
+- 新候選 `.build/cad-user-native-fixes-targeted-f4c61e145380488ebacecee76f99436a`／8791／targeted-current，runtime c389…、EXE9b76…；2008 5輪262.956秒／10880 tokens／28圖元，2022 6輪360.040秒／12798 tokens／29圖元。兩版第一次finish []、無格式重送或length，總深200／180正確。**兩案仍為VISUAL_ISSUES**：尺寸細小暗藍、支架／固定點／圓角細節與承載說明不足。2022中文標題可辨、小字密集，不能說全缺字；2008全英文不算中文驗證。兩份DWG視野調整後磁碟SHA未變，post-visual-file-check.json保存；Get-FileHash曾共享拒絕，Python唯讀檢核成功，未解除占用。
+- docs/VALIDATION_CAD_USER_SCENARIOS.md、docs/PENDING_CAD_Q2_OPTIMIZATION.md及新候選model-summary.json已記完整收尾。完整建置為v142 x64／空快取frozen基本整合／371 Rust、86 CAD、2角色、15驗證流程及release example通過（V2 log及built.json）。沒有進版、dist、安裝包、Git提交／推送。
+- 下一輪待辦僅規劃：標註比例、同圖結構化分段計畫、局部參數修正、幾何語意檢核。公司首次revision誤報仍未以原圖重現；此次新拒絕診斷只有契約測試，本次模型未觸發拒絕，不稱模型自我修正已測過。全應用其他功能的完整驗證仍未執行。原未存檔Drawing11及各ISSUES圖保留開啟，別補存／關閉。
+
+## 即時交接（2026-10-19 06:13，優先於下方歷史）
+
+- V2原生回歸與真窗口檢查均完成：新proof `cad-native-read-fixes-proof-efcaf77088f840138c805903fa2b31e8`，2008新私有住宅86圖元存檔重開且全圖視野正常，原Drawing11全圖未變；2022原花架30圖元268屬性一致／Unicode檔名與SHA未變。visual-review只接受原生修正，原14案不改判。
+- **新Strata代表回歸正在跑，未暫停**：exec56255，8791，`.build/cad-user-targeted-current.txt`→`.build/cad-user-native-fixes-targeted-f4c61e145380488ebacecee76f99436a`，凍結V2 runtime c389…、EXE9b76…，low20k128K。主current仍原14。controller log `.build/cad-native-fixes-targeted-controller.log`。
+- 2008浴室案已真窗口最大化覆核並寫ISSUES，開始2022：5模型輪262.956秒／10880輸出tokens、28操作28圖元（18線4尺寸6英文文字）存檔重開及獨立資料PASS，SHA9e283d0b488e3f191991aa6784b5d6950d00999a1c1167b7dafe721df1e7c0b5。總深800–1000正確200、淨距280；finish第一次[]成功，沒有格式重試或length。尺寸字很小且暗藍、支架／R3僅概念、20mm不鏽鋼假設待確認，答覆仍冗長且未量瓶高就稱足夠。圖留開未補存／關閉。不能稱全案PASS。
+- 下一步：等2022模型／原生存檔重開完成，依targeted cases/progress關卡做獨立資料與**實際CAD窗口**覆核後寫review，讓controller自然結束。最後整理本回歸model-summary與docs；不進版／dist／打包／Git。其他源碼不要在凍結候選中途改。
+
+## 即時交接（2026-10-19 06:05，優先於下方歷史）
+
+- 使用者要求繼續，未暫停。原14案已完整覆核（11視覺問題、2原生失敗、1輸出上限，沒有全案PASS），不得改判原失敗。
+- 新來源完整v142離線建置已成功：`.build/cad-native-read-fixes-build-v2.log`、exec32744退出0、CAD_NATIVE_READ_FIXES_VALIDATION_COMPLETE；實際cl192930159 x64／link14.29、空快取frozen基本整合、371 Rust／86 CAD／2角色／15驗證流程測試及release example通過。`.build/cad-native-read-fixes-built.json`保存來源與EXE雜湊，runtime `c389e34d901fc0134269dc13c2dd64062dd1e29784ec4a27b36b21c28963b5c8`。
+- V1原生回歸雖存檔重開86圖元，但真窗口揭露視野0.1錯誤，不能算修復：新建2008圖元未Regen時GetBoundingBox全零。私有兩線探針證明Regen後座標正確且資料不變。V2只在罕見縮放備援先Regen，再取全圖原生範圍；拒絕合併後仍為零的XY範圍，一般批次讀圖不受影響。
+- V2原生回歸執行中：exec75868，`.build/cad-native-read-fixes-proof-v2.log`，指標`.build/cad-native-read-fixes-proof-current.txt`目前指向`cad-native-read-fixes-proof-efcaf77088f840138c805903fa2b31e8`。原Drawing11完整86圖元先存唯讀快照，僅在新私有DWG重播原87操作；接著2022讀原花架Unicode檔名。完成後必須實際看兩版窗口，寫新proof的visual-review，不能沿用V1錯視野覆核。
+- 之後執行`.build/start_native_fixes_model_test.ps1`，8791／獨立targeted-current，新凍結EXE與runtime做浴室架2008／2022真Strata代表回歸，維持原模糊用戶需求及真窗口關卡。尚未開始，不能稱新版模型通過。不進版、dist、打包或Git。
+
+## 即時交接（2026-10-19 05:42，優先於下方歷史）
+
+- **原凍結候選14／14已完整覆核完成**，current仍`.build/cad-user-explicit-version-99d651b60a2c404ea6317d873c5c59eb`／8790／Q2 low20k128K／runtime7018…。controller20035自然退出0，progress complete/cases14。11 VISUAL_ISSUES、2 CAD_FAILED、1 PAUSED_OUTPUT_LIMIT，沒有PASS。94模型輪9824.672秒／409793輸出tokens／峰值輸入41963／無圖片，不代表128K填滿。model-summary.json與docs/VALIDATION_CAD_USER_SCENARIOS.md最新完整收尾。使用者仍要求繼續修正驗證，工作未完成，不暫停。
+- 最後浴室2022已真窗口局部／全圖看完：58圖元6尺寸、native80秒存檔重開，7輪459.911秒。總深200含支撐正確，但圖註淨高250/200與實際下230、最後答覆230不一致，字小簡繁混用、工程細節待核實，ISSUES；SHA3cd5cdc548dcdc708f341496554302fe0aa7fbcb04d1bf33143aafe14ae5cedd。**operations[48]原錯誤是leader漏height，不是ZOOM E；ZOOM E是合法別名，已向用戶更正**。前13案詳下方。
+- **新來源改動**：cad_bulk.py三個helper分開核對DWGNAME/DWGPREFIX，接受COM原值的ANSI LISP BMP表示法，不一般解碼；cad_worker.py全原生GetBoundingBox範圍備援；cad-new.md補失敗保留／幾何占位誠實／總外廓含支撐墊片／finish.artifacts=[]。指南原4145加common超合併5000檢查，現縮2918bytes保留規則，未放寬門檻。85 Python契約曾通過（縮指南後仍需完整建置再跑）。
+- 另新增src/projects/agent/schema.rs拒絕後診斷：已明示kind/action且各候選單一常數、唯一命中才深入具體錯欄位；接受條件matches不改，未知／模糊保持泛用；新增2 Rust回歸，workspace預計371。**9項schema定向已以v142編譯通過**，含leader缺height、command多餘color、合法ZOOM E保留、錯線型及未知／模糊tag。第一版新測試誤假設ZOOM E不合法，第二次fullbuild因此失敗，已更正；不是產品接受條件被改寬。
+- **現執行建置：exec session69110**，.build/build_cad_native_read_fixes.ps1重新完整跑，log `.build/cad-native-read-fixes-build-final.log`。前兩次失敗log `.build/cad-native-read-fixes-build.log`（指南合併大小）、`...-rerun.log`（新測試假設錯）。目前仍未回報建置完成；必須exit0＋CAD_NATIVE_READ_FIXES_VALIDATION_COMPLETE。流程含實際v142 cl192930159/x64、link14.29.30159、空快取frozen Basic、全部workspace、example2角色、harness15、release example；不進版／dist／打包／Git。
+- **下一步具體**：建置完成後跑 `.build/prove_cad_native_read_fixes.py`（已準備未執行，guard final.log完整標記）。它載入target/release/cad-<新資產hash>新runtime：2008以turn073原87操作在新私有DWG回歸，原Drawing11前後完整snapshot不變、不另存／關閉；記native_bounds_fallback是否真命中，獨立重開86圖元；2022讀原花架Unicode檔名檔案30圖元比原獨立快照、磁碟SHA不變。結果位置會寫`.build/cad-native-read-fixes-proof-current.txt`。若失敗先保留／覆核，不自動重畫。通過後仍需真CAD窗口看新回歸DWG並寫review，原14案失敗不重分類。
+- 之後以新凍結EXE/runtime做必要Strata模型代表性回歸，至少浴室架雙版（驗總外廓／finish指引）及必要參數拒絕後修正；沿用原一般用戶模糊要求，不餵答案。可另用targeted-current指標／8791，保留主current原14案供對照，不重新跑全部14。所有原失敗未存檔Drawing11、各ISSUES檔仍開，別關／補存。公司原圖revision誤報仍未重現，不宣稱本次兩修正解決它。
+## 即時交接（2026-10-19 05:20，優先於下方歷史）
+
+- **13／14已覆核，目前bathroom_shelf-2022模型中**。同controller exec20035、current `.build/cad-user-explicit-version-99d651b60a2c404ea6317d873c5c59eb`／8790／Q2 low20k128K／凍結runtime7018c7d37970aeaa…不變。使用者未暫停，不跳過最後案原生、獨立資料及真CAD畫面。不進版／dist／打包／Git。
+- 浴室2008：6輪400.901秒／13724輸出tokens，36圖元／36操作，native37秒存檔重開與獨立資料PASS，SHA5a3cd3ee28e030023dfd0aee24b95c1b6e6c0b50368708aa96c51d56e6a8766f。真窗口最大化已看：側支撐x700–720＋層板720–920，**總突出220超已送200限制**，200尺寸只量板、答覆誤稱符合。兩層／四瓶／600寬／500高／280淨距可辨，尺寸小、20mm SS304假設需核實、英文不算中文；visual-review=ISSUES已寫，圖留開不改。第一次finish DWG清單不符、第二次[]成功，無重畫。詳docs最新段。
+- **新來源待完整驗證**：cad_bulk.py ANSI LISP Unicode檔名/目錄分開核對；cad_worker.py native_model_bounds在系統EXTMIN/MAX無效時全圖GetBoundingBox備援，完整Count/Handle/DBMOD/文件/時間及合法範圍檢查；cad-new.md失敗保留未存檔圖面、明示簡化占位/未完成、整體外廓含支撐背板墊片、finish.artifacts填[]。85 Python契約最新通過，log .build/cad-name-and-native-bounds-unit.log。舊模型矩陣仍用凍結原80項候選，不能說本85或新提示已實測過。
+- `.build/build_cad_native_read_fixes.ps1`已準備**尚未執行**：先要求cases/progress.stage=complete且cases14、全request有response，才Enter-DevShell（vcvars64 -vcvars_ver14.2／VCTools14.29）、build_cad_runtime、Build.ps1 -ValidateOnly -EmptyCargoCache -BasicValidation（實際cl1920–1929/x64探針）、workspace frozen tests、example2角色、harness15測試、release example。完成標記CAD_NATIVE_READ_FIXES_VALIDATION_COMPLETE。不IncludeInstaller、不改dist/進版。矩陣14完成後需實際執行並讀exit0＋標記，再新來源兩版native回歸及新候選必要模型定向測試；腳本存在不等於完成。
+- 目前已定位原生缺陷兩項：花架2022已存檔但簡體檔名LISP反斜線U+路徑誤拒絕；住宅2008未存檔Drawing11／86圖元原生EXTMIN/MAX初始哨兵值，資料727屬性相符且視野手動調整前後全86相同。native-bounds-proof.json證明全部86原生BoundingBox合法，沒有改圖或存檔。詳下方04:43/05:12及docs。公司首次revision誤拒絕原圖仍未重現，不宣稱本兩修正已解決。
+## 即時交接（2026-10-19 05:12，優先於下方歷史）
+
+- **12／14已覆核，目前bathroom_shelf-2008模型中**。同controller exec20035、current `.build/cad-user-explicit-version-99d651b60a2c404ea6317d873c5c59eb`／8790／Q2 low20k128K／凍結runtime7018c7d37970aeaa…不變。使用者未暫停。後續浴室2022，仍須原生存檔重開、獨立資料、真CAD畫面；不進版／dist／打包／Git。
+- 住宅2022完整走完兩次同檢查點續接，**PAUSED_OUTPUT_LIMIT、沒有cad-report／沒有新圖**。7輪1715.574模型秒／71834輸出tokens，t79/80/81各20k無工具，488.991/461.918/460.672秒。runner exit0不是成功，已自然進下一案，不能再重送本案。詳docs/VALIDATION_CAD_USER_SCENARIOS.md最新段。住宅2008為未存檔Drawing11／86圖元縮放範圍異常CAD_FAILED，完整證據見下方04:43，文件保持開啟不改／補存。
+- **來源已有待驗證修正，舊候選未重建**：src/cad_bulk.py三個helper處理ANSI LISP BMP文件名表示法及獨立目錄核對；src/cad_worker.py native_model_bounds在世界XY模型空間、系統EXTMIN/MAX無效時逐全部圖元GetBoundingBox合併，唯一Handle／Count／DBMOD／目前文件／570秒都須通過，任何缺失停止。正常批次讀圖保留。cad-new.md補未存檔失敗解釋／簡化占位誠實及不保證工程結論。
+- **85 Python契約通過**，.build/run_unicode_path_unit.py以src/cad_worker.py別名worker載入最新來源，log .build/cad-name-and-native-bounds-unit.log。尚未新版runtime、v142空快取frozen完整建置、新來源兩版native回歸或新版模型定向測試，不能稱修復完成。原型 .build/probe_house_native_bounds.py已唯讀確認Drawing11全部86圖元原生範圍合法，low[-804,-800.5,0] high[18000,12900,0]，Count／DBMOD不變，證據本案native-failure-review/native-bounds-proof.json。後續先完成14案，然後做兩修正定向實機／v142建置／必要新模型回歸。
+- 先前10案與原生缺陷、驗收Oracle共邊/圓形限制見下方與docs；大廠2008真60共邊格但0間隙、2022真60設備圓+12座位圓但輪廓/通道不符；不能說只畫標籤。首次公司revision誤報仍未以原圖重現，不宣稱本次兩修正已解決它。
+## 即時交接（2026-10-19 04:43，優先於下方歷史）
+
+- **11／14已覆核，目前two_floor_house-2022模型中**。同controller exec20035、current `.build/cad-user-explicit-version-99d651b60a2c404ea6317d873c5c59eb`／8790／Q2 low20k128K／runtime7018c7d37970aeaa…不變。使用者未暫停。後續浴室雙版，必須原生存檔重開、獨立資料、真CAD畫面，不提前結束／跳過；不進版／dist／打包／Git。
+- 住宅2008本案CAD_FAILED未存檔Drawing11：7輪876.403秒／39993tokens，t72 417.17秒20k無工具後continuation1的t73 355.567秒提交87操作；86已繪，最後ZOOM EXTENTS因原生範圍初始異常而停，無檔，不重畫／補存／關閉。VIEWSIZE2.04e20、EXTMIN全正1e20／EXTMAX全負1e20，worldXY。獨立COM86圖元727可比屬性相符；第一尺寸1A8原報告只有expected_entities、enumeration_error為CAD匯出期間圖面已變更，現COM可讀8000，四原生尺寸8000/12000各2，不能說缺尺寸或圖太大。
+- `.build/inspect_house_zoom_failure.py`已完成，native-failure-review/snapshot.json、result.json及view-only-proof.json保存。前三次診斷因command無entities、1A8僅expected_entities、COM Point JSON而停，均沒調視野；修正後已確認全部已登記Handle、727屬性，再固定本案ZoomWindow(-2000,-2000)-(24000,14000)，視野高16000且86圖元前後完全相同。真2008最大化窗口已看兩層、相對樓梯對位、房名及家具；部分房間無門、尺寸太小、標籤跨線，英文不算中文字形驗證。failure-review已寫，controller進2022。
+- 模型有正確停止，但回覆誤說超出CAD處理範圍，建議關閉殘圖重試／分樓繪製／新版無根據，未照做。此為待修錯誤解釋＋原生範圍備援，原CAD_FAILED不改判。花架2022 Unicode檔名誤拒絕亦仍待定向修正；先完成凍結版剩3案，不拿新runtime冒充本候選。
+- 大廠雙版與先前案例細節及Oracle共邊／圓形辨識限制見下方04:21、04:08及docs/VALIDATION_CAD_USER_SCENARIOS.md最新段。不要把2008共邊60格或2022設備60圓說成只有標籤；兩案實際問題為間隙、輪廓尺寸、通行／標註，原始與人工校正證據分開保留。
+## 即時交接（2026-10-19 04:21，優先於下方歷史）
+
+- **10／14已覆核，目前two_floor_house-2008模型中**，同controller exec20035、current `.build/cad-user-explicit-version-99d651b60a2c404ea6317d873c5c59eb`／8790／Q2 low20k128K／runtime7018c7d37970aeaa…不變。使用者未暫停。後續住宅2022、浴室雙版，必須原生、獨立資料及真CAD畫面覆核；不進版／dist／打包／Git。
+- 大廠2022已完整看實際畫面，visual-review=ISSUES：100操作／100圖元（72圓14線14字），native101秒存檔重開，7輪模型689.136秒、無length，SHA4704b79dcbad56b80582013b16cf1036ba833fc7ead06ccf284b6d4a8a06fd83。快照r1000/1500/2000各20設備圓、r500共12座位圓，**不是沒有設備或只有標籤**；Oracle只查矩形故0，需以人工辨識補充。圈不代表原矩形長寬、最小淨距2m/1m/0m；模型最後主動承認不足、需矩形與尺寸，但開頭仍稱完成。無原生尺寸DATA_ISSUES，封閉外框／底部條帶只有門標籤、無實際出入口，文字低對比與跨線。文件仍開不改／補存。詳docs/VALIDATION_CAD_USER_SCENARIOS.md最新段。
+- 大廠2008同樣Oracle漏共邊，但shared-grid-review.json已逐邊證明60格尺寸各對；內部0間隙與宣稱3m矛盾、文字嚴重重疊、不應把60格說成無圖。其兩個原生尺寸存在，只2008Measurement不可讀，Oracle未找到不是缺尺寸。前所有證據與9案詳下方04:08。
+- 花架2022Unicode檔名路徑誤拒絕尚未修，待此凍結版矩陣完成後定向修正；不能忽略身分檢查／自動改檔名。其他品質及工具粒度待辦照舊，不因每案問題重新開批次。現在住宅2008剛t68 load_skill，仍工作中，不結束或暫停。
+## 即時交接（2026-10-19 04:08，優先於下方歷史）
+
+- **9／14已覆核，目前large_factory-2022模型中**，同controller exec20035、current `.build/cad-user-explicit-version-99d651b60a2c404ea6317d873c5c59eb`／8790／low20k128K／runtime7018c7d37970aeaa…不變。使用者未暫停。接著住宅雙版、浴室雙版，逐案真CAD畫面／獨立資料，不跳過，不重啟已完成案；不進版／dist／Git。
+- 大廠2008：10輪1659.631模型秒／76402輸出tokens，兩次20k無工具後同檢查點continuation2的t57提交79操作，原生88秒存檔重開。79圖元58線19字2原生尺寸，SHA196dd1a695930910ed0769db589775a2bea6e9783312405bf07245a0c04cc2c6，本案040043/factory_layout.dwg。先前宣稱只標籤是自動辨識漏共邊，已向用戶更正。**真窗口與逐格線覆蓋分析確認A/B/C各20格共60，尺寸各對；但內部0間隙，模型答覆機間3m通道錯誤**。辦公12格位非經確認座位動線、文字嚴重重疊、外框無門口缺口，只紅線標門，不能保證堆高機通行。visual-review=ISSUES已寫，文件留開不改。shared-grid-review.json人工證據，原Oracle不覆寫。兩個原生外廓尺寸確實存在，2008Measurement不可讀導致Oracle誤報未找到，不要誤稱缺尺寸。第二預存角色補充未送，4m/1.2m不當硬性已送條件。完整追加docs/VALIDATION_CAD_USER_SCENARIOS.md最新段。
+- 其餘8案、Unicode簡體檔名誤拒絕尚未修、源碼凍結、harness15項、v142建置證據及computer-use規則見下方03:35與歷史。後續修正需定向驗證，不改現候選冒充同版。現在2022大廠已load／ask_user，模型待續，不停止。
+## 即時測試交接（2026-10-19 03:35，優先於下方歷史）
+
+- 使用者要求繼續，未暫停。current `.build/cad-user-explicit-version-99d651b60a2c404ea6317d873c5c59eb`／8790／Q2 low20k128K／runtime7018c7d37970aeaa…／controller session20035。**完成8／14，現在large_factory-2008**。後續大廠雙版→住宅雙版→浴室雙版。沒有stop-after-case，不進版／dist／打包／Git。每案await_visual或failure-review必須真CAD畫面覆核，不跳過。
+- 前6案：門架雙版、桌下架雙版、花架2008資料通過但畫面／內容ISSUES；花架2022存檔後reopen身分誤拒絕，原FAILED保留。新缺陷尚未修：簡體檔名由LISP回傳反斜線U+9633／89C6／56FE，COM FullName是原字，直接比較路徑誤拒絕；COM30圖元268屬性相符、DBMOD0、SHA855fd3…。native-failure-review保存原始export／HEADER、全圖快照；真畫面已看，僅調整本案視野、幾何磁碟不變，未另存／關閉。先完成本凍結產品覆蓋，再針對原檔與兩版修正回歸，不跳過身分檢查／改檔名繞過。
+- 小廠雙版原生存檔重開成功，但都無原生尺寸，獨立data.status=DATA_ISSUES。controller總分類VISUAL_ISSUES會覆蓋data字樣，內嵌data仍完整，不能讀成資料通過。2008 97圖元／6輪422.742秒，12機台6桌但無編號、封閉隔間無門，native約100秒，SHA54767b…。2022 98圖元／7輪802.102秒，先零長線建圖前拒絕再成功，12機台M1–12但沒有六席桌幾何，分區封閉、簡體貨／門問號、大文字跨框、DASHED過密；native98秒，SHA92110b…。兩份真窗口最大化全圖覆核完成，visual-review已寫，圖都留開不改。詳docs/VALIDATION_CAD_USER_SCENARIOS.md最新段。
+- 工具與GUI：computer-use skill及guidance/api/confirmations已讀，使用node_repl的global sky。sky.drag不支援middle按鈕，不再給未文件化參數；曾選取框已Escape取消無改圖。窗口2022 id722826，2008 id3345444（需fresh list→唯一選取）。native verifier會restore窗口，需title雙擊最大化；2022 resize後視野裁切需wheel縮小後再判缺圖。Screenshot直接看，不存／重emit payload。COM program API可做原生唯讀診斷及本案view fit，不能Shell UIAutomation。
+## 目前進度快覽（2026-10-19 03:02，優先於下方歷史）
+
+- 使用者要求繼續，沒有暫停；current仍`.build/cad-user-explicit-version-99d651b60a2c404ea6317d873c5c59eb`／8790／Strata Q2 low20k128K／frozen runtime7018c7d37970aeaa…。controller exec20035仍跑，**完成5／14，現在花架2022**。門架、桌下架雙版與花架2008皆存檔重開＋獨立資料PASS，但實際畫面或內容有問題，均VISUAL_ISSUES。沒有進版、dist、打包或Git。
+- 最新花架2008：先CP950兩處拒絕（≤、簡體現場確認），再100操作中最後ZOOM E帶color欄位Schema不符，皆未建圖。模型第三次93操作成功，93圖元（71線6尺寸9多行字7圓），正確Icad1；native約105秒，模型7輪828.148秒，無length。DWG本案025741/balcony_plant_stand_900x350.dwg，SHA `eda4cf4cda6b40a2fc7f67ef1f7dd74d9f3c7d0bda64d292312d28fed27a42fb`。最大化真CAD三視圖與下方中文逐項覆核，兩層六盆、900×350／上板560加假設盆高200總760可對照；尺寸字太小、三盆中心距220與直徑220相切無餘量、清掃區斜撐、答覆結構高780卻含盆760矛盾、材料足夠與自重估計未驗證。VISUAL_ISSUES，圖留開、不改／補存。第二預存角色補充未送達，不作硬性失敗條件。一次不支援middle的拖曳只啟動選取已Escape取消，沒有改圖；後續不給sky.drag未文件化參數。
+- 桌下架2022詳下方02:45追加：49圖元／9尺寸，SHA962a46…，6輪450.552秒，native54秒。全圖與字放大已看，長中文擠疊、散熱腿部保證超過證據、深350等於主機350無前後餘量。4案比較已追加docs/VALIDATION_CAD_USER_SCENARIOS.md。
+- 後續順序：花架2022→小廠雙版→大廠雙版→住宅雙版→浴室雙版。繼續原生、獨立資料、真實畫面，不重啟已完成案件。產品凍結擴大覆蓋，品質待辦不立即中斷整批；實際流程致命缺陷另診斷。await_visual逐案看後寫visual-review；多產物每份都看，未知部分失敗不重畫／另存／關閉。
+## 最新有效交接：確切CAD版本候選已啟動（2026-10-19 01:44）
+
+- **02:12最新**：current仍`.build/cad-user-explicit-version-99d651b60a2c404ea6317d873c5c59eb`／8790／low20k／128K／runtime7018c7d37970aeaa…。controller已由原80152自然結束後，**exec session20035續跑**，現在**門架2022模型階段**；2008已完整逐份原生與真CAD畫面覆核，沒有重畫已完成案例。新候選目前1/14，未全完成，不進版／dist／Git。
+- **02:22更新**：同一session20035繼續，已完成門架兩版**2/14**，現在**桌下架2008**。2022門架49操作（含1指令）、48圖元（36line、8text、4dimension），正確GStarCAD.Application.22，存檔重開與獨立資料PASS；SHA `b160da13ef0609dd1a92f7378cb5968cf134d3625ce080cda68f77f0f24b2dd6`，位於本案021542/door_hook_rack.dwg。實際2022最大化畫面已看：四L型鉤、300寬／80間距及未知門縫不保證關門有表達；部分簡體字如「现场确认」顯示問號，但COM原文仍完整；原生線265為(40,3)→(0,3)，跨門幅40未加門體40兩側各3的墊片，不能確認裝配。**VISUAL_ISSUES**，未改圖或重畫，DWG仍開。6模型輪326.529秒，完整計畫136.491秒／5411tokens，native約54秒，沒有length；主要剩餘為字型／幾何與註記品質，先凍結產品擴大圖型，不因此重新開整批。
+- **02:32更新**：完成**3/14**，現在**桌下架2022**，session仍20035。2008桌下架65操作67圖元（38line、13dimension、4circle、3text、7mtext、2leader），正確Icad.Application.1，無重試／length，存檔重開及獨立資料PASS；SHA `fcd9fbdc53c8f63893ca4b1b3e815acf56229f248ee4b5d511bfb8ecffbd0d2c`，本案022635/desk_shelf_woodworker.dwg。實際最大化2008三視圖已看，主機180×350×320右置、600×400層板、延長線分區及50前／上餘量可對照，中文可辨；**VISUAL_ISSUES**為尺寸／引線可讀性、沒有另確認地面及腿部位置即說腿不受影響、把6kg平均分成每支M6約1.5kg未驗證偏載／板重／固定強度，吊掛方式需木工確認。文件保留開著，不改圖。6模型輪355.272秒（先load10.507、ask22.445、compact30.977、load5.811、draw233.827／10916tokens、finish51.705），native約96秒；這輪先compact再load正常沿用方案，沒有再發生方案不可見。
+- 2008這案正確使用Icad.Application.1：第一次55操作因3處簡體視／圖／間／較在建圖前拒絕（0操作），模型自行補正後**57操作、67圖元**存檔成功；再自行發現v1註記43與實際46不符，另建v2 **59操作、70圖元**，補46原生尺寸並將4圓移回板邊緣內。這是已知成功後的語意自我修正，**不是未知部分失敗重畫**。最後明示v2為交付版並保留v1，native檔案與原參數未被我們改動。模型7輪／646.068秒，兩次成功native約122／131秒，沒有length；詳原始bridge／events。
+- 兩份DWG都已在2008獨立重開、單位／圖元／原生尺寸／雜湊核對，且真實窗口最大化縮放、切tab逐份查看。v1在015057／SHA `8a3394d41a04c93a2e35f0ad44712c106ef56549fdbcbc5cd229118f49478d3c`，v2在015532／SHA `8d31a87678a2334b8b5ec7725a17170b2dfcab2b6eea8c54ede7845e37e3a727`。v2四鉤／300×120／70等距／門40加兩側各3形成46可對照，中文與未知門縫不保證關門有表達；仍屬概念、卡爪安裝與材料待確認。整體**VISUAL_ISSUES**：v1已作廢但仍自動交付、視野初始很小／字與引線較小；nested review詳列v2概念改善，不當作整案CAD失敗。
+- 驗收器原本只接受一份成功報告，這案原自動VERIFICATION_FAILED已保存在case-result.automatic.json／summary.before-multiple-artifact-review.json。現在tools/verify_cad_user_case.py逐份串行子程序讀取，存artifact-verifications/<時間>/獨立快照與報告，再聚合；不能只挑最後一份，任一錯版／資料問題都不被另一成功蓋過。兩份實機原生覆核已完成，root independent-verification=DATA_PASS_VISUAL_PENDING、artifact_count2，visual-review=ISSUES。已補充case-result／summary且保留自動原始結果，不覆寫native報告。
+- **僅測試工具增補，產品二進位不變**：run_cad_user_cases.py新增--resume，只從已覆核案例邊界、相同EXE SHA／runtime manifest SHA／完整需求與版本續跑；已完成案例必須有對應逐份資料、畫面（部分失敗另需failure-review）及未變DWG SHA。未知中斷／未完成資料夾不重送。成功產物若另有部分寫入失敗也不能判PASS，需人工檢查。15項純資料／檔案生命週期測試已在本機通過（首沙箱暫存ACL WinError5已用require_escalated重跑通過，非CAD錯誤），見.build/cad-user-verification-unit.log。原v142建置仍369 Rust／80 CAD／4舊版本驗收／2角色；不要宣稱原build log含這15項，這是後續驗收工具測試。
+- `.build/resume_explicit_cad_tests.py`核對凍結candidate的EXE、runtime全部檔案與已完成推論後，才補舊cases/manifest的兩個hash欄位；舊manifest保存在manifest.before-resume-hashes.json，候選原manifest未改，新工具SHA與理由在validation-tools-amendment.json。這次同產品續跑，不開新候選，不略過未測圖型；後續仍桌下架、花架、小廠、大廠、住宅、浴室架各兩版。若再停邊界可用正式--resume，勿直接覆寫既有案例。
+
+- 使用者仍要求繼續測試，未暫停。**current為`.build/cad-user-explicit-version-99d651b60a2c404ea6317d873c5c59eb`／localhost8790／low／20k／128K**，controller exec**80152**。先門架2008→2022，再桌下架、花架、小廠、大廠、住宅、浴室架各雙版，共14案尚未完成；目前門架2008模型階段。不要重啟舊批次或拿舊版runtime冒充。維持不進版、dist、打包或Git。
+- 新候選`.build/cad-user-explicit-version-build.log`已完整退出0，有`EXPLICIT_CAD_VERSION_CANDIDATE_VALIDATION_COMPLETE`：v142探針192930159 x64、空快取frozen基本整合、**369 Rust／80 CAD／4版本驗收器純資料／2角色流程測試**及release example。runtime完整SHA `7018c7d37970aeaa02d9b066a35d1c58645ce9dd9cb6971134d938733b13d7b4`。`.build/start_explicit_version_cad_test.ps1`已執行。
+- 新發現／修正：variety門架要求2008，模型卻送`latest`，實際native selected為GStarCAD.Application.22，58操作72圖元存檔成功，但2008實際開啟顯示Invalid Dwg Version。模型最後承認錯版，不能算2008通過。現在**新圖cad_draw需確切ProgID，Broker及worker皆建圖前拒絕latest**，不自動改參數；技能／Schema已說明，未指定先inventory。其他連線／唯讀latest原規則保留。兩版實機`.build/explicit-cad-version-native-proof/result.json`通過，拒絕前沒有selected／connection，文件、目前圖、數量不變，沒有建立輸出。
+- 驗收器`version_review`核對原生selected.progid；錯版只在實際建立它的CAD做獨立唯讀檢查，標記**WRONG_CAD_VERSION**，避免舊CAD被不支援版本模態框阻擋。controller保留此分類，不因畫面可讀改判成功；4項純資料測試於tools/test_cad_user_verification.py。未知／缺證據不猜版本。每案仍須存檔重開、獨立資料及真CAD畫面，不能以模型文字代替。
+- 上一variety根`.build/cad-user-variety-f840e9a35fae45c98767cff32d1b7124`已於3案自然邊界停止，exec32810退出0：浴室架兩版VISUAL_ISSUES；門架2008**WRONG_CAD_VERSION**（舊自動結果為VERIFICATION_FAILED，case-result.automatic.json及summary.automatic-before-version-review.json保留，原報告未改）。新驗收器已實際在2022獨立讀72圖元／10原生尺寸，SHA `7a56f521dd21451251bbf80c91bbd0d6e519b25b075df7c572aa39109fbe346d`。已真實最大化2022視窗覆核：四掛鉤位置及門縫待確認有表達；註記75間距實為75/75/70；門體x400–440厚40，上方折鉤x395–420只跨25且未越另一側，不能視為可安裝。圖與畫面有註記擁擠；visual-review.json詳列。2008版本錯誤通知僅按確定關閉，沒有轉檔、另存、改圖或重畫。這張2022產物仍開著供診斷。
+- 先凍結此候選擴大圖型測試，不為每個尺寸／標籤品質問題反覆重開同兩案；**流程／原生致命缺陷才另外修正**。後續品質待辦仍為註解比例、文字與實際幾何一致、承載／防刮不得保證、局部參數草稿／修正、成功工具結果有界摘要及高階幾何。未實作rectangle、分段計畫或提高100上限。
+
+## 先前交接：2022混合字碼修正／無思考對照（2026-10-19 00:32，以上方為準）
+
+- **01:06最新current**：`.build/cad-user-variety-f840e9a35fae45c98767cff32d1b7124`／localhost8789／**low／20k／128K**，controller exec**32810**，runtime仍0d22dcf81b7453d1…。先浴室架2008→2022，再門架、桌下架、花架、小廠、大廠、住宅各雙版，14案尚未完成；第一案正在模型階段。`.build/start_variety_cad_test.ps1`已啟動，首次因複製腳本改到buildLog路徑而在送模型前停止，修正為真實mixed-ansi-build.log後才啟動。不要將啟動失敗當模型案例。
+- **01:17更新**：variety的浴室架2008已完成，**VISUAL_ISSUES**；正在浴室架2022。2008原生46操作（模型筆記誤寫45，實際46）、61圖元／6原生尺寸，存檔重開及獨立資料PASS，SHA `2e50da919dc7a1bc88598a35ac7ea3b75d0abc842353d9e7c502b61f5f4507fa`，DWG在本案project/_AI_Output/20261019_011148/bathroom_shelf_design.dwg。真實最大化ICAD2008窗口已覆核：600×180×263三視圖對照、兩層及257淨距可辨，尺寸字太小／四位小數；R3只在註記，沒有圓弧；全英文，不能算繁體字型測過。模型最終「3mm板承重5kg足夠／不刮人」沒有工程驗證支持，visual-review有記錄，不當加工核准。此文件因ISSUES仍開著，不改幾何／補存；後續2022使用另一CAD程序。t1 ask21.456s、t2 load10.047、t3短方案41.895、t4完整46操作303.039s／13620tokens；原生約82秒；兩次finish47.748／36.08秒，第一次artifacts清單不符，第二次CAD路徑由桌面交付／artifacts=[]才通過，無CAD重畫。共有6模型輪，全部無length。完整矩陣尚未完成。
+- **01:27更新**：浴室架2022也完成資料及真實CAD畫面覆核，**VISUAL_ISSUES**；現在跑門背掛架2008，controller仍32810、current仍variety根。2022共45操作46圖元（27line、4circle、6dimension、6text、1mtext、2leader），毫米／獨立資料PASS，SHA `346982349269d6e7b5c32a18a25d2d85f059e97a869e67ce4c20b0f8c9f50fb1`；DWG在本案project/_AI_Output/20261019_012109/浴室壁挂架_討論稿_v1.dwg。CAD窗口最大化並wheel縮小確認完整三視圖、中文、原生DASHED投影、四固定點及擋條；尺寸字仍過小、引線附近註記擁擠。**圖上Mtext淨高240，原生層間250、扣3板厚247；最終回答說247但圖上未改，交付矛盾。** R5僅加工註記未畫圓弧，承載／防刮不視為已驗證；最終有明示概念非施工核准。5模型輪308.425秒，完整計畫138.041秒／5480tokens，native約62秒，沒有length或重畫。兩個不同方案不能當CAD版本純速度比較。兩版有問題的DWG仍開著、不修改；批次僅完成2/14，後續多種類型繼續，不為每個品質問題重新開整批。
+- none住宅2022比較已完整走完既定續接、於自然邊界停止：exec86671退出0，根`.build/cad-user-mixed-ansi-055aae084d384b5691fb33244b0b8eab`，**18輪／1785.911秒模型時間／88139輸出tokens**，t12/17/18各20k無工具（353.245／368.944／482.385秒），只有t15的162操作完整但超100被建圖前拒絕，**無cad-report／無新圖，PAUSED_OUTPUT_LIMIT**。没有2008或其餘13案完成；24秒短診斷不能代表此完整任務。`model-summary.json`／cases/summary.json保存；current已換上方low新批次。暫不採none作主要矩陣模式，不能稱none改善完整CAD效率。
+
+- **00:35最新**：mixed-ansi候選建置exec62794已退出0，v142探針192930159 x64、空快取frozen基本驗證、368 Rust／79 CAD／2角色測試與release example全部通過，日誌有`MIXED_ANSI_CANDIDATE_VALIDATION_COMPLETE`。runtime完整SHA `0d22dcf81b7453d1f287692d853e8af2f5a540bbd7458090c5634d9578d15efd`。
+- 新矩陣已啟動，**current現在為`.build/cad-user-mixed-ansi-055aae084d384b5691fb33244b0b8eab`／localhost8788／none／20k／128K**，controller exec86671；先住宅2022→2008，再小廠、大廠、浴室架、門架、桌下架、花架各雙版，14案尚待完成。`.build/start_mixed_ansi_cad_test.ps1`已執行；原8786在自然邊界停止、無待完成推論。新none不改模型權重或全域設定；實機寫入、獨立核對與實際CAD畫面關卡不變。
+- **00:53實測**：none住宅2022尚未建圖。t1追問18.474秒／506tokens；t2先compact11.134／326、t3載入4.433／101、t4再compact17.145／443；後續兩次ask_preference及多次compact，t9/10/11/13/14有tokens但原生API content=null且無tool_calls，t12用滿20k／353.245秒（約56.6 tokens/s）仍無工具。正式continuation1的t15終於回cad_draw、151.229秒／8187tokens，**162操作**被Broker建圖前拒絕，沒有原生報告。t16compact14.321／298，t17待修正。工具與design_planning實際都有送，不是再次遺失筆記；none短回覆快不等於完整任務快。已設`cases/stop-after-case`，**讓當前案完成既定有限續接／若有圖照常實機覆核，再於案例邊界評估後續模式**，不讓完整none矩陣默默跑下去，也不把它提前算成功。下一步宜較廣類型，不能一直只測住宅。162操作只用8187tokens，提示大型圖的操作100限制本身也需後續評估；尚未提高上限／新增rectangle或草稿工具。
+
+- 使用者要求繼續，未暫停。8786住宅2022已自然完成並覆核失敗部分圖，在一案邊界停止，controller81122退出0；current仍`.build/cad-user-handoff-b78e05da0bb6463abae8a3f70c34b751`。只做完1案，不是14案完成；不進版、dist、封裝或Git。
+- 第4輪low耗496.555秒／20k且無工具；正式同checkpoint續接後第5輪424.155秒／16284tokens送105操作，在建圖前拒絕；第6輪219.576秒／9539tokens重送97項（prepare後94操作），實際102圖元，在verify_before_save因cp950單一B2無法解碼而未存檔。第7輪52.083秒／1459tokens正確區分未存檔與已繪製，但不應將未驗證布局宣稱無問題。
+- 實際2022視窗已覆核，兩層8×12m／家具／對位樓梯可見，文字擁擠重疊、尺寸過小、通行未核實；`failure-review.json`及`native-failure-review`保存102圖元326屬性全相符與原始匯出。原Drawing2.dwg仍未存檔，**不重畫、不補存、不關閉**。此案CAD_FAILED，不因後續讀回修好而改判成功。
+- 新錯誤為LISP把m²中的U+00B2寫成單一B2，混在Big5資料內；不是先前餐字尾5C跳脫問題。修正src/cad_bulk.py以surrogateescape保留不可解碼位元組，僅含這種資料的主／子圖元改用既有COM描述器；native_revision以ASCII JSON無損雜湊原始值。JSON結構、文件標頭／結尾、nonce／Handle仍嚴格；不猜字碼、不replacement、不重讀整張圖。這不宣稱所有ANSI混碼均已解決；其他格式或身分錯誤仍停止。
+- 新唯讀原生證據`.build/mixed-ansi-native-proof/result.json`：2022全102圖元898屬性全相符、13文字圖元備援、2.019秒；2008既有97圖元824屬性全相符、無該備援、2.317秒。兩版重複snapshot完全相同，DBMOD／數量不變、不寫幾何／存檔。原生資料通過不代替新模型存檔／重開驗收。
+- 同turn004保留請求的none串流診斷完成：`.build/cad-stream-diag-86cd7e056731465ca89b6da3d0c953f5`，24.377秒／832tokens，只有compact_context、無CAD工具執行。**不能說none畫圖只需24秒／CAD通過**；串流且單次隨機推論不作純速度因果證據。
+- 新79th CAD契約已加；目前v142／空快取frozen完整候選建置在exec62794，`.build/cad-user-mixed-ansi-build.log`，以退出0和`MIXED_ANSI_CANDIDATE_VALIDATION_COMPLETE`為準。不要拿上一runtime401a或前368/78結果冒充新完整驗證。`.build/start_mixed_ansi_cad_test.ps1`已準備但**尚未執行**，完成後可啟8788／新的none、20k、128K矩陣，原7類模糊需求不變，先住宅2022→2008，再其餘各雙版本。程式與推論模式同時改動須註明，不把所有差異歸於none。只改本次API effort，不改Strata全域設定／權重。
+
+## 目前有效交接：真實CAD矩陣繼續（2026-10-18 23:59，以上方更新為準）
+
+- 使用者已要求繼續，沒有暫停。**最新current**為`.build/cad-user-handoff-b78e05da0bb6463abae8a3f70c34b751`／localhost8786／Strata Q2／low／20k／128K，controller exec session81122仍執行；先住宅2022→2008，再小廠、大廠、浴室架、門架、桌下架、花架各兩版，共14案待驗。維持逐案原生存檔重開／獨立資料／真CAD畫面，不省略；不進版、dist、封裝或Git。
+- 目前候選已通過v142實際探針192930159 x64、空快取frozen基本整合、**368 Rust／78 CAD／2角色測試**及release example；`.build/cad-user-handoff-render-build.log`退出0、有HANDOFF_RENDER_CANDIDATE_VALIDATION_COMPLETE。Runtime仍`401a5d15bacf1186d31d0f4a23395cb160aadeb2e4e274d3f4e4ba14ba1e5a16`，新EXE與runtime已凍結在候選bin。
+- 修正後正式runner受控回放PASS：`.build/handoff-replay-fe54ed3296694600bb73e65a87bd64b0/bridge/replay-check.json`確認先compact_context後load_skill時，下一輪同時有cad_draw及原方案。**此回放固定回覆，不用模型、不畫圖，不能算Strata通過**。前367項候選回放曾抓到runner只在已有DWG時送方案的缺漏；368版已修，規劃與建圖前錯誤也會送。先存方案後載入可沿用同一Broker筆記，其他技能筆記不覆蓋已啟用CAD方案，新設計仍清除，授權未改。
+- 既有8785住宅2008：94操作／97圖元存檔重開及獨立資料PASS，實際畫面為VISUAL_ISSUES（尺寸太小、樓梯文字重疊），模型總1008.765秒，沒有length；DWG、SHA、完整差異見下方歷史及該案visual-review.json。8785住宅2022在模型-only回歸除錯時中斷，**不算完成或自然CAD失敗**；pending13晚到已保存、未執行。現新批次要重新測，不能拿舊資料冒充。
+- 後續改善僅記錄、尚未實作：大圖可讀尺寸比例（目前DIMTXT/DIMASZ3、DIMSCALE1）、本機計畫局部修正避免100項全部重送、成功結果的有界模型摘要（之前單次56,901字／41,155輸入tokens）。原生Big5尾0x5C／CP950彙總已修且兩版原型通過，主矩陣仍需新模型驗收。先凍結本候選做較廣測試；流程缺陷或原生致命錯誤才另診斷。
+- 用`.build/inspect_staged_progress.py`（`C:/Python313/python.exe -X utf8`）看最新輪次；controller的`cases/progress.json`為await_visual或await_failure_review時必須實際檢查後寫對應review，不能只判資料成功。角色未交付的8×12／1F WC等隱藏條件不可作失敗依據。技術細節與早期嘗試保留在下方／docs/VALIDATION_CAD_USER_SCENARIOS.md。
+- 2026-10-19 00:04實測進度：8786住宅2022首次ask_user42.923秒／1196tokens，角色已提供8×12m／1F WC等資料；同一新task再compact_context29.122秒／792、load_skill5.753秒／129。真實turn004請求已確認cad_draw可見、原筆記及design_planning都送出，見候選根`handoff-live-request-check.json`，至此沒有read_skill_guide。現在turn004生成完整計畫，未有本案原生CAD報告；不能提前算通過。請保持此凍結候選繼續觀察。
+
+## 恢復測試歷史（2026-10-18 22:33，以上方最新交接為準）
+
+- **23:55最新**：8785的住宅2022回歸嘗試已在確認cad_draw仍未公告、該案無任何cad-report後取消pending turn013，停止專屬controller／runner／worker（session27619已退出1，這是主動除錯中斷，不是自然CAD失敗）。`gate-interruption.json`及cases/progress.json=stopped_for_gate_regression。原生CAD／Strata未關閉；turn013晚到為compact_context、439.829秒／17438tokens，已保留但取消後未執行，不可續用。這不是完整2022通過，也不宣稱永遠死循環。
+- 回歸原因／修正：收到必要補充的新task先compact_context（turn009，28.986秒）再load_skill(cad-new)（turn010），原本程式忽略未載入技能前的同任務筆記，令cad_draw仍不可見而多讀cad-commands／cad-geometry。已修正同Broker的通用交接可在首次載入CAD時沿用；其他技能後續筆記不覆蓋已開始的CAD方案，真正切入下一新設計仍清除。LoadSkill結果明示planning_note_saved及next_action，舊checkpoint／寫入授權不改。
+- 第一輪handoff建置367 Rust／78 CAD／2角色及v142空快取frozen已過，但**正式runner固定回覆回放**發現另一缺漏：cad_draw已公告，方案雖在Broker內，runner只在已有artifacts或blocked時送cad_artifact_index，導致無DWG時方案沒送給模型（不是helper誤判，回放第三請求無design_planning）。已修runner.has_cad_context，方案／last_execution存在也要送，並加368th回歸。`.build/replay_handoff_flow.py`只用固定回覆，**不推論、不繪圖、不算Strata通過**；失敗第一份根由`.build/handoff-replay-current.txt`指向，原始請求保存。必須新版EXE重跑此回放至PASS，確認同時有cad_draw及原筆記，才開新Strata矩陣。
+- 現正建置`.build/cad-user-handoff-render-build.log`（exec session86139），預期368 Rust／78 CAD／2角色，runtime仍401a5d15…；以HANDOFF_RENDER_CANDIDATE_VALIDATION_COMPLETE和退出0為準，不沿用上一handoff完成。完成後執行`C:/Python313/python.exe -X utf8 .build/replay_handoff_flow.py`（需本機loopback授權），成功後`.build/start_handoff_cad_test.ps1`驗證回放binary hash與新release example一致、前推論已完成才啟8786／全新cad-user-handoff根，先2022再2008各7類14案。**尚未啟動8786，current仍舊8785停止根。** 不進版、dist、打包或Git。
+- **23:36目前**：8785凍結候選仍執行，住宅2008已完成資料／實際畫面覆核，case-result=VISUAL_ISSUES；已開始住宅2022，session27619仍運行。2008第2輪短方案62.931秒／1950tokens（前8784為423.554／16212）；第3輪282.310秒／12103tokens送101項，Broker建圖前拒絕；第4輪400.171秒／16574tokens改94項，原生一次列出78／88／90三處楼而建圖前拒絕；第5輪139.437秒／5473tokens修正TC後94操作完成，存檔重開97圖元（69line、7circle、17text、3dimension、1unknown/hatch），mm、SHA256 bddaec1eaec8558e06af56e9e7a6f46e3d7bebee73e2dc73c13baaffbe8e693d。DWG在本案project/_AI_Output/20261018_232608/home_two_floor_plan.dwg。第6輪finish111.806秒／3667tokens，模型總1008.765秒，沒有length。曾在commentary誤說100操作，已明確更正最終94。
+- 2008真實maxCAD畫面可看懂兩層／樓梯對位、三房兩衛、陽台、門洞、家具及假設／非施工註記；但原生尺寸字高太小、樓梯文字重疊，外部入口／實際通行未確認，visual-review.json=ISSUES。初始使用者沒給基地尺寸／1F WC，模型未詢問角色資料，**不能用隱藏persona的8×12m及1F WC當失敗依據**；12×8m已明示假設。檔案資料通過不等於可施工，也非整套14案通過。
+- 新發現效率／能力待辦先記錄：成功後的工具結果仍有56,901字元完整native診斷，最後回覆輸入41,155tokens；原始結果已另存，後續宜僅給有界摘要並保留原始worklog。101項／修3字仍需重送全計畫，宜評估本機計畫局部修正；原生尺寸樣式目前硬設DIMTXT／DIMASZ3及DIMSCALE1，大圖缺可讀比例設定。**這些尚未實作，先以同一401a／8785凍結候選完成較廣矩陣，不為每個品質問題重啟全部測試；原生致命錯誤才另診斷。** 局部方案暫存／rectangle／annotation_scale都只是後續方向，不可宣稱已有。
+- **23:11最新執行**：新候選`.build/cad-user-gated-c15365ac18134f5d835a34df1bed9ebb`／localhost8785／low／20k／128K，current已更新，controller exec session27619。runtime401a5d15bacf1186…。gated-build.log完整退出0，v142實際探針／空快取frozen基本整合／365 Rust／78 CAD／2角色測試及release example均通過，已開始住宅2008，7類×兩版14案仍待實測。舊8784一案在安全邊界停止，88圖元未存檔部分圖仍保留，不由新候選修改或補存。新批次包含真正規劃工具門檻、Big5修正、CP950彙總及失敗回覆指南，原生原型證據不能代替整套新模型測試。
+- **23:06最新交接**：8784文字分階段候選的住宅2008已結束，原根`.build/cad-user-staged-471c3ecc21fd4d1da1c2b83718968f0f`停於stopped_at_case_boundary／completed1，controller session27088退出0。第2輪compact_context423.554秒／16212tokens，第3輪完整88操作198.214秒／10376tokens，無length；第一次CP950拒絕楼，模型修正TC後第4輪105.145秒／4783tokens重送88操作。實際75線13文字，全部畫出，但verify_before_save JSON Invalid escape，未存檔；不是全案通過、未測2022或其餘13案。新Drawing2仍未存檔，88Handle／279項原生屬性獨立核對全相符，已實際max窗口／縮放覆核。沒有原生尺寸、門洞／可見動線；基地12×10m自行假設。模型最後誤稱「建圖前失敗、未建立」並建議ASCII／換CAD，原錯誤與failure-review.json保留，不採用該建議。
+- 查明真正匯出錯誤：Big5餐=C0 5C，ANSI LISP逐byte跳脫把尾5C再加一份，產生客餐\\廳的非法JSON。兩版唯讀字串探針證實strlen按bytes、LISPSYS不存在；修正src/cad_export.lsp依Windows GetCPInfo的DBCS lead ranges成對輸出，真反斜線／引號／控制碼仍跳脫，Unicode LISPSYS1／2不套用bytes模式。固定8組原生roundtrip兩版PASS，原88／58圖元及DBMOD不變；完整新bulk原型讀2008 0.510秒279項、2022 2.556秒499項全部相符，證據`.build/dbcs-json-native-proof/`及`.build/dbcs-bulk-native-proof/`。這是修正原型實機證據，後續新EXE＋模型仍待驗。
+- 新對照候選原始碼已加入：cad_design文字方案狀態／保存恢復（不含授權），fresh cad-new規劃時不公告cad_draw完整Schema，compact_context成功後才公告；重載同技能不清方案，舊checkpoint缺欄位維持相容，直接猜工具也在Broker建圖前擋。簡單新圖只需1–2句方案。另聚合最多20項／每項8種CP950問題字元並標省略，不自動替換；finish失敗說明強調drawing_started與saved不同，禁止據未存檔推論未建圖。
+- 正在`.build/cad-user-gated-build.log`建立新的v142／空快取frozen候選（exec session13405），runtime401a5d15bacf1186…；365 Rust、78 CAD、2角色測試及完整release example以最後GATED_CANDIDATE_VALIDATION_COMPLETE和退出0為準，尚未看完不能稱全部完成。`.build/start_gated_cad_test.ps1`準備8785／新隔離根，等前批安全邊界、無舊執行器／未結束推論、新建置標記才啟動；尚未執行，current仍8784。恢復後先查建置結果，不能拿舊76ad runtime做新功能冒充。
+- 22:37新候選已啟動：`.build/cad-user-staged-471c3ecc21fd4d1da1c2b83718968f0f`／localhost8784／low／20k，runtime76adf657…。current指標已更新；controller exec session27088，先住宅2008，7類×2008／2022共14案待驗。正式v142探針、空快取frozen基本整合、361 Rust／75 CAD／2角色測試及release example全部完成，resume-build.log有STAGED_CANDIDATE_VALIDATION_COMPLETE且退出0。不能把建置通過當模型案例通過；分階段提示的實際效果仍在觀察。
+- 使用者已明確表示完成電腦使用、要求繼續測試，解除下方暫停；維持本輪不進版、不更新dist、不打包、不推送。
+- 已確認Strata loaded、Q2、131072上下文，三份重開機備份SHA256一致，正式連線流程可連2008／2022，見`.build/cad-user-staged-environment.log`。沒有恢復原取消任務或執行晚到回覆。
+- 以MSVC v142、空Cargo快取frozen重新完整驗證候選，進度見`.build/cad-user-staged-resume-build.log`；75 CAD契約已通過，其餘及新版測試EXE以完成標記為準，未完成前不啟動新批次。
+- `.build/start_staged_cad_test.ps1`已補paused_by_user取消證據、舊推論完成／無舊執行器及新版建置完成標記檢查。待建置全通過，啟動8784獨立新批次，先測分階段住宅案例，再按實測結果調整；原始模型／CAD／資料／畫面驗證關卡均保留。
+
+## 使用者暫停交接（2026-10-18 19:06，已由上方恢復）
+
+- **重開機前備份已完成（19:20）**：使用者另行授權保存後續需要的圖面，僅三張本輪失敗診斷圖另存到`.build/reboot-preserved-20261018-191620/`：bathroom-shelf-2008-partial.dwg（31圖元）、balcony-plant-stand-2008-partial.dwg（54）、door-hanger-2022-partial.dwg（58）。各自開啟獨立磁碟副本、全Handle及可讀描述屬性與存檔前記憶體一致，驗證副本Close(False)、原文件未關閉，備份SHA256穩定；詳saved-and-reopened.json，指標`.build/reboot-preserved-current.txt`。這是使用者授權的重開機備份，原模型／原生報告仍FAILED，不改成通過。2008花架SaveAs寫出檔案但來源COM FullName仍殘留先前失敗路徑，因此以獨立開檔資料證明備份有效，不重送SaveAs。初版保存腳本的FullName斷言／比較函式錯誤及修正版日誌均留.build。
+- 其他既有645圖元法蘭／Undo圖都有原檔、來源及診斷證據，可從原檔重新建立測試，不需要保留記憶體修改或Undo堆疊。空白Drawing1不需要保存；沒有關閉CAD、沒有重新開始模型矩陣。重開機後從上述三份DWG恢復診斷，不再依賴舊Drawing編號／COM工作階段。
+- 8783取消後的第7輪已保留晚到回覆：465.254秒、20,000 tokens、沒有工具；不能執行該取消結果。下方「可能仍在推論」是暫停當時紀錄，這一輪現在已完成，整體仍由使用者暫停。
+- 使用者要先使用電腦，明確要求儲存進度、晚點再繼續。**目前停止，不自行恢復測試、編譯或UI操作。** 沒有進版、更新dist、打包或推送。
+- current仍是`.build/cad-user-model-20k-matrix-7d8a0fd3600541d28c0da417ce2ff80e`／8783；住宅2008到第6輪已有三次20,000 tokens且無工具。第7輪模型等待時已正式POST取消，確認cancelled；核對命令列後停止本輪controller12516、runner24044、worker29200。沒有cad-report、沒有本案CAD繪圖；CAD應用及先前圖面保留。證據`user-pause.json`，cases/progress.json為paused_by_user。
+- 已送出的第7輪Strata推論可能自行結束，取消後不會執行工具；晚到回覆由仍開的本輪bridge保留。恢復前先查`bridge/turn-007.response.json`及原始日誌，不把取消當成功／CAD失敗，不與未結束GPU推論重疊測速。
+- 使用者建議分次完成以避免20k耗盡。已修改agent/skill.md、legacy skill.md與cad-new.md：必要條件→compact_context保存200–400字配置→下一輪完整原子cad_draw；不假裝多次cad_draw可追加同圖，100操作限制仍在。**新提示尚未送Strata實測。** 流程已記入docs/LOCAL_MODEL_VALIDATION.md。
+- 分階段候選首次建置因CAD技能上下文超過5000 bytes測試失敗，已縮短提示，未放寬門檻。第二次實際v142探針192930159 x64、Clippy及基本Rust測試通過，到75項Python CAD契約時4個WinError5暫存目錄權限錯誤停止；**建置未完成，沒有workspace361／example2／新版測試EXE的本輪完成證據**。原始`.build/cad-user-staged-build.log`與`...-rerun.log`保留；執行session22192已退出1，不存在背景編譯。
+- 恢復後先以允許暫存檔操作的相同v142環境完整重跑Build.ps1 -ValidateOnly -EmptyCargoCache -BasicValidation，再workspace／example測試及release example；不要省略失敗或沿用舊EXE冒充新提示。`.build/start_staged_cad_test.ps1`是尚未執行的隔離啟動草稿，目前只接受舊批次stopped_at_case_boundary，需依user-pause證據調整安全檢查才可啟動；預定8784、新根目錄、先住宅再其餘7類×2版本。未建立新候選、未啟動8784。
+- 前面的桌下架2008真實存檔／資料／畫面通過紀錄仍有效，整個14案矩陣沒有完成。後續繼續保留原生存檔重開、獨立資料與真正畫面覆核，不因分階段提示而跳過驗證。
+
+## 本機模型長期驗證與CAD多情境（2026-10-18，已按上方要求暫停）
+
+- **目前最新8783**，current指標為.build/cad-user-model-20k-matrix-7d8a0fd3600541d28c0da417ce2ff80e；low／20k，runtime76adf657…；從住宅→小廠→大廠→浴室→門架→桌下→花架，各2008／2022，14案仍執行中。v142實際探針／空快取frozen／75 CAD／361 Rust／2角色測試及隔離EXE建置退出0（.build/cad-user-20k-path-build.log）；不進版、打包、更新dist或推送。
+- 8782花架2008只畫54項幾何，模型誤以為下一輪可追加尺寸；cad_draw說明已明示每次獨立新圖、完整必要尺寸／註記一起規劃。檔名自取阳台（U+9633）造成2008 SaveAs原生錯誤通知阻塞，僅用UI關閉兩個錯誤通知，沒有另存／重畫；實際無DWG，Drawing4保留。54圖元／166項獨立COM屬性及真正畫面覆核完成。新完整存檔路徑CP950預檢已實機證明建圖前拒絕、文件10→10及54個Handle不變；NativeSave錯誤不是模型排隊或output限額。
+- **最新為8782**，current指標指向.build/cad-user-model-20k-suite-d6683e6764a448adbe4e3ca22f0383fc；low／20k、runtime e39648a5…，從花架→住宅→小廠→大廠→浴室→門架→桌下，各兩版本，全14案仍執行中。nullable提示修正建置退出0：v142實際探針192930159 x64、空快取frozen、74 CAD／361 Rust／2角色測試；不進版、打包或推送。
+- 8781桌下2008已完成63圖元存檔重開／獨立資料／真正CAD三視圖覆核，僅木工討論概念圖PASS，實物承載／桌板厚度未驗證；共享唯讀SHA256確認未變，Get-FileHash分享鎖錯誤不可當內容變更。首計畫省略line_style失敗是指南與Schema矛盾：required nullable欄位須填null，restore_optional才還原省略；已對齊通用及線型說明並加入strict true／false回歸，沒有放寬必填驗證。該批在一案完成邊界停止，舊圖與證據保留，最新14案仍包含桌下重跑。
+- 最新候選為localhost8781、Q2／128K／low／20,000輸出，current指標在.build/cad-user-current.txt。新runtime e39648a5…，v142實際探針192930159 x64、空Cargo快取frozen、74 CAD契約、360 Rust、2角色測試及隔離EXE建置退出0（.build/cad-user-20k-unicode-build.log）。從桌下收納→花架→住宅→小廠→大廠→浴室→門架，各2008／2022，14案仍執行中，不能稱全通過。
+- 8780門架2022實際52操作／58圖元，bulk TextString把CAD Unicode表示法當成原文字而誤判未存檔；獨立COM204項屬性全部相符。已實際看全圖及標題，部分簡體字形問號仍是外觀問題。修正只對含Unicode表示法的文字沿用COM描述器，其他保留bulk；原私有圖重讀3.260秒、11筆文字均與COM一致。三份leader Schema補三點順序及後兩點y相同；原生限制未放寬。原失敗圖沒有儲存或自動重畫，已完成failure-review後在案例邊界換候選。
+- 最新使用者要求Strata每輪輸出上限提高至20,000，128K模型上下文不變；隔離轉接新增--max-tokens，同步公告最大／預設並轉送實際額度。新批次暫存指標.build/cad-user-20k-next.txt；8777舊8192門架案在無cad_draw／原生報告的模型修復等待時安全取消並停止所屬隔離程序，保留interruption.json及晚到生成、不執行工具。不是CAD失敗，也非完整案例通過；尚未取得20k推論結果時不得稱改善。
+- 最新候選補齊正式Inbox普通用戶偏好回覆及每輪有界偏好狀態；修正本方錯誤polyline建議，cad_draw目前只有line等既有種類，矩形需4項line。最新v142空快取frozen基本流程、72 CAD契約、360 Rust workspace、2 example角色測試及測試EXE通過，見.build/cad-user-persona-final-build.log；不代表14案已成功。
+- 同一舊請求串流重播：none回完整100條line但內容錯誤，low耗盡8192思考tokens無工具。僅為無工具執行的診斷，不能當CAD通過或穩定速度。8776偏好無人回答的55輪案最終為回覆修復上限，已更正原本輸出額度的誤分類。
+- 20k low同題重播以18,422 tokens／429.029秒回完整73項cad_draw，CP950仍有5項文字不支援，未執行；只能說較大額度讓這一次完成生成。8778轉接誤改task封套導致HTTP400，已修正並補回歸，不把14次失敗啟動算模型矩陣。實際候選改8779，.build/cad-user-current.txt指向新根目錄，已確認正式請求實際max_tokens=20000；完整CAD結果仍待驗證。
+- 8779 none＋20k門架2008以18輪／1298.966秒結束：82操作引線末段不水平、修正版106操作超限，皆未建圖；兩輪20k耗盡無有效內容，最後暫停，assessment.json保留。不是COM寫入失敗或14案已測。已在自然案例邊界切到8780獨立low＋20k批次，current指標更新，產品EXE／runtime／角色不變，仍保留全部資料與CAD畫面驗證關卡。
+
+- 使用者要求保留完整／代表性／重點三級實測流程，先完整測CAD；不趕時間，不省略存檔重開、獨立資料及實際畫面覆核。案例採一般用戶模糊需求，包含日常架具、住宅及工廠，不只調同一法蘭。
+- 長期流程在docs/LOCAL_MODEL_VALIDATION.md；案例與角色在tools/cad_user_cases.json；正式runner批次入口examples/cad_model_suite.rs及tools/run_cad_user_cases.py。命令列流程與真實GUI驗證分開，不自動同意既有文件寫入或失敗後重畫。
+- 前兩批發現新設計誤讀既有圖、角色未回答另開選擇、2008字碼頁丟字、異常視野、模型超出100操作及輸出額度暫停；保留全部失敗並修正。詳見docs/VALIDATION_CAD_USER_SCENARIOS.md，不把尚未完成矩陣寫成全部通過。
+- 目前完整候選根目錄由.build/cad-user-current.txt指向；每案2008／2022獨立專案，具體思考模式及額度看該批manifest，localhost轉送原始當輪messages／tools。暫停最多以同一正式檢查點續接兩次，依實際pause_reason區分輸出額度與回覆修復上限，不新建任務代替續接。
+- 新增操作數明示及read_work_log有界結果摘要，避免大型參數蓋住錯誤；最新EXE已納入此修正、最近工具失敗與偏好狀態。360 Rust workspace通過，真實模型效果仍須按各案證據判定。
+- Outlook帳號與企業加密環境不足項只能標模擬／待公司實測，不能當真實完整驗收。這輪不進版、不更新dist、不製作安裝包、不推送Git；保留使用者既有icon、onboarding資料及本機連線設定。
+
+## CAD Q2 問題修正與再測（2026-10-18）
+
+- 使用者要求依Q2實測修正、持續送模型，並以上下文／提示詞優化。授權必要的隔離測試建置及2008／2022私有副本測試；本輪不進版、更新dist、封裝或推送。
+- 修正方向：程式固定目前文件與版本、保留停止原因／原生修改證據／少量精確查詢，避免上下文整理引導重讀或跨CAD；總覽識別有界的封閉直線輪廓，基本編輯格式常駐，不再強制先讀指南。
+- 2008找到可行原型：RunCommand原生Undo群組＋固定受限LISP半徑／ACI修改，等待完成回條，再完整核對。原生修改後一次Undo已能完整還原645列；不能採用COM屬性外包Begin／End或單次LoadLISP包Begin／End的失敗方案。
+- 完整引擎已通過兩版本兩圖元一批修改、全圖核對、一次Undo還原645列。群組必須涵蓋Regen與批次核對；2022用原生Begin／End，2008用RunCommand＋固定有限LISP。2008額外讀回後一次Undo也通過；2022額外刷新可能留下空Undo項目，仍有限制，不能自動Undo清除。
+- 先前診斷助手漏啟BULK_ENABLED而走慢速COM，在寫入前停止；另有無回條等待、群組過早結束的失敗紀錄，均保留.build，不算通過。建置使用Build.ps1 -ValidateOnly -EmptyCargoCache -BasicValidation及額外定向回歸，v142實際探針不省略。
+- 實際GUI／Strata Q2的2008及2022各兩次中心圓Ø60→80均完成，獨立645列比對僅目標半徑改變、來源與副本磁碟雜湊不變。v2為6輪57.772秒／5輪50.895秒；v3為5輪71.255秒／5輪75.049秒，皆為模型耗時，不含工具及人工確認。先前Q2的2022是18輪199.790秒；2008先前失敗，不能比較成已完成任務。
+- 第一候選版誤認缺少CAD能力，補強技能啟動；v2的2008成功後誤查失效快照，v3依生命週期移除無效工具後未再發生。v3的2008最後答案誤把輪廓編號當Handle並猜類型；再補完成回覆提示及同上下文重播，保留原錯誤，不稱零幻覺。
+- 70項CAD契約與6項新增Rust定向回歸、基本整合、自檢及空快取frozen的v142候選建置通過，沒有本輪全部354項Rust或安裝包生命週期。最後只改完成回覆提示，做最後一輪模型重播及建置，未再完整GUI重跑；詳見docs/PENDING_CAD_Q2_OPTIMIZATION.md與.build/strata-q2-opt-44798bfccc4d455aab821b4652585a09/summary.json。公司原圖首次revision拒絕仍未重現，未放寬revision檢查。
+
+## Strata Q2 比較補測（2026-10-18）
+
+- 使用者自行換成 qwen3.8-flash-next-q2_0，授權再測；128K、none、8192輸出上限與既有0.8.69 EXE不變。本輪未改產品、模型設定、編譯或發布。
+- 五份相同Q3輸入重播：原生生成加權27.94→44.64 tokens/s，總推論159.090→105.363秒。只是固定請求推論，不能當成完整流程或工具執行。
+- 正式GUI的2008副本：正確定位後一次修改仍因StartUndoMark在寫入前停止；Q2之後以version=latest重讀到2022並準備重試，已手動停止，未授權跨版本寫入。第31輪生成在取消後保留但未執行；原生報告僅一次edit，2008獨立核對645圖元全未變。
+- 獨立2022專案：實際僅26C半徑30→40且未存檔，全部645列比對／來源與磁碟雜湊通過；但18輪／199.790秒（Q3為9輪／189.945秒），生成43.38 tokens/s。模型重複查詢且最後誤稱其他孔含Ø15（實際4×Ø12及1×Ø20），不可稱零錯誤通過。
+- 沒有0/100全圖分頁；Q2實際最大輸入約1.4萬tokens，不能證明128K填滿、公司模型或量化品質；一次比較也不能證明差異必然由量化造成。證據.build/strata-q2-587c4789d7b34db08b7f4366b21d1f7a/summary.json、observations.json；真實GUI模型原始紀錄沿用Q3根目錄第19–49輪，Q3舊summary保留。
+
+## Strata 128K 真實 GUI／CAD 測試（2026-10-18）
+
+- 使用者授權連線到本機 Strata，成功後送先前 CAD 驗證；本輪未改產品或進版建置發布。用既有0.8.69 EXE、正式runner/Broker/worker，在兩個獨立空白專案測已存在645圖元法蘭的目前圖面中心圓Ø60→80，不是由Strata重新畫完整法蘭。
+- Strata狀態max_context=131072，model=qwen3.8-flash-next-iq3_s、reasoning_effort=none。MCP連線成功；正式GUI透過127.0.0.1:8771直接轉送每輪messages/tools，API key只由既有Y:/python接口助手讀入記憶體。沒有Codex模型代為推論／修正工具參數。
+- 2008：一次快照／圓查詢／修改提交後，StartUndoMark缺少，drawing_started=false；獨立核對645圖元完全不變、半徑仍30。2022：EDITED_UNSAVED後Strata重建快照查回Ø80；獨立逐圖元核對僅26C改半徑40，其餘不變、來源與副本磁碟雜湊不變。兩者都未重現過期revision或0/100迴圈；不代表公司原圖誤報已修復。
+- 生成加權約27.75／28.70 tokens/s，模型總耗時156.207／189.945秒；2008曾只回文字，由runner要求修正；2022多讀一次cad-copy指南再讀cad-edits。完整最大輸入約1.4萬tokens，未做128K填滿驗證。
+- 本機證據與助手在.build/strata-cad-52b90292a28c4086be28dae907776dea/、.build/strata_local_server.py、.build/strata-current.txt；新版轉接保留原始回覆，只對桌面fast/quality路由封套做映射。首輪原始封套不符、測試專案放在WebView資料目錄內造成sharing violation，皆已另記並排除正式流程速度。測試GUI和兩份私有圖面保留供看結果；2008未改、2022未存檔，不自動關閉。
+- .codex/config.toml是使用者要求的本機MCP連線設定（未追蹤），不放進產品交付或Git；icon.png、dist/onboarding-state.json照舊保留。正式UI與量化比較細節見docs/VALIDATION_0_8_69.md的Strata補測節。未更換Strata模型或修改另一專案設定。
+
+## 0.8.69 公司回報後診斷（2026-10-17）
+
+- 使用者授權以法蘭需求補測本機2008／2022目前圖面 revision 與 Undo；本輪只測試及紀錄，未改產品、建置、進版或發布。
+- 已存檔645／未儲存250圖元法蘭，連續三次與縮放後第四次快照都一致；另每次新啟正式worker三次也一致。公司首次版本拒絕未重現，合併錯誤不足以認定使用者動圖；需補差異診斷，不直接忽略revision。
+- 2008仍缺StartUndoMark，兩種圖面都在寫入前停止；0.8.64只放行純縮放，不能把副本成功當作用中修改支援。原生LISP跨呼叫Undo備援未通過，不可直接採用。2022兩種圖面作用中Ø60→80成功，正式COM群組另以一次Undo實際還原半徑與顏色通過。詳見docs/VALIDATION_0_8_69.md補測節；公司DWG／原始快照、單位1與記憶校驗問題仍待查。
+
 ## 0.8.69：CAD 批次讀取整合與發行（2026-10-17 最新授權）
 
 - 使用者已要求整合、測試成功後進版／v142 編譯／NSIS 打包並發布 Git main，取代下方原型及暫停限制。保留 icon.png、使用者 onboarding-state.json 與歷史離線 ZIP；不提交 .build、連線或聊天資料。
@@ -743,3 +1012,27 @@
 - 分批期間核對可觀察的文件／數量／單位／DBMOD，部分結果不交付模型、不恢復失敗批次。DBMOD 不是遞增版號，同數量編輯仍需修改前完整核對。
 - 用 Build.ps1 -EmptyCargoCache -ValidateOnly -BasicValidation 產生 v142 x64 隔離測試版；實測結果補記 docs/VALIDATION_LUNA_CAD_INDEX.md，不以合成測試代替 2008 大圖驗收。
 - 使用者要求先停止，討論 CAD 程序內批次匯出。已停止本次原生讀圖助手、建置流程、隔離 EXE 與 localhost 8769；保留 CAD／圖面及原始碼。65 CAD 合成與新增 Rust 測試通過、release 編譯成功，但完整基礎驗證及新 GUI／Luna 測試未完成；停止進度見 .build/cad-read-stopped.json。不得自行恢復測試或發布。
+## 本機模型分級驗證（2026-10-18，長期流程）
+
+- 使用者要求將流程記入專案記憶；完整／代表性／重點三級，以及每次基本檢查，詳見docs/LOCAL_MODEL_VALIDATION.md。
+- 本輪先做CAD多種類型、2008／2022的真實Strata測試。需求採一般用戶模糊口吻，必要追問以普通使用者資料補充，不先餵座標／工具格式；涵蓋日常小物、多層住宅與大小工廠。時間不趕，不以加速省略驗證。
+- 每案保留初始需求、追問、原始模型參數、正式工具報告、獨立產物核對及外觀狀態。失敗保留、不自動重畫。模型／工具／幾何／視覺分別判定，模擬資料與真實環境分別記錄。
+- 可用examples/cad_model_suite.rs串行呼叫正式runner測新建CAD，沒有目前圖面寫入／重連的自動確認；此入口不代表GUI驗收。測試連線／聊天／DWG留.build，不進版、打包或推送。
+
+
+- **02:45最新進度**：同一session20035已完成4／14，現在陽台花架2008。桌下架2022原生49操作／49圖元（30線、10字、9尺寸），GStarCAD.Application.22，存檔重開與獨立資料PASS；SHA `962a46bab1330e82af67754901afdaea323e251ded062051bff3b9b4fa965041`，023734/桌下架子設計.dwg。真CAD最大化、全圖縮小及文字放大已覆核，VISUAL_ISSUES：字小／長中文擠疊；板深350與主機深350無前後餘量、靠右支撐但未確認散熱口、未確認腿部位置卻保證腳不會卡；側視圖實為寬度方向。圖仍開、不改幾何／補存。6輪模型450.552秒（含一次空可用輸出24.305s修復），draw193.648s／8239tokens、native約54秒，沒有length。詳細4案表已追加docs/VALIDATION_CAD_USER_SCENARIOS.md。繼續凍結產品完成圖型覆蓋，不為設計品質重啟同一案。
+
+- **03:08最新**：完成6／14，現在small_factory-2008，session20035/current/runtime不變。花架2022 CAD_FAILED(reopen)，實際已存檔30圖元，COM268屬性相符／DBMOD0，SHA855fd3…。LISP HEADER把簡體檔名回傳反斜線U+9633／89C6／56FE，COM為原字，直接路徑比較誤拒絕；尚未修復。native-failure-review保存原始匯出及快照，真CAD畫面已看、failure-review已寫，文件留開不改／補存。全部細節與花架2008紀錄已追加docs/VALIDATION_CAD_USER_SCENARIOS.md最新段落。繼續凍結版測其餘8案，再安排Unicode檔名定向修正與原檔兩版回歸，不能忽略身分核對或改檔名繞過。
+
+- **03:18最新**：同session20035完成7／14，現在small_factory-2022。小廠2008原生97操作／97圖元，正確Icad1、存檔重開約100秒；模型6輪422.742秒。SHA54767b…，本案031435/factory_layout.dwg。獨立確認12台2×1.5m、6桌，沒有任何原生尺寸故data.status=DATA_ISSUES；真CAD最大化已看，封閉無門隔間、DASHED全圖過密、出貨口紅線示意待釐清，visual=ISSUES。controller總狀態VISUAL_ISSUES不可誤讀為資料通過，內嵌data完整保留。全部細節已追加docs/VALIDATION_CAD_USER_SCENARIOS.md最新段。文件仍開不改。後續小廠2022→大廠雙版→住宅雙版→浴室雙版，仍不進版／dist／Git；花架2022Unicode檔名缺陷尚未修復，先完整覆蓋後定向修正。
+
+- **03:54等待中**：仍8／14，large_factory-2008在最後既定continuation2，run_id6644142ceb25f6779f4d92b15deaab4c。t54 compact263.779秒／12715tokens後，t55 433.901秒／20000、t56 412.322秒／20000，皆無可執行工具，沒有cad-report／沒有新圖。不能把長等待當CAD讀取超時。最後一次續接03:54:08開始；待結果後讓同session20035自動進large_factory-2022，不重啟現有任務。原資料與所有下方8案證據不變。不要因重複等待就跳過驗證或提前結束工作。
+
+- **04:58來源修正待驗證（凍結矩陣仍舊runtime7018）**：住宅2022 t79 488.991秒／20k無工具，目前continuation1自04:56:19等待，run_id7cfbb2baa6467ed5577ee6fa1fa99ab8，11／14尚未完成。不要重啟或中斷；後續浴室雙版。
+- 已在等待期間修改**來源**src/cad_bulk.py：新增ansi_lisp_representation、exported_name_matches、exported_path_matches，分開比對DWGNAME和DWGPREFIX，僅從COM原字正向產生CP950外BMP字元的反斜線U+表示法；不一般解碼、不猜字、不略身分。檔名以反斜線U+開頭時原os.path.join會誤丟目錄，已避免；未知非BMP跳脫仍拒絕。未存檔名稱改splitext後同法比對。
+- 已改**來源**src/cad_worker.py：native_model_bounds在TILEMODE1、worldXY前置成立且EXTMIN/MAX無效時，以全部圖元GetBoundingBox原生WCS外框合併，再既有ZoomWindow。每個Handle唯一、數量、完整合法範圍、DBMOD與目前文件、570秒預算必須通過；任一失敗停止，不跳圖元。不改正常批次讀圖路徑。尚未打成新runtime／未完整native修正流程測過，不能稱已完成建置或已修復上線。
+- 原生唯讀接口原型已證明：.build/probe_house_native_bounds.py對Drawing11全部86圖元GetBoundingBox合法，low[-804,-800.5,0]、high[18000,12900,0]、Count/DBMOD不變、無寫幾何；證據本案native-failure-review/native-bounds-proof.json。最初誤用14C無效Handle唯讀查詢失敗，改快照真Handle156後成功；型別資訊確實有GetBoundingBox。
+- cad-new.md補來源指引：保留未存檔圖面、僅依證據解釋範圍錯誤；明列實際幾何／簡化占位／未完成需求，核對淨距與門口，不保證承載散熱。指南仍<5000bytes。
+- **85項Python CAD契約通過**：.build/run_unicode_path_unit.py從src/cad_worker.py以worker別名載入本次來源，其他固定依賴使用凍結runtime；最新log .build/cad-name-and-native-bounds-unit.log。含新增路徑反例、全原生範圍／缺圖元／DBMOD變更／重複Handle／非模型空間拒絕，以及回覆指引。這不是v142重建或新版模型流程通過。後續矩陣完成後做新來源兩版native回歸、v142正式空快取frozen建置及必要新模型定向測試。不要拿本85項說舊候選build有85；舊候選原80。
+
+- **05:04即時**：仍11／14，住宅2022 t80 461.918秒／20k無工具，已進最後continuation2，無cad-report／無新圖。current／session20035／舊runtime7018不變。來源兩修正＋cad-new指引已改、85 Python契約通過，尚未新runtime/v142建置或完整native修正流程；詳04:58追加及docs/PENDING_CAD_Q2_OPTIMIZATION.md最新段。保持繼續等待，不重啟現有任務。

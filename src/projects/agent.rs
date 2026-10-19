@@ -13,6 +13,10 @@ pub const CONTRACT: &str = "desktop-agent-v1";
 pub const PATH: &str = "/lm_server/api/desktop/agent/turns";
 const CAP_PATH: &str = "/lm_server/api/desktop/agent/capabilities";
 const MAX_BYTES: usize = 2 * 1024 * 1024;
+
+pub(super) fn validate_cad_operations(operations: &[Value]) -> AppResult<()> {
+    schema::validate_cad_operations(operations)
+}
 /// 圖片編碼約增加三分之一；一般文字請求仍維持原上限。
 const MAX_IMAGE_REQUEST_BYTES: usize = 12_000_000;
 

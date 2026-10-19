@@ -6,8 +6,11 @@ pub mod batch;
 mod cad;
 mod cad_active;
 mod cad_copy;
+mod cad_design;
 mod cad_excel;
+mod cad_plan;
 mod cad_query;
+mod cad_session;
 mod chart_annotations;
 mod chart_preferences;
 mod code_review;
@@ -47,6 +50,46 @@ use std::{
     sync::atomic::AtomicBool,
 };
 use windows_sys::Win32::Storage::FileSystem::*;
+
+/// 大型操作的參數可能佔滿第一頁；另附有界的結果欄位，讓錯誤原因不被參數擠走。
+/// 原始紀錄與字元分頁仍完全保留，不將此摘要當成已讀完操作的證據。
+pub(super) fn work_log_outcome(result: &Value) -> Value {
+    let mut outcome = serde_json::Map::new();
+    for key in ["ok", "error"] {
+        if let Some(value) = result.get(key) {
+            outcome.insert(
+                key.into(),
+                match value.as_str() {
+                    Some(text) => Value::String(text.chars().take(2000).collect()),
+                    None if value.is_boolean() => value.clone(),
+                    None => Value::Null,
+                },
+            );
+        }
+    }
+    for key in [
+        "status",
+        "recovery",
+        "drawing_started",
+        "completed_operations",
+        "saved",
+    ] {
+        if let Some(value) = result.get("result").and_then(|r| r.get(key)) {
+            if value.is_boolean() || value.is_number() {
+                outcome.insert(key.into(), value.clone());
+            } else if let Some(text) = value.as_str() {
+                outcome.insert(key.into(), Value::String(text.chars().take(120).collect()));
+            }
+        }
+    }
+    if let Some(error) = result["result"]["error"].as_str() {
+        outcome.insert(
+            "native_error".into(),
+            Value::String(error.chars().take(2000).collect()),
+        );
+    }
+    Value::Object(outcome)
+}
 
 /// 回傳的 handle 保持到操作結束，拒絕目錄本身的寫入／刪除共用，
 /// 避免檢查後被重新命名、替換或改成 Junction；仍可在目錄內建立成果。
@@ -773,6 +816,10 @@ pub(super) struct SavedBroker {
     #[serde(default)]
     cad_failed: bool,
     #[serde(default)]
+    cad_last_result: Option<Value>,
+    #[serde(default)]
+    cad_design: cad_design::Design,
+    #[serde(default)]
     cad_attempts: u32,
     #[serde(default)]
     cad_partial_plans: Vec<String>,
@@ -790,6 +837,7 @@ pub struct Broker {
     cad_waiter: Option<crate::cad::Waiter>,
     cad_progress: Option<crate::cad::Progress>,
     cad_active: Option<Value>,
+    cad_session: cad_session::ActiveSession,
     // 完整快照只活在本次 Broker；重啟／續接須重讀，不恢復作用中文件寫入授權。
     cad_snapshot: Option<super::cad_index::Snapshot>,
     // 不支援介面的錯誤不能因模型遺忘歷史而持續送往 COM。
@@ -818,6 +866,9 @@ pub struct Broker {
     python_artifacts: Vec<super::python::Artifact>,
     cad_artifacts: Vec<super::python::Artifact>,
     cad_failed: bool,
+    /// 新建圖面的最後原生結果摘要；不保存完整圖元或恢復目前文件寫入授權。
+    cad_last_result: Option<Value>,
+    cad_design: cad_design::Design,
     cad_attempts: u32,
     cad_partial_plans: Vec<String>,
     cad_reads: BTreeMap<String, Value>,
@@ -844,6 +895,7 @@ impl Broker {
             cad_waiter: None,
             cad_progress: None,
             cad_active: None,
+            cad_session: Default::default(),
             cad_snapshot: None,
             model: "fast".into(),
             cad_active_unsupported: None,
@@ -867,6 +919,8 @@ impl Broker {
             python_artifacts: vec![],
             cad_artifacts: vec![],
             cad_failed: false,
+            cad_last_result: None,
+            cad_design: Default::default(),
             cad_attempts: 0,
             cad_partial_plans: vec![],
             cad_reads: BTreeMap::new(),
@@ -883,7 +937,8 @@ impl Broker {
         // 經序列化建立不含程序資源的快照；授權與執行中的 COM 物件不保存。
         serde_json::from_value(
             json!({"analysis":self.analysis,"mail_notes":self.mail_notes,"mail_draft":self.mail_draft,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
-            "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts,"cad_artifacts":self.cad_artifacts,"cad_failed":self.cad_failed,"cad_attempts":self.cad_attempts,"cad_partial_plans":self.cad_partial_plans,"cad_reads":self.cad_reads,"cad_previews":self.cad_previews}),
+            "cad_design":self.cad_design,
+            "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts,"cad_artifacts":self.cad_artifacts,"cad_failed":self.cad_failed,"cad_last_result":self.cad_last_result,"cad_attempts":self.cad_attempts,"cad_partial_plans":self.cad_partial_plans,"cad_reads":self.cad_reads,"cad_previews":self.cad_previews}),
         )
         .map_err(|e| e.to_string())
     }
@@ -964,6 +1019,8 @@ impl Broker {
         }
         self.cad_artifacts = state.cad_artifacts;
         self.cad_failed = state.cad_failed;
+        self.cad_last_result = state.cad_last_result;
+        self.cad_design = state.cad_design;
         self.cad_attempts = state.cad_attempts;
         self.cad_partial_plans = state.cad_partial_plans;
         self.cad_reads = state.cad_reads;
@@ -1035,7 +1092,9 @@ impl Broker {
     }
     pub(super) fn cad_artifact_index(&self) -> Value {
         json!({"artifacts":self.cad_artifacts,"blocked_after_error":self.cad_failed,
-            "visual_check_required":true})
+            "design_planning":self.cad_design.context(),
+            "last_execution":self.cad_last_result,"visual_check_required":true,
+            "next_action":if self.cad_failed {"finish回報最後原生結果及實際存檔狀態；不重畫、不換CAD或改用ASCII重試。"} else {"依原要求及原生結果繼續；新設計不用讀無關的目前圖面。"}})
     }
     /// 精簡上下文後仍提供確定的欄位角色，不附原始資料。
     pub(super) fn excel_plan_index(&self) -> Value {
@@ -1053,7 +1112,21 @@ impl Broker {
             .collect::<Vec<_>>())
     }
     pub(super) fn skill_context(&self, model: &str) -> AppResult<String> {
-        super::skills::context_for(&self.loaded_skills, model)
+        let mut context = super::skills::context_for(&self.loaded_skills, model)?;
+        if self.cad_design.pending() && self.loaded_skills.iter().any(|id| id == "cad-new") {
+            context.push_str("\n目前為新圖規劃階段，暫不提供cad_draw及其完整參數；不是缺少CAD能力。必要尺寸未齊先ask_user，條件足夠就compact_context保存短方案，下一輪才提供cad_plan_start分段工具。這一輪不展開全部座標。簡單新圖只需1–2句方案。不要重載技能找繪圖工具。");
+        }
+        Ok(context)
+    }
+
+    /// 只在真正切入新圖技能時開始規劃；重複載入不清除已保存方案。
+    fn activate_skill(&mut self, id: &str) -> AppResult<()> {
+        let already_loaded = self.loaded_skills.iter().any(|loaded| loaded == id);
+        super::skills::activate(&mut self.loaded_skills, id)?;
+        if id == "cad-new" && !already_loaded {
+            self.cad_design.begin();
+        }
+        Ok(())
     }
     pub fn charts(&self) -> &[super::charts::Chart] {
         &self.charts
@@ -1064,6 +1137,58 @@ impl Broker {
             tools.retain(|tool| {
                 let name = tool["function"]["name"].as_str().unwrap_or("");
                 if !super::skills::enabled(name, &self.loaded_skills) {
+                    return false;
+                }
+                if name == "cad_draw"
+                    && (self.cad_design.pending()
+                        || self.cad_design.staged()
+                        || self.cad_design.plan.is_some())
+                {
+                    return false;
+                }
+                if name.starts_with("cad_plan_") {
+                    if self.cad_design.pending() {
+                        return false;
+                    }
+                    if name != "cad_plan_start" && self.cad_design.plan.is_none() {
+                        return false;
+                    }
+                    if name == "cad_plan_inspect"
+                        && self
+                            .cad_design
+                            .plan
+                            .as_ref()
+                            .is_some_and(|p| p.inspectable_parts().is_empty())
+                    {
+                        return false;
+                    }
+                    if name == "cad_plan_start"
+                        && self.cad_design.plan.as_ref().is_some_and(|p| !p.finished())
+                    {
+                        return false;
+                    }
+                    if matches!(name, "cad_plan_part" | "cad_plan_commit")
+                        && self.cad_design.plan.as_ref().is_some_and(|p| p.finished())
+                    {
+                        return false;
+                    }
+                }
+                // 新模型只看到本機索引流程；舊入口仍供已提交請求／歷史相容。
+                if matches!(name, "cad_active_read" | "cad_read") {
+                    return false;
+                }
+                if (self.cad_session.stopped() || self.cad_failed)
+                    && name.starts_with("cad_")
+                    && name != "cad_inventory"
+                {
+                    return false;
+                }
+                // 修改後舊快照已撤銷；不要再公告必須持有快照／授權的工具，
+                // 避免模型為額外核對而憑空產生 snapshot_id。需要新量測仍可先讀快照。
+                if self.cad_snapshot.is_none() && matches!(name, "cad_query" | "cad_preview") {
+                    return false;
+                }
+                if self.cad_active.is_none() && name == "cad_active_edit" {
                     return false;
                 }
                 match name {
@@ -1087,6 +1212,41 @@ impl Broker {
                     _ => true,
                 }
             });
+            if let Some(plan) = &self.cad_design.plan {
+                let mut missing: Vec<Value> = plan
+                    .inspectable_parts()
+                    .into_iter()
+                    .map(Value::String)
+                    .collect();
+                missing.push(Value::Null);
+                for tool in tools
+                    .iter_mut()
+                    .filter(|t| t["function"]["name"] == "cad_plan_inspect")
+                {
+                    tool["function"]["parameters"]["properties"]["part_id"]["enum"] =
+                        json!(missing);
+                }
+            }
+            if self.cad_failed {
+                for tool in tools.iter_mut() {
+                    if tool["function"]["name"] == "finish" {
+                        tool["function"]["parameters"]["properties"]["message"]["description"] = json!("依cad_artifacts.last_execution簡短回報實際失敗步驟。drawing_started=true或completed_operations>0表示已建立圖面或曾執行操作；saved=false/file_exists=false只代表未存檔，不能說未建圖。說明部分圖面待人工檢查，不推測未證實原因，不建議ASCII、換CAD或重畫繞過manual_check。");
+                    }
+                }
+            }
+            if self.loaded_skills.iter().any(|id| id == "cad-active") {
+                let edited = self.cad_session.context()["last_edit"]["status"] == "EDITED_UNSAVED";
+                for tool in tools {
+                    let note = &mut tool["function"]["parameters"]["properties"]["progress_note"];
+                    if note.is_object() {
+                        note["description"] = json!("簡短80–150字記本輪新增進展及下一步；精確ID／圖元資料由CAD常駐狀態提供，不反覆抄寫，不把待執行說成完成。");
+                    }
+                    if edited && tool["function"]["name"] == "finish" {
+                        // 完成狀態靠原生證據；避免小模型在結尾重述未要求的外框、孔位而猜錯。
+                        tool["function"]["parameters"]["properties"]["message"]["description"] = json!("依原生修改結果簡短交付。單一圖元修改用2–3句，只說目標、實際舊值→新值與未儲存／未關閉狀態；必要限制才補充。不重述外框、其他孔、未核對的圖元類型、輪廓編號或內部驗證欄位。輪廓／候選編號不是Handle。");
+                    }
+                }
+            }
         }
     }
     pub fn set_png_renderer(&mut self, renderer: super::charts::png::Renderer) {
@@ -1492,6 +1652,15 @@ impl Broker {
         self.outlook.check_policy()?;
         crate::jobs::validate_id(id)?;
         let request = serde_json::to_value(tool).map_err(|e| e.to_string())?;
+        if (self.cad_session.stopped() || self.cad_failed)
+            && request["tool"]
+                .as_str()
+                .is_some_and(|name| name.starts_with("cad_") && name != "cad_inventory")
+        {
+            return Ok(Some(
+                json!({"ok":false,"error":"本任務CAD操作已停止，不重讀、重畫或換CAD。請依cad_artifacts.last_execution或cad_session.last_edit回報原生失敗。"}),
+            ));
+        }
         if let Some((previous, result)) = self.recorded_operation(id)? {
             if previous != request {
                 return Err("操作識別碼重複但參數不同；已停止。".into());
@@ -1597,6 +1766,15 @@ impl Broker {
             );
         }
         let request = serde_json::to_value(tool).map_err(|e| e.to_string())?;
+        if (self.cad_session.stopped() || self.cad_failed)
+            && request["tool"]
+                .as_str()
+                .is_some_and(|name| name.starts_with("cad_") && name != "cad_inventory")
+        {
+            return Ok(
+                json!({"ok":false,"error":"CAD操作已停止，不能以其他CAD工具重試；請依cad_artifacts.last_execution或cad_session.last_edit回報。"}),
+            );
+        }
         if let Some((old, result)) = self.recorded_operation(id)? {
             if old != request {
                 return Err("操作識別碼重複但參數不同；已停止。".into());
@@ -2103,6 +2281,12 @@ impl Broker {
                 super::progress::validate_handoff(working_note, superseded, next_step)?;
                 // runner 在本結果封存成功後才套用；此處不可自行丟棄正在執行的對話。
                 self.archive_results()?;
+                if self.loaded_skills.iter().any(|id| id == "cad-new") {
+                    self.cad_design.record(working_note, next_step)?;
+                } else {
+                    self.cad_design
+                        .remember_before_loading(working_note, next_step)?;
+                }
                 Ok(
                     json!({"handoff_validated":true,"apply_at":"本工具結果封存後、下一次模型請求前","raw_history":"read_work_log"}),
                 )
@@ -2200,6 +2384,21 @@ impl Broker {
                 version,
                 operations,
             } => self.draw_cad(name, version, operations, cancel),
+            Tool::CadPlanStart { name, version } => self.start_cad_plan(name, version),
+            Tool::CadPlanPart {
+                plan_id,
+                plan_revision,
+                part_id,
+                summary,
+                operations,
+            } => self.put_cad_plan_part(plan_id, *plan_revision, part_id, summary, operations),
+            Tool::CadPlanInspect { plan_id, part_id } => {
+                self.inspect_cad_plan(plan_id, part_id.as_deref())
+            }
+            Tool::CadPlanCommit {
+                plan_id,
+                plan_revision,
+            } => self.commit_cad_plan(plan_id, *plan_revision, cancel),
             Tool::RunPython {
                 purpose,
                 code,
@@ -2306,10 +2505,17 @@ impl Broker {
                 {
                     return Err("已有郵件成果；先查 read_mail_notes。確需回讀請用 set_work_stage(read,note_ids,reason)。".into());
                 }
-                super::skills::activate(&mut self.loaded_skills, id)?;
-                Ok(
-                    json!({"id":id,"loaded":self.loaded_skills,"instructions_location":"下一輪 system，工具定義位於 tools；無需重複載入。"}),
-                )
+                self.activate_skill(id)?;
+                let mut result = json!({"id":id,"loaded":self.loaded_skills,"instructions_location":"下一輪 system，工具定義位於 tools；無需重複載入。"});
+                if id == "cad-new" {
+                    result["planning_note_saved"] = json!(!self.cad_design.pending());
+                    result["next_action"] = json!(if self.cad_design.pending() {
+                        "本任務尚未保存短方案；必要條件未齊先ask_user，足夠就compact_context。不要靠重讀指南尋找尚未公告的cad_draw。"
+                    } else {
+                        "已沿用短方案；下一輪cad_plan_start建立計畫，每輪cad_plan_part只送1–20項。全部區段齊備才commit，不重讀指南或重送整圖。"
+                    });
+                }
+                Ok(result)
             }
             Tool::SearchFiles { paths, query } => self.search_files(paths, query, worker, cancel),
             Tool::OfficeBatch {
@@ -2455,7 +2661,8 @@ impl Broker {
                     }
                     let part: String = log.chars().skip(*offset).take(6000).collect();
                     return Ok(
-                        json!({"text":part,"offset":offset,"next_offset":offset+part.chars().count(),"total":total,"operation_id":id}),
+                        json!({"text":part,"offset":offset,"next_offset":offset+part.chars().count(),"total":total,"operation_id":id,
+                            "outcome":work_log_outcome(&result),"notice":"outcome只摘錄結果狀態；完整請求及結果仍按next_offset查回。"}),
                     );
                 }
                 // 一次索引分頁期間固定內容，避免新操作插到字典中間使游標漂移。
@@ -3141,6 +3348,45 @@ impl Broker {
 mod tests {
     use super::*;
     #[test]
+    fn work_log_outcome_keeps_failure_before_large_request_pages() {
+        let failed = json!({"ok":false,"error":"收到101項operations，上限100"});
+        assert_eq!(work_log_outcome(&failed)["error"], failed["error"]);
+        let native = json!({"ok":true,"result":{"status":"FAILED","recovery":"manual_check",
+            "drawing_started":true,"saved":false,"error":"TextString核對不符","entities":vec!["private details";1000]}});
+        let summary = work_log_outcome(&native);
+        assert_eq!(summary["status"], "FAILED");
+        assert_eq!(summary["drawing_started"], true);
+        assert_eq!(summary["native_error"], "TextString核對不符");
+        assert!(summary.get("entities").is_none());
+        let bounded = work_log_outcome(&json!({"ok":false,"error":"錯".repeat(5000)}));
+        assert_eq!(bounded["error"].as_str().unwrap().chars().count(), 2000);
+    }
+    #[test]
+    fn cad_operation_limit_reports_count_without_creating_output() {
+        let mut broker = Broker::new(
+            Project {
+                id: "p".into(),
+                name: "p".into(),
+                root: std::env::current_dir().unwrap(),
+                imports: BTreeMap::new(),
+            },
+            "r".into(),
+        )
+        .unwrap();
+        let error = broker
+            .draw_cad(
+                "limit.dwg",
+                "Icad.Application.1",
+                &vec![json!({}); 101],
+                &AtomicBool::new(false),
+            )
+            .unwrap_err();
+        assert!(error.contains("101項operations"));
+        assert!(error.contains("尚未建立圖面"));
+        assert_eq!(broker.cad_attempts, 0);
+        assert!(broker.cad_last_result.is_none());
+    }
+    #[test]
     fn dataset_checkpoint_reopens_and_rejects_modified_csv_without_touching_sources() {
         let root = std::env::temp_dir().join(format!(
             "dataset-checkpoint-{}",
@@ -3227,6 +3473,312 @@ mod tests {
             )
             .is_err());
     }
+    #[test]
+    fn new_drawing_context_keeps_failure_without_requiring_active_snapshot() {
+        let mut broker = Broker::new(
+            Project {
+                id: "p".into(),
+                name: "p".into(),
+                root: std::env::current_dir().unwrap(),
+                imports: BTreeMap::new(),
+            },
+            "r".into(),
+        )
+        .unwrap();
+        super::super::skills::activate(&mut broker.loaded_skills, "cad-new").unwrap();
+        assert_eq!(broker.cad_snapshot_index()["mode"], "new_drawing");
+        broker.cad_failed = true;
+        broker.cad_last_result = Some(json!({"status":"FAILED","recovery":"manual_check",
+            "error":"TextString","saved":false,"drawing_started":true}));
+        let mut request: Value = serde_json::from_str(include_str!("tools.json")).unwrap();
+        broker.restrict_tools(&mut request);
+        assert!(!request["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|t| t["function"]["name"]
+                .as_str()
+                .is_some_and(|n| n.starts_with("cad_") && n != "cad_inventory")));
+        assert_eq!(
+            broker.cad_artifact_index()["last_execution"]["error"],
+            "TextString"
+        );
+        assert_eq!(
+            broker.saved().unwrap().cad_last_result.unwrap()["recovery"],
+            "manual_check"
+        );
+        let finish = request["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["function"]["name"] == "finish")
+            .unwrap();
+        assert!(
+            finish["function"]["parameters"]["properties"]["message"]["description"]
+                .as_str()
+                .unwrap()
+                .contains("不能說未建圖")
+        );
+    }
+
+    #[test]
+    fn new_design_hides_drawing_schema_until_saved_and_keeps_state_after_restore() {
+        let project = Project {
+            id: "planning".into(),
+            name: "planning".into(),
+            root: std::env::current_dir().unwrap(),
+            imports: BTreeMap::new(),
+        };
+        let mut broker = Broker::new(project.clone(), "r".into()).unwrap();
+        let available = |broker: &Broker, name: &str| {
+            let mut request: Value = serde_json::from_str(include_str!("tools.json")).unwrap();
+            broker.restrict_tools(&mut request);
+            request["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|tool| tool["function"]["name"] == name)
+        };
+        broker.activate_skill("cad-new").unwrap();
+        assert!(!available(&broker, "cad_plan_start"));
+        assert!(available(&broker, "compact_context"));
+        assert!(available(&broker, "ask_user"));
+        assert!(broker
+            .skill_context("fast")
+            .unwrap()
+            .contains("暫不提供cad_draw"));
+        // 即使模型猜出尚未公告的工具，也不接觸COM或建立成果目錄。
+        let error = broker
+            .draw_cad(
+                "new.dwg",
+                "latest",
+                &[json!({"kind":"line"})],
+                &AtomicBool::new(false),
+            )
+            .unwrap_err();
+        assert!(error.contains("尚未保存新圖配置方案"));
+        assert_eq!(broker.cad_attempts, 0);
+        assert!(!broker.cad_failed);
+        broker
+            .cad_design
+            .record("毫米，兩層並排；現場尺寸待確認。", "完整繪圖")
+            .unwrap();
+        assert!(available(&broker, "cad_plan_start"));
+        let saved = broker.saved().unwrap();
+        let mut restored = Broker::new(project, "r".into()).unwrap();
+        restored.restore(saved, &AtomicBool::new(false)).unwrap();
+        assert!(available(&restored, "cad_plan_start"));
+        assert_eq!(
+            restored.cad_artifact_index()["design_planning"]["design"]["working_note"],
+            "毫米，兩層並排；現場尺寸待確認。"
+        );
+        restored.activate_skill("cad-new").unwrap();
+        assert!(
+            available(&restored, "cad_plan_start"),
+            "重複載入不能丟失方案"
+        );
+        restored.activate_skill("cad-active").unwrap();
+        restored.activate_skill("cad-new").unwrap();
+        assert!(
+            !available(&restored, "cad_plan_start"),
+            "重新切入新圖需新的方案"
+        );
+    }
+
+    #[test]
+    fn old_broker_checkpoint_does_not_gain_a_new_drawing_gate() {
+        let project = Project {
+            id: "legacy-planning".into(),
+            name: "legacy".into(),
+            root: std::env::current_dir().unwrap(),
+            imports: BTreeMap::new(),
+        };
+        let mut broker = Broker::new(project.clone(), "r".into()).unwrap();
+        broker.activate_skill("cad-new").unwrap();
+        let mut value = serde_json::to_value(broker.saved().unwrap()).unwrap();
+        value.as_object_mut().unwrap().remove("cad_design");
+        let saved = serde_json::from_value(value).unwrap();
+        let mut restored = Broker::new(project, "r".into()).unwrap();
+        restored.restore(saved, &AtomicBool::new(false)).unwrap();
+        assert!(!restored.cad_design.pending());
+        assert!(restored.cad_artifact_index()["design_planning"].is_null());
+    }
+
+    #[test]
+    fn staged_cad_geometry_survives_broker_restore_without_becoming_a_drawing() {
+        let project = Project {
+            id: "staged".into(),
+            name: "staged".into(),
+            root: std::env::current_dir().unwrap(),
+            imports: BTreeMap::new(),
+        };
+        let mut broker = Broker::new(project.clone(), "r".into()).unwrap();
+        broker.activate_skill("cad-new").unwrap();
+        broker
+            .cad_design
+            .record("兩層同圖，單位毫米。", "先一樓牆")
+            .unwrap();
+        assert!(broker.start_cad_plan("new.dwg", "latest").is_err());
+        broker
+            .start_cad_plan("new.dwg", "Icad.Application.1")
+            .unwrap();
+        let op = json!({"kind":"line","color":7,"start":[0,0],"end":[100,0]});
+        broker
+            .put_cad_plan_part(
+                "plan-1",
+                0,
+                "floor1",
+                "一樓底邊x0–100",
+                std::slice::from_ref(&op),
+            )
+            .unwrap();
+        let saved = broker.saved().unwrap();
+        let mut restored = Broker::new(project, "r".into()).unwrap();
+        restored.restore(saved, &AtomicBool::new(false)).unwrap();
+        let mut wire_op = op.clone();
+        wire_op["line_style"] = Value::Null;
+        assert_eq!(
+            restored.inspect_cad_plan("plan-1", Some("floor1")).unwrap()["part"]["operations"],
+            json!([wire_op])
+        );
+        restored
+            .cad_design
+            .record("繼續安排下一段，前段參數由本機保留。", "新增二樓")
+            .unwrap();
+        assert_eq!(
+            restored.cad_artifact_index()["design_planning"]["plan"]["recent_details"][0]["id"],
+            "floor1"
+        );
+        assert!(restored
+            .start_cad_plan("other.dwg", "GStarCAD.Application.22")
+            .is_err());
+        assert!(restored
+            .draw_cad(
+                "new.dwg",
+                "Icad.Application.1",
+                &[],
+                &AtomicBool::new(false)
+            )
+            .is_err());
+        assert!(restored
+            .commit_cad_plan("plan-1", 1, &AtomicBool::new(true))
+            .is_err());
+        assert_eq!(
+            restored.cad_design.plan.as_ref().unwrap().context()["phase"],
+            "collecting"
+        );
+        assert_eq!(restored.cad_attempts, 0);
+        assert!(!restored.cad_failed);
+        let mut request: Value = serde_json::from_str(include_str!("tools.json")).unwrap();
+        restored.restrict_tools(&mut request);
+        let names: Vec<_> = request["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|t| t["function"]["name"].as_str())
+            .collect();
+        assert!(names.contains(&"cad_plan_part"));
+        assert!(names.contains(&"cad_plan_commit"));
+        assert!(
+            !names.contains(&"cad_plan_inspect"),
+            "已常駐精確資料，不公告多餘查詢"
+        );
+        assert!(!names.contains(&"cad_draw"));
+        assert!(!names.contains(&"cad_plan_start"));
+    }
+
+    #[test]
+    fn same_task_handoff_before_loading_cad_exposes_drawing_without_another_handoff() {
+        let mut broker = Broker::new(
+            Project {
+                id: "before-load".into(),
+                name: "before-load".into(),
+                root: std::env::current_dir().unwrap(),
+                imports: BTreeMap::new(),
+            },
+            "r".into(),
+        )
+        .unwrap();
+        broker
+            .cad_design
+            .remember_before_loading("基地8×12m，入口前側，兩層同圖。", "載入CAD並繪圖")
+            .unwrap();
+        broker.activate_skill("cad-new").unwrap();
+        let mut request: Value = serde_json::from_str(include_str!("tools.json")).unwrap();
+        broker.restrict_tools(&mut request);
+        assert!(request["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["function"]["name"] == "cad_plan_start"));
+        assert_eq!(
+            broker.cad_artifact_index()["design_planning"]["design"]["working_note"],
+            "基地8×12m，入口前側，兩層同圖。"
+        );
+    }
+
+    #[test]
+    fn cad_tools_follow_snapshot_and_active_document_lifetime() {
+        let mut broker = Broker::new(
+            Project {
+                id: "p".into(),
+                name: "p".into(),
+                root: std::env::current_dir().unwrap(),
+                imports: BTreeMap::new(),
+            },
+            "r".into(),
+        )
+        .unwrap();
+        super::super::skills::activate(&mut broker.loaded_skills, "cad-active").unwrap();
+        let definitions: Value = serde_json::from_str(include_str!("tools.json")).unwrap();
+        let available = |broker: &Broker, name: &str| {
+            let mut request = definitions.clone();
+            broker.restrict_tools(&mut request);
+            request["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|tool| tool["function"]["name"] == name)
+        };
+        assert!(available(&broker, "cad_snapshot"));
+        for name in ["cad_query", "cad_preview", "cad_active_edit"] {
+            assert!(!available(&broker, name));
+        }
+        broker.cad_snapshot = Some(
+            super::super::cad_index::Snapshot::new(
+                json!({"entities":[],"entity_count":0,"revision":"r"}),
+            )
+            .unwrap(),
+        );
+        broker.cad_active = Some(json!({"revision":"r"}));
+        for name in ["cad_query", "cad_preview", "cad_active_edit"] {
+            assert!(available(&broker, name));
+        }
+        // 寫入撤銷快照後仍可 finish 或取得新快照，不提供失效的查詢入口。
+        broker.cad_snapshot = None;
+        broker.cad_active = None;
+        assert!(available(&broker, "finish") && available(&broker, "cad_snapshot"));
+        assert!(!available(&broker, "cad_query") && !available(&broker, "cad_active_edit"));
+        broker.cad_session.edited(
+            &json!({"status":"EDITED_UNSAVED","verification":{"handles_verified":645}}),
+            &[json!({"handle":"A","kind":"radius","value":40})],
+        );
+        let mut completed = definitions.clone();
+        broker.restrict_tools(&mut completed);
+        let finish = completed["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["function"]["name"] == "finish")
+            .unwrap();
+        assert!(
+            finish["function"]["parameters"]["properties"]["message"]["description"]
+                .as_str()
+                .unwrap()
+                .contains("2–3句")
+        );
+    }
+
     #[test]
     fn tools_require_existing_edit_and_export_targets() {
         let mut broker = Broker::new(

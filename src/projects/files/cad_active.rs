@@ -60,6 +60,7 @@ impl Broker {
         operations: &[Value],
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
+        self.cad_session.version("latest")?;
         if self.cad_failed || self.cad_attempts >= 6 {
             return Err("先前 CAD 結果未確認或本任務已達六次操作，請先檢查圖面。".into());
         }
@@ -89,7 +90,9 @@ impl Broker {
             std::time::Instant::now() + std::time::Duration::from_secs(600),
         )?;
         if choice != "confirm" {
-            return Ok(json!({"status":"CANCELLED","saved":false,"drawing_started":false}));
+            let result = json!({"status":"CANCELLED","saved":false,"drawing_started":false});
+            self.cad_session.edited(&result, edits);
+            return Ok(result);
         }
         let base = self.project.root.join("_AI_Output");
         match fs::create_dir(&base) {
@@ -128,6 +131,7 @@ impl Broker {
                 "advice":"結果未知，可能已部分修改；請人工檢查目前圖面，不自動重送。"}),
         };
         result["report_path"] = json!(format!("_AI_Output/{folder}/cad-report.json"));
+        self.cad_session.edited(&result, edits);
         crate::storage::atomic_write(
             &report_path,
             &serde_json::to_vec_pretty(&result).map_err(|e| e.to_string())?,

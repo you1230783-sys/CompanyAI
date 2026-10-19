@@ -29,6 +29,9 @@ pub struct Snapshot {
     pub data: Value,
     pub rows: Vec<Value>,
     rectangles: Vec<Value>,
+    contours: Vec<Value>,
+    /// 只保留少量已交付的精確資料，避免整理工具歷史後又查相同圖元。
+    recent_details: Vec<Value>,
 }
 
 pub fn point(value: &Value) -> Option<[f64; 3]> {
@@ -131,7 +134,55 @@ fn rectangle(points: &[[f64; 3]]) -> Option<[f64; 4]> {
     (corners.len() == 4).then_some(b)
 }
 
+/// 只描述閉合直線輪廓的外接框，不擅自命名零件或推算面積重心。
+fn contour_info(points: &[[f64; 3]], handles: Vec<Value>) -> Option<Value> {
+    if !(3..=64).contains(&points.len())
+        || points.iter().any(|p| (p[2] - points[0][2]).abs() > 1e-6)
+    {
+        return None;
+    }
+    let b = extent(points)?;
+    if !valid_region(&b) {
+        return None;
+    }
+    Some(
+        json!({"handles":handles,"vertex_count":points.len(),"bounds":b,
+        "bounds_center":[(b[0]+b[2])/2.0,(b[1]+b[3])/2.0,points[0][2]],
+        "width":b[2]-b[0],"height":b[3]-b[1],"z":points[0][2]}),
+    )
+}
+
 impl Snapshot {
+    /// 小量精確資料不靠 AI 摘寫，與快照同生共滅。超限移除整筆，
+    /// 不截斷座標或字串，也不因移出常駐上下文而撤銷已讀 Handle。
+    pub fn remember_details(&mut self, result: &Value) {
+        for candidate in result["candidates"].as_array().into_iter().flatten() {
+            let row = &candidate["entity"];
+            if !row.is_object() {
+                continue;
+            }
+            let fact = json!({"candidate":candidate["candidate"],"handle":row["handle"],
+                "kind":row["kind"],"editable":row["editable"],"allowed_edits":row["allowed_edits"],
+                "properties":row["properties"],"native_revision":row["native_revision"]});
+            self.recent_details
+                .retain(|previous| previous["handle"] != fact["handle"]);
+            if fact.to_string().len() > 8000 {
+                continue;
+            }
+            self.recent_details.push(fact);
+            while self.recent_details.len() > 10
+                || serde_json::to_string(&self.recent_details).map_or(usize::MAX, |s| s.len())
+                    > 8000
+            {
+                self.recent_details.remove(0);
+            }
+        }
+    }
+
+    pub fn recent_details(&self) -> &[Value] {
+        &self.recent_details
+    }
+
     pub fn new(mut data: Value) -> AppResult<Self> {
         let rows: Vec<Value> =
             serde_json::from_value(data["entities"].take()).map_err(|e| e.to_string())?;
@@ -146,16 +197,21 @@ impl Snapshot {
             }
         }
         let mut rectangles = Vec::new();
+        let mut contours = Vec::new();
         for row in &rows {
             if row["geometry"]["closed"] == true {
                 if let Some(points) = vertices(row) {
+                    if let Some(contour) = contour_info(&points, vec![row["handle"].clone()]) {
+                        contours.push(contour);
+                    }
                     if let Some(b) = rectangle(&points) {
                         rectangles.push(json!({"id":rectangles.len()+1,"handles":[row["handle"]],"bounds":b,"z":points[0][2],"width":b[2]-b[0],"height":b[3]-b[1]}));
                     }
                 }
             }
         }
-        // 四條獨立線亦可形成矩形。只走每個頂點度數為二的閉環，不從雜亂交線猜外框。
+        // 獨立線亦可形成四邊或八邊等封閉輪廓。只走頂點度數為二的閉環，
+        // 最多64段，不從雜亂交線猜外框，也不把外接框當成真正矩形。
         let key = |p: [f64; 3]| format!("{:.6},{:.6},{:.6}", p[0], p[1], p[2]);
         let mut links: BTreeMap<String, Vec<usize>> = BTreeMap::new();
         let mut lines = BTreeMap::new();
@@ -181,7 +237,7 @@ impl Snapshot {
             let mut edge = start;
             let mut ids = Vec::new();
             let mut points = Vec::new();
-            for _ in 0..4 {
+            for _ in 0..64 {
                 if ids.contains(&edge) {
                     break;
                 }
@@ -194,9 +250,13 @@ impl Snapshot {
                 };
                 edge = if next[0] == edge { next[1] } else { next[0] };
             }
-            if ids.len() == 4 && edge == start && key(at) == key(a) {
+            if ids.len() >= 3 && edge == start && key(at) == key(a) {
+                seen.extend(ids.iter().copied());
+                let handles = ids.iter().map(|i| rows[*i]["handle"].clone()).collect();
+                if let Some(contour) = contour_info(&points, handles) {
+                    contours.push(contour);
+                }
                 if let Some(b) = rectangle(&points) {
-                    seen.extend(ids.iter().copied());
                     rectangles.push(json!({"id":rectangles.len()+1,"handles":ids.iter().map(|i|&rows[*i]["handle"]).collect::<Vec<_>>(),"bounds":b,"z":a[2],"width":b[2]-b[0],"height":b[3]-b[1]}));
                 }
             }
@@ -206,6 +266,8 @@ impl Snapshot {
             data,
             rows,
             rectangles,
+            contours,
+            recent_details: Vec::new(),
         })
     }
 
@@ -233,17 +295,21 @@ impl Snapshot {
                 unknown += 1;
             }
         }
-        let mut descriptions: Vec<String> = self
-            .rectangles
-            .iter()
-            .take(8)
-            .map(|r| {
-                format!(
-                    "矩形 {}：寬 {}、高 {}，WCS XY 邊界 {}，所在高度 {}。",
-                    r["id"], r["width"], r["height"], r["bounds"], r["z"]
-                )
-            })
-            .collect();
+        let mut descriptions: Vec<String> = self.contours.iter().take(8).enumerate().map(|(i,c)|
+            format!("封閉直線輪廓 {}：{}邊，寬 {}、高 {}，WCS XY外接框 {}，外接框中心 {}（不是面積重心）。",
+                i+1,c["vertex_count"],c["width"],c["height"],c["bounds"],c["bounds_center"])).collect();
+        descriptions.extend(
+            self.rectangles
+                .iter()
+                .take(8)
+                .map(|r| {
+                    format!(
+                        "矩形 {}：寬 {}、高 {}，WCS XY 邊界 {}，所在高度 {}。",
+                        r["id"], r["width"], r["height"], r["bounds"], r["z"]
+                    )
+                })
+                .collect::<Vec<_>>(),
+        );
         for (i, row) in self
             .rows
             .iter()
@@ -287,11 +353,12 @@ impl Snapshot {
             descriptions.push(description);
         }
         json!({"snapshot_id":self.id,"revision":self.data["revision"],"document":self.data["document"],"source":self.data["source"],
-            "entity_count":self.rows.len(),"units_code":self.data["units_code"],"coordinates":"WCS XY; X右/Y上；不是目前螢幕方向；距離為圖面單位，INSUNITS=4才是毫米",
+            "entity_count":self.rows.len(),"units_code":self.data["units_code"],"edit_capabilities":self.data["edit_capabilities"],"coordinates":"WCS XY; X右/Y上；不是目前螢幕方向；距離為圖面單位，INSUNITS=4才是毫米",
             "kinds":kinds,"layers":layers.iter().take(50).collect::<BTreeMap<_,_>>(),"omitted_layers":layers.len().saturating_sub(50),
             "known_geometry_bounds":extent(&known),"entities_without_geometry_bounds":unknown,
             "rectangles":self.rectangles.iter().take(20).collect::<Vec<_>>(),"rectangle_count":self.rectangles.len(),
-            "geometry_summary":descriptions,"summary_scope":"只描述前8個已識別矩形／圓，不代表整張圖；距離是圖面單位，包含關係僅核對前20個矩形，不判斷零件用途。",
+            "closed_contours":self.contours.iter().take(12).collect::<Vec<_>>(),"closed_contour_count":self.contours.len(),
+            "geometry_summary":descriptions,"summary_scope":"只描述前8個封閉輪廓／矩形／圓，不代表整張圖。輪廓僅連通性與平面直線閉合，未驗證自交；外接框中心不是面積重心。距離是圖面單位，包含關係僅核對前20個矩形，不判斷用途。",
             "sample":self.rows.iter().enumerate().take(8).map(|(i,r)|self.candidate(i,r,None,false)).collect::<Vec<_>>(),
             "notice":"完整資料留在本機；以cad_query按條件或候選編號取得目標，不逐頁重讀。此為唯讀快照，不保證目前CAD未被手動修改；修改前仍重新核對全部可讀屬性。未讀取屬性、剖面、圖塊內容及外觀不可宣稱已驗證。"})
     }
@@ -476,5 +543,64 @@ impl Snapshot {
             "offset":offset,"next_offset":(end<matches.len()).then_some(end),"candidates":page,
             "notice":"候選編號綁定本快照；候選列表不是修改授權。修改前以details=true取回精確資料；有歧義請讓使用者選擇。區域為WCS XY外接框相交，不是精確碰撞檢查。"}),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snapshot(rows: Vec<Value>) -> Snapshot {
+        Snapshot::new(
+            json!({"entity_count":rows.len(),"entities":rows,"revision":"r","units_code":4}),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn isolated_eight_line_contour_exposes_bounds_without_becoming_rectangle() {
+        let points = [
+            [20., 0., 0.],
+            [200., 0., 0.],
+            [220., 20., 0.],
+            [220., 120., 0.],
+            [200., 140., 0.],
+            [20., 140., 0.],
+            [0., 120., 0.],
+            [0., 20., 0.],
+        ];
+        let rows = (0..8)
+            .map(|i| {
+                json!({"handle":format!("{:X}",i+1),"kind":"line",
+            "properties":{"StartPoint":points[i],"EndPoint":points[(i+1)%8],"Layer":"0"}})
+            })
+            .collect();
+        let view = snapshot(rows).overview();
+        assert_eq!(view["closed_contour_count"], 1);
+        assert_eq!(view["closed_contours"][0]["vertex_count"], 8);
+        assert_eq!(
+            view["closed_contours"][0]["bounds_center"],
+            json!([110., 70., 0.])
+        );
+        assert_eq!(view["rectangle_count"], 0);
+    }
+
+    #[test]
+    fn details_remain_exact_bounded_and_do_not_survive_new_snapshot() {
+        let mut state = snapshot(vec![json!({"handle":"A","kind":"circle","editable":true,
+            "properties":{"Center":[110.,70.,0.],"Radius":30.,"Normal":[0.,0.,1.]}})]);
+        let result = state.query(&Filter::default(), 0, 10, true).unwrap();
+        state.remember_details(&result);
+        state.remember_details(&result);
+        assert_eq!(state.recent_details().len(), 1);
+        assert_eq!(state.recent_details()[0]["properties"]["Radius"], 30.);
+        let replacement = snapshot(state.rows.clone());
+        assert!(replacement.recent_details().is_empty());
+        for i in 0..30 {
+            state.remember_details(&json!({"candidates":[{"candidate":i+1,"entity":{
+                "handle":format!("H{i}"),"kind":"text","properties":{"TextString":"字".repeat(500)}}}]}));
+        }
+        assert!(state.recent_details().len() <= 10);
+        assert!(serde_json::to_string(state.recent_details()).unwrap().len() <= 8000);
     }
 }

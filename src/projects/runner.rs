@@ -42,6 +42,17 @@ fn quota_reached(replies: usize, tools: usize) -> bool {
     replies >= MAX_REPLIES || tools >= MAX_TOOLS
 }
 
+/// 尚未產生DWG時，已保存的方案與建圖前錯誤仍是下一輪必需的資料。
+/// 不只檢查成果清單，否則筆記被新進度取代後，模型看不到本機方案。
+fn has_cad_context(state: &Value) -> bool {
+    state["artifacts"]
+        .as_array()
+        .is_some_and(|items| !items.is_empty())
+        || state["blocked_after_error"] == true
+        || !state["last_execution"].is_null()
+        || !state["design_planning"].is_null()
+}
+
 const SEGMENT_BUDGET: Duration = Duration::from_secs(24 * 60 * 60);
 pub(super) const TIME_LIMIT_REASON: &str = "本段專案執行已達 24 小時";
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -496,18 +507,22 @@ fn run_for(
             let python_artifacts = broker.python_artifact_index();
             let cad_artifacts = broker.cad_artifact_index();
             let cad_snapshot = broker.cad_snapshot_index();
+            if let Some(inbox) = &run.instructions {
+                let preferences = inbox.model_context()?;
+                if preferences["total"].as_u64().unwrap_or(0) > 0 {
+                    messages.push(super::agent::Message::user(&format!(
+                        "可選偏好狀態（程式保存，已問過的不要重問；未知現場條件仍待確認）：{preferences}"
+                    )));
+                }
+            }
             if !cad_snapshot.is_null() {
                 messages.push(super::agent::Message::user(&format!(
-                    "本機CAD索引（精確資料用cad_query查回）：{cad_snapshot}"
+                    "本機CAD工作狀態（程式維護，優先於舊筆記；recent_details已是精確查詢結果）：{cad_snapshot}"
                 )));
             }
-            if cad_artifacts["artifacts"]
-                .as_array()
-                .is_some_and(|v| !v.is_empty())
-                || cad_artifacts["blocked_after_error"] == true
-            {
+            if has_cad_context(&cad_artifacts) {
                 messages.push(super::agent::Message::user(&format!(
-                    "CAD 成果（自動加入交付；外觀仍需人工核對；改色另建新DWG。錯誤請依診斷 recovery；blocked_after_error=true 才停止。intended_path 不是成果，未存檔部分圖面可能只在 CAD 記憶體）：{cad_artifacts}"
+                    "本機CAD方案與結果（design_planning不是完成證據；artifacts內核對過的檔案才自動交付，外觀仍需人工核對。依last_execution及recovery判定，blocked_after_error=true才停止。intended_path不是成果；未存檔不等於未建圖，部分內容可能仍在CAD記憶體）：{cad_artifacts}"
                 )));
             }
             if python_artifacts.as_array().is_some_and(|v| !v.is_empty()) {
@@ -1575,6 +1590,23 @@ pub fn recover_local_time(root: &Path, id: &str) -> Option<String> {
 #[cfg(test)]
 mod pause_tests {
     use super::*;
+    #[test]
+    fn saved_design_and_precreation_error_are_visible_without_a_dwg_artifact() {
+        let empty = json!({"artifacts":[],"blocked_after_error":false,
+            "last_execution":null,"design_planning":null});
+        assert!(!has_cad_context(&empty));
+        let mut planned = empty.clone();
+        planned["design_planning"] =
+            json!({"phase":"ready_to_draw","design":{"working_note":"8×12m兩層"}});
+        assert!(has_cad_context(&planned));
+        let mut rejected = empty.clone();
+        rejected["last_execution"] =
+            json!({"status":"FAILED","drawing_started":false,"saved":false});
+        assert!(has_cad_context(&rejected));
+        let mut saved = empty;
+        saved["artifacts"] = json!([{"path":"new.dwg"}]);
+        assert!(has_cad_context(&saved));
+    }
     #[test]
     fn segment_budget_is_twenty_four_hours_and_cancellation_stays_separate() {
         assert_eq!(SEGMENT_BUDGET.as_secs(), 86400);

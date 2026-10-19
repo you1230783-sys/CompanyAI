@@ -1,12 +1,25 @@
 ; 固定唯讀效能原型。由測試工具填入輸出檔與 nonce；不接受模型產生的 LISP。
 ; 不使用 command、entmod、entmake、Save、Close 或全圖系統變數設定。
 ; 每行是一個 JSON 陣列；實數以 16 位小數輸出，避免 prin1 預設精度造成失真。
-(defun lm-ai-json-string (s f / i c n)
+; ANSI LISP的substr按位元組切字；Big5「餐／許」的尾碼可能是92，
+; 必須把完整雙位元組字元一起寫出，不能把尾碼當成JSON反斜線。
+; 範圍由固定Python匯出器查Windows字碼頁提供；Unicode引擎傳入空範圍。
+(defun lm-ai-dbcs-lead-p (n / ranges found)
+  (setq ranges '@@LEAD_BYTES@@ found nil)
+  (while ranges
+    (if (and (<= (car ranges) n) (<= n (cadr ranges))) (setq found T))
+    (setq ranges (cddr ranges)))
+  found)
+
+(defun lm-ai-json-string (s f / i c n size)
   (princ "\"" f)
-  (setq i 1)
-  (while (<= i (strlen s))
+  (setq i 1 size (strlen s))
+  (while (<= i size)
     (setq c (substr s i 1) n (ascii c))
     (cond
+      ((and (>= n 128) (< i size) (lm-ai-dbcs-lead-p n))
+        (princ (substr s i 2) f)
+        (setq i (1+ i)))
       ((= n 34) (princ "\\\"" f))
       ((= n 92) (princ "\\\\" f))
       ((= n 10) (princ "\\n" f))

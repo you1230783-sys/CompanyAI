@@ -74,6 +74,56 @@ def text_equal(actual, expected):
     return cad_text(str(actual)).replace("%%C", "%%c") == cad_text(str(expected)).replace("%%C", "%%c")
 
 
+def preflight_text_encoding(operations, legacy, codepage=None, output_path=None):
+    """已驗證的2008介面會經ANSI字碼頁；不能等字元變成問號後才發現。
+
+    文字與完整存檔路徑都在建立文件前檢查，不自動翻譯、改名或替換。
+    新版保留原有Unicode路徑。
+    codepage參數供純函式回歸；正式執行使用目前Windows ANSI字碼頁。
+    """
+    if not legacy:
+        return
+    if codepage is None:
+        import ctypes
+        codepage = ctypes.windll.kernel32.GetACP()
+    encoding = 'cp' + str(codepage)
+    if output_path is not None:
+        path = str(output_path)
+        try:
+            path.encode(encoding, errors='strict')
+        except UnicodeEncodeError as error:
+            sample = ' '.join(f'{char}（U+{ord(char):04X}）' for char in path[error.start:error.end][:8])
+            raise ValueError(
+                f'存檔路徑無法以CP{codepage}無損傳給ICAD 2008：{sample}。'
+                '尚未建立圖面；可修正自行命名的檔名，使用者指定名稱或路徑則回報限制，'
+                '不可擅自改名或移動專案。') from error
+    issues = []
+    last_error = None
+    for index, operation in enumerate(operations):
+        if 'text' not in operation:
+            continue
+        try:
+            operation['text'].encode(encoding, errors='strict')
+        except UnicodeEncodeError as error:
+            # 一次列出各文字中的不同問題字元，避免只回第一個字，讓模型每改一字
+            # 就必須重新產生整份計畫。只診斷、不翻譯或替換使用者的原文。
+            unsupported = []
+            for char in dict.fromkeys(operation['text']):
+                try:
+                    char.encode(encoding, errors='strict')
+                except UnicodeEncodeError:
+                    unsupported.append(char)
+            sample = ' '.join(f'{char}（U+{ord(char):04X}）' for char in unsupported[:8])
+            omitted = f'，另有{len(unsupported) - 8}種字元' if len(unsupported) > 8 else ''
+            issues.append(f'第{index + 1}操作文字無法以CP{codepage}無損寫入ICAD 2008：{sample}{omitted}')
+            last_error = error
+    if issues:
+        # 有界報告仍明示省略數量；不能把前20項誤當全部通過。
+        omitted = f'；另有{len(issues) - 20}項文字不支援' if len(issues) > 20 else ''
+        raise ValueError('；'.join(issues[:20]) + omitted + '。尚未建立圖面；'
+                         '可一次補正自行撰寫的字詞或回報限制，不可擅改使用者指定原文。') from last_error
+
+
 def equal(actual, expected):
     if isinstance(expected, list):
         actual = coordinate(actual)
@@ -130,9 +180,11 @@ class Formula:
         return number(read(self.tree))
 
 
-def prepare(operations):
+def prepare(operations, max_operations=100):
     """整份計畫先驗證、計算公式點，再接觸 CAD，避免明顯錯誤造成部分繪圖。"""
-    require(isinstance(operations, list) and 1 <= len(operations) <= 100, "每份圖面需 1–100 個操作")
+    require(max_operations in (100, 400), "未知計畫操作上限")
+    require(isinstance(operations, list) and 1 <= len(operations) <= max_operations,
+            f"每份圖面需 1–{max_operations} 個操作")
     prepared = []
     budget = 0
     fields = {
@@ -141,7 +193,7 @@ def prepare(operations):
         "aligned_dimension": "start end location", "diameter_dimension": "start end leader_length",
         "hatch": "boundary holes seed scale", "curve": "x y t_start t_end segments",
     }
-    for source in operations:
+    for index, source in enumerate(operations):
         require(isinstance(source, dict), "每個操作必須是物件")
         op = dict(source)
         kind = op.get("kind")
@@ -168,7 +220,7 @@ def prepare(operations):
             require(isinstance(op["text"], str) and 0 < len(op["text"]) <= 1000 and "\x00" not in op["text"], "文字需為 1–1000 字")
             op["text"] = cad_text(op["text"])
         if kind in ("line", "aligned_dimension", "diameter_dimension"):
-            require(op["start"] != op["end"], "直線兩端不能相同")
+            require(op["start"] != op["end"], f"第{index + 1}操作：直線兩端不能相同")
         if kind == "leader":
             require(isinstance(op["points"], list) and len(op["points"]) == 3, "引線需三個點：箭頭、轉折、水平段末端")
             op["points"] = [point_value(p) for p in op["points"]]
@@ -586,6 +638,8 @@ class Drawing:
         else:
             method()
         require(int(self.doc.GetVariable("CMDACTIVE")) == 0, "指令結束狀態未確認")
+        if self.legacy and command.startswith('ZOOM '):
+            self.verify_legacy_zoom(command, entry)
         after_entities = entities()
         # iCAD 2008 原生尺寸在第一次重繪後才提供計算好的 TextString。
         # 僅容許從「不可讀」變成可讀；既有文字改變、欄位消失及圖元增減仍拒絕。
@@ -612,6 +666,83 @@ class Drawing:
             entry["removed_definitions"] = {key:sorted(set(values)-set(after[key])) for key,values in tables.items()}
         entry.update(status="COMPLETED", readable_entities_unchanged=True,
                      audit_clean_not_verified=command == "AUDIT N", visual_check_required=True)
+
+    def native_model_bounds(self):
+        """全圖系統範圍失效時，逐圖元取得原生WCS外框，不略過未知圖元。
+
+        這是少見縮放異常的唯讀備援；一般讀圖仍走CAD內部批次匯出。
+        不用模型參數推測圖面大小，也不把讀取失敗的物件當作不存在。
+        """
+        require(int(self.doc.GetVariable('TILEMODE')) == 1,
+                '2008原生範圍失效且不在模型空間，未縮放')
+        count = int(self.model.Count)
+        require(0 < count <= 200000, '2008模型空間數量不適合原生範圍備援，未縮放')
+        # 實測新建物件未重繪前GetBoundingBox可全部回傳(0,0,0)，雖有限卻不是真實範圍。
+        # 先更新原生顯示快取；外層維護指令仍會完整核對所有圖元未改變。
+        require(self.app.ActiveDocument._oleobj_ == self.doc._oleobj_,
+                '2008原生範圍讀取前文件已切換，未縮放')
+        started = time.monotonic()
+        self.doc.Regen()
+        modified = self.doc.GetVariable('DBMOD')
+        low, high, handles = [math.inf] * 3, [-math.inf] * 3, set()
+        for entity in iter_entities(self.model):
+            require(time.monotonic() - started < 570, '2008原生圖元範圍讀取逾時，未縮放')
+            handle = str(entity.Handle).upper()
+            require(handle and handle not in handles, '2008原生範圍圖元Handle重複或缺少，未縮放')
+            try:
+                entity_low, entity_high = [coordinate(point) for point in entity.GetBoundingBox()]
+            except Exception as error:
+                raise ValueError('2008無法取得圖元' + handle + '的原生範圍，未縮放') from error
+            require(len(entity_low) == len(entity_high) == 3
+                    and all(math.isfinite(v) and abs(v) < 1e15 for v in entity_low + entity_high)
+                    and all(a <= b for a, b in zip(entity_low, entity_high)),
+                    '2008圖元' + handle + '的原生範圍異常，未縮放')
+            handles.add(handle)
+            low = [min(low[i], entity_low[i]) for i in range(3)]
+            high = [max(high[i], entity_high[i]) for i in range(3)]
+        require(len(handles) == count == int(self.model.Count)
+                and modified == self.doc.GetVariable('DBMOD')
+                and self.app.ActiveDocument._oleobj_ == self.doc._oleobj_,
+                '2008原生範圍讀取期間文件或圖元已變更，未縮放')
+        require(max(high[0] - low[0], high[1] - low[1]) > 0,
+                '2008原生圖元沒有有效XY範圍，未縮放')
+        return low, high, count
+
+    def verify_legacy_zoom(self, command, entry):
+        """2008可能回傳成功卻留下1e20視野；只在世界XY俯視以原生範圍備援。
+
+        備援仍是固定同步COM ZoomWindow，不執行任何模型指令，不改幾何或儲存。
+        不猜旋轉視圖的座標轉換；異常範圍直接回報，不能宣稱縮放成功。
+        """
+        height = float(self.doc.GetVariable('VIEWSIZE'))
+        entry['view_height_before_fallback'] = height
+        if not math.isfinite(height) or not 0 < height < 1e18:
+            for variable, expected in (('VIEWDIR',[0,0,1]),('UCSXDIR',[1,0,0]),('UCSYDIR',[0,1,0])):
+                require(equal(coordinate(self.doc.GetVariable(variable)), expected),
+                        '2008縮放視野異常且不是世界XY俯視，未套用範圍備援')
+            low = coordinate(self.doc.GetVariable('EXTMIN'))
+            high = coordinate(self.doc.GetVariable('EXTMAX'))
+            if not (len(low) == len(high) == 3
+                    and all(math.isfinite(v) and abs(v) < 1e15 for v in low + high)
+                    and all(a <= b for a, b in zip(low, high))
+                    and max(high[0] - low[0], high[1] - low[1]) > 0):
+                low, high, count = self.native_model_bounds()
+                entry['native_bounds_fallback'] = dict(method='all_model_entities_GetBoundingBox', entities=count)
+            if command == 'ZOOM ALL':
+                limits = [coordinate(self.doc.GetVariable(k)) for k in ('LIMMIN','LIMMAX')]
+                low = [min(low[i],limits[0][i]) for i in range(3)]
+                high = [max(high[i],limits[1][i]) for i in range(3)]
+            require(all(math.isfinite(v) and abs(v)<1e15 for v in low+high)
+                    and high[0]>=low[0] and high[1]>=low[1], '2008原生圖形範圍異常，未縮放')
+            margin = max(high[0]-low[0],high[1]-low[1],1.)*.05
+            window_low = [low[0]-margin,low[1]-margin,0.]
+            window_high = [high[0]+margin,high[1]+margin,0.]
+            self.doc.ActiveViewport.ZoomWindow(self.point(window_low),self.point(window_high))
+            entry['view_fallback'] = dict(method='native_extent_window',low=window_low,high=window_high)
+            height = float(self.doc.GetVariable('VIEWSIZE'))
+        require(math.isfinite(height) and 0<height<1e18, '2008縮放後視野仍異常，未確認完成')
+        entry['view_height'] = height
+        entry['view_verified'] = True
 
     def native_leader(self, op):
         # 帶箭頭直線是 2；0 是無箭頭，不能混淆 ArrowheadType 的 0。
@@ -735,7 +866,16 @@ class Drawing:
                 compare = text_equal if key == "TextString" else equal
                 available = described.get(row["handle"], {})
                 observed = available[key] if key in available else getattr(entities[row["handle"]], key)
-                require(compare(observed, value), "圖元屬性不符：" + key)
+                if not compare(observed, value):
+                    # 保留具體差異；模型不必猜是哪一筆文字或幾何，完整計畫仍在原報告。
+                    difference = dict(handle=row["handle"], operation_index=row.get("operation_index"),
+                                      field=key, expected=value, observed=observed)
+                    for name in ('expected', 'observed'):
+                        if isinstance(difference[name], str):
+                            difference[name] = difference[name][:256]
+                    if hasattr(self, 'report'):
+                        self.report['verification_difference'] = difference
+                    raise ValueError('圖元屬性不符：' + key + '；Handle=' + row['handle'])
             if "measurement" in row:
                 try:
                     actual = float(entities[row["handle"]].Measurement)
@@ -803,9 +943,14 @@ def execute(request, report):
     found, errors = registry.discover()
     if request["action"] == "inventory":
         return {"status": "INVENTORY", "versions": found, "errors": errors}
-    operations = prepare(request["operations"]) if request["action"] == "draw" else []
+    # 只有Rust已核對並合併的分段入口使用400；舊直接繪圖維持100項。
+    operations = prepare(request["operations"], 400 if request.get("staged_plan") is True else 100) if request["action"] == "draw" else []
     version = request["version"]
     require(isinstance(version, str), "CAD 版本必須是 inventory 回傳的 ProgID")
+    # 即使繞過上層Broker，建立新圖也不能自動改接最高版本。
+    # inventory／連線／既有讀取的latest語意不變；新圖須明確指向一套CAD。
+    require(request["action"] != "draw" or version.casefold() != "latest",
+            "新建圖面需使用確切ProgID，不接受latest；請依使用者指定版本或先查inventory")
     # Windows ProgID 本身不區分大小寫；仍以已登錄 CLSID／執行檔核對實際連線。
     candidates = [v for v in found if v["server_exists"] and (version.casefold() == "latest" or v["progid"].casefold() == version.casefold())]
     require(candidates, "找不到所選 CAD 的 COM 登錄；請先安裝並開啟 CAD")
@@ -830,6 +975,8 @@ def execute(request, report):
         report["application"] = identity
         return execute_existing(app, family == "yoda_icad_2008", request, report, sys.modules[__name__])
     require(request["action"] == "draw", "未知 CAD 操作")
+    report['step'] = 'validate_text_encoding'
+    preflight_text_encoding(operations, family == 'yoda_icad_2008', output_path=request['output'])
     report.update(application=identity, step="validate_commands")
     # 有現成文件時只用它查詢介面，不縮放、不修改；避免已知不支援仍先建空圖。
     if any(op["kind"] == "command" for op in operations):

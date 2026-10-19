@@ -6,6 +6,7 @@ import json
 import hashlib
 import time
 from itertools import islice
+from contextlib import ExitStack
 
 # 只縮減已知幾何類型的無關探測；文字、尺寸及未知圖元仍使用完整備援。
 # 不快取「某屬性讀不到」的結果，避免把暫時 COM 錯誤套用到整張圖。
@@ -203,6 +204,15 @@ def execute_existing(app, legacy, request, report, api):
 
 def edit_document(app, doc, legacy, request, report, api, entities, before, output=None, guard=None):
     """目前文件與磁碟副本共用同一驗證／修改引擎；output=None 絕不儲存或關閉。"""
+    # 舊版原生群組必須涵蓋 Regen 與修改後核對；否則這些後續步驟可能
+    # 成為新的 Undo 項目，一次復原便無法還原圖元。例外也必須結束本輪群組。
+    with ExitStack() as cleanup:
+        return _edit_document(app, doc, legacy, request, report, api, entities, before,
+                              output, guard, cleanup)
+
+
+def _edit_document(app, doc, legacy, request, report, api, entities, before, output, guard, cleanup):
+    """執行已限定的修改；cleanup讓原生群組持續到整個核對流程結束。"""
     report["step"] = "validate_edit"
     edits = request["edits"]
     api.require(isinstance(edits, list) and len(edits) <= 100, "每次最多修改 100 個圖元")
@@ -272,73 +282,93 @@ def edit_document(app, doc, legacy, request, report, api, entities, before, outp
                 "verification": {"readable_entities_unchanged": True},
                 "advice": "縮放指令完成，未儲存、未關閉；可讀圖元內容核對未變。請目視確認顯示範圍。本輪未建立圖元 Undo 群組。"}
     deleted = set()
-    # 目前圖面必須支援 Undo 群組才寫入；不透過 SendCommand 猜測指令完成。
+    native_applied = False
+    # 目前圖面必須有可確認的 Undo 群組；原生指令需等待群組旗標，不能只看COM返回。
     if guard:
         guard()
         report["step"] = "prepare_undo_group"
         # 開始前先確認起訖方法都存在，避免只能開始、不能結束的群組。
-        start_undo, end_undo = doc.StartUndoMark, doc.EndUndoMark
-        api.require(callable(start_undo) and callable(end_undo), "目前 CAD 不支援完整 Undo 群組，尚未修改圖元")
-        start_undo()
-        report["undo_group_started"] = True
-    try:
-        # 線型載入也屬於文件變更，須留在 Undo 群組內且先於任何圖元修改。
-        drawing.prepare_linetypes(
-            [op["line_style"] for op in additions if "line_style" in op]
-            + [edit["value"] for edit in edits if edit["kind"] == "linetype"])
-        if additions:
-            # 樣式建立也是寫入：保留在目前圖面的 Undo 群組內，且先於刪改既有圖元。
-            report.update(step="prepare_annotation_styles", drawing_started=True)
-            drawing.prepare_styles(additions)
-        for index, edit in enumerate(edits):
-            if guard:
-                guard()
-            report["drawing_started"] = True
-            report.update(step="edit_entity", operation_index=index)
-            entity, row = entities[edit["handle"]], rows[edit["handle"]]
-            kind, value = edit["kind"], edit["value"]
-            if kind == "text":
-                entity.TextString = api.cad_text(value)
-                row["properties"]["TextString"] = api.cad_text(value)
-            elif kind == "color":
-                entity.Color = value
-                row["properties"]["Color"] = value
-            elif kind == "linetype":
-                row["properties"].update(drawing.apply_line_style(entity, value))
-            elif kind in ("radius", "height"):
-                field = "Radius" if kind == "radius" else "Height"
-                if kind == "radius" and row["kind"] == "arc":
-                    # 弧的唯讀端點也隨半徑改變；依中心與原向量同比縮放，保留所在平面。
-                    old_radius = row["properties"]["Radius"]
-                    api.require(old_radius > 0 and "Center" in row["properties"], "缺少弧的中心／有效半徑")
-                    center = row["properties"]["Center"]
-                    for endpoint in ("StartPoint", "EndPoint"):
-                        if endpoint in row["properties"]:
-                            row["properties"][endpoint] = [c + (v-c)*value/old_radius
-                                for c,v in zip(center,row["properties"][endpoint])]
-                setattr(entity, field, api.number(value))
-                row["properties"][field] = api.number(value)
-            elif kind == "delete":
-                entity.Delete()
-                deleted.add(edit["handle"])
+        if not legacy and callable(optional(doc, 'SendCommand')):
+            # 批次核對會進入CAD內部LISP，2022的COM Undo標記無法跨過它；
+            # 使用已驗證的原生Begin／End，持續涵蓋寫入、Regen與完整核對。
+            from cad_undo import begin_group
+            cleanup.callback(begin_group(app, doc, report, guard))
+        else:
+            try:
+                start_undo, end_undo = doc.StartUndoMark, doc.EndUndoMark
+            except AttributeError:
+                if not legacy:
+                    raise
+                if additions:
+                    raise AttributeError("ICAD 2008 原生 Undo 備援不支援新增或混合指令，尚未修改")
+                from cad_undo import apply as apply_legacy_edits
+                cleanup.callback(apply_legacy_edits(app, doc, edits, rows, report, guard))
+                for edit in edits:
+                    field = "Radius" if edit["kind"] == "radius" else "Color"
+                    rows[edit["handle"]]["properties"][field] = edit["value"]
+                native_applied = True
             else:
-                delta = api.point_value(value)
-                entity.Move(drawing.point([0., 0., 0.]), drawing.point(delta))
-                for field in ("StartPoint", "EndPoint", "Center", "InsertionPoint"):
-                    if field in row["properties"]:
-                        row["properties"][field] = [a+b for a,b in zip(row["properties"][field], delta)]
-            report["completed_operations"] += 1
-        for index, op in enumerate(additions):
-            if guard:
-                guard()
-            report["drawing_started"] = True
-            report.update(step=op["kind"], operation_index=len(edits)+index)
-            drawing.draw(op)
-            report["completed_operations"] += 1
-    finally:
-        if guard and report.get("undo_group_started"):
-            end_undo()
-            report["undo_group_closed"] = True
+                api.require(callable(start_undo) and callable(end_undo), "目前 CAD 不支援完整 Undo 群組，尚未修改圖元")
+                start_undo()
+                report.update(undo_group_started=True, undo_group_closed=False, undo_method="com_start_end_marks")
+                def finish_com_group():
+                    guard()
+                    end_undo()
+                    report["undo_group_closed"] = True
+                cleanup.callback(finish_com_group)
+    # 線型載入也屬於文件變更，須留在 Undo 群組內且先於任何圖元修改。
+    drawing.prepare_linetypes(
+        [op["line_style"] for op in additions if "line_style" in op]
+        + [edit["value"] for edit in edits if edit["kind"] == "linetype"])
+    if additions:
+        # 樣式建立也是寫入：保留在目前圖面的 Undo 群組內，且先於刪改既有圖元。
+        report.update(step="prepare_annotation_styles", drawing_started=True)
+        drawing.prepare_styles(additions)
+    for index, edit in enumerate([] if native_applied else edits):
+        if guard:
+            guard()
+        report["drawing_started"] = True
+        report.update(step="edit_entity", operation_index=index)
+        entity, row = entities[edit["handle"]], rows[edit["handle"]]
+        kind, value = edit["kind"], edit["value"]
+        if kind == "text":
+            entity.TextString = api.cad_text(value)
+            row["properties"]["TextString"] = api.cad_text(value)
+        elif kind == "color":
+            entity.Color = value
+            row["properties"]["Color"] = value
+        elif kind == "linetype":
+            row["properties"].update(drawing.apply_line_style(entity, value))
+        elif kind in ("radius", "height"):
+            field = "Radius" if kind == "radius" else "Height"
+            if kind == "radius" and row["kind"] == "arc":
+                # 弧的唯讀端點也隨半徑改變；依中心與原向量同比縮放，保留所在平面。
+                old_radius = row["properties"]["Radius"]
+                api.require(old_radius > 0 and "Center" in row["properties"], "缺少弧的中心／有效半徑")
+                center = row["properties"]["Center"]
+                for endpoint in ("StartPoint", "EndPoint"):
+                    if endpoint in row["properties"]:
+                        row["properties"][endpoint] = [c + (v-c)*value/old_radius
+                            for c,v in zip(center,row["properties"][endpoint])]
+            setattr(entity, field, api.number(value))
+            row["properties"][field] = api.number(value)
+        elif kind == "delete":
+            entity.Delete()
+            deleted.add(edit["handle"])
+        else:
+            delta = api.point_value(value)
+            entity.Move(drawing.point([0., 0., 0.]), drawing.point(delta))
+            for field in ("StartPoint", "EndPoint", "Center", "InsertionPoint"):
+                if field in row["properties"]:
+                    row["properties"][field] = [a+b for a,b in zip(row["properties"][field], delta)]
+        report["completed_operations"] += 1
+    for index, op in enumerate(additions):
+        if guard:
+            guard()
+        report["drawing_started"] = True
+        report.update(step=op["kind"], operation_index=len(edits)+index)
+        drawing.draw(op)
+        report["completed_operations"] += 1
     expected = {row["handle"]: row["properties"] for row in before if row["handle"] not in deleted}
     expected.update({row["handle"]: row["properties"] for row in drawing.expected})
 

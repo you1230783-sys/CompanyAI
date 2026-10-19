@@ -158,6 +158,7 @@ pub fn context(ids: &[String]) -> AppResult<String> {
     }
     let mut guides = Vec::new();
     if ids.iter().any(|id| id.starts_with("cad-")) {
+        guides.push("目前CAD技能已載入並持續保留，不需要重複load_skill。基本修改格式已在cad-active，資料足夠就執行，不用為重述計畫讀指南。");
         guides.push(include_str!("skills/cad-common.md"));
     }
     for id in ids {
@@ -230,7 +231,8 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
         "cad_snapshot" | "cad_query" | "cad_preview" => {
             has("cad-active") || has("cad-copy") || has("cad-excel") || has("cad-drawing")
         }
-        "cad_draw" => has("cad-new") || has("cad-drawing"),
+        "cad_draw" | "cad_plan_start" | "cad_plan_part" | "cad_plan_inspect"
+        | "cad_plan_commit" => has("cad-new") || has("cad-drawing"),
         "cad_active_read" => has("cad-active") || has("cad-excel") || has("cad-drawing"),
         "cad_active_edit" => has("cad-active") || has("cad-drawing"),
         "cad_read" => has("cad-copy") || has("cad-excel") || has("cad-drawing"),
@@ -295,6 +297,29 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn new_cad_outline_guidance_matches_available_primitives() {
+        let tools: Value = serde_json::from_str(include_str!("tools.json")).unwrap();
+        let draw = tools["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["function"]["name"] == "cad_draw")
+            .unwrap();
+        let kinds: Vec<_> = draw["function"]["parameters"]["properties"]["operations"]["items"]
+            ["oneOf"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|shape| shape["properties"]["kind"]["enum"][0].as_str())
+            .collect();
+        let guide = load("cad-new").unwrap();
+        assert!(kinds.contains(&"line"));
+        assert!(guide.contains("矩形外框需4項line"));
+        if guide.contains("使用原生封閉折線") {
+            assert!(kinds.contains(&"polyline"), "提示不能推薦尚未提供的操作");
+        }
+    }
     #[test]
     fn cad_stages_and_reference_pages_do_not_load_unrelated_tools() {
         let mut ids = vec![];

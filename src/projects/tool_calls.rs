@@ -78,8 +78,29 @@ pub(super) fn system_prompt_for(model: &str) -> AppResult<String> {
             function.remove("description");
         }
     }
+    // 舊文字協定一次帶全目錄；相同幾何規格只寫一份，避免分段入口把訊息推破64KB。
+    // 這只是文字中的JSON Pointer參照，原生Schema與Broker驗證仍讀完整tools.json。
+    let geometry = definitions["tools"]
+        .as_array()
+        .and_then(|tools| tools.iter().find(|t| t["function"]["name"] == "cad_draw"))
+        .map(|t| t["function"]["parameters"]["properties"]["operations"]["items"].clone())
+        .ok_or("缺少CAD幾何規格。")?;
+    for tool in definitions["tools"].as_array_mut().into_iter().flatten() {
+        if let Some(items) = tool
+            .get_mut("function")
+            .and_then(|v| v.get_mut("parameters"))
+            .and_then(|v| v.get_mut("properties"))
+            .and_then(|v| v.get_mut("operations"))
+            .and_then(|v| v.get_mut("items"))
+        {
+            if *items == geometry {
+                *items = json!({"$ref":"#/cad_operation"});
+            }
+        }
+    }
+    definitions["cad_operation"] = geometry;
     Ok(format!(
-        "{}\n\n所有工具的 arguments 共用必填參數 progress_note:string，以下省略重複定義。請簡述已完成與下一步，不記內部思考、不把待辦稱為完成。\n工具定義（OpenAI Chat Completions tools 形狀，僅為文字契約）：\n{}",
+        "{}\n\n所有工具的 arguments 共用必填參數 progress_note:string，以下省略重複定義。請簡述已完成與下一步，不記內部思考、不把待辦稱為完成。operations.items中的$ref=#/cad_operation表示共用下方cad_operation幾何規格，提交時仍填實際操作物件。\n工具定義（OpenAI Chat Completions tools 形狀，僅為文字契約）：\n{}",
         super::SKILL,
         definitions
     ))
@@ -252,6 +273,27 @@ mod tests {
     #[test]
     fn legacy_tool_catalog_fits_message_limit() {
         assert!(system_prompt().unwrap().len() < 64_000);
+        let prompt = system_prompt().unwrap();
+        let catalog: Value = serde_json::from_str(prompt.rsplit_once('\n').unwrap().1).unwrap();
+        assert!(catalog["cad_operation"].is_object());
+        let tool = |name: &str| {
+            catalog["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|t| t["function"]["name"] == name)
+                .unwrap()
+        };
+        assert_eq!(
+            tool("cad_plan_part")["function"]["parameters"]["properties"]["operations"]["items"]
+                ["$ref"],
+            "#/cad_operation"
+        );
+        assert!(
+            tool("cad_plan_start")["function"]["parameters"]["properties"]
+                .get("operations")
+                .is_none()
+        );
     }
 
     #[test]
@@ -648,6 +690,10 @@ mod tests {
             ("cad_read", json!({"path":"a.dwg","version":"latest","offset":0,"revision":null})),
             ("cad_edit", json!({"path":"a.dwg","revision":"r","name":"copy.dwg","edits":[{"handle":"AB","kind":"color","value":1}],"operations":[]})),
             ("cad_draw", json!({"name":"測試.dwg","version":"latest","operations":[{"kind":"circle","center":[0,0],"radius":5,"color":1}]})),
+            ("cad_plan_start",json!({"name":"test.dwg","version":"Icad.Application.1"})),
+            ("cad_plan_part",json!({"plan_id":"plan-1","plan_revision":0,"part_id":"walls","summary":"牆","operations":[{"kind":"line","color":7,"start":[0,0],"end":[10,0]}]})),
+            ("cad_plan_inspect",json!({"plan_id":"plan-1","part_id":null})),
+            ("cad_plan_commit",json!({"plan_id":"plan-1","plan_revision":1})),
         ]);
         let definitions: Value = serde_json::from_str(DEFINITIONS).unwrap();
         assert_eq!(
