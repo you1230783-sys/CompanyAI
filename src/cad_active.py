@@ -179,6 +179,7 @@ def edit_capabilities(app, doc, legacy):
         return dict(method='com_start_end_marks', scope='原有已讀圖元修改及新增；仍需確認與原生核對')
     if legacy and callable(optional(app, 'RunCommand')) and callable(optional(app, 'LoadLISP')):
         return dict(method='icad_runcommand_native', edits={'radius':['circle'],
-            'color':['line','circle','arc','text','mtext']}, additions=False,
-            notice='舊版原生Undo備援僅支援圓半徑及ACI顏色；不支援TrueColor顏色覆寫、其他修改或混合操作')
+            'color':['line','circle','arc','text','mtext'], 'text':['text','mtext'],
+            'diameter':['dimension_with_verified_diameter_endpoints']}, additions=False, deletion=False,
+            notice='2008原生Undo支援半徑、ACI、TEXT/MTEXT；平面直徑標註同圖替換並回傳replacement_handles。依allowed_edits，沒有通用新增／刪除／TrueColor覆寫')
     return dict(method='unavailable', notice='缺少已驗證的Undo方法，不可修改目前圖面')

@@ -9,6 +9,44 @@ const PLAN_BYTES: usize = 500_000;
 const RECENT_PARTS: usize = 4;
 const RECENT_DETAIL_BYTES: usize = 32_000;
 
+/// inventory 已依已辨識年份排序；只從仍有執行檔的項目選擇，不跨版本回退。
+fn select_version(requested: &str, inventory: &Value) -> AppResult<Value> {
+    let automatic = matches!(
+        requested.to_ascii_lowercase().as_str(),
+        "latest" | "auto" | "最新版"
+    );
+    let year = requested
+        .parse::<u64>()
+        .ok()
+        .filter(|y| (1990..=2099).contains(y));
+    let versions = inventory["versions"]
+        .as_array()
+        .ok_or("無法取得本機 CAD 安裝清單；尚未建立計畫。")?;
+    let candidates: Vec<_> = versions
+        .iter()
+        .filter(|v| v["server_exists"] == true)
+        .filter(|v| {
+            automatic
+                || year.is_some_and(|y| v["year"].as_u64() == Some(y))
+                || v["progid"]
+                    .as_str()
+                    .is_some_and(|id| id.eq_ignore_ascii_case(requested))
+        })
+        .collect();
+    if candidates.is_empty() || (!automatic && candidates.len() != 1) {
+        return Err(format!(
+            "CAD 版本 {requested} 不存在或不唯一，未改用其他版本。可用版本：{}",
+            inventory["versions"]
+        ));
+    }
+    let selected = candidates[0];
+    Ok(
+        json!({"requested":requested,"progid":selected["progid"],"product":selected["product"],
+        "year":selected["year"],"installation_checked":true,"connected":false,
+        "selection_policy":if automatic {"newest_installed_supported"} else {"requested_version"}}),
+    )
+}
+
 /// 完整原生報告已由draw_cad寫在專案；模型只收交付事實與有界警告。
 /// 不將數百圖元的前後快照再塞進最後一輪，也不隱藏量測不可用或稽核警告。
 fn completion_summary(result: &Value, report_path: Value) -> Value {
@@ -33,6 +71,8 @@ pub(super) struct Plan {
     id: String,
     name: String,
     version: String,
+    #[serde(default)]
+    selection: Value,
     revision: u64,
     phase: String,
     parts: Vec<Part>,
@@ -88,6 +128,7 @@ impl Plan {
             }
         }
         json!({"plan_id":self.id,"name":self.name,"version":self.version,
+            "selected_cad":self.selection,
             "plan_revision":self.revision,"phase":self.phase,
             "operation_count":self.parts.iter().map(|p|p.operations.len()).sum::<usize>(),
             "limits":{"per_part":PART_OPERATIONS,"total":TOTAL_OPERATIONS,"parts":40},
@@ -213,7 +254,30 @@ impl Plan {
 }
 
 impl Broker {
-    pub(super) fn start_cad_plan(&mut self, name: &str, version: &str) -> AppResult<Value> {
+    pub(super) fn start_cad_plan(
+        &mut self,
+        name: &str,
+        version: &str,
+        cancel: &AtomicBool,
+    ) -> AppResult<Value> {
+        // 已有計畫時沿用固定版本，不能因安裝清單改變而重新選版。
+        let inventory = if self.cad_design.plan.as_ref().is_some_and(|p| !p.finished())
+            || self.cad_design.pending()
+            || self.cad_failed
+        {
+            Value::Null
+        } else {
+            crate::cad::inventory(cancel)?
+        };
+        self.start_cad_plan_with_inventory(name, version, &inventory)
+    }
+
+    pub(super) fn start_cad_plan_with_inventory(
+        &mut self,
+        name: &str,
+        version: &str,
+        inventory: &Value,
+    ) -> AppResult<Value> {
         if self.cad_failed || self.cad_design.pending() {
             return Err("先完成新圖短方案，或處理上次原生失敗；尚未建立分段計畫或圖面。".into());
         }
@@ -227,23 +291,33 @@ impl Broker {
             || !name.to_ascii_lowercase().ends_with(".dwg")
             || version.is_empty()
             || version.len() > 100
-            || version.eq_ignore_ascii_case("latest")
         {
-            return Err("計畫需單一DWG檔名及已確認的確切CAD ProgID，不接受latest或目錄。".into());
+            return Err("計畫需單一DWG檔名及CAD版本選擇，不接受目錄。".into());
         }
         if let Some(plan) = self.cad_design.plan.as_ref().filter(|p| !p.finished()) {
-            if plan.name == name && plan.version == version {
+            if plan.name == name
+                && (plan.version.eq_ignore_ascii_case(version)
+                    || plan.selection["requested"]
+                        .as_str()
+                        .is_some_and(|v| v.eq_ignore_ascii_case(version)))
+            {
                 return Ok(json!({"plan":plan.context(),"unchanged":true,"executed":false}));
             }
             return Err(
                 "已有未完成計畫；不能用新名稱或版本清掉已累積內容。請沿用目前plan_id。".into(),
             );
         }
+        let selection = select_version(version, inventory)?;
+        let resolved = selection["progid"]
+            .as_str()
+            .ok_or("CAD 安裝資料缺少 ProgID。")?
+            .to_owned();
         self.cad_design.next_plan += 1;
         let plan = Plan {
             id: format!("plan-{}", self.cad_design.next_plan),
             name,
-            version: version.into(),
+            version: resolved,
+            selection,
             revision: 0,
             phase: "collecting".into(),
             parts: vec![],
@@ -350,11 +424,32 @@ impl Broker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn version_selection_respects_exact_preference_and_never_falls_back() {
+        let installed = json!({"versions":[
+            {"progid":"GStarCAD.Application.22","year":2022,"server_exists":true},
+            {"progid":"Icad.Application.1","year":2008,"server_exists":true}]});
+        assert_eq!(select_version("latest", &installed).unwrap()["year"], 2022);
+        assert_eq!(
+            select_version("2008", &installed).unwrap()["progid"],
+            "Icad.Application.1"
+        );
+        assert_eq!(
+            select_version("icad.application.1", &installed).unwrap()["year"],
+            2008
+        );
+        assert!(select_version("2019", &installed).is_err());
+        assert!(select_version("latest", &json!({"versions":[]})).is_err());
+        let ambiguous = json!({"versions":[{"progid":"a","year":2008,"server_exists":true},
+            {"progid":"b","year":2008,"server_exists":true}]});
+        assert!(select_version("2008", &ambiguous).is_err());
+    }
     fn plan() -> Plan {
         Plan {
             id: "plan-1".into(),
             name: "test.dwg".into(),
             version: "Icad.Application.1".into(),
+            selection: Value::Null,
             revision: 0,
             phase: "collecting".into(),
             parts: vec![],

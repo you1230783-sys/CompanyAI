@@ -1,4 +1,12 @@
-## 最優先：0.8.70 正式建置與恢復核對完成（2026-10-19 09:00）
+## 最優先：0.8.71 基本建置與NSIS完成（2026-10-19）
+
+- 使用者明確要求本輪實作：ICAD2008 文字／直徑標註更新、程式解析並回傳確切 CAD 版本、輸出額度耗盡後最多自動續接 5 次。完成後進版、v142 x64 編譯、NSIS 打包並推送既有 GitHub main（來源、EXE／Setup／更新清單及文件）；本輪僅小部分／針對性驗證，不跑完整驗證。
+- 延續既有排除清單與共享目錄界線。不得重播已成功 CAD 工具、執行截斷參數、擅自改用其他 CAD、修改使用者目前圖面進行實驗；實機使用私有新圖驗證修改及 Undo，保留既有圖面。
+- 原生定向驗證已通過：最後 runtime SHA256 `7c5c36c5f2d67c09dd8dcffc19318e038236897ee384e95be7508dddff4adba1`，`.build/native-071-313b060c556549e6a9ae5d27e6efe673/result.json` 為 PASS；文字／引線附屬文字原位更新，直徑尺寸同圖安全替換並回傳新Handle，一次Undo全圖原生revision完全還原，磁碟未存檔。直接改端點的早期候選Undo後DXF42快取未還原，失敗保留，不接受為通過。
+- 25項progress、6項cad_plan、Broker還原、88項CAD及技能長度回歸通過。新版指南曾超5000bytes，已精簡，沒有放寬上限。`.build/release071.ps1`正式基本流程10:25:30退出0（`.build/release-071-exit.json`），`.build/release-071-r2.log`有`RELEASE_0_8_71_BASIC_AND_NSIS_PASS`。實際v142 14.29.30133／cl192930159 x64／link14.29，空快取frozen、release、基本契約／來源整合與NSIS封裝簽署驗證通過；完整及NSIS安裝生命週期未重驗。首次`.build/release-071.log`為指南長度失敗歷史。
+- `.build/finalize071.py`已退出0，核對PASS_BASIC、0.8.71.0、兩份NSIS清單及最後原生proof，更新README／驗證文件與`offline/cad-annotation-verification-0.8.71.json`。EXE SHA256 `84a38d7d1509f7d734cc64ea5a5faa35f1f73a7926ff490e37b86bcc05ffbbfa`，Setup SHA256 `c5d8de1ca495329968e441d9eb753960cd79b8b8bbea7710a58ce10093f6f648`。Git交付白名單沿用既有main，遠端提交以Git紀錄為準；排除個人檔／.codex／.build／icon.png，不更新歷史ZIP，不沿用0.8.70的完整PASS。
+
+## 歷史：0.8.70 正式建置與恢復核對完成（2026-10-19 09:00）
 
 - 使用者要求查看斷線前進度並繼續。原 pwsh23376 仍在執行，沒有重啟建置；08:59:37 完成完整 Build.ps1 -EmptyCargoCache -IncludeInstaller，日誌 `.build/cad-segment-release.log` 已有 `CAD_SEGMENT_RELEASE_BUILD_AND_INSTALLER_VALIDATED`。
 - 實際 v142 14.29.30133、cl `_MSC_FULL_VER=192930159` x64、link14.29.30159；377 Rust／87 CAD、專案與 Python 隔離長流程、完整 NSIS 安裝／更新／回復／修復／移除全部通過。`offline/exe-verification.json` 與 `offline/installer-verification.json` 均為 0.8.70.0 PASS。空 Cargo 快取只有 registry/CACHEDIR.TAG，124 份 vendor 套件沿用，Cargo.lock 只有本專案版本改動。

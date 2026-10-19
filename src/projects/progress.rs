@@ -131,6 +131,9 @@ pub(super) struct Progress {
     /// 同類工具後續成功才清除，不恢復任何寫入授權。
     #[serde(default)]
     last_tool_failure: Option<Value>,
+    /// 與格式修復分開計數；checkpoint 保留，讀指南不能刷新這項預算。
+    #[serde(default)]
+    output_limit_retries: usize,
 }
 impl Progress {
     pub fn new(base: Vec<Message>) -> Self {
@@ -166,6 +169,7 @@ impl Progress {
             python_failures: 0,
             other_failures: 0,
             last_tool_failure: None,
+            output_limit_retries: 0,
         }
     }
     pub fn calendar_context(&self) -> AppResult<String> {
@@ -188,6 +192,7 @@ impl Progress {
 
     /// 使用者主動續接才重設每段計數；去重紀錄仍由 broker 保留。
     pub fn resume_segment(&mut self) {
+        self.output_limit_retries = 0;
         self.total_repairs = 0;
         self.consecutive_repairs = 0;
         self.no_progress = 0;
@@ -310,6 +315,7 @@ impl Progress {
             "working_note":{"requirements":"以本次保留的使用者原文及補充為準，不由筆記改寫授權", "model_summary":self.note.as_ref().map(|n| &n.text),"superseded_conclusions":self.superseded,"planned_next_step":self.next_step,"instruction_review_required":self.instruction_review_required,"summary_warning":"模型摘要可能尚未涵蓋最近步驟；instruction_review_required=true 時必須先依最新補充重新核對欄位與結論，不沿用被否定的圖表。完成狀態依 operations、copies 及工具原文核對","checkpoint_count":self.checkpoints,"next_step":"依原始要求、最近結果及摘要待辦繼續；缺少細節時先 read_work_log，不重做已成功修改"},
             "note":self.note.as_ref().map(|n| &n.text),"note_covers_tools":self.note.as_ref().map(|n| n.covered),
             "total_repairs":self.total_repairs,"consecutive_repairs":self.consecutive_repairs,
+            "output_limit_retries":self.output_limit_retries,"output_limit_retry_limit":5,
             "no_progress":self.no_progress,
             "no_progress_reason":self.no_progress_reason,"outlook_paging":self.coverage.mail_index(),
             "cad_paging":self.coverage.cad_index(),
@@ -333,6 +339,7 @@ impl Progress {
             "superseded":self.superseded,"next_step":self.next_step,
             "review_required":self.instruction_review_required,"copies":copies,
             "recent_operations":operations,"last_tool_failure":self.last_tool_failure,"readings":readings,
+            "output_limit_retries":self.output_limit_retries,"output_limit_retry_limit":5,
             "outlook_paging":self.coverage.mail_index(),
             "cad_paging":self.coverage.cad_index(),
             "tool_failures":{"python":self.python_failures,"other":self.other_failures},"total_repairs":self.total_repairs,
@@ -363,6 +370,27 @@ impl Progress {
     /// 工具名稱已由原生協定確認才可使用。提供修正指引，但不另扣一般格式修復預算。
     pub fn tool_repair(&mut self, reason: &str) {
         self.repair = Some(format!("上一則工具要求未通過檢查：{reason}。請依錯誤修正參數或程式後，透過 API 呼叫工具；不要重做已成功的修改。Python 與其他工具的失敗分別計數，請查看 tool_failures 剩餘次數。"));
+    }
+
+    /// 已收到確定的 length 終態且沒有可執行指令，才建立新的推論輪次。
+    /// 不動 broker 的計畫、去重紀錄或寫入權限；第五次續接仍失敗就暫停。
+    pub fn retry_output_limit(&mut self, advertised_budget: Option<u64>) -> AppResult<String> {
+        if self.output_limit_retries >= 5 {
+            return Err(
+                "模型輸出額度耗盡，已自動續接 5 次仍未取得有效進展；已保存進度，請按繼續接續。"
+                    .into(),
+            );
+        }
+        self.output_limit_retries += 1;
+        let budget = advertised_budget.map_or_else(
+            || "本輪輸出額度".to_owned(),
+            |n| format!("本輪輸出額度（服務公告預設 {n} tokens，實際用量以服務紀錄為準）"),
+        );
+        self.repair = Some(format!("上一輪因達到{budget}而被強制中止，沒有執行任何工具。這是自動續接第 {}/5 次。沿用原始需求、確切 CAD 版本、plan_id、最新 plan_revision 與已保存區段，不重建計畫或重送成功操作。只處理下一個最小步驟並立即呼叫工具；CAD 尺寸／引線先拆成每段 1–3 項，不在單輪規劃或輸出整張圖。保持原需求，不以刪減需求或宣稱完成避開額度。", self.output_limit_retries));
+        Ok(format!(
+            "輸出額度已用盡，正在縮小步驟並自動續接（{}/5）",
+            self.output_limit_retries
+        ))
     }
 
     /// 只計算真正新增的閱讀區間或工具結果；重播與重讀不會重設恢復上限。
@@ -489,6 +517,12 @@ impl Progress {
         if new {
             self.no_progress = 0;
             self.consecutive_repairs = 0;
+            if !matches!(
+                tool,
+                Tool::LoadSkill { .. } | Tool::CadInventory {} | Tool::ReadSkillGuide { .. }
+            ) {
+                self.output_limit_retries = 0;
+            }
         } else if result["ok"] != false && !self.coverage.recovering {
             // 已知失敗由各類工具的 5／10 次上限管理，不在第 8 次被無進展保護提前攔截。
             // 相同操作 ID 的重播仍由上方計數，失敗也不會清除既有的無進展累積。
@@ -685,6 +719,46 @@ impl Progress {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn output_limit_has_five_retries_and_survives_checkpoint_and_guides() {
+        let mut state = Progress::new(vec![Message::user("保留原始尺寸")]);
+        for n in 1..=5 {
+            assert!(state
+                .retry_output_limit(Some(20_000))
+                .unwrap()
+                .contains(&format!("{n}/5")));
+            state = serde_json::from_value(serde_json::to_value(&state).unwrap()).unwrap();
+            state.observe(
+                &format!("guide{n}"),
+                &Tool::LoadSkill {
+                    id: "cad-new".into(),
+                },
+                &json!({"ok":true,"result":{"text":"guide"}}),
+            );
+        }
+        assert!(state.retry_output_limit(None).is_err());
+        let tool = Tool::CadPlanPart {
+            plan_id: "plan-1".into(),
+            plan_revision: 0,
+            part_id: "dims_a".into(),
+            summary: "一項尺寸".into(),
+            operations: vec![],
+        };
+        assert!(state.observe(
+            "part",
+            &tool,
+            &json!({"ok":true,"result":{"plan_revision":1,"saved":true}})
+        ));
+        assert!(state
+            .retry_output_limit(Some(20_000))
+            .unwrap()
+            .contains("1/5"));
+        assert!(state
+            .messages(Value::Null)
+            .unwrap()
+            .iter()
+            .any(|m| m.content.contains("1–3 項")));
+    }
     #[test]
     fn exact_tool_failure_survives_compaction_and_unrelated_success() {
         let mut state = Progress::new(vec![]);

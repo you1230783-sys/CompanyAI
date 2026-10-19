@@ -2384,7 +2384,7 @@ impl Broker {
                 version,
                 operations,
             } => self.draw_cad(name, version, operations, cancel),
-            Tool::CadPlanStart { name, version } => self.start_cad_plan(name, version),
+            Tool::CadPlanStart { name, version } => self.start_cad_plan(name, version, cancel),
             Tool::CadPlanPart {
                 plan_id,
                 plan_revision,
@@ -3618,9 +3618,10 @@ mod tests {
             .cad_design
             .record("兩層同圖，單位毫米。", "先一樓牆")
             .unwrap();
-        assert!(broker.start_cad_plan("new.dwg", "latest").is_err());
+        let installed =
+            json!({"versions":[{"progid":"Icad.Application.1","year":2008,"server_exists":true}]});
         broker
-            .start_cad_plan("new.dwg", "Icad.Application.1")
+            .start_cad_plan_with_inventory("new.dwg", "latest", &installed)
             .unwrap();
         let op = json!({"kind":"line","color":7,"start":[0,0],"end":[100,0]});
         broker
@@ -3650,7 +3651,7 @@ mod tests {
             "floor1"
         );
         assert!(restored
-            .start_cad_plan("other.dwg", "GStarCAD.Application.22")
+            .start_cad_plan_with_inventory("other.dwg", "GStarCAD.Application.22", &installed)
             .is_err());
         assert!(restored
             .draw_cad(

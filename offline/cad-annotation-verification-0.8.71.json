@@ -1,0 +1,19 @@
+{
+  "version": "0.8.71",
+  "result": "PASS_FOCUSED_NATIVE",
+  "cad": "Icad.Application.1",
+  "runtime_sha256": "7c5c36c5f2d67c09dd8dcffc19318e038236897ee384e95be7508dddff4adba1",
+  "scope": "private new drawing; native geometry/text and one Undo only",
+  "circle_diameters_changed": [
+    80,
+    15
+  ],
+  "dimension_measurement": 80,
+  "text_and_leader_annotation_updated": true,
+  "dimension_replaced_with_new_handle": true,
+  "one_undo_restores_all_native_rows": true,
+  "saved_file_unchanged": true,
+  "visual_review_performed": false,
+  "real_model_tested": false,
+  "full_validation_completed": false
+}

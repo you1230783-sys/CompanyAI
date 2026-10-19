@@ -17,6 +17,24 @@ from unittest.mock import patch
 
 
 class BasicTests(unittest.TestCase):
+    def test_legacy_annotation_plan_splits_text_and_scales_real_endpoints(self):
+        rows = {'A':dict(kind='mtext',native_text='舊孔%%c12',properties={'TextString':'舊孔%%c12'}),
+                'B':dict(kind='dimension',properties={'DiameterStart':[-30.,0.,0.],
+                    'DiameterEnd':[30.,0.,0.],'MeasuredDiameter':60.,'TextString':'%%c60'})}
+        text = '許餐孔%%c15；' * 50
+        with patch.object(cad_undo.ctypes, 'windll', SimpleNamespace(kernel32=SimpleNamespace(GetACP=lambda:950)), create=True):
+            plan = cad_undo.prepare([dict(handle='A',kind='text',value=text),
+                dict(handle='B',kind='diameter',value=80)],rows)
+        self.assertEqual(''.join(chunk[1] for chunk in plan[0]['value']),text)
+        self.assertTrue(all(len(chunk[1].encode('cp950'))<=240 for chunk in plan[0]['value']))
+        self.assertEqual(plan[1]['value'],[[-40.,0.,0.],[40.,0.,0.]])
+        cad_undo.update_expected(rows['B'],dict(kind='diameter',value=80))
+        self.assertEqual(rows['B']['properties']['MeasuredDiameter'],80)
+        self.assertNotIn('TextString',rows['B']['properties'])
+        for kind in ('delete','move'):
+            with self.assertRaises(AttributeError):
+                cad_undo.prepare([dict(handle='A',kind=kind,value=None)],rows)
+
     def test_staged_plan_has_separate_bounded_native_limit(self):
         op = dict(kind='line', color=7, start=[0, 0], end=[10, 0])
         with self.assertRaises(ValueError):
@@ -901,7 +919,7 @@ class BasicTests(unittest.TestCase):
         self.assertTrue(row["editable"])
         self.assertEqual(row["allowed_edits"], ["delete"])
         request = self.active_request(app, doc, [dict(handle="A",kind="color",value=3)])
-        with patch.object(cad_active,"identity",return_value=request["document"]), self.assertRaisesRegex(ValueError,"刪除後重建"):
+        with patch.object(cad_active,"identity",return_value=request["document"]), self.assertRaisesRegex(ValueError,"allowed_edits"):
             cad_active.execute_active(app, True, request, {"completed_operations":0}, worker)
         self.assertEqual(calls, [])
 

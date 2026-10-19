@@ -6226,6 +6226,30 @@
                       "value"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "diameter"
+                        ]
+                      },
+                      "value": {
+                        "type": "number",
+                        "description": "目標直徑；只適用allowed_edits含diameter的2008平面直徑標註。在同圖替換該標註、保留位置方向樣式，回傳replacement_handles供後續使用；真正更新量測端點，不改圓。"
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               }
@@ -7191,7 +7215,7 @@
       "type": "function",
       "function": {
         "name": "cad_plan_start",
-        "description": "建立同一張新DWG的本機分段計畫，不連線CAD。沿用短方案，接著每輪cad_plan_part提交1–20項，勿一次想完全部座標。",
+        "description": "建立本機CAD分段計畫，尚未連線或繪圖。程式查本機安裝版本，解析latest/auto、年份或確切ProgID，回傳並固定selected_cad；指定版本不存在不換版。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -7200,7 +7224,7 @@
             },
             "version": {
               "type": "string",
-              "description": "已確認的確切CAD ProgID，不接受latest。"
+              "description": "本輪指定版本優先；可沿用專案記憶的偏好ProgID或年份。未指定用latest，程式內部解析並回傳確切版本，不必先cad_inventory。"
             },
             "progress_note": {
               "type": "string",

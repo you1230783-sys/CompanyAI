@@ -4,6 +4,7 @@ from pathlib import Path
 import math
 import json
 import hashlib
+import copy
 import time
 from itertools import islice
 from contextlib import ExitStack
@@ -228,7 +229,7 @@ def _edit_document(app, doc, legacy, request, report, api, entities, before, out
         used.add(handle)
         kind, value = edit["kind"], edit["value"]
         api.require("allowed_edits" not in rows[handle] or kind in rows[handle]["allowed_edits"],
-                    "尺寸／引線目前僅支援依已讀 Handle 刪除後重建")
+                    "此尺寸／引線不支援該修改；依allowed_edits操作，2008備援不支援刪除或重建")
         if kind == "text":
             api.require(rows[handle]["kind"] in ("text", "mtext") and isinstance(value, str)
                         and 0 < len(value) <= 1000 and "\x00" not in value, "只能修改文字圖元的文字內容")
@@ -253,8 +254,15 @@ def _edit_document(app, doc, legacy, request, report, api, entities, before, out
                             and "Center" in rows[handle]["properties"], "缺少弧的中心／有效半徑")
         elif kind == "delete":
             api.require(value is None, "刪除的 value 需為 null")
+        elif kind == "diameter":
+            api.require(legacy and guard is not None and not callable(optional(doc, 'StartUndoMark')),
+                        '直徑標註原位修改目前只支援ICAD2008目前圖面的原生Undo備援')
+            api.require(rows[handle]['kind'] == 'dimension' and
+                        all(k in rows[handle]['properties'] for k in ('DiameterStart', 'DiameterEnd', 'MeasuredDiameter')),
+                        '只支援已核對端點、無文字覆寫的平面直徑標註')
+            api.require(api.number(value) > 0, '直徑必須大於零')
         else:
-            raise ValueError("只支援 text/color/linetype/move/radius/height/delete")
+            raise ValueError("只支援 text/color/linetype/move/radius/height/diameter/delete")
         api.require(not bool(doc.Layers.Item(rows[handle]["properties"]["Layer"]).Lock), "圖元所在圖層已鎖定")
     drawing = api.Drawing.__new__(api.Drawing)
     drawing.app, drawing.doc, drawing.model = app, doc, doc.ModelSpace
@@ -304,8 +312,15 @@ def _edit_document(app, doc, legacy, request, report, api, entities, before, out
                 from cad_undo import apply as apply_legacy_edits
                 cleanup.callback(apply_legacy_edits(app, doc, edits, rows, report, guard))
                 for edit in edits:
-                    field = "Radius" if edit["kind"] == "radius" else "Color"
-                    rows[edit["handle"]]["properties"][field] = edit["value"]
+                    from cad_undo import update_expected
+                    row = rows[edit['handle']]
+                    replacement = report.get('replacement_handles', {}).get(edit['handle'])
+                    if replacement:
+                        row = copy.deepcopy(row)
+                        row['handle'] = replacement
+                        deleted.add(edit['handle'])
+                        drawing.expected.append(row)
+                    update_expected(row, edit)
                 native_applied = True
             else:
                 api.require(callable(start_undo) and callable(end_undo), "目前 CAD 不支援完整 Undo 群組，尚未修改圖元")
@@ -403,6 +418,7 @@ def _edit_document(app, doc, legacy, request, report, api, entities, before, out
     before_save = verify(doc)
     if output is None:
         return {"status": "EDITED_UNSAVED", "saved": False, "verification": before_save,
+                "replacement_handles":report.get('replacement_handles', {}),
                 "modified_handles": sorted(used), "deleted_handles": sorted(deleted),
                 "added_entities": len(drawing.expected), "visual_check_required": True,
                 "advice": "修改完成，尚未儲存。請查看 CAD；可用一次 Undo 撤銷本輪，儲存由使用者決定。"}

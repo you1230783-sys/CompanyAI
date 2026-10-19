@@ -10,7 +10,7 @@ $manifest = Get-Content (Join-Path $source 'manifest.json') -Raw | ConvertFrom-J
 foreach ($entry in $manifest.PSObject.Properties) {
     if ((Get-FileHash (Join-Path $source $entry.Name)).Hash.ToLowerInvariant() -ne $entry.Value) { throw "CAD runtime mismatch: $($entry.Name)" }
 }
-foreach ($pair in @(@('worker.py','src\cad_worker.py'), @('cad_existing.py','src\cad_existing.py'), @('cad_active.py','src\cad_active.py'), @('cad_bulk.py','src\cad_bulk.py'), @('cad_export.lsp','src\cad_export.lsp'), @('cad.py','tools\gstarcad-probe\cad.py'), @('registry.py','tools\gstarcad-probe\registry.py'))) {
+foreach ($pair in @(@('worker.py','src\cad_worker.py'), @('cad_existing.py','src\cad_existing.py'), @('cad_active.py','src\cad_active.py'), @('cad_bulk.py','src\cad_bulk.py'), @('cad_undo.py','src\cad_undo.py'), @('cad_export.lsp','src\cad_export.lsp'), @('cad.py','tools\gstarcad-probe\cad.py'), @('registry.py','tools\gstarcad-probe\registry.py'))) {
     if ((Get-FileHash (Join-Path $source $pair[0])).Hash -ne (Get-FileHash (Join-Path $root $pair[1])).Hash) { throw 'CAD source changed: rebuild the pinned runtime first.' }
 }
 $directoryName = 'cad-' + $expected.Substring(0,16)

@@ -784,21 +784,25 @@ fn run_for(
                             call_id,
                         } => {
                             // 已經通過原生回覆身分核對，且沒有可執行工具。
-                            // 空白 length 不是一般參數錯誤；不要原樣再花一次完整輸出額度。
-                            let empty_length = status.result.as_ref().is_some_and(|result| {
+                            // length 截斷的文字／工具參數皆不執行；附上縮小步驟提示，最多續接五次。
+                            let output_exhausted = status.result.as_ref().is_some_and(|result| {
                                 let choice = &result["choices"][0];
                                 choice["finish_reason"] == "length"
-                                    && choice["message"]["content"]
-                                        .as_str()
-                                        .is_none_or(|text| text.trim().is_empty())
-                                    && choice["message"]["tool_calls"]
-                                        .as_array()
-                                        .is_none_or(Vec::is_empty)
                             });
-                            if empty_length {
+                            if output_exhausted {
                                 broker.archive_results()?;
-                                progress_state.recover_context();
-                                return pause("模型用完輸出額度但未提供文字或工具指令；本輪未執行工具，已停止自動重送並整理續接內容", &broker, &progress_state, None);
+                                let budget = agent_caps.as_ref().map(|c| c.output_budget());
+                                let label = match progress_state.retry_output_limit(budget) {
+                                    Ok(label) => label,
+                                    Err(reason) => {
+                                        return pause(&reason, &broker, &progress_state, None)
+                                    }
+                                };
+                                record["progress"] =
+                                    progress_state.snapshot(broker.progress_snapshot());
+                                checkpoint(&journal, &record)?;
+                                report(&mut activity, &mut progress, label);
+                                continue;
                             }
                             if let (Some(message), Some(call_id)) = (message, call_id) {
                                 // parse 已確認這是本輪提供的單一工具；參數錯誤歸入該工具的失敗預算。

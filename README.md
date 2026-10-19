@@ -1,25 +1,26 @@
 <!-- 開頭版本公告最多保留最新 3 個版本；歷史文件保留於 docs。 -->
+**0.8.71：CAD 註記更新與額度續接。** 2008 支援文字／引線附屬文字與直徑標註更新，新圖自動解析並固定 CAD 版本；輸出額度耗盡最多自動續接五次。本輪基本與針對性驗證完成，完整驗證延後。[驗證紀錄](docs/VALIDATION_0_8_71.md)
+
 **0.8.70：CAD 同圖分段累積。** 每次保存一小段、可查回及局部替換，最後合併成同一張 DWG。Strata 雙版實測皆無單輪輸出額度中斷；圖面設計與字型仍需核對。[發行驗證](docs/VALIDATION_0_8_70.md) · [雙版 CAD 圖檔 ZIP](examples/cad/cad-segmented-0.8.70.zip)
 
 **0.8.69：加速 CAD 讀圖與修改核對。** 將固定批次匯出整合到本機索引及修改前後核對，加入讀取進度與取消；2008／2022 合成大圖與副本修改已實測。[實作範圍](docs/CAD_SNAPSHOT_QUERY.md) · [發行驗證](docs/VALIDATION_0_8_69.md)
 
-**0.8.68：CAD 本機索引與本版更新日誌。** 支援按需查詢與局部候選預覽；更新日誌只列本版，教學照常保留。編譯、整合與安裝驗證通過，CAD 實機效率與模型核對準確性待確認。[實作範圍](docs/CAD_SNAPSHOT_QUERY.md) · [發行驗證](docs/VALIDATION_0_8_68.md)
 
 # LM_AI — Windows 工作助理
 
 CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供日常問答、文件整理、專案副本修訂與 Classic Outlook 郵件分析。
 
-**目前 EXE／NSIS：0.8.70** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
+**目前 EXE／NSIS：0.8.71** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
 
 ## 下載與開始使用
 
-1. [下載 0.8.70 完整 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從系統托盤選「離開」，再以一般權限安裝至 `C:\largan\LM_AI`；Python 會放在旁邊的 `python` 子目錄。驗證範圍請見該版驗證紀錄；公司服務與真實 CAD 圖面仍需公司實機確認。
+1. [下載 0.8.71 完整 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從系統托盤選「離開」，再以一般權限安裝至 `C:\largan\LM_AI`；Python 會放在旁邊的 `python` 子目錄。驗證範圍請見該版驗證紀錄；公司服務與真實 CAD 圖面仍需公司實機確認。
 2. 開啟程式，按「登入」，在瀏覽器核對短碼並允許授權。
 3. 選擇模型後開始對話；需要讀取或修改資料夾內的文件時，先建立「專案」。
 
 執行需要 WebView2 Runtime，不需安裝 Rust、Node 或 Python。若啟動時提示缺少 WebView2，請依 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md) 處理。正式功能需要公司服務連線與桌面帳號權限。
 
-目前交付的 EXE 與 NSIS 都是 **0.8.70**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
+目前交付的 EXE 與 NSIS 都是 **0.8.71**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
 
 ## 可以做什麼
 

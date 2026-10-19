@@ -344,6 +344,26 @@ def snapshot(doc, api, guard=None, handles_only=False, exclude_handles=frozenset
             row = convert(data, children, legacy)
             if row is None:
                 row = describe(entities[handle], api)
+            # 固定原生欄位供2008原位改字／直徑標註使用；不把一般尺寸誤當直徑。
+            d = fields(data)
+            if d.get(0) in ('TEXT', 'MTEXT'):
+                row['native_text'] = ''.join(v for k, v in data if k == 3) + d.get(1, '')
+            if (d.get(0) == 'DIMENSION' and d.get(70, -1) & 7 == 3
+                    and d.get(210, [0., 0., 1.]) == [0., 0., 1.]
+                    and 10 in d and 15 in d and d.get(1, '') in ('', '<>')):
+                start, end = api.coordinate(d[10]), api.coordinate(d[15])
+                if math.dist(start, end) > 0 and abs(start[2] - end[2]) < 1e-9:
+                    row['properties'].update(DiameterStart=start, DiameterEnd=end,
+                        MeasuredDiameter=math.dist(start, end), DimensionTextOverride=d.get(1, ''))
+                    row['allowed_edits'] = ['diameter'] if legacy and guard is not None else ['delete']
+            if legacy and guard is not None:
+                # 2008備援沒有刪除／新增；逐圖元公告可執行動作，避免模型提出不可行的刪除方案。
+                allowed = {'circle':['radius', 'color'], 'line':['color'], 'arc':['color'],
+                           'text':['text', 'color'], 'mtext':['text', 'color']}.get(row['kind'], [])
+                if row['kind'] == 'dimension' and 'DiameterStart' in row['properties']:
+                    allowed = ['diameter']
+                row['allowed_edits'] = allowed
+                row['editable'] = bool(allowed) and row['editable']
             row["native_revision"] = digest([data, children])
             size += len(json.dumps(row, ensure_ascii=False).encode("utf-8"))
             api.require(size <= 64*1024*1024, "CAD 本機索引超過 64 MiB，請分割圖面")

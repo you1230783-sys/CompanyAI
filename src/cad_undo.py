@@ -1,11 +1,12 @@
-"""ICAD 2008 的有限原生修改：固定 Undo 指令與程式產生的半徑／ACI 修改。
+"""ICAD2008有限原生修改：半徑／ACI、文字及平面直徑標註。
 
 舊 COM 屬性寫入未能納入原生 Undo，因此不能只補 Begin／End 後照用 COM。
-本模組只接受已驗證的圖元與數字，不接受模型 LISP、指令或路徑；原生修改
+本模組只接受已驗證的圖元、數字及文字，不接受模型 LISP、指令或路徑；原生修改
 須取得帶 nonce 的完成回條。失敗不自動 Undo，也不儲存或關閉目前圖面。
 """
 import ctypes
 import json
+import math
 from pathlib import Path
 import re
 import tempfile
@@ -25,11 +26,69 @@ def prepare(edits, rows):
             code, old = 40, row['properties']['Radius']
         elif kind == 'color':
             code, old = 62, row['properties']['Color']
+        elif kind == 'text' and row['kind'] in ('text', 'mtext'):
+            old = row.get('native_text')
+            if not isinstance(old, str):
+                raise AttributeError('缺少原生文字快照，請刷新目前圖面後再修改')
+            # 所有編碼與長度檢查在開始Undo之前完成，不接受不完整／有損字串。
+            encoding = 'cp' + str(ctypes.windll.kernel32.GetACP())
+            from worker import cad_text
+            text = cad_text(value)
+            old.encode(encoding, errors='strict')
+            text.encode(encoding, errors='strict')
+            chunks, chunk = [], ''
+            for char in text:
+                if len((chunk + char).encode(encoding)) > 240:
+                    chunks.append([3, chunk])
+                    chunk = ''
+                chunk += char
+            if row['kind'] == 'text' and chunks:
+                raise ValueError('單行文字超過原生字串長度，請保留原文並另行處理')
+            chunks.append([1, chunk])
+            plan.append(dict(handle=handle.upper(), code=1, old=old, value=chunks,
+                             entity_type='MTEXT' if row['kind'] == 'mtext' else 'TEXT'))
+            continue
+        elif kind == 'diameter' and row['kind'] == 'dimension':
+            p = row['properties']
+            points = diameter_points(p, value)
+            plan.append(dict(handle=handle.upper(), code=10,
+                old=[p['DiameterStart'], p['DiameterEnd']], value=points, entity_type='DIMENSION'))
+            continue
         else:
             # 讓正式 worker 回報 unsupported_capability，在任何寫入之前停止。
-            raise AttributeError('ICAD 2008 原生 Undo 備援目前僅支援圓半徑及 ACI 顏色修改')
+            raise AttributeError('ICAD2008原生修改支援圓半徑、ACI、文字及平面直徑標註；不支援刪除／新增')
         plan.append(dict(handle=handle.upper(), code=code, old=old, value=value))
     return plan
+
+
+def diameter_points(properties, diameter):
+    """保持標註中心與方向，真正調整兩個量測端點，不寫假尺寸文字。
+
+    DXF直徑標註的10／15為相對兩點；來源：Autodesk DXF radial/diameter reference。
+    """
+    start, end = properties['DiameterStart'], properties['DiameterEnd']
+    distance = math.dist(start, end)
+    if not math.isfinite(distance) or distance <= 0 or not 0 < diameter <= 1e12:
+        raise ValueError('直徑標註端點或目標直徑不合法')
+    center = [(a+b)/2 for a, b in zip(start, end)]
+    return [[c+(v-c)*diameter/distance for c, v in zip(center, point)] for point in (start, end)]
+
+
+def update_expected(row, edit):
+    """只更新已指定欄位；其餘位置、樣式及原生圖元保持既有核對。"""
+    p, kind, value = row['properties'], edit['kind'], edit['value']
+    if kind == 'diameter':
+        p['DiameterStart'], p['DiameterEnd'] = diameter_points(p, value)
+        p['MeasuredDiameter'] = value
+        if 'Measurement' in p:
+            p['Measurement'] = value
+        # TextString是CAD依新幾何重算的顯示結果，不能要求仍等於舊的Ø60。
+        p.pop('TextString', None)
+    elif kind == 'text':
+        from worker import cad_text
+        p['TextString'] = cad_text(value)
+    else:
+        p['Radius' if kind == 'radius' else 'Color'] = value
 
 
 def lisp_string(value):
@@ -40,23 +99,43 @@ def lisp_string(value):
 
 
 def source(plan, name, prefix, units, output, nonce):
-    """固定模板；每個插入值只能是已驗證的 Handle、字串或 JSON 有限數字。"""
+    """固定模板；插入值限已核對Handle、文字、端點與有限數字，字串一律跳脫。"""
     def number(value):
         if type(value) not in (int, float):
             raise ValueError('原生修改只接受數字')
         return json.dumps(value, allow_nan=False)
 
+    def literal(value):
+        if isinstance(value, str):
+            return lisp_string(value)
+        if isinstance(value, list):
+            return '(' + ' '.join(literal(v) for v in value) + ')'
+        return number(value)
+
     items = ' '.join('(' + ' '.join((lisp_string(p['handle']), str(p['code']),
-        number(p['old']), number(p['value']))) + ')' for p in plan)
+        literal(p['old']), literal(p['value']), lisp_string(p.get('entity_type', '')))) + ')' for p in plan)
     template = '''
 (defun lm-edit-receipt (status / f)
   (setq f (open @@OUTPUT@@ "w"))
-  (if f (progn (prin1 (list @@NONCE@@ status lm-edit-count) f) (close f))))
+  (if f (progn (prin1 (list @@NONCE@@ status lm-edit-count lm-edit-replacements) f) (close f))))
 (defun lm-edit-error (message)
   (lm-edit-receipt "ERROR") (setq *error* lm-edit-old-error) (princ))
+(defun lm-edit-text (d / s pair)
+  (setq s "")
+  (foreach pair d (if (= (car pair) 3) (setq s (strcat s (cdr pair)))))
+  (strcat s (if (assoc 1 d) (cdr (assoc 1 d)) "")))
+(defun lm-edit-text-data (d chunks / result inserted pair chunk)
+  (setq result nil inserted nil)
+  (foreach pair d
+    (if (member (car pair) '(1 3))
+      (if (not inserted)
+        (progn (foreach chunk chunks (setq result (cons (cons (car chunk) (cadr chunk)) result)))
+               (setq inserted T)))
+      (setq result (cons pair result))))
+  (reverse result))
 (defun lm-edit-run (/ e d p actual item replacement updated lm-edit-plan lm-edit-valid
-                       lm-edit-ok lm-edit-old-error lm-edit-count)
-(setq lm-edit-old-error *error* lm-edit-count 0)
+                       lm-edit-ok lm-edit-old-error lm-edit-count lm-edit-replacements created pairs pair)
+(setq lm-edit-old-error *error* lm-edit-count 0 lm-edit-replacements "")
 (setq *error* lm-edit-error)
 (setq lm-edit-plan '@@PLAN@@)
 (setq lm-edit-valid (and (= (getvar "DWGNAME") @@NAME@@) (= (getvar "DWGPREFIX") @@PREFIX@@)
@@ -65,9 +144,15 @@ def source(plan, name, prefix, units, output, nonce):
   (setq e (handent (car item)) d (if e (entget e) nil))
   (setq p (if d (assoc (cadr item) d) nil))
   (setq actual (if p (cdr p) (if (= (cadr item) 62) 256 nil)))
+  (if (= (cadr item) 1) (setq actual (lm-edit-text d)))
+  (if (= (cadr item) 10) (setq actual (list (cdr (assoc 10 d)) (cdr (assoc 15 d)))))
   (if (not (and d (or (/= (cadr item) 62) (and (not (assoc 420 d)) (not (assoc 430 d))))
                 (or (not (assoc 67 d)) (= 0 (cdr (assoc 67 d))))
                 (or (/= (cadr item) 40) (= "CIRCLE" (cdr (assoc 0 d))))
+                (or (= (nth 4 item) "") (= (nth 4 item) (cdr (assoc 0 d))))
+                (or (/= (cadr item) 10) (and (= 3 (logand 7 (cdr (assoc 70 d))))
+                    (not (assoc 102 d)) (not (assoc 360 d))
+                    (or (not (assoc 1 d)) (member (cdr (assoc 1 d)) '("" "<>")))))
                 (= 0 (logand 4 (cdr (assoc 70 (tblsearch "LAYER" (cdr (assoc 8 d)))))))
                 (equal actual (caddr item) 0.0000001)))
       (setq lm-edit-valid nil)))
@@ -80,9 +165,28 @@ def source(plan, name, prefix, units, output, nonce):
           (setq e (handent (car item)) d (entget e) p (assoc (cadr item) d))
           (setq replacement (cons (cadr item) (cadddr item)))
           (setq updated (if p (subst replacement p d) (append d (list replacement))))
-          (if (entmod updated)
-            (progn (setq lm-edit-count (1+ lm-edit-count)) (entupd e))
-            (setq lm-edit-ok nil)))))
+          (if (= (cadr item) 1) (setq updated (lm-edit-text-data d (cadddr item))))
+          (if (= (cadr item) 10)
+            (progn
+              (setq updated (subst (cons 15 (cadr (cadddr item))) (assoc 15 d)
+                            (subst (cons 10 (car (cadddr item))) (assoc 10 d) d)))
+              ; 2008原位改端點的唯讀42快取不隨Undo還原。安全替換本尺寸，讓Undo還原原物件。
+              ; 保留位置／方向／樣式；移除舊身分及計算快取，不接受模型原生資料。
+              (setq pairs nil)
+              (foreach pair updated
+                (if (not (member (car pair) '(-1 5 330 2 42))) (setq pairs (cons pair pairs))))
+              (if (entmake (reverse pairs))
+                (progn
+                  (setq created (entlast))
+                  (if (entdel e)
+                    (progn (setq lm-edit-count (1+ lm-edit-count))
+                      (setq lm-edit-replacements (strcat lm-edit-replacements (car item) ":"
+                        (cdr (assoc 5 (entget created))) ";")))
+                    (setq lm-edit-ok nil)))
+                (setq lm-edit-ok nil)))
+            (if (entmod updated)
+              (progn (setq lm-edit-count (1+ lm-edit-count)) (entupd e))
+              (setq lm-edit-ok nil))))))
     (lm-edit-receipt (if lm-edit-ok "OK" "ERROR")))
   (lm-edit-receipt "PRECONDITION"))
 (setq *error* lm-edit-old-error)
@@ -180,19 +284,30 @@ def apply(app, doc, edits, rows, report, guard):
             guard()
             if output.exists():
                 # 不解析任意 LISP，只接受固定且完整的狀態回條；不使用 eval。
-                match = re.fullmatch(r'\("' + nonce + r'" "(OK|ERROR|PRECONDITION)" ([0-9]+)\)\s*',
+                match = re.fullmatch(r'\("' + nonce + r'" "(OK|ERROR|PRECONDITION)" ([0-9]+) "([0-9A-Fa-f:;]*)"\)\s*',
                                      output.read_text(encoding='ascii'))
                 if match:
-                    receipt = match.group(1), int(match.group(2))
+                    receipt = match.group(1), int(match.group(2)), match.group(3)
                     break
             if time.monotonic() >= deadline:
                 raise TimeoutError('原生修改沒有完整回條；結果未知，不自動重送')
             pythoncom.PumpWaitingMessages()
             time.sleep(.05)
-        status, count = receipt
+        status, count, replacements = receipt
         if not 0 <= count <= len(plan):
             raise ValueError('原生修改回條計數不符')
         report['completed_operations'] = count
+        mapping = {}
+        for item in replacements.split(';'):
+            if not item:
+                continue
+            old, new = item.split(':')
+            if old not in {p['handle'] for p in plan if p['code'] == 10} or old in mapping or not new:
+                raise ValueError('直徑標註替換回條不符')
+            mapping[old] = new.upper()
+        report['replacement_handles'] = mapping
+        if status == 'OK' and len(mapping) != sum(p['code'] == 10 for p in plan):
+            raise ValueError('直徑標註替換回條數量不符')
         if status == 'PRECONDITION' and count == 0:
             report['drawing_started'] = False
         if status != 'OK' or count != len(plan):

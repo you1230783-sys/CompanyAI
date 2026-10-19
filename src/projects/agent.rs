@@ -114,6 +114,10 @@ pub struct Capabilities {
     notification_policy: String,
 }
 impl Capabilities {
+    /// 服務公告的預設輸出額度；不是這次回覆實際用量的推測。
+    pub(super) fn output_budget(&self) -> u64 {
+        self.default_max_completion_tokens
+    }
     pub fn validate(&self, model: &str, tools: bool) -> AppResult<()> {
         jobs::validate_id(&self.principal_id)?;
         if self.contract_version != CONTRACT
