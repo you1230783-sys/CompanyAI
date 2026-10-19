@@ -11,6 +11,7 @@
 所有可繪幾何可指定layer；arc/polyline也可指定line_style。若當輪schema列可選欄位required且接受null，未指定填null，由程式還原省略。建立圖塊、線型、圖層與尺寸都需存檔重開核對；新增到2008目前圖面仍須依edit_capabilities，不宣稱通用新增已開放。
 
 # 已讀既有圖元的幾何修改
+提交前先一次核對所有批次限制；CAD查詢直接cad_query，不使用run_batch／read_code_section。PRECHECK_REJECTED的issues會同時列缺少詳細資料、重複Handle與混用操作；依全部問題修正後再提交，尚未修改圖元。
 
 cad_active_edit或cad_edit的edits每項仍為{handle,kind,value}。先cad_query(details=true)取得所有主／副目標Handle與allowed_edits。每批同Handle僅一次；新幾何修改與改字/半徑/新增operations分批，不混合兩套Undo路徑。目前支援WCS Z=0的直線／圓／弧／直線輕量多段線；傾斜、3D、TrueColor、反應器或擴充字典保留不動。
 - copy：value={offset:[dx,dy]}，保留原圖元。
@@ -24,3 +25,4 @@ cad_active_edit或cad_edit的edits每項仍為{handle,kind,value}。先cad_query
 - layer：value=已存在且未鎖定的圖層名稱。只改圖元歸屬，不改圖層定義／鎖定狀態。
 
 需要新圖的重複構件時優先原生圖塊重複插入；array等Handle修改工具用於已有圖元。所有操作核對全部可讀屬性及未指定圖元，部分結果或未知回條不重送。一次Undo涵蓋本輪修改；後續CAD操作另依原生Undo順序。這些是有界2D幾何工具，不是任意TRIM/FILLET指令、通用曲面或3D編輯器。
+同版本detail_delivery是已讀範圍，recent_details提供精確幾何；需求核對結論保存一次後沿用。已取得全部必要資料就finish，不為最後報告重查已核對的圖元。已讀／原生依提交值核對不等於使用者設計意圖或外觀通過。

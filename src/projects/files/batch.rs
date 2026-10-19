@@ -26,14 +26,23 @@ impl Task {
             || object.contains_key("progress_note")
             || object.contains_key("mail_note")
         {
-            return Err("批次參數不包含tool／progress_note／mail_note。".into());
+            return Err(format!("批次子項 {} 的 arguments_json 不得包含 tool／progress_note／mail_note；只保留子工具參數，progress_note 請放在外層 run_batch。", self.task_id));
         }
         object.insert("tool".into(), json!(self.tool));
-        let request: Tool =
-            serde_json::from_value(arguments).map_err(|e| format!("批次工具參數不符：{e}"))?;
+        if self.tool.starts_with("cad_")
+            || (self.tool == "read_code_section"
+                && ["snapshot_id", "details", "filter"]
+                    .iter()
+                    .any(|key| object.contains_key(*key)))
+        {
+            return Err("run_batch不支援CAD工具。CAD圖元查詢請直接呼叫cad_query，不要把snapshot_id／details等參數包成read_code_section；後者只讀程式文字。".into());
+        }
+        let request: Tool = serde_json::from_value(arguments)
+            .map_err(|e| format!("批次工具參數不符（子項 {}）：{e}", self.task_id))?;
         if !matches!(
             request,
-            Tool::ReadFile { .. }
+            Tool::ListFiles { .. }
+                | Tool::ReadFile { .. }
                 | Tool::ReadCodeSection { .. }
                 | Tool::FindText { .. }
                 | Tool::InspectDataset { .. }
@@ -199,6 +208,8 @@ impl Broker {
                     Tool::RunPython { inputs, .. } => {
                         inputs.iter().map(|input| input.path.as_str()).collect()
                     }
+                    // list_files由perform固定目錄handle並驗證範圍；不可用checked_file
+                    // 預先開啟資料夾，否則Windows會誤報檔案存取被拒。
                     _ => vec![],
                 };
                 for path in paths {
@@ -370,6 +381,29 @@ impl Broker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn argument_errors_identify_the_child_and_explain_where_progress_belongs() {
+        let error = Task {
+            task_id: "list-root".into(),
+            tool: "list_files".into(),
+            arguments_json: r#"{"path":"","progress_note":"列出資料夾"}"#.into(),
+        }
+        .request()
+        .err()
+        .unwrap();
+        assert!(error.contains("list-root") && error.contains("不得包含"));
+        assert!(error.contains("外層 run_batch"));
+        let error = Task {
+            task_id: "bad-fields".into(),
+            tool: "list_files".into(),
+            arguments_json: r#"{"path":"","unexpected":true}"#.into(),
+        }
+        .request()
+        .err()
+        .unwrap();
+        assert!(error.contains("bad-fields") && error.contains("unexpected"));
+    }
+
     #[test]
     fn workers_overlap_and_keep_result_order() {
         let barrier = std::sync::Barrier::new(2);

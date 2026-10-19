@@ -26,6 +26,14 @@ class Element {
   dispatchEvent(event) { this.dispatch(event.type); return true; }
   close() { this.open = false; this.dispatch("close"); }
   reset() { this.resetCount++; }
+  setAttribute(name, value) { this[name] = value; }
+  append() {}
+  querySelector(selector) {
+    // 此測試只核對登入門檻／關閉行為；動態VNC對話框的真實DOM另由WebView2驗證。
+    if (!this.children) this.children = new Map();
+    if (!this.children.has(selector)) this.children.set(selector, add(this.id + selector));
+    return this.children.get(selector);
+  }
 }
 function add(id, tag, disabled) {
   const element = new Element(id, tag, disabled); elements.set(id, element); return element;
@@ -37,7 +45,7 @@ add("login-panel", "section");
 const modal = add("settings-dialog", "dialog"); modal.open = true;
 const listeners = new Map(), observers = [], sent = [];
 const document = {
-  body: {},
+  body: {append() {}},
   querySelectorAll: selector => selector === "dialog"
     ? [...elements.values()].filter(e => e.tag === "dialog")
     : selector === "dialog[open]"
@@ -48,6 +56,7 @@ const document = {
 const context = vm.createContext({
   Event: class { constructor(type) { this.type = type; } },
   window: {}, document, $: get, state: {logged_in: false, busy: "none", config: {}},
+  node: (tag, className) => add(className || `dynamic-${elements.size}`, tag),
   send: command => sent.push(command),
   MutationObserver: class {
     constructor(callback) { this.callback = callback; observers.push(this); }
@@ -90,6 +99,7 @@ assert.equal(dialogIds.length, 16);
 assert.ok(dialogIds.includes("project-default-dialog"), "local project creation is included");
 for (const id of dialogIds) { if (!elements.has(id)) add(id, "dialog"); }
 vm.runInContext(fs.readFileSync(path.join(root, "ui/vnc.js"), "utf8"), context);
+dialogIds.push("vnc-json-dialog");
 vm.runInContext(fs.readFileSync(path.join(root, "ui/dialogs.js"), "utf8"), context);
 const inside = {clientX: 100, clientY: 100}, outside = {clientX: 10, clientY: 10};
 for (const id of dialogIds) {

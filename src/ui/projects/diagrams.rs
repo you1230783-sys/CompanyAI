@@ -60,6 +60,7 @@ impl App {
                     .ok_or("檔名無法辨識。")?;
                 projects::files::diagrams::save(
                     &project,
+                    &projects::files::conversation_folder_name(&conversation)?,
                     &format!("{stem}.{}", format.extension()),
                     &bytes,
                 )

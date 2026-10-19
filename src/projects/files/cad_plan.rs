@@ -10,7 +10,7 @@ const RECENT_PARTS: usize = 4;
 const RECENT_DETAIL_BYTES: usize = 32_000;
 
 /// inventory 已依已辨識年份排序；只從仍有執行檔的項目選擇，不跨版本回退。
-fn select_version(requested: &str, inventory: &Value) -> AppResult<Value> {
+pub(super) fn select_version(requested: &str, inventory: &Value) -> AppResult<Value> {
     let automatic = matches!(
         requested.to_ascii_lowercase().as_str(),
         "latest" | "auto" | "最新版"

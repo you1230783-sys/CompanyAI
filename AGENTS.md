@@ -1,4 +1,43 @@
-## 目前任務：0.8.72 Mermaid、CAD擴充與等待確認通知（2026-10-19）
+## 發行結果：0.8.73本機驗證完成（2026-10-19）
+
+- 使用者授權的1–15項已實作，410 Rust／99 CAD、完整v142 x64空快取frozen、原生及Strata四組／八次要求、Office／VNC與NSIS生命週期通過。最終EXE 5648e143634daaf61974a980bfe7a080f61c3c1fa98919a2e65360bbe1799b64、Setup 80396172b65f97104514de25a87b92c9787152534c21f998134a89b59d006ae7；公開摘要與docs/VALIDATION_0_8_73.md保存確切範圍、原始失敗與手動／公司環境限制。Git交付以main提交及遠端實際LFS下載核對為準，不能只憑這段宣稱推送。
+- 預設勾選縮小保留工作列，X一律收到托盤。真視窗訊息回歸通過；最終EXE設定／字體／縮放／專案modal已部分真桌面核對，OS通知送達／點擊及其餘手動流程未完成。
+- 最終runtime來源凍結，後續僅文件與公開摘要整理；排除.codex/、dist/onboarding-state.json、icon.png、.build/，不重製歷史ZIP。
+- 私人Strata分析初輪漏跑Python runtime正式初始化而STOPPED，原始失敗保留；初始化及自檢後以相同原始提示詞另開案例完成，八次選定要求之外另計此初輪。不是修改最終EXE或放寬隔離，詳公開摘要fixture_environment_correction。
+- 分析檔案流程及所需筆數／平均值通過；模型Word另加的min/max/std九項內容錯誤未通過。Word表格與原始模型參數一致，未改模型文件來冒稱通過。私人PowerShell 5觀察器JSON解碼失敗，子程序退出碼未保存，保留null；原生FINISHED及各成果獨立核對完成。公開總結果含MODEL_CONTENT_AND_MANUAL_LIMITATIONS。
+
+## 目前授權：0.8.73完整建置、Strata實測、打包與Git發行（2026-10-19）
+
+- 使用者已回報0.8.72公司主要流程可完成，並明確要求將NEXT_VERSION_NOTES的1–15項剩餘修正進版、編譯、完整測試與實際Strata驗證，完成NSIS打包及Git推送，希望明早完成。本條取代下方「僅修改來源／不測試／不推送」限制；尚未完成的檢查不可先宣稱通過。
+- 本輪版本0.8.73。沿用scripts/Build.ps1，必須v142 x64、實際cl探針、空Cargo快取與frozen/vendor。完整流程不使用BasicValidation；針對新增功能補回歸及UI實測，保留失敗證據與公司服務／模型內容限制。既有main及交付範圍沿用，排除.codex/、dist/onboarding-state.json、icon.png與.build/私人資料。不得把舊0.8.72結果當本版測試。
+
+- 新增第12項：一般設定預設勾選「縮小時保留在 Windows 工作列」；未勾選縮小收到托盤。X一律收到托盤並提示右鍵離開，保留草稿及背景任務。需原生視窗訊息回歸與設定相容性測試。
+
+- Strata本版首輪改圖測試發現新任務尚未載入Mermaid時沒有圖形提示，模型反覆一般文字讀取。新增第13項：技能未載入時僅帶最近兩張原生圖形索引及載入提示，不切換其他技能、不開放工具；完整來源依原流程載入。另提供總計4KB的衍生行號對照（含空白行），不改原碼／hash／checkpoint。批次錯誤明示子項與外層progress_note位置，仍拒絕非法參數。舊候選完整建置／NSIS已通過並私存，不能當修正後EXE的完整結果；新候選與Strata、正式完整流程需重跑。
+
+- 第14項由Strata匯出圖目視發現：原碼>=在Mermaid SVG純文字分詞時遺失>。已對固定12.2.0 bundle做唯一單字元相容修補，保留所有上游授權、安全層級及SVG淨化；tools/patch_mermaid_svg_text.py可核對正反向SHA。原始MMD／模型參數不改寫；原生自檢與來源UI增加比較符號和安全過濾回歸。修補前R2完整流程主動停止並記錄，不宣稱通過；修補後再完整建置與實測。
+
+- 跨輪Strata重測又確認相同原碼被另存v2–v8；原匯出記錄只有路徑／雜湊／格式，沒有圖版綁定。已補可選原生source(revision/message_index/diagram_index)，舊checkpoint不猜來源；每圖回傳格式完成狀態與實際路徑、指出同原碼完整成果，常駐圖源按revision去重，實際命名副本仍保留。402項library與版本／索引／checkpoint／舊記錄回歸通過；最終EXE5e8e72dc...需完整發行驗證與新Strata結果，不沿用先前候選PASS。
+
+- 第15項由最終Strata CAD測試發現：來源與成果共用資料夾時，Windows唯讀目錄pin會阻擋報告atomic rename，導致原生選取點錯誤被os error 32蓋掉。改以create_new保留的獨占報告handle寫入並sync，未寫完不分享、舊報告不覆寫；新增真目錄pin回歸。R3已停止並保留，修補後必須重新完整建置／NSIS及Strata，不以5e8e候選當最終結果。
+
+- R4實測再確認共用目錄的來源READ pin阻擋CAD暫存DWG改名，Save逾時；不能當作模型格式錯誤或R4完整自動測試／NSIS已通過就發行。已以目錄FileID核對，先建立StageGuard再僅移除重複末層來源pin，保留祖先、原檔唯讀、目錄不分享DELETE及anchor。新增真rename／來源寫入與更名拒絕測試，並補CAD參數修正封套提示。405項library，新增examples/cad_shared_output.rs及scripts/Test-CadSharedOutput.ps1做雙CAD真正Broker三批保存／重開回歸；固定參數與原始Strata結果分開，修正版須新完整R5及模型實測。R4證據保留.build/release073-r4-proof，不能冒用為新EXE結果。
+
+
+- R5真正Strata確認新圖計畫接受年份，但DWG副本入口仍將2008當ProgID查登錄，模型反覆重試後誤稱CAD未安裝。副本現在共用新圖的inventory年份解析，保留不存在／不唯一拒絕與首次成功ProgID綁定；latest／auto／最新版沿用已綁定版本，明確不同年份不換CAD。快照總覽直接回傳原生selected版本資訊，避免再查inventory。另獨立核對R4分析原始參數與CSV實際SHA完全相同，失敗是read_file裸雜湊與Python前綴表示不相容，不是來源真的變更或模型捏造revision；只接受同一原始位元組SHA的裸值／既有sha256:或log:表示，變更來源及其他命名空間仍拒絕。新增410項library中的五個版本解析／回饋／雜湊相容回歸；真正Broker雙CAD依序使用年份、latest、auto及最新版，Python固定回歸實際read_file→run_python，再變更合成來源確認舊版本拒絕。R5原始模型失敗及完整自動測試另存，不冒用為修改後R6。
+
+## 來源準備紀錄：0.8.72已推送，下一版1–11（2026-10-19）
+
+- 0.8.72 main提交1b75f636e5591c683017886cd214ea26c18619ca已推送，.build/remote-delivery-072.json有遠端main及兩個LFS執行檔實際下載SHA核對。docs/COMPANY_TEST_PROMPTS_0_8_72.txt七組提示詞同次交付；不重跑或改寫既有0.8.72驗證結果。
+- 推送後已實作docs/NEXT_VERSION_NOTES.txt的1–7：專案modal精簡／條列／間距、快速模型紅字確認（快速動作免）、專案根資料夾Explorer捷徑、VNC JSON原生匯入／匯出與加入／覆蓋／重名處理、WebView2原生介面縮放、四字體選擇與三份開源TTF／授權、未知副檔名清單及依內容讀取／文字副本修改。預設霞鶩文楷TC非等寬；微軟字型只引用系統，不散布。
+- 清單200項分頁、100000項目錄界線，未知格式也顯示；一般文字4MiB、TXT／MD文件200KB、所有一般文字副本200KB，原件唯讀。既有Office／PDF／MSG／CAD／圖片走專用工具。未知二進位與不明編碼拒絕，Python只讀靜態快照，不自動執行指令稿。根目錄／機密／連結／內部資料及副本完整性界線保留。
+- VNC匯入4MiB／20000台，先原生驗證快照、顯示數量，revision與磁碟變更守衛後才原子儲存；密碼不回前端。同分類重名加「（匯入 2）」序號，不動Viewer／使用者設定；匯出保存原JSON位元組，同名加序號。源碼待實測，不可稱已驗證。
+- 第8項已加入來源：同一原生專案對話ID推導同一_AI_Output/對話_<SHA256>/，MMD／PNG／SVG、手動圖形匯出、文件／Office副本、CSV／圖表／Python與CAD成果共用；lazy建立，不同對話分開，同名create_new／CAD旁邊保留檔加序號。CAD診斷不覆寫，唯讀副本及固定索引隔離於共用目錄內的暫存子目錄。共享目錄使用READ_ATTRIBUTES且不分享DELETE的handle及唯一anchor，以共存來源唯讀pin；COM／檔案共用尚未編譯或實測。舊輸出不搬移、舊暫停草稿沿用舊目錄。詳NEXT_VERSION_NOTES第8項；保留不編譯／不測試／不發行的限制。
+- 第9項CAD已加入來源：複製／確認前一次回報缺少details、重複修改Handle、混用幾何operations與allowed_edits問題；預檢未啟動CAD，不扣寫入次數。原生FAILED／UNKNOWN提升共同外層，避免UI誤稱完成；副本任務綁定首次成功確切ProgID。快照保存全部已交付集合與種類覆蓋，常駐64筆／8000bytes精確幾何、同版送出投影去重、不重送內部DXF；保留本機全資料／工作日誌／原生全圖驗證。已讀不等於需求通過，必要核對一次後finish，實際輪數／tokens未量測。
+- 第10–11項來源已修改：Mermaid以viewBox尺寸覆蓋全域18px圖示規則、10–800%／符合視窗／比例顯示，全畫面返回對話（Esc）與Esc同步；公司run_batch紀錄確認read_file誤讀四資料夾才產生os error 5，不是HTML白名單證據。checked_file回明確list_files建議，批次實際開放list_files及目錄read_tool提示，保留範圍與連結檢查。上述尚未編譯或功能測試，詳NEXT_VERSION_NOTES，不改已發布0.8.72結果。
+- 依使用者要求：本批不進版、不編譯／cargo check、不跑功能測試、不打包、不改dist／offline驗證／runtime清單、不提交或二次推送。僅cargo fmt、node --check、PowerShell ParseFile及人工來源核對；現有契約範例已隨欄位／副本行為調整，但未執行。等公司0.8.72測試回饋再決定建置。未追蹤.codex/、dist/onboarding-state.json、icon.png仍保持原狀。
+
+## 已完成發行：0.8.72 Mermaid、CAD擴充與等待確認通知（2026-10-19）
 
 - 使用者明確要求：Mermaid做在專案功能；原始碼複製、PNG/SVG/MMD保存、下輪讀原碼改圖；可以加入實用相關功能／套件。已同意沿用上版進版、基本／針對性驗證、NSIS與Git main推送。後續又要求合併建議的CAD擴充，並使用已開啟的本機Strata按需求實測，通過才發布；完整長流程／安裝生命週期仍不擅自擴大。
 - CAD本輪包含原生polyline/arc、半徑／小角尺寸、新圖層與圖元改層、有界原生圖塊、複製／旋轉／鏡射／矩形陣列、線／圓偏移及兩直線修剪／延伸／圓角。固定JSON與原生LISP模板，不開任意指令；既有2D修改限WCS Z=0、已讀主副目標、無TrueColor／反應器／擴充字典，依allowed_edits；新幾何與改字／半徑批次分開，2008通用新增／刪除仍不開放。新增指南cad-advanced。

@@ -74,7 +74,7 @@
             </button>
           </div>
         </header>
-        <div id="project-context" class="project-context" hidden></div>
+        <button id="project-context" class="project-context project-folder-link" type="button" hidden></button>
         <section id="login-panel" class="login-panel" aria-label="登入公司服務">
           <p>尚未登入時無法使用其他功能</p>
           <div class="button-row">
@@ -202,7 +202,7 @@
         <section id="vnc-view" class="view secondary-view" hidden>
           <div class="section-heading">
             <div><h2>VNC 快速連線</h2><p>選擇機台，以本機安裝的 UltraVNC Viewer 開啟連線。</p></div>
-            <div class="button-row"><button id="vnc-sync-open" class="secondary-button" disabled>從網站更新</button><button id="vnc-manage" class="secondary-button" disabled>機台管理</button></div>
+            <div class="button-row"><button id="vnc-json-import" class="secondary-button" disabled>匯入 JSON</button><button id="vnc-json-export" class="secondary-button" disabled>匯出 JSON</button><button id="vnc-sync-open" class="secondary-button" disabled>從網站更新</button><button id="vnc-manage" class="secondary-button" disabled>機台管理</button></div>
           </div>
           <fieldset class="vnc-options">
             <legend>連線選項</legend>
@@ -376,17 +376,21 @@
           <h3>外觀</h3>
           <label class="check-row"><input id="dark-mode" type="checkbox" />深色模式</label>
           <p class="subtle">使用柔和的深灰藍背景，設定會保留。</p>
-          <label for="font-size"
-            >文字大小 <output id="font-value">14 px</output></label
-          ><input
-            id="font-size"
-            type="range"
-            min="12"
-            max="20"
-            step="1"
-            value="14"
-          />
-          <p class="subtle">調整聊天與操作介面的字體，設定會保留。</p>
+          <div class="display-settings">
+            <div><label for="font-size">文字大小 <output id="font-value">14 px</output></label>
+              <input id="font-size" type="range" min="12" max="20" step="1" value="14" /></div>
+            <div><label for="interface-scale">介面大小</label>
+              <select id="interface-scale"><option value="75">75%</option><option value="90">90%</option><option value="100" selected>100%</option><option value="110">110%</option><option value="125">125%</option><option value="150">150%</option><option value="175">175%</option><option value="200">200%</option></select></div>
+            <div class="font-setting"><label for="ui-font">介面字體</label>
+              <select id="ui-font"><option value="microsoft_jhenghei">微軟正黑體（Windows 系統）</option><option value="huninn">jf 粉圓體</option><option value="wenkai_tc" selected>霞鶩文楷體（繁中，非等寬）</option><option value="wenkai_mono_tc">霞鶩文楷體（繁中，等寬）</option></select>
+              <button id="font-licenses-open" class="text-button" type="button">字型授權</button></div>
+          </div>
+          <p class="subtle">介面大小同時縮放文字、按鈕與排版，僅由此處設定。字體選擇會保留；程式碼區使用等寬字體。</p>
+        </section>
+<section>
+          <h3>視窗行為</h3>
+          <label class="check-row"><input id="minimize-to-taskbar" type="checkbox" checked />縮小時保留在 Windows 工作列</label>
+          <p class="subtle">取消勾選後，縮小會收到系統托盤。按 X 一律收到托盤；如需離開，請在托盤圖示按右鍵 → 離開。</p>
         </section>
 <section>
           <h3>通知</h3>
@@ -585,11 +589,16 @@
     </dialog>
     <dialog id="project-dialog" aria-labelledby="project-dialog-title">
       <h2 id="project-dialog-title">新增專案</h2>
-      <p>AI 將依據這個資料夾內的檔案，協助完成您的要求。目前支援 Word、Excel、PowerPoint、TXT、MD、文字型 PDF、Outlook MSG、LOG 類紀錄檔，以及 JPG／JPEG／PNG 圖片。程式與設定檔（如 C/C++、標頭、HTML、JS、CSS、Rust）可按行唯讀；PY 保留副本編輯。程式檔單檔上限 4 MiB，依範圍分段閱讀。AI 會依任務需要自行決定是否讀取圖片，不會自動送出全部圖片。</p>
-        <p>CAD 繪圖測試版：可在專案對話中要求新建二維 DWG、尺寸、文字、引線、剖面線、公式曲線及顏色。會連接或啟動已安裝的 CAD，預設新版優先；只新建圖面，成果存入專案的 _AI_Output。改色或修改幾何會產生另一份新圖面；外觀仍請人工核對。</p>
-        <p>執行任務時，所需的檔案內容會送至目前使用的 AI 服務分析。請確認資料夾內的資料適合提供 AI 使用。</p>
-      <label>專案名稱<input id="project-name" maxlength="60" autocomplete="off" placeholder="輸入專案名稱" /></label>
-      <button id="project-default-folder">建立專案資料夾</button>
+      <p>選擇資料夾，讓 AI 協助閱讀、整理與產生成果。執行時會將所需內容送至 AI 服務，請確認資料適合提供使用。</p>
+      <details class="project-file-types"><summary>支援的檔案與功能</summary>
+        <ul><li>文件：Word、Excel、PowerPoint、文字型 PDF、Outlook MSG。</li>
+          <li>文字與程式：依內容及編碼讀取，文字副本可編輯，包括 TXT、MD、PY、BAT、CMD、PS1 等。</li>
+          <li>圖片：JPG、PNG、BMP、TIFF、GIF；由任務需要決定讀取。</li>
+          <li>資料與圖形：LOG 分析、圖表、Mermaid 流程圖、有限的二維 CAD 操作。</li>
+          <li>未知副檔名也會列出；是否可讀取，以實際內容與可用工具為準。</li></ul>
+      </details>
+      <div class="project-name-field"><label for="project-name">專案名稱</label><input id="project-name" maxlength="60" autocomplete="off" placeholder="輸入專案名稱" /></div>
+      <button id="project-default-folder" class="secondary-button" type="button">建立專案資料夾</button>
       <div class="dialog-actions"><button id="project-cancel">取消</button><button id="project-create" class="primary-button">選擇資料夾並建立</button></div>
     </dialog>
     <dialog id="project-default-dialog" aria-labelledby="project-default-title">
@@ -697,6 +706,7 @@
     <script src="review.js"></script>
     <script src="review-self-test.js"></script>
     <script src="reply-tables.js"></script>
+    <script src="fonts/licenses.js"></script>
     <script src="app.js"></script>
     <script src="work.js"></script>
     <script src="mail.js"></script>

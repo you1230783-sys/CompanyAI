@@ -132,6 +132,60 @@
     if (!state.vnc?.loaded) command({ action: "open" });
   };
   $("vnc-reload").onclick = () => { clearForm(); command({ action: "reload" }); };
+  // 匯入只顯示原生驗證後的摘要；密碼與完整 JSON 從不進入網頁狀態。
+  let jsonPreviewId = null, jsonPending = false;
+  const jsonDialog = node("dialog", "vnc-json-dialog");
+  jsonDialog.innerHTML = `<h2>匯入 VNC 機台清單</h2>
+    <p data-json-summary></p>
+    <fieldset><legend>處理方式</legend>
+      <label class="check-row"><input type="radio" name="vnc-json-mode" value="add" checked>加入：保留目前機台</label>
+      <label class="check-row"><input type="radio" name="vnc-json-mode" value="replace">覆蓋：以匯入清單取代全部機台</label>
+    </fieldset>
+    <p>同一分類重名時自動加上「（匯入 2）」等序號，不覆寫同名機台。分類名稱區分大小寫，機台名稱判重不分大小寫。Viewer 與連線選項不受影響。</p>
+    <p data-json-result role="status"></p>
+    <div class="button-row"><button type="button" class="secondary-button" data-json-cancel>取消</button>
+      <button type="button" class="primary-button" data-json-apply>確認匯入</button></div>`;
+  jsonDialog.setAttribute("aria-label", "匯入 VNC 機台清單");
+  document.body.append(jsonDialog);
+  const jsonApply = jsonDialog.querySelector("[data-json-apply]");
+  const jsonMode = () => jsonDialog.querySelector('input[name="vnc-json-mode"]:checked').value;
+  function renderJsonImport() {
+    const data = state.vnc || {}, preview = data.json_preview;
+    const available = data.loaded && !data.syncing && !data.session_open;
+    $("vnc-json-import").disabled = $("vnc-json-export").disabled = !available;
+    if (!preview) {
+      jsonPreviewId = null;
+      if (jsonDialog.open) jsonDialog.close();
+      return;
+    }
+    if (jsonPreviewId !== preview.id) {
+      jsonPreviewId = preview.id;
+      jsonDialog.querySelector('input[value="add"]').checked = true;
+      if (!jsonDialog.open) jsonDialog.showModal();
+    }
+    jsonDialog.querySelector("[data-json-summary]").textContent =
+      `${preview.name}：${preview.groups} 個分類、${preview.machines} 台；目前本機 ${preview.current_machines} 台。`;
+    const result = preview[jsonMode()], stale = preview.revision !== data.revision;
+    jsonDialog.querySelector("[data-json-result]").textContent = stale
+      ? "機台清單已變更，請取消並重新匯入。"
+      : result.error || `匯入後共 ${result.groups} 個分類、${result.machines} 台；自動改名 ${result.renamed} 台。`;
+    jsonApply.disabled = jsonPending || !available || stale || !!result.error;
+  }
+  jsonDialog.onchange = renderJsonImport;
+  jsonDialog.querySelector("[data-json-cancel]").onclick = () => jsonDialog.close();
+  jsonDialog.addEventListener("close", () => {
+    const id = jsonPreviewId; jsonPreviewId = null;
+    if (id) command({action:"cancel_json_import", preview_id:id});
+  });
+  jsonApply.onclick = () => {
+    if (jsonApply.disabled) return;
+    jsonPending = true; jsonApply.disabled = true;
+    command({action:"apply_json_import", revision:state.vnc.json_preview.revision,
+      preview_id:jsonPreviewId, mode:jsonMode()});
+  };
+  $("vnc-json-import").onclick = () => command({action:"choose_json_import", revision:state.vnc.revision});
+  $("vnc-json-export").onclick = () => ask("匯出 VNC 機台 JSON", "匯出包含機台檔中已儲存的密碼，請選擇適合保存此檔案的資料夾。同名檔案會加序號保留。",
+    () => command({action:"export_json", revision:state.vnc.revision}));
   $("vnc-choose-viewer").onclick = () => command({ action: "choose_viewer" });
   $("vnc-search-viewer").onclick = () => command({ action: "search_viewer" });
   for (const option of ["fullscreen", "viewonly", "autoscaling"]) {
@@ -175,6 +229,7 @@
       if (!enabled) {
         if (activeView === "vnc") showView("chat");
         if (dialog.open) dialog.close();
+        if (jsonDialog.open) jsonDialog.close();
         clearForm();
         currentGroup = renderedRevision = null;
         checkedMachines.clear(); checkedGroups.clear();
@@ -184,6 +239,9 @@
         return;
       }
       const data = state.vnc || {};
+      // 每次原生狀態回覆皆解除送出鎖；拒絕時保留預覽供重新選擇。
+      jsonPending = false;
+      renderJsonImport();
       for (const id of ["vnc-manage", "vnc-choose-viewer", "vnc-save-machine", "vnc-fullscreen", "vnc-viewonly", "vnc-autoscaling"]) {
         $(id).disabled = !data.loaded;
       }

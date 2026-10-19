@@ -1,6 +1,7 @@
 //! VNC 頁面命令。所有檔案位置由原生層決定，連線只接受已載入機台的分類與索引。
 use super::*;
 use crate::vnc::{self, sync, MachineKey, Manager, Options, Selection};
+mod json_transfer;
 use windows::{
     core::w,
     Win32::{
@@ -16,6 +17,20 @@ use windows::{
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(super) enum VncCommand {
+    ChooseJsonImport {
+        revision: u64,
+    },
+    ApplyJsonImport {
+        revision: u64,
+        preview_id: String,
+        mode: vnc::json_transfer::ImportMode,
+    },
+    CancelJsonImport {
+        preview_id: String,
+    },
+    ExportJson {
+        revision: u64,
+    },
     SyncSettings {
         settings: sync::Settings,
         clear_password: bool,
@@ -96,6 +111,7 @@ pub(super) struct VncRuntime {
     sync_id: Option<String>,
     cancel: Option<Arc<AtomicBool>>,
     preview: Option<(String, sync::Download)>,
+    json_preview: Option<vnc::json_transfer::Preview>,
     preview_revision: u64,
     busy: bool,
     closing: bool,
@@ -179,6 +195,7 @@ impl App {
             "syncing":self.vnc.busy, "session_open":self.vnc.sync_id.is_some(), "closing":self.vnc.closing,
             "sync_settings":self.vnc.settings.as_ref().map(sync::Settings::public),
             "settings_revision":self.vnc.settings_revision,
+            "json_preview":self.vnc.json_preview.as_ref().zip(manager).map(|(preview, manager)| preview.public(manager)),
             "preview":self.vnc.preview.as_ref().map(|(id, result)| json!({"id":id,"machines":result.machines.iter().map(|m| {
                 let mut value = json!(m);
                 value["comparison"] = json!(manager.map(|manager| manager.comparison(m)).unwrap_or("new"));
@@ -220,7 +237,14 @@ impl App {
     }
 
     fn vnc_dispatch(&mut self, command: VncCommand) -> AppResult<()> {
+        if self.vnc_json_command(&command)? {
+            return Ok(());
+        }
         match command {
+            VncCommand::ChooseJsonImport { .. }
+            | VncCommand::ApplyJsonImport { .. }
+            | VncCommand::CancelJsonImport { .. }
+            | VncCommand::ExportJson { .. } => unreachable!(),
             VncCommand::SortGroup { revision, group } => {
                 self.vnc_manager(revision)?.sort_group(&group)?;
                 self.vnc.revision += 1;
@@ -381,6 +405,7 @@ impl App {
                 }
                 // Reload 失敗時丟棄舊快照，避免仍可操作已損壞或已被替換的設定。
                 self.vnc.manager = None;
+                self.vnc.json_preview = None;
                 self.vnc.search_id = None;
                 self.vnc.revision += 1;
                 self.vnc.manager = Some(Manager::load(Manager::default_path()?)?);

@@ -12,6 +12,26 @@ if ($EmptyCargoCache) {
 }
 Push-Location $projectRoot
 try {
+    # 字型是離線介面的一部分；漏抓 LFS 或檔案損壞時在編譯前即停止。
+    $fontRoot = Join-Path $projectRoot 'ui\fonts'
+    $fontManifest = Get-Content -LiteralPath (Join-Path $fontRoot 'manifest.json') -Raw | ConvertFrom-Json
+    if (@($fontManifest).Count -ne 3) { throw 'Bundled font manifest must contain all three open fonts.' }
+    foreach ($fontAsset in $fontManifest) {
+        if ([IO.Path]::GetFileName($fontAsset.file) -cne $fontAsset.file -or $fontAsset.file -notmatch '\.ttf$') {
+            throw 'Invalid bundled font manifest path.'
+        }
+        $fontPath = Join-Path $fontRoot $fontAsset.file
+        if ((Get-Item -LiteralPath $fontPath).Length -ne $fontAsset.bytes -or (Get-FileHash -LiteralPath $fontPath -Algorithm SHA256).Hash -ine $fontAsset.sha256) {
+            throw "Bundled font is missing, corrupt or an unresolved LFS pointer: $($fontAsset.file)"
+        }
+    }
+    # Mermaid 含有可重現的 SVG 純文字修補；不允許損毀或漏抓的引擎進入安裝包。
+    $vendorPackages = Get-Content -LiteralPath (Join-Path $projectRoot 'ui\vendor\packages.json') -Raw | ConvertFrom-Json
+    $mermaidPackage = @($vendorPackages | Where-Object { $_.name -eq 'mermaid' })
+    if ($mermaidPackage.Count -ne 1 -or
+        (Get-FileHash -LiteralPath (Join-Path $projectRoot 'ui\vendor\mermaid.min.js') -Algorithm SHA256).Hash -ine $mermaidPackage[0].bundled_file_sha256) {
+        throw 'Pinned Mermaid bundle hash differs from its manifest; inspect the SVG text patch before building.'
+    }
     # 不只相信環境變數：以指定 cl.exe 編譯小型探針，確認真正的 _MSC_VER 與 x64。
     # 此檔僅供建置驗證，不連入 Rust EXE，也不加入交付包。
     $probeRoot = Join-Path $projectRoot '.build\compiler-check'

@@ -83,7 +83,9 @@ impl App {
                 .map_err(|_| "圖片繪製逾時，尚未儲存。".to_owned())
                 .and_then(|r| r)
                 .and_then(|url| projects::charts::png::decode_url(&url))
-                .and_then(|bytes| projects::files::save_user_chart(&project, &bytes));
+                .and_then(|bytes| {
+                    projects::files::save_user_chart(&project, &conversation, &bytes)
+                });
             let _ = tx.send(Event::Project(ProjectEvent::UserChartSaved(
                 conversation,
                 result,

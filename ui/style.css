@@ -20,7 +20,35 @@
 .release-entry h4 { margin-bottom: 6px; }
 .release-entry li { margin: 6px 0; line-height: 1.6; }
 #settings-dialog .settings-tabs { flex-wrap: wrap; }
+/* 每一個欄位自己管理標籤與控制項間距，避免一般label樣式互相擠壓。 */
+.display-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }
+.display-settings > div { display: grid; align-content: start; gap: 8px; }
+.display-settings label { margin: 0; }
+.display-settings select { width: 100%; min-width: 0; }
+.display-settings .font-setting { grid-column: 1 / -1; }
+.font-setting .text-button { justify-self: start; }
+#project-dialog { width: min(560px, calc(100vw - 40px)); max-height: calc(100vh - 48px); overflow-y: auto; }
+#project-dialog > p { line-height: 1.65; }
+.project-file-types { margin: 18px 0 24px; }
+.project-file-types summary { cursor: pointer; color: var(--accent); }
+.project-file-types li { margin: 8px 0; line-height: 1.6; }
+.project-name-field { display: grid; gap: 10px; margin: 0 0 20px; }
+.project-name-field label { margin: 0; }
+.project-folder-link { display: block; max-width: 100%; padding: 0; text-align: left; text-decoration: underline; text-underline-offset: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#project-name { width: 100%; }
+#project-dialog .dialog-actions { margin-top: 24px; }
+.font-license-dialog { width: min(820px, calc(100vw - 40px)); }
+.font-license-text { max-height: 55vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: Consolas, monospace; font-size: 13px; line-height: 1.6; }
 #settings-dialog .settings-tabs button { white-space: nowrap; }
+/* 三個字型檔維持官方原始內容，與完整授權離線附帶，不安裝到Windows。 */
+@font-face { font-family: "LM Huninn"; src: url("fonts/jf-openhuninn-2.1.ttf") format("truetype"); font-style: normal; font-weight: 400; font-display: swap; }
+@font-face { font-family: "LM WenKai TC"; src: url("fonts/LXGWWenKaiTC-Medium.ttf") format("truetype"); font-style: normal; font-weight: 400; font-display: swap; }
+@font-face { font-family: "LM WenKai Mono TC"; src: url("fonts/LXGWWenKaiMonoTC-Medium.ttf") format("truetype"); font-style: normal; font-weight: 400; font-display: swap; }
+.fast-model-warning { color: #d32f2f; font-weight: 600; }
+.fast-model-dialog { max-width: min(520px, calc(100vw - 40px)); max-height: 85vh; overflow-y: auto; }
+[data-theme="dark"] .fast-model-warning { color: #ff7676; }
+.vnc-json-dialog { max-width: min(640px, calc(100vw - 40px)); max-height: 85vh; overflow-y: auto; }
+.vnc-json-dialog fieldset { display: grid; gap: 12px; padding: 16px; }
 :root {
   --font-size: 14px;
   --ink: #253039;
@@ -36,7 +64,7 @@
   --strong-accent: #2f6854;
   --warning: #99664a;
   --sidebar-width: 208px;
-  font-family: "Segoe UI", "Microsoft JhengHei UI", sans-serif;
+  font-family: var(--ui-font-family, "LM WenKai TC"), "Microsoft JhengHei UI", "Segoe UI", sans-serif;
   font-size: var(--font-size);
   color: var(--ink);
   color-scheme: light;
@@ -1613,8 +1641,12 @@ dialog button.icon-button { padding:6px; }
 .mermaid-toolbar button { padding: 6px 10px; }
 .mermaid-viewport { overflow: auto; max-height: 640px; min-height: 80px; background: white; border: 1px solid #e3e6eb; border-radius: 8px; padding: 12px; }
 .mermaid-plot { width: max-content; min-width: 100%; }
-.mermaid-plot svg { max-width: none !important; }
+/* 流程圖不沿用全域SVG圖示的18px尺寸與描邊；實際尺寸由viewBox及縮放比例設定。 */
+.mermaid-plot svg { display: block; max-width: none !important; max-height: none !important; stroke: none; fill: initial; stroke-width: 1; }
+.mermaid-zoom { align-self: center; min-width: 4em; text-align: center; font-variant-numeric: tabular-nums; }
 .mermaid-status { font-size: 13px; color: var(--muted, #626b7a); }
 .mermaid-card pre { white-space: pre; overflow: auto; max-height: 380px; }
-.mermaid-card:fullscreen { overflow: auto; background: var(--panel); color: var(--ink); padding: 24px; }
-.mermaid-card:fullscreen .mermaid-viewport { max-height: calc(100vh - 180px); }
+.mermaid-card:fullscreen { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: auto; background: var(--surface); color: var(--ink); padding: 24px; margin: 0; box-sizing: border-box; }
+.mermaid-card:fullscreen .mermaid-toolbar { position: sticky; top: 0; z-index: 1; flex-shrink: 0; background: var(--surface); padding: 6px 0; }
+.mermaid-card:fullscreen .mermaid-viewport { flex: 1 1 auto; min-height: 80px; max-height: none; }
+.mermaid-card:fullscreen details { flex-shrink: 0; max-height: 25vh; overflow: auto; }

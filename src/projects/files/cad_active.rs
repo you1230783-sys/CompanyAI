@@ -72,12 +72,15 @@ impl Broker {
             ));
         }
         let handles = state["handles"].as_array().ok_or("缺少已讀取的 Handle。")?;
-        if state["revision"] != revision
-            || edits.len() > 100
-            || operations.len() > 100
-            || !cad::edits_are_read(edits, handles)
-        {
-            return Err("目前圖面 revision 或 Handle 不符；請重新讀取，單次至多各 100 項。".into());
+        if state["revision"] != revision {
+            return Err("目前圖面revision不符；請刷新同一文件的快照，再讀取實際修改目標。".into());
+        }
+        let snapshot = self
+            .cad_snapshot
+            .as_ref()
+            .filter(|s| s.data["source"].is_null() && s.data["revision"] == revision);
+        if let Some(rejection) = cad_preflight::check(edits, operations, handles, snapshot) {
+            return Ok(rejection);
         }
         let ask = self
             .cad_waiter
@@ -101,10 +104,16 @@ impl Broker {
             Err(e) => return Err(e.to_string()),
         }
         let _base = pin(&base)?;
-        let folder = create_output_folder(&base)?;
+        let folder = shared_output_folder(
+            &base,
+            &mut self.output_folder,
+            self.output_conversation.as_deref(),
+        )?;
         let output = base.join(&folder);
-        let _stage = pin_stage(&output)?;
-        let report_path = output.join("cad-report.json");
+        let _stage = pin_output_directory(&output)?;
+        let (report_name, report_placeholder) = reserve_output(&output, "cad-report.json")?;
+        drop(report_placeholder);
+        let report_path = output.join(&report_name);
         crate::storage::atomic_write(
             &report_path,
             &serde_json::to_vec_pretty(&json!({
@@ -130,7 +139,7 @@ impl Broker {
             Err(error) => json!({"status":"UNKNOWN","error":error,"saved":false,
                 "advice":"結果未知，可能已部分修改；請人工檢查目前圖面，不自動重送。"}),
         };
-        result["report_path"] = json!(format!("_AI_Output/{folder}/cad-report.json"));
+        result["report_path"] = json!(format!("_AI_Output/{folder}/{report_name}"));
         self.cad_session.edited(&result, edits);
         crate::storage::atomic_write(
             &report_path,

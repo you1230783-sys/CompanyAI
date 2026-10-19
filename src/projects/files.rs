@@ -9,6 +9,7 @@ mod cad_copy;
 mod cad_design;
 mod cad_excel;
 mod cad_plan;
+mod cad_preflight;
 mod cad_query;
 mod cad_session;
 mod chart_annotations;
@@ -18,14 +19,21 @@ mod code_sections;
 pub mod diagrams;
 mod drafts;
 mod mail_notes;
+mod output;
+pub use output::conversation_folder_name;
+use output::{ensure_output_folder, reserve_external_output, shared_output_folder};
 mod python;
 mod python_edit;
 mod review;
 mod source_code;
 
-/// 分析工具共用程式碼唯讀白名單，不連帶開放副本寫入或原始碼執行。
+/// 常見程式格式僅供分析結果加上類型提示，不作為文字閱讀權限。
 pub(super) fn is_source_code(path: &Path) -> bool {
     source_code::supported(path)
+}
+
+pub(super) fn is_plain_text_input(path: &Path) -> bool {
+    !source_code::excluded(path) && plain_text_candidate(path)
 }
 
 pub(super) fn excluded_source_path(path: &Path) -> bool {
@@ -48,7 +56,7 @@ use std::{
         io::AsRawHandle,
     },
     path::{Component, Path, PathBuf},
-    sync::atomic::AtomicBool,
+    sync::atomic::{AtomicBool, Ordering},
 };
 use windows_sys::Win32::Storage::FileSystem::*;
 
@@ -234,30 +242,40 @@ pub fn relative(value: &str) -> AppResult<PathBuf> {
     Ok(path.components().collect())
 }
 fn extension(path: &Path) -> AppResult<String> {
+    if source_code::excluded(path) {
+        return Err("此路徑屬於預設排除的版本庫、產物、依賴或機密設定，未讀取內容。".into());
+    }
     let ext = path
         .extension()
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    if !matches!(ext.as_str(), "txt" | "md" | "py" | "pdf" | "msg") && !office::supported(path) {
-        return Err("支援 TXT、MD、PY、PDF、MSG 及 Word／Excel／PowerPoint 文件。".into());
-    }
     Ok(ext)
 }
 
-/// 閱讀與寫入刻意使用不同檢查；extension 保留原本的可寫副本格式。
+/// 副檔名只用於分派專用讀取器；一般文字是否可讀由實際解碼結果決定。
 fn readable_extension(path: &Path) -> AppResult<String> {
-    if source_code::excluded(path) {
-        return Err("此路徑屬於預設排除的版本庫、產物、依賴或機密設定，未讀取內容。".into());
-    }
-    if source_code::supported(path) {
-        return Ok(path
-            .extension()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_ascii_lowercase());
-    }
     extension(path)
+}
+
+/// 這些格式有自己的讀取／輸出契約，不把抽取的文字當成原封裝內容編輯。
+fn plain_text_candidate(path: &Path) -> bool {
+    !office::supported(path)
+        && !super::vision::input::supported(path)
+        && !path.extension().is_some_and(|ext| {
+            ["pdf", "msg", "dwg"]
+                .iter()
+                .any(|value| ext.eq_ignore_ascii_case(value))
+        })
+}
+
+/// 文件摘要快取與程式文字分開；像CMakeLists.txt這類已知程式檔仍不建全文快取。
+fn uses_document_memory(path: &Path) -> bool {
+    !plain_text_candidate(path)
+        || (!source_code::supported(path)
+            && path.extension().is_some_and(|ext| {
+                ext.eq_ignore_ascii_case("txt") || ext.eq_ignore_ascii_case("md")
+            }))
 }
 
 pub fn read(project: &Project, path: &str) -> AppResult<(String, Encoding)> {
@@ -274,20 +292,8 @@ fn read_cancel(
     let ext = readable_extension(&rel)?;
     let target = project.root.join(&rel);
     let _guards = pin(target.parent().ok_or("缺少來源資料夾。")?)?;
-    let mut file = OpenOptions::new()
-        .read(true)
-        .share_mode(FILE_SHARE_READ)
-        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
-        .open(&target)
-        .map_err(|e| super::interaction::open_error(&target, e))?;
+    let mut file = checked_file(&target)?;
     reject_internal(&file)?;
-    let mut info = BY_HANDLE_FILE_INFORMATION::default();
-    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0
-        || info.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY) != 0
-        || info.nNumberOfLinks != 1
-    {
-        return Err("拒絕讀取連結、目錄或無法驗證的檔案。".into());
-    }
     if office::supported(&rel) {
         if file.metadata().map_err(|e| e.to_string())?.len() > 50_000_000 {
             return Err("Office 檔案上限為 50 MB。".into());
@@ -342,10 +348,14 @@ fn read_cancel(
         };
         return Ok((content, Encoding::Utf8(true)));
     }
-    let limit = if source_code::supported(&rel) {
-        source_code::MAX_BYTES
-    } else {
+    if !plain_text_candidate(&rel) {
+        return Err("此檔案需使用對應的 CAD 或圖片工具，不能當純文字開啟。".into());
+    }
+    // TXT／MD的文件摘要維持原容量；未知副檔名與程式碼則走有界文字快照。
+    let limit = if matches!(ext.as_str(), "txt" | "md") && !source_code::supported(&rel) {
         text::MAX_TEXT
+    } else {
+        source_code::MAX_BYTES
     };
     if file.metadata().map_err(|e| e.to_string())?.len() > limit as u64 {
         return Err(format!("文件超過讀取上限 {limit} bytes，請縮小來源檔案。"));
@@ -354,7 +364,9 @@ fn read_cancel(
     file.take((limit + 1) as u64)
         .read_to_end(&mut data)
         .map_err(|e| e.to_string())?;
-    text::decode_with_limit(&data, limit)
+    text::decode_with_limit(&data, limit).map_err(|error| format!(
+        "無法以純文字讀取「{path}」（副檔名：{}）：{error}。目前沒有可用的其他讀取器；可能是二進位、密文或無法確認編碼。未修改原檔。",
+        if ext.is_empty() { "無" } else { &ext }))
 }
 
 /// 用獨立暫存副本協調 Outlook 的開檔需求，原件仍維持拒絕寫入的 handle。
@@ -416,9 +428,8 @@ fn with_reader_copy<T>(
     }
 }
 
-/// 使用本機時間命名；create_dir 本身決定是否撞名，同秒任務不共用目錄。
-/// 手動儲存使用相同專案邊界、無覆寫預留及讀回驗證；每次產生當前成果資料夾。
-pub fn save_user_chart(project: &Project, bytes: &[u8]) -> AppResult<String> {
+/// 手動儲存與AI匯出共用原生對話識別；同名成果保留舊檔並加序號。
+pub fn save_user_chart(project: &Project, conversation: &str, bytes: &[u8]) -> AppResult<String> {
     super::charts::png::validate(bytes)?;
     validate_root(&project.root)?;
     let _root = pin(&project.root)?;
@@ -429,7 +440,8 @@ pub fn save_user_chart(project: &Project, bytes: &[u8]) -> AppResult<String> {
         Err(e) => return Err(e.to_string()),
     }
     let _base = pin(&base)?;
-    let folder_name = create_output_folder(&base)?;
+    let folder_name = conversation_folder_name(conversation)?;
+    ensure_output_folder(&base, &folder_name)?;
     let folder = base.join(&folder_name);
     let _folder = pin(&folder)?;
     let (name, mut file) = reserve_output(&folder, "自訂圖表.png")?;
@@ -477,7 +489,7 @@ fn reserve_output(folder: &Path, name: &str) -> AppResult<(String, File)> {
         .file_stem()
         .and_then(|s| s.to_str())
         .ok_or("檔名無效。")?;
-    // 圖形／資料僅由專用匯出流程建立，不擴大一般文件編輯的格式。
+    // 專用圖形匯出保留原本副檔名；一般文字可使用未知或沒有副檔名的檔名。
     let ext = match path.extension().and_then(|s| s.to_str()) {
         Some(ext)
             if ["png", "csv", "mmd", "svg"]
@@ -491,6 +503,8 @@ fn reserve_output(folder: &Path, name: &str) -> AppResult<(String, File)> {
     for number in 1..=10000 {
         let candidate = if number == 1 {
             name.to_owned()
+        } else if ext.is_empty() {
+            format!("{stem}_{number}")
         } else {
             format!("{stem}_{number}.{ext}")
         };
@@ -557,7 +571,29 @@ pub fn reveal(project: &Project, value: &str) -> AppResult<()> {
     if selected.is_ok() {
         return Ok(());
     }
-    // 某些企業 Shell 未註冊定位介面。直接啟動系統 Explorer，不依赖檔案關聯或任意命令。
+    // 某些企業 Shell 未註冊定位介面，固定使用系統Explorer定位成果。
+    use std::os::windows::process::CommandExt;
+    std::process::Command::new(system_explorer()?)
+        .raw_arg(format!("/select,\"{}\"", target.display()))
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("無法開啟檔案總管：{e}；成果位置：{}", target.display()))
+}
+
+/// 路徑只取自已授權專案；開啟前再次檢查目錄，不接受前端任意路徑。
+pub fn open_folder(project: &Project) -> AppResult<()> {
+    validate_root(&project.root)?;
+    let root = super::setup::resolve_project_path(&project.root)?;
+    let _guards = pin(&root)?;
+    std::process::Command::new(system_explorer()?)
+        .arg(&root)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("無法開啟專案資料夾：{e}"))
+}
+
+/// 固定從Windows目錄取得Explorer，避免受PATH或檔案關聯影響。
+fn system_explorer() -> AppResult<PathBuf> {
     let mut windows_dir = [0u16; 32768];
     let length = unsafe {
         windows_sys::Win32::System::SystemInformation::GetWindowsDirectoryW(
@@ -568,18 +604,21 @@ pub fn reveal(project: &Project, value: &str) -> AppResult<()> {
     if length == 0 || length >= windows_dir.len() {
         return Err("無法取得 Windows 目錄。".into());
     }
-    let explorer =
-        PathBuf::from(String::from_utf16_lossy(&windows_dir[..length])).join("explorer.exe");
-    use std::os::windows::process::CommandExt;
-    std::process::Command::new(explorer)
-        .raw_arg(format!("/select,\"{}\"", target.display()))
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("無法開啟檔案總管：{e}；成果位置：{}", target.display()))
+    Ok(PathBuf::from(String::from_utf16_lossy(&windows_dir[..length])).join("explorer.exe"))
 }
 
 /// 固定開啟方式同時保護原檔、發布暫存，拒絕連結及操作期間的替換。
 pub(crate) fn checked_file(path: &Path) -> AppResult<File> {
+    // Windows以一般檔案旗標開啟資料夾會得到模糊的os error 5。
+    // 這裡僅改善誤用訊息，不能取代下方handle層的連結／替換驗證。
+    if fs::symlink_metadata(path).is_ok_and(|metadata| {
+        metadata.is_dir() && metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0
+    }) {
+        return Err(format!(
+            "「{}」是資料夾，不能使用檔案讀取工具。請改用list_files列出此路徑，再讀取清單中的檔案；這不是副檔名不支援，請勿據此判定目錄權限不足。",
+            path.file_name().unwrap_or_default().to_string_lossy()
+        ));
+    }
     let file = OpenOptions::new()
         .read(true)
         .share_mode(FILE_SHARE_READ)
@@ -618,8 +657,21 @@ fn pin_stage(path: &Path) -> AppResult<StageGuard> {
 pub(super) fn pin_memory_directory(path: &Path) -> AppResult<StageGuard> {
     pin_named_stage(path, &format!(".anchor_{}", crate::jobs::new_id()?))
 }
+/// 共用成果目錄可能同時是CAD來源的父目錄，必須與既有唯讀pin相容。
+/// READ_ATTRIBUTES不要求DELETE存取；不分享DELETE的目錄handle仍防止更名，
+/// 不分享存取的唯一anchor維持目錄非空，避免被改成重新解析點。
+fn pin_output_directory(path: &Path) -> AppResult<StageGuard> {
+    pin_named_stage_access(
+        path,
+        &format!(".anchor_{}", crate::jobs::new_id()?),
+        FILE_READ_ATTRIBUTES,
+    )
+}
 fn pin_named_stage(path: &Path, anchor_name: &str) -> AppResult<StageGuard> {
     const DELETE_ACCESS: u32 = 0x0001_0000;
+    pin_named_stage_access(path, anchor_name, DELETE_ACCESS)
+}
+fn pin_named_stage_access(path: &Path, anchor_name: &str, access: u32) -> AppResult<StageGuard> {
     let initial = pin(path)?;
     let anchor_path = path.join(anchor_name);
     let anchor = OpenOptions::new()
@@ -631,7 +683,7 @@ fn pin_named_stage(path: &Path, anchor_name: &str) -> AppResult<StageGuard> {
         .map_err(|e| e.to_string())?;
     drop(initial);
     let directory = OpenOptions::new()
-        .access_mode(DELETE_ACCESS)
+        .access_mode(access)
         .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
         .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
         .open(path)
@@ -837,6 +889,8 @@ pub(super) struct SavedBroker {
     #[serde(default)]
     cad_reads: BTreeMap<String, Value>,
     #[serde(default)]
+    cad_copy_version: Option<String>,
+    #[serde(default)]
     cad_previews: BTreeMap<String, Value>,
 }
 pub struct Broker {
@@ -861,6 +915,8 @@ pub struct Broker {
     server_pdf: Option<super::server_pdf::Reader>,
     memory: Option<super::memory::Memory>,
     project: Project,
+    /// 僅由原生runner的對話ID設定，模型不能指定；重啟後可推導相同資料夾。
+    output_conversation: Option<String>,
     output_folder: Option<String>,
     copies: BTreeMap<String, Copy>,
     /// 同一 operation_id 只能配對同一份工具參數，重送僅回傳已記錄的結果。
@@ -888,6 +944,7 @@ pub struct Broker {
     cad_attempts: u32,
     cad_partial_plans: Vec<String>,
     cad_reads: BTreeMap<String, Value>,
+    cad_copy_version: Option<String>,
     cad_previews: BTreeMap<String, Value>,
     png_renderer: Option<super::charts::png::Renderer>,
     chart_chooser: Option<super::charts::quality::Chooser>,
@@ -921,6 +978,7 @@ impl Broker {
             server_pdf: None,
             memory: None,
             project,
+            output_conversation: None,
             output_folder: None,
             copies: BTreeMap::new(),
             results: BTreeMap::new(),
@@ -945,6 +1003,7 @@ impl Broker {
             cad_attempts: 0,
             cad_partial_plans: vec![],
             cad_reads: BTreeMap::new(),
+            cad_copy_version: None,
             cad_previews: BTreeMap::new(),
             png_renderer: None,
             chart_chooser: None,
@@ -958,7 +1017,7 @@ impl Broker {
         // 經序列化建立不含程序資源的快照；授權與執行中的 COM 物件不保存。
         serde_json::from_value(
             json!({"analysis":self.analysis,"mail_notes":self.mail_notes,"mail_draft":self.mail_draft,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
-            "cad_design":self.cad_design,
+            "cad_design":self.cad_design,"cad_copy_version":self.cad_copy_version,
             "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"diagrams":self.diagrams,"diagram_sources":self.diagram_sources,"diagram_exports":self.diagram_exports,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts,"cad_artifacts":self.cad_artifacts,"cad_failed":self.cad_failed,"cad_last_result":self.cad_last_result,"cad_attempts":self.cad_attempts,"cad_partial_plans":self.cad_partial_plans,"cad_reads":self.cad_reads,"cad_previews":self.cad_previews}),
         )
         .map_err(|e| e.to_string())
@@ -1061,6 +1120,7 @@ impl Broker {
         self.cad_attempts = state.cad_attempts;
         self.cad_partial_plans = state.cad_partial_plans;
         self.cad_reads = state.cad_reads;
+        self.cad_copy_version = state.cad_copy_version;
         self.cad_previews = state.cad_previews;
         self.python_artifacts = state.python_artifacts;
         self.datasets = state.datasets;
@@ -1081,11 +1141,13 @@ impl Broker {
     }
     /// 只有專案代理啟用跨任務記憶；一般聊天沒有此能力。
     pub fn enable_memory(&mut self, conversation: &str) -> AppResult<()> {
+        crate::jobs::validate_id(conversation)?;
         self.memory = Some(super::memory::Memory::open(
             self.project.clone(),
             conversation,
         )?);
         self.txt_context |= self.memory()?.has_protected_documents()?;
+        self.output_conversation = Some(conversation.to_owned());
         Ok(())
     }
     pub fn memory(&self) -> AppResult<&super::memory::Memory> {
@@ -1438,14 +1500,12 @@ impl Broker {
             Err(e) => return Err(e.to_string()),
         }
         let _base = pin(&base)?;
-        if self.output_folder.is_none() {
-            self.output_folder = Some(create_output_folder(&base)?);
-        }
-        let folder_name = self
-            .output_folder
-            .as_deref()
-            .ok_or("CSV 輸出資料夾不存在。")?;
-        let folder = base.join(folder_name);
+        let folder_name = shared_output_folder(
+            &base,
+            &mut self.output_folder,
+            self.output_conversation.as_deref(),
+        )?;
+        let folder = base.join(&folder_name);
         let _folder = pin(&folder)?;
         let (actual_name, mut file) = reserve_output(&folder, name)?;
         let path = format!("_AI_Output/{folder_name}/{actual_name}");
@@ -1520,14 +1580,12 @@ impl Broker {
             Err(e) => return Err(e.to_string()),
         }
         let _base = pin(&base)?;
-        if self.output_folder.is_none() {
-            self.output_folder = Some(create_output_folder(&base)?);
-        }
-        let folder_name = self
-            .output_folder
-            .as_deref()
-            .ok_or("PNG 輸出資料夾不存在。")?;
-        let folder = base.join(folder_name);
+        let folder_name = shared_output_folder(
+            &base,
+            &mut self.output_folder,
+            self.output_conversation.as_deref(),
+        )?;
+        let folder = base.join(&folder_name);
         let _folder = pin(&folder)?;
         let (actual_name, mut file) = reserve_output(&folder, name)?;
         let path = format!("_AI_Output/{folder_name}/{actual_name}");
@@ -1568,7 +1626,7 @@ impl Broker {
         // 程式碼以純文字循序掃描，不啟動 Office／PDF；允許較大批次但不擴大結果上限。
         let source_only = paths
             .iter()
-            .all(|path| source_code::supported(Path::new(path)));
+            .all(|path| is_plain_text_input(Path::new(path)));
         let max_files = if source_only { 100 } else { 20 };
         if paths.is_empty()
             || paths.len() > max_files
@@ -1887,6 +1945,7 @@ impl Broker {
                 json!({"ok":false,"operation_id":id,"error":error,"retry_same_operation":false})
             }
         };
+        let result = cad_preflight::normalize_outcome(tool, result);
         if result["ok"] == true {
             self.retain_diagram_read(tool, &result["result"]);
         }
@@ -1915,11 +1974,11 @@ impl Broker {
             self.txt_context = true;
         }
         // 程式檔以分頁原文及 revision 查閱，不把整個程式庫複製到200份文件摘要快取。
-        let is_source = source_code::supported(Path::new(path));
+        let cache_document = uses_document_memory(Path::new(path));
         let stamp = self
             .memory
             .as_ref()
-            .filter(|_| !is_source)
+            .filter(|_| cache_document)
             .map(|m| m.source_stamp(path))
             .transpose()?;
         let content = loop {
@@ -2809,19 +2868,27 @@ impl Broker {
                 field,
                 offset,
             } => self.memory()?.read_task_result(task_id, field, *offset),
-            Tool::ListFiles { path } => {
+            Tool::ListFiles { path, offset } => {
+                if source_code::excluded(Path::new(path)) {
+                    return Err("此資料夾屬於預設排除的路徑。".into());
+                }
                 let target = self.project.root.join(relative(path)?);
                 let _guards = pin(&target)?;
                 if let Some(directory) = _guards.last() {
                     reject_internal(directory)?;
                 }
-                let mut entries = Vec::new();
-                let mut truncated = false;
+                let mut candidates = Vec::new();
                 for (scanned, entry) in fs::read_dir(&target)
                     .map_err(|e| e.to_string())?
                     .enumerate()
                 {
                     let entry = entry.map_err(|e| e.to_string())?;
+                    if cancel.load(Ordering::Relaxed) {
+                        return Err("已停止列出檔案。".into());
+                    }
+                    if scanned >= 100_000 {
+                        return Err("單一資料夾超過100000項，請整理子資料夾後再列出；未宣稱已取得完整清單。".into());
+                    }
                     if source_code::excluded(&entry.path()) {
                         continue;
                     }
@@ -2832,55 +2899,72 @@ impl Broker {
                     {
                         continue;
                     }
-                    if entries.len() == 200 || scanned >= 500 {
-                        truncated = true;
-                        break;
-                    }
                     let metadata = fs::symlink_metadata(entry.path()).map_err(|e| e.to_string())?;
                     if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
                         continue;
                     }
-                    if metadata.is_dir()
-                        || readable_extension(&entry.path()).is_ok()
-                        || super::logs::supported(&entry.path())
-                        || super::vision::input::supported(&entry.path())
-                        || entry
+                    if metadata.is_dir() || metadata.is_file() {
+                        candidates.push((entry, metadata));
+                    }
+                }
+                // 固定排序後再分頁，不讓未知副檔名或位於舊500項掃描界線後的檔案消失。
+                candidates.sort_by_cached_key(|(entry, _)| {
+                    (
+                        entry.file_name().to_string_lossy().to_lowercase(),
+                        entry.file_name(),
+                    )
+                });
+                let total = candidates.len();
+                if *offset > total {
+                    return Err(
+                        "清單位置超過項目數；資料夾可能已變更，請從offset=0重新列出。".into(),
+                    );
+                }
+                let mut entries = Vec::new();
+                for (entry, metadata) in candidates.into_iter().skip(*offset).take(200) {
+                    let mut info = json!({"name":entry.file_name().to_string_lossy(),"directory":metadata.is_dir()});
+                    if metadata.is_dir() {
+                        info["kind"] = json!("directory");
+                        info["read_tool"] = json!("list_files");
+                    }
+                    if !metadata.is_dir() {
+                        info["bytes"] = json!(metadata.len());
+                        info["kind"] = json!("unclassified");
+                        info["read_tool"] = json!("read_file");
+                        info["text_support"] = json!("requires_content_check");
+                        info["original_read_only"] = json!(true);
+                    }
+                    if !metadata.is_dir()
+                        && entry
                             .path()
                             .extension()
                             .is_some_and(|e| e.eq_ignore_ascii_case("dwg"))
                     {
-                        let mut info = json!({"name":entry.file_name().to_string_lossy(),"directory":metadata.is_dir()});
-                        if !metadata.is_dir()
-                            && entry
-                                .path()
-                                .extension()
-                                .is_some_and(|e| e.eq_ignore_ascii_case("dwg"))
-                        {
-                            info["kind"] = json!("cad_dwg");
-                            info["read_tool"] = json!("cad_read");
-                            info["bytes"] = json!(metadata.len());
-                        }
-                        if !metadata.is_dir() && source_code::supported(&entry.path()) {
-                            info["kind"] = json!("source_text");
-                            info["bytes"] = json!(metadata.len());
-                            info["read_tool"] = json!("read_code_section");
-                            info["read_only"] = json!(source_code::read_only(&entry.path()));
-                        }
-                        // 圖片與文件一起列出，但只公告類型及讀取工具；列目錄不會送圖。
-                        if !metadata.is_dir() && super::vision::input::supported(&entry.path()) {
-                            info["kind"] = json!("image");
-                            info["bytes"] = json!(metadata.len());
-                            if super::vision::input::model_supported(&self.model) {
-                                info["read_tool"] = json!("analyze_image");
-                            } else {
-                                info["image_input_available"] = json!(false);
-                            }
-                        }
-                        entries.push(info);
+                        info["kind"] = json!("cad_dwg");
+                        info["read_tool"] = json!("cad_read");
+                        info["bytes"] = json!(metadata.len());
                     }
+                    if !metadata.is_dir() && source_code::supported(&entry.path()) {
+                        info["kind"] = json!("source_text");
+                        info["bytes"] = json!(metadata.len());
+                        info["read_tool"] = json!("read_code_section");
+                        info["copy_editing"] = json!("after_text_validation_max_200KB");
+                    }
+                    // 圖片與文件一起列出，但只公告類型及讀取工具；列目錄不會送圖。
+                    if !metadata.is_dir() && super::vision::input::supported(&entry.path()) {
+                        info["kind"] = json!("image");
+                        info["bytes"] = json!(metadata.len());
+                        if super::vision::input::model_supported(&self.model) {
+                            info["read_tool"] = json!("analyze_image");
+                        } else {
+                            info["image_input_available"] = json!(false);
+                        }
+                    }
+                    entries.push(info);
                 }
+                let next = offset + entries.len();
                 Ok(
-                    json!({"entries":entries,"truncated":truncated,"default_exclusions":"版本庫、依賴、編譯產物與常見機密設定已排除；本層清單不代表已讀取子目錄或全文。"}),
+                    json!({"entries":entries,"offset":offset,"next_offset":(next<total).then_some(next),"total":total,"truncated":next<total,"default_exclusions":"不依副檔名隱藏檔案；版本庫、依賴、編譯產物、連結與常見機密設定仍排除。每頁200項，依next_offset續頁；資料夾變更時重新列出。本層清單不代表已讀取子目錄或全文。"}),
                 )
             }
             Tool::ReadFile { path, offset } => {
@@ -2918,7 +3002,7 @@ impl Broker {
                 let text: String = content.chars().skip(*offset).take(6000).collect();
                 let next = offset + text.chars().count();
                 let document =
-                    if self.copies.contains_key(path) || source_code::supported(Path::new(path)) {
+                    if self.copies.contains_key(path) || !uses_document_memory(Path::new(path)) {
                         Value::Null
                     } else if let Some(memory) = self.memory.as_mut() {
                         memory.record_read(path, *offset, next);
@@ -2990,17 +3074,16 @@ impl Broker {
                     return Err("本次工作副本已達 20 份。".into());
                 }
                 let rel = relative(name)?;
-                if source_code::read_only(&rel)
-                    || source
-                        .as_ref()
-                        .is_some_and(|path| source_code::read_only(Path::new(path)))
-                {
-                    return Err("此程式／設定檔目前僅支援唯讀，不開放建立或修改工作副本。".into());
-                }
                 if rel.components().count() != 1 {
                     return Err("工作副本只填檔名，不含資料夾。".into());
                 }
                 let ext = extension(&rel)?;
+                if !plain_text_candidate(&rel)
+                    && !office::supported(&rel)
+                    && !matches!(ext.as_str(), "pdf" | "msg")
+                {
+                    return Err("CAD 與圖片請使用專用工具，不建立純文字封裝副本。".into());
+                }
                 if matches!(ext.as_str(), "pdf" | "msg") {
                     return Err("PDF／MSG 只支援 TXT 文字副本。".into());
                 }
@@ -3031,17 +3114,17 @@ impl Broker {
                             office::render(None, &rel, None, &[], None, cancel)?.serialize()?,
                             Encoding::Utf8(true),
                         )
-                    } else if matches!(ext.as_str(), "txt" | "py") {
-                        (String::new(), Encoding::Utf8(true))
-                    } else {
+                    } else if office::supported(&rel) || ext == "md" {
                         return Err(
-                            "新建只支援 TXT、PY、DOCX、XLSX、PPTX；舊格式與 MD 請從來源建立副本。"
+                            "舊版 Office 與 MD 請從來源建立副本；新文件可用 TXT、一般文字格式或 DOCX／XLSX／PPTX。"
                                 .into(),
                         );
+                    } else {
+                        (String::new(), Encoding::Utf8(true))
                     }
                 };
-                if ext == "py" {
-                    // 放寬的是唯讀容量；PY副本仍維持既有編輯上限。
+                if !office::supported(&rel) {
+                    // 原文閱讀可達4MiB；所有一般文字副本維持200KB的既有編輯／編碼上限。
                     text::validate(&content)?;
                 }
                 let office = if office::supported(&rel) {
@@ -3226,11 +3309,12 @@ impl Broker {
                     Err(e) => return Err(e.to_string()),
                 }
                 let _base = pin(&base)?;
-                if self.output_folder.is_none() {
-                    self.output_folder = Some(create_output_folder(&base)?);
-                }
-                let folder_name = self.output_folder.as_deref().ok_or("缺少輸出資料夾。")?;
-                let folder = base.join(folder_name);
+                let folder_name = shared_output_folder(
+                    &base,
+                    &mut self.output_folder,
+                    self.output_conversation.as_deref(),
+                )?;
+                let folder = base.join(&folder_name);
                 let _folder = pin(&folder)?;
                 let (name, mut output) = reserve_output(&folder, &copy.name)?;
                 // 路徑先記錄，失敗時也能告知使用者可能已建立的檔案。
@@ -3718,6 +3802,7 @@ mod tests {
         restored.restore(saved, &AtomicBool::new(false)).unwrap();
         let mut wire_op = op.clone();
         wire_op["line_style"] = Value::Null;
+        wire_op["layer"] = Value::Null;
         assert_eq!(
             restored.inspect_cad_plan("plan-1", Some("floor1")).unwrap()["part"]["operations"],
             json!([wire_op])
@@ -4070,7 +4155,7 @@ mod tests {
         fs::remove_dir(root).unwrap();
     }
     #[test]
-    fn user_chart_save_creates_verified_new_folders_without_overwrite() {
+    fn user_chart_save_reuses_conversation_folder_without_overwrite() {
         let root = std::env::current_dir()
             .unwrap()
             .join(".build")
@@ -4083,17 +4168,18 @@ mod tests {
             imports: BTreeMap::new(),
         };
         let bytes = super::super::charts::png::fixture();
-        let first = save_user_chart(&project, &bytes).unwrap();
-        let second = save_user_chart(&project, &bytes).unwrap();
+        let first = save_user_chart(&project, "chart-conversation", &bytes).unwrap();
+        let second = save_user_chart(&project, "chart-conversation", &bytes).unwrap();
         assert_ne!(first, second);
         assert!(first.starts_with("_AI_Output/"));
         assert_eq!(fs::read(root.join(&first)).unwrap(), bytes);
-        assert!(save_user_chart(&project, b"invalid").is_err());
+        assert!(save_user_chart(&project, "chart-conversation", b"invalid").is_err());
+        let folder = root.join(&first).parent().unwrap().to_owned();
         for path in [first, second] {
             let file = root.join(path);
             fs::remove_file(&file).unwrap();
-            fs::remove_dir(file.parent().unwrap()).unwrap();
         }
+        fs::remove_dir(folder).unwrap();
         fs::remove_dir(root.join("_AI_Output")).unwrap();
         fs::remove_dir(root).unwrap();
     }

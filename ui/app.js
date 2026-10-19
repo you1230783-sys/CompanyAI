@@ -8,9 +8,12 @@ let state = {
   notifications: [],
   config: {
     font_size: 14,
+    ui_font: "wenkai_tc",
+    interface_scale: 100,
     hotkey: "Win+Esc",
     sidebar_collapsed: false,
     notification_popups: true,
+    minimize_to_taskbar: true,
   },
   busy: "none",
   logged_in: false,
@@ -23,6 +26,16 @@ let activeView = "chat",
   stickToBottom = true,
   confirmAction = null;
 let draftTimer, toastTimer;
+const UI_FONT_FAMILIES = Object.freeze({
+  microsoft_jhenghei: '"Microsoft JhengHei", "Microsoft JhengHei UI"',
+  huninn: '"LM Huninn"',
+  wenkai_tc: '"LM WenKai TC"',
+  wenkai_mono_tc: '"LM WenKai Mono TC"',
+});
+function applyUiFont(value) {
+  const family = Object.hasOwn(UI_FONT_FAMILIES, value) ? UI_FONT_FAMILIES[value] : UI_FONT_FAMILIES.wenkai_tc;
+  document.documentElement.style.setProperty("--ui-font-family", family);
+}
 let lastStatusNotice = "";
 let hotkeyRecording = false,
   hotkeyDraft = null;
@@ -369,8 +382,9 @@ function showView(view) {
   const project = view === "chat" && state.logged_in
     ? state.projects?.items?.find(item => item.id === conversation?.project_id) : null;
   $("project-context").textContent = project?.root || "";
-  $("project-context").title = project?.root || "";
+  $("project-context").title = project ? `在檔案總管開啟：${project.root}` : "";
   $("project-context").hidden = !project;
+  $("project-context").onclick = project ? () => send({type:"project", command:{action:"open_folder", id:project.id}}) : null;
   // 一般對話提供快速解釋；專案透過原本的任務輸入提出需求。
   document.querySelector('[data-action="explain"]').hidden = !!conversation?.project_id;
   // 只在真正進入助理頁時更新，狀態推播重繪不重複查詢。
@@ -625,7 +639,14 @@ function renderMessages() {
       const resume = node("button", "resume-project", "繼續");
       resume.disabled = !state.retry?.enabled || state.projects?.running;
       resume.title = "從暫存的工作副本與進度繼續，不重新執行整個任務";
-      resume.onclick = () => { if (resume.disabled) return; resume.disabled = true; send({type:"project", command:{action:"resume",conversation:state.active_id,run_id:message.request_id,message_count:state.messages.length}}); };
+      resume.onclick = () => {
+        if (resume.disabled) return;
+        const conversation = state.active_id, count = state.messages.length;
+        window.confirmFastModelSend(() => {
+          resume.disabled = true;
+          send({type:"project", command:{action:"resume",conversation,run_id:message.request_id,message_count:count}});
+        }, () => resume.isConnected && !resume.disabled && !!state.retry?.enabled && state.messages.length === count && !state.projects?.running);
+      };
       tools.append(resume);
     } else if (state.retry && index === state.messages.length - 1) {
       const retry = node("button", "retry-message", "重新再試一次");
@@ -829,6 +850,9 @@ function receive(next) {
     "--font-size",
     state.config.font_size + "px",
   );
+  applyUiFont(state.config.ui_font);
+  $("ui-font").value = state.config.ui_font || "wenkai_tc";
+  $("interface-scale").value = String(state.config.interface_scale || 100);
   for (const [section, label, list] of [["projects", "專案", "project-list"], ["recent", "最近對話", "history-list"]]) {
     const collapsed = !!state.config[section + "_collapsed"];
     $(list).hidden = collapsed;
@@ -863,6 +887,7 @@ function receive(next) {
   $("version-label").textContent =
     `LM_AI ${state.version} · ${state.version_status}`;
   $("notification-popups").checked = state.config.notification_popups;
+  $("minimize-to-taskbar").checked = state.config.minimize_to_taskbar !== false;
   $("save-label").textContent = state.history_error
     ? "尚未保存"
     : state.busy === "chat"
@@ -903,7 +928,53 @@ function resizePrompt() {
   input.style.height = "48px";
   input.style.height = Math.min(160, Math.max(48, input.scrollHeight)) + "px";
 }
+// 快速動作自行選擇模型；只有使用者以普通對話啟動的請求需要確認。
+// 回呼前重新比對對話及草稿，避免對話框等待期間把舊內容送往新的對話。
+let fastModelConfirmationOpen = false;
+window.confirmFastModelSend = (action, stillCurrent = () => true, requestModel = state.config.model) => {
+  if (fastModelConfirmationOpen) return;
+  const conversation = state.active_id, model = state.config.model;
+  const proceed = () => {
+    if (conversation !== state.active_id || model !== state.config.model || !stillCurrent()) {
+      toast("內容或模型已變更，請重新確認後傳送；草稿已保留。");
+      return;
+    }
+    action();
+  };
+  if (requestModel !== "fast") { proceed(); return; }
+  fastModelConfirmationOpen = true;
+  const dialog = node("dialog", "fast-model-dialog");
+  const title = node("h2", "", "使用快速模型傳送？");
+  const warning = node("p", "fast-model-warning", "快速模型使用工具能力較差，回饋品質可能不如預期");
+  const description = node("p", "", "快速模型僅建議用於快速動作，如翻譯等功能用途。仍要使用目前模型傳送嗎？");
+  const buttons = node("div", "button-row");
+  const cancel = node("button", "secondary-button", "取消");
+  const confirm = node("button", "primary-button", "仍要傳送");
+  cancel.type = confirm.type = "button";
+  cancel.autofocus = true;
+  cancel.onclick = () => dialog.close();
+  confirm.onclick = () => dialog.close("send");
+  buttons.append(cancel, confirm); dialog.append(title, warning, description, buttons);
+  dialog.setAttribute("aria-label", title.textContent);
+  dialog.addEventListener("close", () => {
+    fastModelConfirmationOpen = false;
+    const approved = dialog.returnValue === "send";
+    dialog.remove();
+    if (approved) proceed();
+  }, {once:true});
+  document.body.append(dialog); dialog.showModal();
+};
 function submit(action = "send") {
+  const text = $("prompt").value;
+  if (action !== "send") { submitConfirmed(action); return; }
+  if ((!state.can_send && !window.ProjectComposer?.canSend()) || window.WorkUI?.getFileBusy()) return;
+  if (!text.trim() && !state.work?.attachments?.length) { toast("請先輸入文字"); return; }
+  const fingerprint = () => JSON.stringify([$("prompt").value, state.work?.attachments,
+    state.projects?.running_id, $("project-send-mode")?.value]);
+  const original = fingerprint();
+  window.confirmFastModelSend(() => submitConfirmed(action), () => original === fingerprint());
+}
+function submitConfirmed(action) {
   if (window.ProjectComposer?.submit($("prompt").value, action)) return;
   if (!state.can_send || window.WorkUI?.getFileBusy()) return;
   const text = $("prompt").value;
@@ -966,6 +1037,35 @@ $("font-size").addEventListener("change", () =>
     notification_popups: state.config.notification_popups,
   }),
 );
+// 舊的通知／側欄命令未帶新欄位時，原生層會保留既有字體與縮放設定。
+function saveDisplayPreference(extra) {
+  send({ type: "preferences", font_size: state.config.font_size,
+    sidebar_collapsed: state.config.sidebar_collapsed,
+    notification_popups: state.config.notification_popups, ...extra });
+}
+$("ui-font").onchange = () => {
+  applyUiFont($("ui-font").value);
+  saveDisplayPreference({ui_font: $("ui-font").value});
+};
+$("minimize-to-taskbar").onchange = () => saveDisplayPreference({minimize_to_taskbar: $("minimize-to-taskbar").checked});
+$("interface-scale").onchange = () => saveDisplayPreference({interface_scale: Number($("interface-scale").value)});
+document.addEventListener("wheel", event => {
+  if (event.ctrlKey) event.preventDefault();
+}, {passive: false});
+document.addEventListener("keydown", event => {
+  if (!hotkeyRecording && event.ctrlKey && !event.altKey && !event.metaKey && ["+", "=", "-", "0"].includes(event.key)) event.preventDefault();
+});
+// 授權文字與字型均來自內嵌資源，可離線閱讀，不以fetch放寬CSP。
+const fontLicenseDialog = document.createElement("dialog");
+fontLicenseDialog.className = "font-license-dialog";
+fontLicenseDialog.setAttribute("aria-label", "字型授權");
+const fontLicenseClose = node("button", "primary-button", "關閉");
+fontLicenseClose.type = "button";
+fontLicenseClose.onclick = () => fontLicenseDialog.close();
+const fontLicenseText = node("pre", "font-license-text", window.BundledFontLicenses || "字型授權資源未載入。");
+fontLicenseDialog.append(node("h2", "", "字型授權"), fontLicenseText, fontLicenseClose);
+document.body.append(fontLicenseDialog);
+$("font-licenses-open").onclick = () => fontLicenseDialog.showModal();
 $("notification-popups").onchange = () =>
   send({
     type: "preferences",
@@ -1117,10 +1217,14 @@ document.addEventListener("click", (event) => {
   }
   const retry = event.target.closest(".retry-message");
   if (retry && !retry.disabled) {
-    retry.disabled = true;
-    send({type:"retry_chat", conversation_id:retry.dataset.conversation,
+    const request = {type:"retry_chat", conversation_id:retry.dataset.conversation,
       user_index:Number(retry.dataset.index), message_count:Number(retry.dataset.count),
-      request_id:retry.dataset.request || null});
+      request_id:retry.dataset.request || null};
+    // 翻譯等快速動作的重試仍免提醒；使用原提問保存的 action 判斷。
+    const quickAction = !!state.retry?.quick_action, retryModel = state.retry?.model || state.config.model;
+    const retrySend = () => { retry.disabled = true; send(request); };
+    if (quickAction) retrySend();
+    else window.confirmFastModelSend(retrySend, () => retry.isConnected && !retry.disabled && !!state.retry?.enabled && (state.retry?.model || state.config.model) === retryModel, retryModel);
   }
   const copy = event.target.closest(".copy-message");
   if (copy) {

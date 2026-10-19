@@ -83,6 +83,11 @@ impl WebView {
             settings.SetAreDevToolsEnabled(false)?;
             settings.SetIsStatusBarEnabled(false)?;
             settings.SetAreDefaultContextMenusEnabled(false)?;
+            // 介面比例只由一般設定控制；禁用Ctrl+滾輪／瀏覽器縮放快捷鍵。
+            settings.SetIsZoomControlEnabled(false)?;
+            if let Ok(settings) = settings.cast::<ICoreWebView2Settings5>() {
+                settings.SetIsPinchZoomEnabled(false)?;
+            }
             if let Ok(settings) = settings.cast::<ICoreWebView2Settings4>() {
                 settings.SetIsPasswordAutosaveEnabled(false)?;
                 settings.SetIsGeneralAutofillEnabled(false)?;
@@ -215,6 +220,12 @@ impl WebView {
     pub fn set_recording(&self, active: bool) {
         self.recording.set(active);
     }
+    /// 使用WebView2原生縮放，同時調整文字、按鈕及排版。
+    pub fn set_interface_scale(&self, percent: u16) -> AppResult<()> {
+        let scale = f64::from(crate::config::interface_scale(percent)) / 100.0;
+        unsafe { self.controller.SetZoomFactor(scale) }
+            .map_err(|e| format!("無法套用介面大小：{e}"))
+    }
     /// 把已獲前景權限的主視窗焦點交給 WebView2，不用模擬貼上或附加其他程序輸入。
     pub fn focus(&self) {
         unsafe {
@@ -310,6 +321,7 @@ fn mime_type(path: &str) -> &'static str {
         Some("css") => "text/css; charset=utf-8",
         Some("js") => "text/javascript; charset=utf-8",
         Some("woff2") => "font/woff2",
+        Some("ttf") => "font/ttf",
         Some("ico") => "image/x-icon",
         _ => "application/octet-stream",
     }

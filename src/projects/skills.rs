@@ -66,7 +66,7 @@ const SKILLS: &[(&str, &str, &str)] = &[
     ),
     (
         "text-edit",
-        "搜尋、建立與修訂 TXT／MD 副本",
+        "搜尋與修訂一般文字副本，包含程式／指令檔及未知副檔名",
         include_str!("skills/text-edit.md"),
     ),
     (

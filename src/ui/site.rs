@@ -155,6 +155,7 @@ impl App {
                         self.site.not_before = None;
                         self.site.status = "全站鈴鐺已同步，已讀與刪除以網站為準".into();
                         if added > 0 && self.config.notification_popups && !self.is_foreground() {
+                            self.work.tray_restore_only = false;
                             self.work.task_balloon = false;
                             tray(
                                 self.window,

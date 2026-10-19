@@ -13,6 +13,11 @@ window.runSelfTest = async (structuredFixture) => {
     checks.push(name);
   }
   const frame = () => new Promise((resolve) => setTimeout(resolve, 80));
+  // 舊傳送情境仍走真實確認流程，不以關閉快速模型警告的方式繞過新行為。
+  async function approveFastWarningIfPresent() {
+    const dialog = document.querySelector(".fast-model-dialog[open]");
+    if (dialog) {dialog.close("send");await frame();}
+  }
   // Rust 訊息橋為非同步；等實際狀態回覆，避免固定等兩幀就在慢速主機誤報失敗。
   // 有明確上限且保留原斷言，真正未回覆仍會使自檢失敗。
   async function waitFor(condition, name) {
@@ -26,6 +31,28 @@ window.runSelfTest = async (structuredFixture) => {
     // 原生 ready 訊息可能早於後續 script；先等全部介面入口就緒再驗證動態節點。
     await waitFor(() => !!window.ProjectUI && !!window.AuthUI, "UI modules initialized");
     await window.runReviewTests(check);
+    {
+      const old = LMUI.getState();
+      LMUI.receive({...old, logged_in:true, can_send:true});
+      let accepted = 0;
+      confirmFastModelSend(() => accepted++, () => true, "fast");
+      confirmFastModelSend(() => accepted++, () => true, "fast");
+      check(document.querySelectorAll(".fast-model-dialog[open]").length === 1 && accepted === 0, "fast model confirmation opens once and blocks send");
+      check(["rgb(211, 47, 47)","rgb(255, 118, 118)"].includes(getComputedStyle(document.querySelector(".fast-model-warning")).color), "fast model warning is red in either theme");
+      document.querySelector(".fast-model-dialog").close();await frame();
+      check(accepted === 0, "cancel fast model confirmation never sends");
+      confirmFastModelSend(() => accepted++, () => false, "fast");
+      await approveFastWarningIfPresent();
+      check(accepted === 0, "stale draft does not send after confirmation");
+      confirmFastModelSend(() => accepted++, () => true, "fast");
+      await approveFastWarningIfPresent();
+      check(accepted === 1, "confirmed fast model action sends once");
+      confirmFastModelSend(() => accepted++, () => true, "quality");
+      check(accepted === 2 && !document.querySelector(".fast-model-dialog"), "quality model needs no confirmation");
+      check($("ui-font").options.length === 4 && $("interface-scale").options.length === 8, "font and interface size settings contain all fixed choices");
+      check(document.querySelector("#project-dialog details li"), "new project support list is collapsible");
+      LMUI.receive(old);
+    }
     // 使用真正的離線引擎驗證常用圖型與拒絕路徑，不以假 SVG 替代呈現。
     for (const [kind, source] of [
       ["flowchart", 'flowchart TD\n A["開始"] --> B{"通過？"}\n B -->|是| C["完成"]\n B -->|否| A'],
@@ -37,8 +64,38 @@ window.runSelfTest = async (structuredFixture) => {
       const result = JSON.parse(await DiagramUI.exportData(source, "svg"));
       check(result.ok && result.data.startsWith("<svg") && !result.data.includes("foreignObject"), `Mermaid ${kind} renders offline as SVG`);
     }
+    // 真正檢查文字，避免把 value >= 10 誤畫成 value = 10。
+    {
+      const source = ['flowchart TD', ' A["value >= 10"] -->|"x > 5"| B{value <= 20}', ' B --> C["score &gt;= 80"]', ' C --> D["angle < 30"]'].join(String.fromCharCode(10));
+      const result = JSON.parse(await DiagramUI.exportData(source, "svg"));
+      check(result.ok, "Mermaid comparison fixture renders");
+      const doc = new DOMParser().parseFromString(result.data, "image/svg+xml");
+      const labels = [...doc.querySelectorAll("text")].map(node => node.textContent.trim());
+      for (const expected of ["value >= 10", "x > 5", "value <= 20", "score >= 80", "angle < 30"]) {
+        check(labels.includes(expected), "Mermaid preserves comparison label: " + expected);
+      }
+      const clean = new DOMParser().parseFromString(DiagramUI.safeSvg('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(1)</script><image href="https://example.invalid/x"/><foreignObject/><text>&gt;=</text></svg>'), "image/svg+xml");
+      check(!clean.querySelector("script,image,foreignObject,[onload]") && clean.querySelector("text").textContent === ">=", "SVG sanitizer preserves operators and removes active/external content");
+    }
     for (const source of ['flowchart TD\nA[', '%%{init: {securityLevel:"loose"}}%%\nflowchart TD', 'flowchart TD\nA-->B\nclick A "https://example.com"']) {
       check(JSON.parse(await DiagramUI.exportData(source, "svg")).ok === false, "Mermaid invalid syntax/config/click returns explicit error");
+    }
+    {
+      const old = LMUI.getState();
+      LMUI.receive({...old, logged_in:true, can_send:true});
+      const container = document.createElement("div");document.body.append(container);
+      try {
+        DiagramUI.render(container,[{name:"尺寸測試",source:'flowchart TD\n A["中文開始"] --> B["中文完成"]',revision:"r"}],{conversation:"test",message_index:0});
+        await waitFor(() => !!container.querySelector("svg"), "Mermaid card rendered");
+        const svg = container.querySelector("svg"), original = svg.viewBox.baseVal.width;
+        check(original > 18 && Math.abs(svg.getBoundingClientRect().width - original) < 1, "Mermaid uses intrinsic SVG width instead of 18px icon size");
+        const button = label => [...container.querySelectorAll("button")].find(b => b.textContent === label);
+        for (let i=0;i<12;i++) button("放大").click();
+        check(container.querySelector(".mermaid-zoom").textContent === "800%" && Math.abs(svg.getBoundingClientRect().width - original*8) < 2, "Mermaid reaches 800 percent with matching scroll dimensions");
+        button("原始比例").click();
+        check(container.querySelector(".mermaid-zoom").textContent === "100%", "Mermaid original size resets scale");
+        check(!!button("符合視窗") && !!button("全畫面") && button("全畫面").title.includes("Esc"), "Mermaid fit and fullscreen escape guidance are available");
+      } finally {container.remove();LMUI.receive(old);}
     }
     {
       const old=LMUI.getState(), originalSend=send, commands=[];
@@ -1003,6 +1060,7 @@ window.runSelfTest = async (structuredFixture) => {
       prompt.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter", shiftKey:true, bubbles:true, cancelable:true}));
       check(!behaviorCommands.some(c=>c.type === "chat"), "IME confirmation and Shift Enter never send");
       prompt.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter", bubbles:true, cancelable:true}));
+      await approveFastWarningIfPresent();
       check(behaviorCommands.filter(c=>c.type === "chat").length === 1, "plain Enter sends when enabled");
       fixture.config.enter_sends = false;
       fixture.config.hotkey_enabled = true;
@@ -1016,6 +1074,7 @@ window.runSelfTest = async (structuredFixture) => {
       prompt.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter", bubbles:true, cancelable:true}));
       check(behaviorCommands.filter(c=>c.type === "chat").length === 1, "plain Enter preserves newline mode");
       prompt.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter",ctrlKey:true,bubbles:true,cancelable:true}));
+      await approveFastWarningIfPresent();
       check(behaviorCommands.filter(c=>c.type === "chat").length === 2, "Ctrl Enter sends in newline mode");
       check(!document.getElementById("execution-sync"), "old synchronous reply control removed");
       check(document.getElementById("execution-stream").textContent === "一般", "stream label is general");
@@ -1233,6 +1292,7 @@ window.runSelfTest = async (structuredFixture) => {
       check(!$("project-compose-controls").hidden && $("project-send-mode").value==="next_turn","main composer defaults to next-turn supplement");
       $("prompt").value="只看 Z01-CY，<script>不是 HTML</script>";
       $("send").click();
+      await approveFastWarningIfPresent();
       const composed=retryCommands.at(-1)?.command;
       check(composed?.action==="compose" && composed.run_id==="run-one" && composed.mode==="next_turn","composer binds active run");
       check(!!$("prompt").value,"composer keeps text until native acknowledgement");
@@ -1299,6 +1359,7 @@ window.runSelfTest = async (structuredFixture) => {
       fixture.retry = {...fixture.retry,message_count:2,enabled:true}; LMUI.receive(fixture);
       check($("project-activity").hidden && document.querySelector("#messages .project-activity summary").textContent === "查看工具紀錄與進度筆記", "finished activity kept with reply");
       const button = document.querySelector(".retry-message");button.click();button.click();
+      await approveFastWarningIfPresent();
       check(retryCommands.filter(command => command.type === "retry_chat").length === 1 && retryCommands.at(-1).request_id === "request-one" && retryCommands.at(-1).message_count === 2, "retry button binds original request and suppresses double click");
       LMUI.receive(fixture);check(!document.querySelector(".retry-message").disabled, "rejected retry can be used again after state refresh");
       fixture.messages[1].project_paused = true; fixture.messages[1].request_id = "paused-run";
@@ -1306,6 +1367,7 @@ window.runSelfTest = async (structuredFixture) => {
       const resume = document.querySelector(".resume-project");
       check(resume && !resume.disabled && !document.querySelector(".retry-message"), "paused task offers continue instead of restart");
       resume.click(); resume.click();
+      await approveFastWarningIfPresent();
       check(retryCommands.filter(c => c.command?.action === "resume").length === 1 && retryCommands.at(-1).command.run_id === "paused-run", "continue binds checkpoint and suppresses duplicate clicks");
       fixture.messages[1].project_paused = false;
       fixture.messages[1].content = "成果：\n\n`_AI_Output/20260929_153000/測試 報告.txt`\n\n[另存](_AI_Output/20260929_153000/report.xlsx)\n\n_AI_Output/20260929_153000/plain.txt";

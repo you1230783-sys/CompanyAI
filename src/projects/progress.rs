@@ -884,7 +884,10 @@ mod tests {
     #[test]
     fn new_operation_ids_and_rewritten_notes_cannot_manufacture_progress() {
         let mut state = Progress::new(vec![]);
-        let tool = Tool::ListFiles { path: ".".into() };
+        let tool = Tool::ListFiles {
+            path: ".".into(),
+            offset: 0,
+        };
         assert!(state.observe(
             "first",
             &tool,
@@ -1209,6 +1212,7 @@ mod tests {
                 &format!("list{i}"),
                 &Tool::ListFiles {
                     path: format!("folder{i}"),
+                    offset: 0,
                 },
                 &json!({"ok":true,"result":{"entries":[]}}),
             );

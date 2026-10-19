@@ -56,7 +56,13 @@
       const start = node("button", "text-button", "現在傳送");
       start.dataset.queuedSend = "true";
       start.disabled = !state.can_send;
-      start.onclick = () => { start.disabled = true; command({action:"send_queued",conversation:state.active_id,id:queue.id}); };
+      start.onclick = () => {
+        const conversation = state.active_id, id = queue.id;
+        window.confirmFastModelSend(() => {
+          start.disabled = true;
+          command({action:"send_queued", conversation, id});
+        }, () => state.can_send && state.projects?.queued?.id === id && !state.projects.running);
+      };
       host.append(start);
     }
     if (!waiting) host.append(node("small", "", "任務暫停、停止、失敗或程式重開後，請確認內容再傳送。"));

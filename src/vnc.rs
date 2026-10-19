@@ -16,6 +16,7 @@ const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
 mod ordering;
 use ordering::{group_cmp, natural_cmp};
+pub mod json_transfer;
 mod selection;
 pub mod sync;
 pub use selection::{MachineKey, Selection};

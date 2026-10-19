@@ -280,6 +280,16 @@ pub(super) fn decode_arguments(encoded: &str, schema: &Value) -> AppResult<Value
     Ok(args)
 }
 
+/// 只補充固定格式說明，不改寫模型參數，也不放寬 Schema 的接受條件。
+/// 幾何修改誤放 operations 時，anyOf 的一般錯誤無法清楚指出兩組陣列的用途。
+pub(super) fn argument_repair_hint(name: &str, reason: String) -> String {
+    if matches!(name, "cad_edit" | "cad_active_edit") {
+        format!("{reason} CAD修改請放在頂層edits陣列，每項為{{handle,kind,value}}；trim/fillet等的boundary、pick、other_handle、radius等參數需放進value物件，不可攤到edits項目本身。operations只放新增圖元，沒有新增時填[]；不要把既有圖元修改移到operations。保留已讀Handle、座標及revision，只修正參數封套；詳細格式見cad-advanced。")
+    } else {
+        reason
+    }
+}
+
 /// 拒絕後才補充有限診斷，不改變 matches 的接受條件，也不補猜參數。
 /// 只回傳欄位位置及內建規格，避免重送整段程式或檔案內容。
 fn diagnose(value: &Value, schema: &Value, path: &str, errors: &mut Vec<String>) {
@@ -700,6 +710,21 @@ mod tests {
                 .remove("line_style");
             assert!(decode_arguments(&missing.to_string(), schema).is_err());
         }
+    }
+
+    #[test]
+    fn cad_repair_hint_explains_edit_envelope_without_rewriting_arguments() {
+        for name in ["cad_edit", "cad_active_edit"] {
+            let hint = argument_repair_hint(name, "$.operations[0]: anyOf不符".into());
+            assert!(hint.starts_with("$.operations[0]: anyOf不符"));
+            assert!(hint.contains("{handle,kind,value}"));
+            assert!(hint.contains("operations只放新增圖元"));
+            assert!(hint.contains("value物件"));
+        }
+        assert_eq!(
+            argument_repair_hint("read_file", "原始錯誤".into()),
+            "原始錯誤"
+        );
     }
 
     #[test]

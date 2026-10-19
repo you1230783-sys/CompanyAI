@@ -78,8 +78,33 @@ impl App {
         else {
             return serde_json::Value::Null;
         };
+        let question = &self.messages[index];
+        let project = self
+            .active_id
+            .as_deref()
+            .and_then(|id| self.projects.store.project_for(id))
+            .is_some();
+        let previous_model = self
+            .work
+            .store
+            .tasks
+            .iter()
+            .find(|task| {
+                task.request_id.as_str() == question.request_id.as_deref().unwrap_or("")
+                    && Some(&task.conversation_id) == self.active_id.as_ref()
+                    && !task.title_generation
+            })
+            .and_then(|task| task.request["model"].as_str());
+        let model = if project {
+            self.config.model.as_str()
+        } else {
+            previous_model
+                .or_else(|| question.retry_settings.as_ref().map(|s| s.model.as_str()))
+                .unwrap_or(&self.config.model)
+        };
         json!({"user_index":index,"message_count":self.messages.len(),
-            "request_id":self.messages[index].request_id,"enabled":self.retry_allowed(index)})
+            "request_id":question.request_id,"enabled":self.retry_allowed(index),"model":model,
+            "quick_action":!project && question.retry_settings.as_ref().is_some_and(|s|s.quick_action)})
     }
 
     pub(super) fn retry_chat(
@@ -181,6 +206,7 @@ impl App {
                         mode: self.work.mode.clone(),
                         skills: true,
                         attachment_ids: vec![],
+                        quick_action: false,
                     });
             if !question.attachments.is_empty() && settings.attachment_ids.is_empty() {
                 return Err("原附件紀錄已不可用，請重新加入附件後送出。".into());

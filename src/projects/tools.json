@@ -4,7 +4,7 @@
       "type": "function",
       "function": {
         "name": "list_files",
-        "description": "列出專案相對資料夾；path 空字串為根目錄，最多 200 項。",
+        "description": "列出專案相對資料夾的所有副檔名（未知格式也列出）；path空字串為根目錄，每頁200項，依next_offset續頁，null代表結束。資料夾只能用list_files，不可用read_file／read_code_section當作列目錄；可在run_batch同時列2–4個獨立子目錄。原檔唯讀；內部／機密／依賴／產物／連結仍排除。清單不代表已讀內容，資料夾變更時重新列出。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -15,6 +15,12 @@
               "type": "string",
               "maxLength": 2000,
               "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "description": "第一頁填0；續頁使用結果next_offset。"
             }
           },
           "required": [
@@ -28,7 +34,7 @@
       "type": "function",
       "function": {
         "name": "read_file",
-        "description": "讀取檔案或 copy_id；offset 是 Unicode 字元索引，每次最多 6000 字。 Excel 資料閱讀優先 inspect_excel／read_excel_range；此工具的 Office 編輯快照仍限 2000 區塊。",
+        "description": "讀取檔案或copy_id；一般文字按實際內容與編碼驗證，不依副檔名白名單，包含BAT/CMD/PS1及未知文字格式，原件上限4MiB。offset是Unicode字元索引，每頁6000字。二進位／編碼不明如實回報。文件／CAD／圖片沿用專用工具；Excel優先inspect_excel/read_excel_range，Office編輯快照限2000區塊。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -260,7 +266,7 @@
       "type": "function",
       "function": {
         "name": "find_text",
-        "description": "在單一明確檔案搜尋字面文字（區分大小寫，不支援正規表示式）。支援唯讀程式碼 CPP/H/PY/Rust/JS/HTML/CSS 等及一般可讀文件；程式檔上限4MiB。path不可為資料夾或萬用字元。最多回傳100處命中、行號及revision；多檔請用search_files，命中後用read_code_section讀小段。大小／格式／排除路徑錯誤不應原樣重試。",
+        "description": "單一明確檔案的唯讀字面搜尋，區分大小寫，不接受資料夾/glob/正規表示式。一般文字不限制副檔名，實際內容驗證後讀取，上限4MiB；文件沿用原讀取器。最多100處命中、行號及revision。多檔用search_files；大小／排除路徑／格式錯誤不原樣重試。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -288,7 +294,7 @@
       "type": "function",
       "function": {
         "name": "create_working_copy",
-        "description": "建立本次工作副本。source 為來源相對路徑；null 時新建 TXT/DOCX/XLSX/PPTX，name 為檔名。Office 來源保留格式，PDF/MSG 僅 TXT。",
+        "description": "建立本次工作副本；source為來源相對路徑或null，name只填檔名。一般文字依實際解碼判定，保留來源副檔名／編碼／BOM，包含BAT/CMD/PS1及未知文字格式，副本上限200KB；原檔不改、不自動執行。新建可用一般文字或DOCX/XLSX/PPTX；MD及舊Office由來源建立，Office保留格式，PDF/MSG僅TXT。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -1320,7 +1326,7 @@
       "type": "function",
       "function": {
         "name": "search_files",
-        "description": "跨檔唯讀字面搜尋，區分大小寫；支援CPP/H/PY/Rust/JS/HTML/CSS等。全程式碼每批最多100檔，混合一般文件最多20檔；單一程式檔4MiB，最多60處命中。先list_files取得明確檔名，不接受資料夾/glob/正規表示式。檢查coverage/errors/truncated，未掃描不是零命中；較大程式檔或正規表示式改用run_python kind=text靜態分析，不用inspect_excel。",
+        "description": "跨檔唯讀字面搜尋，區分大小寫；所有一般文字格式可嘗試，不限制副檔名。純文字每批最多100檔，含專用文件最多20檔；每文字檔4MiB，最多60處命中。先list_files取得明確檔名，不接受資料夾/glob/正規表示式。檢查coverage/errors/truncated，未掃描不是零命中。較大文字或正規表示式用run_python kind=text靜態分析。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -4188,7 +4194,7 @@
       "type": "function",
       "function": {
         "name": "read_code_section",
-        "description": "唯讀程式／設定檔區段（C/C++、PY、Rust、HTML、JS/TS、CSS等），每段200行/6000字，單檔4MiB，回傳行號與revision。新格式不開放修改或執行；既有PY副本仍可用copy_id讀取並取得section_id。",
+        "description": "按行讀取一般文字／程式／設定檔，未知副檔名也依實際內容驗證。每段200行/6000字，單檔4MiB，回傳行號與revision；原件唯讀。需要修改時create_working_copy，再read_file/edit_text/save_copy；一般文字副本上限200KB，不執行來源。PY副本仍可用section_id分段修改及既有檢查流程。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -4269,7 +4275,7 @@
       "type": "function",
       "function": {
         "name": "run_batch",
-        "description": "一次提交2–4個互不依賴的工作，最多2個同時運算；每項獨立回傳結果。禁止修改同一副本、讀信或巢狀批次。",
+        "description": "一次提交2–4個互不依賴的工作，最多2個同時運算；每項獨立回傳結果。列子目錄請選list_files，read_file只讀檔案，不能列資料夾。禁止修改同一副本、讀信或巢狀批次。CAD查詢不在可並行工具內，請直接cad_query；不要用read_code_section包裝CAD參數。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -4286,6 +4292,7 @@
                   "tool": {
                     "type": "string",
                     "enum": [
+                      "list_files",
                       "read_file",
                       "read_code_section",
                       "find_text",
@@ -5903,7 +5910,7 @@
       "type": "function",
       "function": {
         "name": "cad_edit",
-        "description": "讀取後修改全新 DWG 副本；共用操作支援文字、顏色、移動、半徑、文字高度、刪除及所有新增繪圖類型。原檔不改。",
+        "description": "依已讀revision及Handle建立新DWG副本，原檔不動。寫入前一次檢查主/副目標details、批次各100項、同修改Handle一次。幾何copy/rotate/mirror/array/offset/trim/extend/fillet/layer獨立一批且operations=[]，不混改字/半徑/ZOOM等指令。PRECHECK_REJECTED未送CAD修改，依issues一次修正。native FAILED/UNKNOWN依recovery停止或處理，不能當成功。成功存檔重開後可交付，後續改新檔才重建快照。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -7727,7 +7734,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
+              "description": "簡短交接新結果、未完成步驟與下一步；CAD版本、已讀幾何及原生核對結果由程式常駐提供，不每輪重抄全部座標／計畫。"
             }
           },
           "required": [
@@ -7775,7 +7782,7 @@
       "type": "function",
       "function": {
         "name": "cad_active_edit",
-        "description": "修改已讀取的目前圖面，桌面確認後執行一組 Undo；絕不儲存或關閉。",
+        "description": "修改已讀且allowed_edits允許的目前圖面，需桌面確認，不儲存/不關閉。revision及主/副目標details皆需有效。幾何修改operations=[]，同修改Handle每批一次，不混改字/半徑/指令。PRECHECK_REJECTED尚未修改，依全部issues修正；原生失敗與未知結果不重播，EDITED_UNSAVED才可回報已修改未儲存。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -9592,7 +9599,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
+              "description": "簡短交接新結果、未完成步驟與下一步；CAD版本、已讀幾何及原生核對結果由程式常駐提供，不每輪重抄全部座標／計畫。"
             }
           },
           "required": [
@@ -9795,7 +9802,7 @@
       "type": "function",
       "function": {
         "name": "cad_snapshot",
-        "description": "一次建立完整本機CAD索引，只回精簡總覽。path=null讀目前圖面，專案DWG路徑則唯讀副本。refresh=false重用快照，true明確重建；重建後舊候選作廢。",
+        "description": "建立本機完整CAD索引，只回精簡總覽；path=null為目前文件，DWG路徑為唯讀副本。refresh=false重用，true重建並撤銷舊候選。副本可填確切ProgID或已安裝年份，由程式解析並回傳實際版本；latest/auto/最新版沿用本任務首次成功版本，不改選其他CAD。總覽不代表已讀目標詳細資料，修改前直接cad_query(details=true)。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -9814,7 +9821,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "更新目標、決策、已完成、待辦與下一步；不把快照建立說成已核對整張圖。"
+              "description": "簡短交接新結果、未完成步驟與下一步；CAD版本、已讀幾何及原生核對結果由程式常駐提供，不每輪重抄全部座標／計畫。"
             }
           },
           "required": [
@@ -9831,7 +9838,7 @@
       "type": "function",
       "function": {
         "name": "cad_query",
-        "description": "查詢本機快照；不用重掃CAD。先條件篩選，修改前details=true取精確資料。候選編號僅在同快照有效。多條件AND；空條件可查總覽樣本外的資料。 details=true每頁最多10筆；其他每頁最多50筆。",
+        "description": "直接查詢本機CAD快照，不放run_batch，不用read_code_section。依種類/圖層/文字/Handle/區域篩選；details=true每頁10筆，其餘50筆。目標及副目標皆先details才能修改。回傳new_details_delivered與detail_delivery；同版已讀精確幾何在常駐recent_details，核對完成即finish，不為逐步報告反覆查圓/線/弧。已讀不等於需求通過。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -9947,7 +9954,7 @@
             "progress_note": {
               "type": "string",
               "maxLength": 2000,
-              "description": "更新目標、決策、已完成、待辦與下一步；不把快照建立說成已核對整張圖。"
+              "description": "簡短交接新結果、未完成步驟與下一步；CAD版本、已讀幾何及原生核對結果由程式常駐提供，不每輪重抄全部座標／計畫。"
             }
           },
           "required": [

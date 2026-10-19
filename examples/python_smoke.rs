@@ -11,6 +11,8 @@ mod analysis;
 mod batch;
 #[path = "python_smoke/edit.rs"]
 mod edit;
+#[path = "python_smoke/revision.rs"]
+mod revision;
 #[path = "python_smoke/verification.rs"]
 mod verification;
 use std::{
@@ -62,6 +64,10 @@ fn run() -> AppResult<()> {
     broker.enable_memory("python-smoke-chat")?;
     let cancel = AtomicBool::new(false);
     let mut worker = Worker::start(&exe, &cancel)?;
+    revision::run(&mut broker, &mut worker, &project)?;
+    if args.iter().any(|s| s == "--revision-only") {
+        return Ok(());
+    }
     analysis::run(&mut broker, &mut worker, &project)?;
     batch::run(&project, &mut worker)?;
     verification::run(&project, &mut worker)?;

@@ -17,12 +17,22 @@ pub(super) mod encoding;
 pub const MAX_INPUT: usize = 32 * 1024 * 1024;
 pub const MAX_OUTPUT: usize = 8 * 1024 * 1024;
 
+/// read_file 回傳原始 SHA-256；Python／LOG 保留既有前綴表示。
+/// 三種表示必須指向完全相同的原始位元組雜湊，不接受其他命名空間或略過版本核對。
+fn source_revision_matches(requested: &str, actual: &str) -> bool {
+    requested == actual
+        || actual
+            .strip_prefix("sha256:")
+            .is_some_and(|hash| requested == hash || requested.strip_prefix("log:") == Some(hash))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Input {
     pub name: String,
     pub path: String,
     pub kind: String,
+    /// 同一原始檔的read_file裸SHA或既有sha256:/log:表示；仍逐位核對目前檔案內容。
     pub revision: Option<String>,
     /// 文字來源的明確編碼；缺省沿用依副檔名決定的自動模式。
     pub encoding: Option<String>,
@@ -229,7 +239,7 @@ pub(super) fn snapshot(
         && inputs.iter().all(|input| {
             input.kind == "text"
                 && input.log_range.is_none()
-                && files::is_source_code(Path::new(&input.path))
+                && files::is_plain_text_input(Path::new(&input.path))
         });
     let max_sources = if source_only { 32 } else { 8 };
     if inputs.len() > max_sources {
@@ -306,15 +316,10 @@ pub(super) fn snapshot(
             }
             let source_code = files::is_source_code(&rel);
             if !generated_xlsx
-                && !(input.kind == "text"
-                    && (source_code
-                        || matches!(
-                            ext.as_str(),
-                            "log" | "txt" | "md" | "out" | "err" | "json" | "jsonl"
-                        ))
+                && !(input.kind == "text" && files::is_plain_text_input(&rel)
                     || input.kind == "csv" && ext == "csv")
             {
-                return Err("Python 可直接讀取 CSV、kind=text 的程式碼／文字／LOG，以及 _AI_Output 生成的 XLSX；CPP/H/PY/JS等請用kind=text。公司 Excel 原檔先由 COM 匯出資料集，不用inspect_excel開程式碼。".into());
+                return Err("Python 可讀取 CSV、kind=text 的一般文字（不依副檔名限制），以及 _AI_Output 生成的 XLSX。文件／圖片／CAD 使用專用讀取器；公司 Excel 原檔先由 COM 匯出資料集。文字會依實際編碼及內容驗證，不執行來源程式。".into());
             }
             let mut guards = Vec::new();
             let bytes = read_locked(&project.root, &input.path, MAX_INPUT, &mut guards)?;
@@ -322,7 +327,7 @@ pub(super) fn snapshot(
             if input
                 .revision
                 .as_ref()
-                .is_some_and(|r| r != &revision && r != &revision.replace("sha256:", "log:"))
+                .is_some_and(|r| !source_revision_matches(r, &revision))
             {
                 return Err("Python 來源版本已變更，請重新檢查。".into());
             }
@@ -414,4 +419,34 @@ pub(super) fn unhex(value: &str) -> AppResult<Vec<u8>> {
                 .map_err(|e| e.to_string())
         })
         .collect()
+}
+
+#[cfg(test)]
+mod revision_tests {
+    use super::*;
+
+    #[test]
+    fn python_revision_accepts_exact_file_hash_and_existing_namespaces() {
+        let hash = "a".repeat(64);
+        let actual = format!("sha256:{hash}");
+        for requested in [&hash, &actual, &format!("log:{hash}")] {
+            assert!(source_revision_matches(requested, &actual));
+        }
+    }
+
+    #[test]
+    fn python_revision_rejects_changed_hash_or_other_namespace() {
+        let hash = "a".repeat(64);
+        let actual = format!("sha256:{hash}");
+        for requested in [
+            "b".repeat(64),
+            format!("sha256:{}", "b".repeat(64)),
+            format!("log:{}", "b".repeat(64)),
+            format!("code:{hash}"),
+            String::new(),
+            hash[..63].to_owned(),
+        ] {
+            assert!(!source_revision_matches(&requested, &actual));
+        }
+    }
 }

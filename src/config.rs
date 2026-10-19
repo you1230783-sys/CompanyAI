@@ -48,6 +48,27 @@ pub enum AuthHeader {
     XApiKey,
 }
 
+/// 字型只保存固定代號；不接受任意 CSS、網址或本機字型路徑。
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UiFont {
+    MicrosoftJhenghei,
+    Huninn,
+    WenkaiMonoTc,
+    #[default]
+    #[serde(other)]
+    WenkaiTc,
+}
+
+/// 與一般設定的選項一致，舊檔案或未知比例回到100%，不沿用瀏覽器手動縮放。
+pub fn interface_scale(value: u16) -> u16 {
+    if [75, 90, 100, 110, 125, 150, 175, 200].contains(&value) {
+        value
+    } else {
+        100
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Config {
     pub server_url: String,
@@ -60,10 +81,14 @@ pub struct Config {
     pub allow_http: bool,
     pub hotkey: String,
     pub font_size: u8,
+    pub ui_font: UiFont,
+    pub interface_scale: u16,
     pub sidebar_collapsed: bool,
     pub projects_collapsed: bool,
     pub recent_collapsed: bool,
     pub notification_popups: bool,
+    /// 勾選時最小化保留工作列；關閉按鈕仍一律收到托盤。
+    pub minimize_to_taskbar: bool,
     pub dark_mode: bool,
     /// 快捷鍵只在啟用時註冊；浮動圖示為獨立、預設關閉的選項。
     pub hotkey_enabled: bool,
@@ -86,10 +111,13 @@ struct Preferences {
     model: String,
     hotkey: Option<String>,
     font_size: Option<u8>,
+    ui_font: Option<UiFont>,
+    interface_scale: Option<u16>,
     sidebar_collapsed: bool,
     projects_collapsed: bool,
     recent_collapsed: bool,
     notification_popups: Option<bool>,
+    minimize_to_taskbar: Option<bool>,
     dark_mode: bool,
     hotkey_enabled: Option<bool>,
     selection_icon: bool,
@@ -107,10 +135,13 @@ impl Serialize for Config {
             model: self.model.clone(),
             hotkey: Some(self.hotkey.clone()),
             font_size: Some(self.font_size),
+            ui_font: Some(self.ui_font),
+            interface_scale: Some(self.interface_scale),
             sidebar_collapsed: self.sidebar_collapsed,
             projects_collapsed: self.projects_collapsed,
             recent_collapsed: self.recent_collapsed,
             notification_popups: Some(self.notification_popups),
+            minimize_to_taskbar: Some(self.minimize_to_taskbar),
             dark_mode: self.dark_mode,
             hotkey_enabled: Some(self.hotkey_enabled),
             selection_icon: self.selection_icon,
@@ -131,10 +162,13 @@ impl<'de> Deserialize<'de> for Config {
             model: saved.model,
             hotkey: saved.hotkey.unwrap_or_else(|| "Win+Esc".into()),
             font_size: saved.font_size.unwrap_or(14).clamp(12, 20),
+            ui_font: saved.ui_font.unwrap_or_default(),
+            interface_scale: interface_scale(saved.interface_scale.unwrap_or(100)),
             sidebar_collapsed: saved.sidebar_collapsed,
             projects_collapsed: saved.projects_collapsed,
             recent_collapsed: saved.recent_collapsed,
             notification_popups: saved.notification_popups.unwrap_or(true),
+            minimize_to_taskbar: saved.minimize_to_taskbar.unwrap_or(true),
             dark_mode: saved.dark_mode,
             hotkey_enabled: saved.hotkey_enabled.unwrap_or(true),
             selection_icon: saved.selection_icon,
@@ -165,10 +199,13 @@ impl Default for Config {
             allow_http: true,
             hotkey: "Win+Esc".into(),
             font_size: 14,
+            ui_font: UiFont::default(),
+            interface_scale: 100,
             sidebar_collapsed: false,
             projects_collapsed: false,
             recent_collapsed: false,
             notification_popups: true,
+            minimize_to_taskbar: true,
             dark_mode: false,
             hotkey_enabled: true,
             selection_icon: false,
@@ -306,6 +343,51 @@ pub fn validate_url(url: &Url, allow_http: bool) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn minimize_preference_defaults_to_taskbar_and_preserves_both_choices() {
+        let old: Config = serde_json::from_str("{}").unwrap();
+        assert!(old.minimize_to_taskbar);
+        assert!(Config::default().minimize_to_taskbar);
+        for enabled in [true, false] {
+            let config = Config {
+                minimize_to_taskbar: enabled,
+                ..Config::default()
+            };
+            let loaded: Config =
+                serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
+            assert_eq!(loaded.minimize_to_taskbar, enabled);
+        }
+    }
+
+    #[test]
+    fn fonts_and_interface_scale_roundtrip_without_accepting_arbitrary_css() {
+        let old: Config = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.ui_font, UiFont::WenkaiTc);
+        assert_eq!(old.interface_scale, 100);
+        for font in [
+            UiFont::MicrosoftJhenghei,
+            UiFont::Huninn,
+            UiFont::WenkaiTc,
+            UiFont::WenkaiMonoTc,
+        ] {
+            for scale in [75, 90, 100, 110, 125, 150, 175, 200] {
+                let config = Config {
+                    ui_font: font,
+                    interface_scale: scale,
+                    ..Config::default()
+                };
+                let saved = serde_json::to_string(&config).unwrap();
+                let loaded: Config = serde_json::from_str(&saved).unwrap();
+                assert_eq!(loaded.ui_font, font);
+                assert_eq!(loaded.interface_scale, scale);
+            }
+        }
+        let invalid: Config =
+            serde_json::from_str(r#"{"ui_font":"url(invalid)","interface_scale":42}"#).unwrap();
+        assert_eq!(invalid.ui_font, UiFont::WenkaiTc);
+        assert_eq!(invalid.interface_scale, 100);
+    }
     #[test]
     fn pdf_route_keeps_the_desktop_deployment_prefix() {
         assert_eq!(
@@ -373,7 +455,9 @@ mod tests {
         assert_eq!(config.model, "quality");
         assert_eq!(config.hotkey, "Ctrl+Shift+F8");
         let saved = serde_json::to_value(&config).unwrap();
-        assert_eq!(saved.as_object().unwrap().len(), 16);
+        assert_eq!(saved.as_object().unwrap().len(), 19);
+        assert!(saved.get("ui_font").is_some());
+        assert!(saved.get("interface_scale").is_some());
         assert!(saved.get("server_url").is_none());
         assert!(Config::default().validate().is_ok());
     }

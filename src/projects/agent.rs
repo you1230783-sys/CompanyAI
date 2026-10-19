@@ -575,6 +575,7 @@ pub fn parse(
     let args = match args {
         Ok(args) => args,
         Err(reason) => {
+            let reason = schema::argument_repair_hint(name, reason);
             if definition["function"]["strict"] == true {
                 return Err(format!("嚴格工具參數不符合 Schema：{reason}"));
             }

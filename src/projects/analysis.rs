@@ -405,7 +405,9 @@ impl State {
                     );
                 }
             }
-            Tool::ListFiles { path: directory }
+            Tool::ListFiles {
+                path: directory, ..
+            }
             | Tool::ListLogs {
                 path: directory, ..
             } => {

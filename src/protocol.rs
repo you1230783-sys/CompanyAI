@@ -20,6 +20,9 @@ pub struct RetrySettings {
     pub mode: String,
     pub skills: bool,
     pub attachment_ids: Vec<String>,
+    /// 快速動作重試沿用首次操作的免提醒規則；舊紀錄視為普通對話。
+    #[serde(default)]
+    pub quick_action: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

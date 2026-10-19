@@ -21,7 +21,7 @@ pub(super) fn guide(id: &str) -> &'static str {
         "notes" | "context-management" => "記憶：筆記是語意摘要，不取代來源、權限與執行證據。compact_context保存目標/決策/已完成/待辦/下一步，superseded標明失效結論。不要抄入原文。需要精確細節用read_work_log查原版本。record_analysis的證據取實際operation_id與JSON Pointer，統計checks取工具數值，不自填passed。交付依原生completion與核對結果說明完成/部分/失敗/未驗證，不以少數成功宣稱整批完成。分析方法保存適用條件/步驟/驗證/限制，下次先核對新來源再重用。",
         "multi-file-excel" => "多檔Excel：先統一欄位意義/單位與來源，缺資料明示，不猜空值。讀取切excel-read，合併統計切python-analysis，既有表格修改切office-edit。保存對應來源與未完成事項。",
         "mermaid" => include_str!("mermaid.md"),
-        "text-edit" => "文字：find_text定位原文，create_working_copy後edit_text，只修改副本；每次沿用最新revision，最後save_copy。未知編碼/讀取失敗不猜內容。",
+        "text-edit" => "文字：不依副檔名限制，包含BAT/CMD/PS1與未知文字格式；先以實際內容／編碼核對。find_text定位原文，create_working_copy保留原格式與編碼，再read_file(copy_id)、edit_text、save_copy。原件唯讀，副本200KB，不執行來源；PY沿用python-edit。每次沿用最新revision；二進位、未知編碼或讀取失敗不猜內容。",
         _ => "",
     }
 }

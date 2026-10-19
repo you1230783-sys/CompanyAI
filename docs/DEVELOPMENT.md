@@ -1,3 +1,16 @@
+## 0.8.73 維護位置
+
+- 介面偏好：`src/config.rs` 保存字型、介面比例與縮小行為；`src/ui/window_behavior.rs` 管理工作列／托盤，`src/webview.rs` 設定原生縮放。三份開源字型的版本、雜湊與授權位於 `ui/fonts/`；微軟正黑體只引用 Windows 系統字型。
+- 專案檔案：`src/projects/files/source_code.rs` 依內容讀取有界文字，不以副檔名隱藏目錄項目；`src/projects/files/output.rs` 由原生對話 ID 決定共用成果目錄。不要把未知二進位當文字，也不要執行使用者的指令稿。
+- CAD：`src/projects/files/cad_preflight.rs` 在複製前核對已讀 Handle 與批次限制；`src/projects/cad_index/delivery.rs` 保存已交付幾何及查詢覆蓋。`src/projects/files/cad_copy.rs` 保護來源及成果目錄：先取得 StageGuard，再以 Windows FileID 核對是否重複持有同一末層目錄；只移除該重複 pin，保留原檔、祖先及成果目錄保護，讓 CAD 可完成 Save 暫存檔改名。
+- 版本與資料橋接：副本入口共用 `cad_plan.rs::select_version` 的安裝年份解析，`cad_query.rs` 保留首次成功版本綁定，快照總覽直接回傳原生 `selected`。`src/projects/python.rs` 接受同一原始位元組 SHA 的裸值及既有前綴表示；來源版本不是可任意替換的標籤，不能為消除錯誤而省略雜湊核對。
+- Mermaid：`src/projects/diagrams.rs` 管理跨輪圖源索引，`src/projects/files/diagrams.rs` 綁定每次匯出的圖源與格式；`ui/diagrams.js` 管理原生 viewBox 尺寸、縮放及全畫面返回。固定上游 bundle 的比較符號修補由 `tools/patch_mermaid_svg_text.py` 核對原始／修補 SHA，不可任意重寫 vendor 檔。
+- VNC JSON：`src/vnc/json_transfer.rs` 驗證匯入資料與合併；`src/ui/vnc/` 綁定原生選檔、確認及磁碟版本。密碼不回前端，匯入確認前不覆寫本機資料。
+
+`scripts/Test-CadSharedOutput.ps1` 使用 v142 編譯 `examples/cad_shared_output.rs`，透過正式 Broker、worker 與兩套已安裝 CAD，在隔離目錄各完成三批修改、存檔及重開；核對原件未變、六步幾何及同對話目錄。這是固定參數的原生回歸，與真正 Strata 模型的原始參數及內容判定分開保存。完整發行仍執行 `scripts/Build.ps1 -EmptyCargoCache -IncludeInstaller -TestOffice -TestVnc`；實際結果與未涵蓋範圍見 [0.8.73 驗證紀錄](VALIDATION_0_8_73.md)。
+
+`scripts/Test-PythonRevision.ps1` 以 `examples/python_smoke.rs --revision-only` 執行真正的 `read_file → run_python` CSV 串接，再變更自己建立的合成來源，確認舊 SHA 仍被拒絕。完整 Python 驗收也執行同一個 `examples/python_smoke/revision.rs`，避免只測字串比較而漏掉工具之間的版本格式。
+
 ## 0.8.54 維護位置
 
 `files/source_code.rs` 分開管理可讀格式與排除目錄；`readable_extension` 不擴大既有 `extension` 寫入白名單。`text::decode_with_limit` 僅替原始碼開放 4 MiB，有界讀取後解碼；既有文字修改仍限 200 KB。新格式禁止建立工作副本；PY 沿用原有修改流程。`read_code_section` 與 `find_text` 是基本讀取工具，來源以 revision 與行號識別，不把未讀區段宣稱為已讀。程式來源不進入文件全文摘要快取。

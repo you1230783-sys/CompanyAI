@@ -472,6 +472,8 @@ pub enum Tool {
     },
     ListFiles {
         path: String,
+        #[serde(default)]
+        offset: usize,
     },
     ReadFile {
         path: String,

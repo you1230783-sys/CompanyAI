@@ -8,6 +8,15 @@ window.DiagramUI = (() => {
   const MAX_SOURCE = 48000;
   const command = value => send({type: "project", command: value});
 
+  // 一個共用事件即可涵蓋所有卡片；使用者按Esc退出時也同步恢復按鈕文字。
+  document.addEventListener("fullscreenchange", () => {
+    for (const button of document.querySelectorAll("[data-diagram-fullscreen]")) {
+      const active = document.fullscreenElement === button.closest(".mermaid-card");
+      button.textContent = active ? "返回對話（Esc）" : "全畫面";
+      button.setAttribute("aria-pressed", String(active));
+    }
+  });
+
   /** 固定安全設定；來源不允許透過 directive/frontmatter 降低 securityLevel。 */
   function validateSource(source) {
     if (typeof source !== "string" || !source.trim() || new TextEncoder().encode(source).length > MAX_SOURCE) {
@@ -139,10 +148,36 @@ window.DiagramUI = (() => {
       const svgButton = button("儲存 SVG", () => save("svg"));
       const pngButton = button("儲存 PNG", () => save("png"));
       svgButton.disabled = pngButton.disabled = true;
-      let zoom = 1;
-      const setZoom = value => {zoom = Math.max(0.25, Math.min(4, value));plot.style.zoom = String(zoom);};
+      let zoom = 1, naturalWidth = 0, naturalHeight = 0;
+      const zoomLabel = document.createElement("span");zoomLabel.className = "mermaid-zoom";
+      zoomLabel.setAttribute("role", "status");zoomLabel.textContent = "100%";
+      const setZoom = value => {
+        zoom = Math.max(0.1, Math.min(8, value));
+        const svg = plot.querySelector("svg");
+        if (svg && naturalWidth && naturalHeight) {
+          // 明訂實際像素尺寸，避免全域18px圖示規則或Mermaid百分比寬度縮小圖形。
+          // 改尺寸而非transform，捲動範圍會與可見圖形一致。
+          svg.style.width = `${naturalWidth * zoom}px`;
+          svg.style.height = `${naturalHeight * zoom}px`;
+        }
+        zoomLabel.textContent = `${Math.round(zoom * 100)}%`;
+      };
       button("縮小", () => setZoom(zoom / 1.25));button("放大", () => setZoom(zoom * 1.25));button("原始比例", () => setZoom(1));
-      button("全畫面", () => {if (document.fullscreenElement) document.exitFullscreen();else card.requestFullscreen().catch(() => toast("無法切換全畫面。"));});
+      button("符合視窗", () => {
+        if (naturalWidth && naturalHeight) {
+          setZoom(Math.min((viewport.clientWidth - 24) / naturalWidth, (viewport.clientHeight - 24) / naturalHeight, 1));
+          viewport.scrollTo(0, 0);
+        }
+      });
+      toolbar.append(zoomLabel);
+      const fullscreen = button("全畫面", async () => {
+        try {
+          if (document.fullscreenElement === card) await document.exitFullscreen();
+          else await card.requestFullscreen();
+        } catch (_) {toast("無法切換全畫面，仍可在圖形區捲動與放大。");}
+      });
+      fullscreen.dataset.diagramFullscreen = "true";fullscreen.setAttribute("aria-pressed", "false");
+      fullscreen.title = "全畫面時可按返回對話或Esc離開";
       button("請 AI 修改此圖", () => {
         const prompt = `請修改 Mermaid 圖形「${diagram.name}」（message_index=${context.message_index}，diagram_index=${diagram_index}，revision=${diagram.revision}）。請先用 inspect_mermaid 讀取原始碼，保留其餘內容。修改要求：\n`;
         // 只填入草稿，保留使用者既有內容，不自動送出。
@@ -152,7 +187,15 @@ window.DiagramUI = (() => {
       card.append(title, toolbar, viewport, status, details);container.append(card);
       svgFor(diagram.source).then(svg => {
         if (!card.isConnected) return;
-        plot.innerHTML = displaySvg(svg);svgButton.disabled = pngButton.disabled = false;
+        plot.innerHTML = displaySvg(svg);
+        const root = plot.querySelector("svg");
+        const box = root.viewBox.baseVal;
+        naturalWidth = box.width || parseFloat(root.getAttribute("width"));
+        naturalHeight = box.height || parseFloat(root.getAttribute("height"));
+        if (!(naturalWidth > 0 && naturalHeight > 0 && Number.isFinite(naturalWidth + naturalHeight))) {
+          throw new Error("無法取得流程圖尺寸");
+        }
+        setZoom(1);svgButton.disabled = pngButton.disabled = false;
         status.textContent = diagram.based_on ? "已由先前版本修改；舊圖保留。" : "Mermaid 原始碼已保存，可在後續對話修改。";
       }).catch(error => {status.textContent = `圖形無法呈現：${error.message}。原始碼仍可複製或儲存。`;details.open = true;});
     }

@@ -83,6 +83,18 @@ pub struct Export {
     pub path: String,
     pub sha256: String,
     pub format: Format,
+    /// 舊 checkpoint 沒有綁定資料時保留 None，不依檔名猜測對應圖形。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<ExportSource>,
+}
+
+/// 只記錄原生工具實際匯出的目標；不授予任何額外檔案權限。
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExportSource {
+    pub revision: String,
+    pub message_index: Option<usize>,
+    pub diagram_index: usize,
 }
 
 /// WebView 的固定 API 回傳序列化字串。錯誤沿用原文，讓模型能修正語法。

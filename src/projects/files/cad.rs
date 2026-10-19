@@ -1,4 +1,4 @@
-//! AI CAD 成果只建立在全新資料夾；不能以工具參數指定既有 DWG 或 COM 方法。
+//! AI CAD 成果只建立新檔；不能以工具參數指定既有DWG為輸出或提供任意COM方法。
 use super::*;
 use crate::storage;
 use sha2::{Digest, Sha256};
@@ -109,19 +109,27 @@ impl Broker {
             Err(e) => return Err(e.to_string()),
         }
         let _base = pin(&base)?;
-        let folder_name = create_output_folder(&base)?;
+        let folder_name = shared_output_folder(
+            &base,
+            &mut self.output_folder,
+            self.output_conversation.as_deref(),
+        )?;
         let folder = base.join(&folder_name);
-        // CAD SaveAs 需要目錄寫入共用，與 Office 相同以 anchor 固定新目錄。
-        let _folder = pin_stage(&folder)?;
+        // CAD SaveAs需要目錄寫入共用，以唯一anchor保護共用成果目錄。
+        let _folder = pin_output_directory(&folder)?;
+        let reserved_output = reserve_external_output(&folder, name)?;
+        let name = reserved_output.name.as_str();
+        let (report_name, report_placeholder) = reserve_output(&folder, "cad-report.json")?;
+        drop(report_placeholder);
         let path = format!("_AI_Output/{folder_name}/{name}");
         self.cad_failed = true; // 出現錯誤或未知結果時，不允許模型換 operation_id 立即重播。
         self.cad_last_result = Some(json!({"status":"UNKNOWN","saved":false,
-            "report_path":format!("_AI_Output/{folder_name}/cad-report.json"),
+            "report_path":format!("_AI_Output/{folder_name}/{report_name}"),
             "notice":"尚未收到原生結果；程序中斷時不能憑檔案不存在判斷可重送。"}));
         self.cad_attempts += 1;
         let mut result = crate::cad::execute_interactive(
             json!({"action":"draw", "version":version,
-            "operations":operations,"staged_plan":limit>100,"output":folder.join(name)}),
+            "operations":operations,"staged_plan":limit>100,"output":reserved_output.path}),
             cancel,
             self.cad_waiter.as_mut(),
             self.cad_progress.as_mut(),
@@ -135,14 +143,14 @@ impl Broker {
             "recovery":result["recovery"],"drawing_started":result["drawing_started"],
             "completed_operations":result["completed_operations"],"saved":result["saved"],
             "file_exists":result["file_exists"],"intended_path":path,
-            "report_path":format!("_AI_Output/{folder_name}/cad-report.json"),
+            "report_path":format!("_AI_Output/{folder_name}/{report_name}"),
             "verification_difference":result["verification_difference"]}));
         if result["status"] == "DATA_VERIFIED_VISUAL_PENDING" {
             result["path"] = json!(path);
         }
         // 保留執行報告，包括失敗所在步驟；不把它偽裝成成功 DWG。
         storage::atomic_write(
-            &folder.join("cad-report.json"),
+            &folder.join(&report_name),
             &serde_json::to_vec_pretty(&result).map_err(|e| e.to_string())?,
         )?;
         if result["status"] != "DATA_VERIFIED_VISUAL_PENDING" {
@@ -155,7 +163,7 @@ impl Broker {
                 }
             }
             return Err(format!(
-                "CAD 未完成：{}；診斷：_AI_Output/{folder_name}/cad-report.json；file_exists={}，saved={}，completed_operations={}。{} 預定路徑不是已交付成果，未存檔的部分圖面可能只在 CAD 記憶體中。",
+                "CAD 未完成：{}；診斷：_AI_Output/{folder_name}/{report_name}；file_exists={}，saved={}，completed_operations={}。{} 預定路徑不是已交付成果，未存檔的部分圖面可能只在 CAD 記憶體中。",
                 result["error"], result["file_exists"], result["saved"], result["completed_operations"], result["advice"]
             ));
         }

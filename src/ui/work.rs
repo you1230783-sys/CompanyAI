@@ -87,6 +87,8 @@ pub(super) struct WorkRuntime {
     pub capability_loading: bool,
     pub storage_error: bool,
     pub task_balloon: bool,
+    /// 收到托盤的操作提示只還原視窗，不導向舊任務或通知。
+    pub tray_restore_only: bool,
     /// 僅在本次執行保存最新工具進度，不寫入對話或加密任務檔。
     pub tool_status: std::collections::HashMap<String, jobs::ToolStatus>,
     /// 依本機 request ID 分開計數，成功或改用另一查詢 ID 時歸零。
@@ -110,6 +112,7 @@ impl Default for WorkRuntime {
             capability_loading: false,
             storage_error: false,
             task_balloon: false,
+            tray_restore_only: false,
             tool_status: Default::default(),
             poll_failures: Default::default(),
         }
@@ -589,6 +592,7 @@ impl App {
             mode: self.work.mode.clone(),
             skills: action != "mail",
             attachment_ids,
+            quick_action: matches!(action, "translate" | "summarize" | "polish" | "explain"),
         });
         let mut request = jobs::current_chat_request(
             model,
@@ -1420,6 +1424,7 @@ impl App {
                 && self.config.notification_popups
                 && !self.is_foreground()
             {
+                self.work.tray_restore_only = false;
                 self.work.task_balloon = true;
                 tray(self.window, NIM_MODIFY, Some(label));
             }

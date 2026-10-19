@@ -1,10 +1,11 @@
 //! CAD 快照的本機查詢。幾何由程式計算，語意名稱（例如固定孔）留給使用者確認。
 //! 全部圖元不送入模型；候選編號只在同一 snapshot_id 內有效。
+mod delivery;
 pub mod preview;
 use crate::AppResult;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -32,6 +33,9 @@ pub struct Snapshot {
     contours: Vec<Value>,
     /// 只保留少量已交付的精確資料，避免整理工具歷史後又查相同圖元。
     recent_details: Vec<Value>,
+    /// 全快照的已交付集合留在本機，不因常駐小視窗淘汰資料而遺忘。
+    delivered_candidates: BTreeSet<usize>,
+    repeated_detail_queries: usize,
 }
 
 pub fn point(value: &Value) -> Option<[f64; 3]> {
@@ -156,14 +160,28 @@ impl Snapshot {
     /// 小量精確資料不靠 AI 摘寫，與快照同生共滅。超限移除整筆，
     /// 不截斷座標或字串，也不因移出常駐上下文而撤銷已讀 Handle。
     pub fn remember_details(&mut self, result: &Value) {
+        let previous = self.delivered_candidates.len();
         for candidate in result["candidates"].as_array().into_iter().flatten() {
             let row = &candidate["entity"];
             if !row.is_object() {
                 continue;
             }
+            if let Some(index) = candidate["candidate"]
+                .as_u64()
+                .and_then(|n| usize::try_from(n).ok())
+                .and_then(|n| n.checked_sub(1))
+            {
+                if self
+                    .rows
+                    .get(index)
+                    .is_some_and(|original| original["handle"] == row["handle"])
+                {
+                    self.delivered_candidates.insert(index);
+                }
+            }
             let fact = json!({"candidate":candidate["candidate"],"handle":row["handle"],
                 "kind":row["kind"],"editable":row["editable"],"allowed_edits":row["allowed_edits"],
-                "properties":row["properties"],"native_revision":row["native_revision"]});
+                "properties":row["properties"],"geometry":row["geometry"]});
             self.recent_details
                 .retain(|previous| previous["handle"] != fact["handle"]);
             if fact.to_string().len() > 8000 {
@@ -177,6 +195,11 @@ impl Snapshot {
                 self.recent_details.remove(0);
             }
         }
+        self.repeated_detail_queries = if self.delivered_candidates.len() == previous {
+            self.repeated_detail_queries.saturating_add(1)
+        } else {
+            0
+        };
     }
 
     pub fn recent_details(&self) -> &[Value] {
@@ -268,6 +291,8 @@ impl Snapshot {
             rectangles,
             contours,
             recent_details: Vec::new(),
+            delivered_candidates: BTreeSet::new(),
+            repeated_detail_queries: 0,
         })
     }
 
@@ -353,7 +378,7 @@ impl Snapshot {
             descriptions.push(description);
         }
         json!({"snapshot_id":self.id,"revision":self.data["revision"],"document":self.data["document"],"source":self.data["source"],
-            "entity_count":self.rows.len(),"units_code":self.data["units_code"],"edit_capabilities":self.data["edit_capabilities"],"coordinates":"WCS XY; X右/Y上；不是目前螢幕方向；距離為圖面單位，INSUNITS=4才是毫米",
+            "selected":self.data["selected"],"entity_count":self.rows.len(),"units_code":self.data["units_code"],"edit_capabilities":self.data["edit_capabilities"],"coordinates":"WCS XY; X右/Y上；不是目前螢幕方向；距離為圖面單位，INSUNITS=4才是毫米",
             "kinds":kinds,"layers":layers.iter().take(50).collect::<BTreeMap<_,_>>(),"omitted_layers":layers.len().saturating_sub(50),
             "known_geometry_bounds":extent(&known),"entities_without_geometry_bounds":unknown,
             "rectangles":self.rectangles.iter().take(20).collect::<Vec<_>>(),"rectangle_count":self.rectangles.len(),
@@ -399,6 +424,11 @@ impl Snapshot {
         }
         if detail {
             value["entity"] = row.clone();
+            // 原生DXF版本資料供本機修改前後逐項比對，不是模型的編輯參數。
+            // 完整原件仍在self.rows；不在每次查詢重送這份大型內部資料。
+            if let Some(entity) = value["entity"].as_object_mut() {
+                entity.remove("native_revision");
+            }
         }
         value
     }

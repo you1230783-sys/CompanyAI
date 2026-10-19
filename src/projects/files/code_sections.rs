@@ -314,11 +314,11 @@ impl Broker {
             .copies
             .get(&canonical)
             .map(|c| c.name.as_str())
-            .unwrap_or(path);
-        if !source_code::supported(Path::new(name)) {
-            return Err("程式區段工具需要支援的程式或設定檔。".into());
+            .unwrap_or(path)
+            .to_owned();
+        if !plain_text_candidate(Path::new(&name)) {
+            return Err("區段工具讀取一般文字；文件、CAD 與圖片請使用對應的專用工具。".into());
         }
-        let read_only = source_code::read_only(Path::new(name));
         let content = self.content(&canonical, cancel, worker)?;
         let (first, actual_last) = read_bounds(&content, first, last)?;
         let (start, end) = section(&content, first, actual_last)?;
@@ -331,9 +331,9 @@ impl Broker {
             "total_lines":content.split_inclusive('\n').count(),"section_hash":text::revision(value),"text":value,
             "offset":content[..start].chars().count(),"next_offset":content[..end].chars().count(),"total":content.chars().count(),
             "guidance":"副本修改優先傳copy_id、section_id、replacement。若用舊介面，範圍須等於實際first_line/last_line，不能拿大段hash改小段。原件只供對照；修改與測試讀copy_id。"});
-        if read_only {
-            result["read_only"] = json!(true);
-            result["guidance"] = json!("此程式／設定檔只讀取原文，不開放修改或執行。依next_line續讀；每段核對revision一致，變更時重新讀取。不可把部分區段說成整個專案已讀完。");
+        result["read_only"] = json!(copy_id.is_none());
+        if !name.to_ascii_lowercase().ends_with(".py") {
+            result["guidance"] = json!("原件唯讀；需要修改時create_working_copy保留原格式，再用read_file(copy_id)與edit_text、save_copy修改及發布文字副本。每份副本上限200KB。不自動執行指令檔；依next_line續讀並核對revision，不可把部分區段說成整個專案已讀完。");
         }
         self.retain_code_section(&result);
         Ok(result)

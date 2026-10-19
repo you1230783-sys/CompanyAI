@@ -1,9 +1,9 @@
 <!-- 開頭版本公告最多保留最新 3 個版本；歷史文件保留於 docs。 -->
+**0.8.73：介面偏好與專案操作修正。** 新增四字型、介面大小、VNC JSON匯入／匯出與縮小保留工作列選項；未知文字／INI可讀取與另存，同對話共用成果資料夾，修正CAD預檢／報告與Mermaid檢視／改圖。完整本機自動測試、Strata功能情境與NSIS安裝生命週期已完成；本機模型Word額外統計有誤，內容未列為通過，公司服務與通知點擊仍待現場確認。[驗證紀錄](docs/VALIDATION_0_8_73.md)
+
 **0.8.72：專案 Mermaid 與 CAD 擴充。** 可從敘述／程式碼畫圖、複製來源、保存 MMD／SVG／PNG 與跨輪修改；新增原生 CAD 幾何／尺寸／圖層／圖塊及有限 2D 編輯，背景等待確認會通知。本機 Strata 與基本針對性驗證完成，完整驗證延後。[驗證紀錄](docs/VALIDATION_0_8_72.md) · [公司實測提示詞](docs/COMPANY_TEST_PROMPTS_0_8_72.txt)
 
 **0.8.71：CAD 註記更新與額度續接。** 2008 支援文字／引線附屬文字與直徑標註更新，新圖自動解析並固定 CAD 版本；輸出額度耗盡最多自動續接五次。本輪基本與針對性驗證完成，完整驗證延後。[驗證紀錄](docs/VALIDATION_0_8_71.md)
-
-**0.8.70：CAD 同圖分段累積。** 每次保存一小段、可查回及局部替換，最後合併成同一張 DWG。Strata 雙版實測皆無單輪輸出額度中斷；圖面設計與字型仍需核對。[發行驗證](docs/VALIDATION_0_8_70.md) · [雙版 CAD 圖檔 ZIP](examples/cad/cad-segmented-0.8.70.zip)
 
 
 
@@ -11,7 +11,7 @@
 
 CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供日常問答、文件整理、專案副本修訂與 Classic Outlook 郵件分析。
 
-**目前 EXE／NSIS：0.8.72** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
+**目前 EXE／NSIS：0.8.73** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
 
 ## 下載與開始使用
 
@@ -46,7 +46,7 @@ CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供�
 | 選字快捷鍵 | 在其他程式選取文字，帶入 LM_AI 草稿後再送出。 |
 | VNC 快速連線 | 選用功能，管理機台清單並啟動已安裝的 UltraVNC Viewer。 |
 
-專案支援 TXT、MD、PY（試用）、Word、Excel、PowerPoint、PDF、MSG，以及唯讀 LOG／OUT／ERR／JSONL。各格式的可讀取／可修改範圍，請見 [使用指南](docs/USER_GUIDE.md)。
+專案列出所有副檔名；INI、BAT、CMD、PS1及未知純文字可依內容閱讀／另存副本，Word、Excel、PowerPoint、PDF、MSG、CAD及圖片仍使用專用工具。各格式的可讀取／可修改範圍，請見 [使用指南](docs/USER_GUIDE.md)。
 
 ## 文件導覽
 

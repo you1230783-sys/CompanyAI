@@ -557,6 +557,7 @@ fn run_for(
                 }
             }
             if !cad_snapshot.is_null() {
+                super::cad_index::Snapshot::project_delivered_reads(&mut messages, &cad_snapshot);
                 messages.push(super::agent::Message::user(&format!(
                     "本機CAD工作狀態（程式維護，優先於舊筆記；recent_details已是精確查詢結果）：{cad_snapshot}"
                 )));
@@ -1176,6 +1177,13 @@ fn run_for(
                         &mut progress,
                         if run.cancel.load(std::sync::atomic::Ordering::Relaxed) {
                             format!("{label}：已依你的操作停止；先前保存的草稿與成果保留。")
+                        } else if result["result"]["status"] == "PRECHECK_REJECTED" {
+                            format!(
+                                "{label}：預檢未通過（未執行CAD修改）\n{}",
+                                result["error"].as_str().unwrap_or("請依issues修正參數。")
+                            )
+                        } else if result["result"]["status"] == "CANCELLED" {
+                            format!("{label}：已取消；存檔及圖面狀態以原生回報為準。")
                         } else if result["ok"] == false {
                             let reason = result["error"].as_str().unwrap_or("工具未提供錯誤原因");
                             // 只取已解析的工具名稱，不把參數、檔名或內容放進預設診斷。

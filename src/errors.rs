@@ -155,7 +155,16 @@ pub fn classify(stage: &str, raw: &str) -> &'static str {
     if has(&["dpapi", "解密", "無法保存設定", "本機紀錄"]) {
         return "09";
     }
-    if has(&["invalid json", "格式錯誤", "結構不符", "無法解析"]) {
+    if has(&[
+        "invalid json",
+        "格式錯誤",
+        "結構不符",
+        "無法解析",
+        "run_batch不支援cad工具",
+        "本任務dwg副本已使用確切cad版本",
+        "批次工具參數不符",
+        "是資料夾，不能使用檔案讀取工具",
+    ]) {
         return "08";
     }
     if has(&["com error", "hresult", "outlook", "excel", "word"]) {

@@ -1,4 +1,4 @@
-//! 程式與設定檔唯讀能力；與既有副本寫入白名單分開，避免加副檔名就連帶開放編輯。
+//! 常見程式與設定檔的清單提示。此表不是閱讀或文字副本編輯的允許清單。
 use super::*;
 
 pub(super) const MAX_BYTES: usize = 4 * 1024 * 1024;
@@ -127,20 +127,12 @@ pub(super) fn supported(path: &Path) -> bool {
     )
 }
 
-/// PY 保留原有已驗證的副本編輯；這次新加入的格式都只有讀取能力。
-pub(super) fn read_only(path: &Path) -> bool {
-    supported(path)
-        && !path
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn source_formats_do_not_expand_copy_write_permissions() {
+    fn source_hints_are_separate_from_content_validation() {
         for name in [
             "main.cpp",
             "API.H",
@@ -156,7 +148,7 @@ mod tests {
         ] {
             assert!(supported(Path::new(name)), "{name}");
             if !name.ends_with(".py") && name != "CMakeLists.txt" {
-                assert!(extension(Path::new(name)).is_err(), "{name}");
+                assert!(extension(Path::new(name)).is_ok(), "{name}");
             }
         }
         for name in [

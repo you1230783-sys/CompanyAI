@@ -3703,3 +3703,13 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+
+LM_AI local compatibility modification (2026-10-19)
+================================================
+Mermaid 12.2.0: preserve literal greater-than characters in nonMarkdownToLines
+SVG plain-text labels. One character is removed from the negated word class:
+/<[^>]+>|[^\s<>]+/g becomes /<[^>]+>|[^\s<]+/g.
+Strict security, DOMPurify, HTML-label policy and SVG sanitization remain enabled.
+Upstream source: https://github.com/mermaid-js/mermaid/blob/develop/packages/mermaid/src/rendering-util/handle-markdown-text.ts
+Reproduction and pinned upstream/patched hashes: tools/patch_mermaid_svg_text.py
+All upstream copyright and license notices above are retained.

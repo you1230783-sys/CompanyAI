@@ -54,7 +54,11 @@
     "tarball": "https://registry.npmjs.org/mermaid/-/mermaid-12.2.0.tgz",
     "sha256": "071914164d0f6d53e5c26a10a220230d4ae8d37ed0f2263fbf072266f0af3a0a",
     "integrity": "sha512-w7nr/SFrLO7BaVTs3dQTvYSV6nYSBj0Yy9DjBhsIJtAcHqRzXSq4Pg32ujHZ/AdWsAMNEvvhbm5dt9E2tOiHzw==",
-    "bundled_file_sha256": "a8a6a6f805b074a8261a2825c86f99c8054acb3b35f50bb7e24a4f9f2c3c3b9f",
-    "license": "MIT; bundled dependencies retain upstream license notices"
+    "bundled_file_sha256": "b8ec9fa298fc84a28dd06649e1b3fcf16c0c4ba85afbec51e5f2774879c2e470",
+    "license": "MIT; bundled dependencies retain upstream license notices",
+    "upstream_bundled_file_sha256": "a8a6a6f805b074a8261a2825c86f99c8054acb3b35f50bb7e24a4f9f2c3c3b9f",
+    "local_patches": [
+      "svg-plain-text-greater-than-v1"
+    ]
   }
 ]

@@ -53,7 +53,10 @@ mod tests {
                 command: super::super::vnc::VncCommand::Open,
             },
             Command::Preferences {
+                minimize_to_taskbar: None,
                 font_size: 14,
+                ui_font: None,
+                interface_scale: None,
                 sidebar_collapsed: false,
                 notification_popups: true,
                 dark_mode: None,

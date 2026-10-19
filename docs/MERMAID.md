@@ -8,12 +8,12 @@
 
 ## 檢視與保存
 
-- 圖形卡片可放大、縮小、回到原始比例或全畫面檢視。
+- 圖形卡片依SVG原始尺寸顯示，可縮放10–800%、回到原始比例、符合視窗或全畫面檢視；大圖在圖形區內捲動。全畫面時按「返回對話（Esc）」或Esc離開。
 - 「查看 Mermaid 原始碼」與「複製原始碼」提供真正的文字來源。
 - `.mmd`：UTF-8 原始碼，供下一輪對話或其他 Mermaid 工具修改。
 - SVG：可縮放的向量圖片，適合長圖與排版。
 - PNG：白底圖片，適合文件與簡報；保留圖形比例，最長邊不超過 4096 像素。
-- 檔案存到專案的 `_AI_Output/<本機時間>/`，每次建立新檔，不覆寫舊版。
+- 新任務的檔案存到專案的 `_AI_Output/對話_<識別碼>/`，同一專案對話跨訊息共用此位置，MMD／PNG／SVG不另分資料夾；同名檔案加序號，不覆寫舊版。舊暫停任務保留原有目錄。
 
 可直接要求 AI 保存 PNG、SVG 或 MMD，也可以按卡片按鈕保存。檔案成功讀回核對後才會回報已儲存。
 
@@ -42,3 +42,7 @@ draw.io 可在其 Mermaid 插入功能貼上複製的語法；`.mmd` 不是原�
 模型每輪固定帶入最近兩張圖的精確來源（合計上限32 KB），以及本任務已讀的程式／完整短篇 README 快照（最多6段、文字合計16 KB），與工具歷史整理分開保存。來源片段帶行號與revision，新revision會淘汰同檔舊片段；checkpoint也保留。這是已讀版本，不能宣稱即時同步外部檔案。超出預算的圖只保留索引並明示按需讀完整原碼，不截斷語法冒充完整來源。
 
 上游 bundle、source map 及 66 個確切依賴版本的來源／完整性資料，見 `ui/vendor/packages.json`、`mermaid-dependencies.json` 與 `MERMAID-NOTICES.txt`。建置直接嵌入資源，不執行 npm 或套件安裝腳本。
+
+### SVG 比較符號相容修補
+
+0.8.73 內附 Mermaid 12.2.0 的一個單字元 SVG 文字分詞修補，避免 `>=` 被畫成 `=`；`>`、`<=`、`<` 與既有實體編碼均有回歸。原始 MMD 不改寫，安全層級與 SVG 淨化保持啟用。上游與修補後雜湊、重現工具及修改聲明在 `ui/vendor/packages.json`、`tools/patch_mermaid_svg_text.py` 與 `ui/vendor/MERMAID-NOTICES.txt`。上游函式位置：[handle-markdown-text.ts](https://github.com/mermaid-js/mermaid/blob/develop/packages/mermaid/src/rendering-util/handle-markdown-text.ts)。

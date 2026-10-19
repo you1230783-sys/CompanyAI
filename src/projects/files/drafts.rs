@@ -48,15 +48,16 @@ impl Broker {
             Err(error) => return Err(error.to_string()),
         }
         let _base = pin(&base)?;
-        if self.output_folder.is_none() {
-            self.output_folder = Some(create_output_folder(&base)?);
-        }
-        let folder_name = self.output_folder.as_deref().ok_or("缺少草稿輸出目錄。")?;
-        let folder = base.join(folder_name);
+        let folder_name = shared_output_folder(
+            &base,
+            &mut self.output_folder,
+            self.output_conversation.as_deref(),
+        )?;
+        let folder = base.join(&folder_name);
         let _folder = pin(&folder)?;
         let (path, mut file, old) = if let Some(previous) = previous {
             let rel = relative(&previous.path)?;
-            if rel.parent() != Some(Path::new("_AI_Output").join(folder_name).as_path()) {
+            if rel.parent() != Some(Path::new("_AI_Output").join(&folder_name).as_path()) {
                 return Err("草稿不屬於本次輸出目錄。".into());
             }
             let file = OpenOptions::new()

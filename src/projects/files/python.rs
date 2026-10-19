@@ -138,11 +138,12 @@ impl Broker {
             Err(e) => return Err(e.to_string()),
         }
         let _base = pin(&base)?;
-        if self.output_folder.is_none() {
-            self.output_folder = Some(create_output_folder(&base)?);
-        }
-        let folder_name = self.output_folder.as_deref().ok_or("缺少成果資料夾。")?;
-        let folder = base.join(folder_name);
+        let folder_name = shared_output_folder(
+            &base,
+            &mut self.output_folder,
+            self.output_conversation.as_deref(),
+        )?;
+        let folder = base.join(&folder_name);
         let _folder = pin(&folder)?;
         let (actual_name, mut file) = reserve_output(&folder, name)?;
         let path = format!("_AI_Output/{folder_name}/{actual_name}");

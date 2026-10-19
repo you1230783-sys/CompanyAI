@@ -27,3 +27,7 @@ ui/vendor/ECHARTS-NOTICE.txt text eol=lf
 ui/vendor/mermaid.min.js text eol=lf -whitespace
 ui/vendor/MERMAID-LICENSE.txt text eol=lf
 ui/vendor/MERMAID-NOTICES.txt -whitespace
+
+# Unmodified offline font binaries and their upstream license notices.
+ui/fonts/*.ttf filter=lfs diff=lfs merge=lfs -text
+ui/fonts/*.txt text eol=lf -whitespace

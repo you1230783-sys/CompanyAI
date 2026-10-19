@@ -1,11 +1,17 @@
-Scope: basic validation; full validation pending
+Recorded: 2026-10-19T22:15:16.2687854+08:00
+Host OS: Microsoft Windows NT 10.0.26200.0
+Visual Studio: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools
 MSVC: 14.29.30133
 Compiler: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\cl.exe
 v142.c
 Verified _MSC_FULL_VER=192930159 x64
-Linker: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\link.exe
-SDK: 10.0.19041.0\
-Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-7c8cda3ecb514744ac7e0d1c123e5ed6
+Windows SDK: 10.0.19041.0\
+Target: x86_64-pc-windows-msvc
+CRT: static
+Rust binaries: Y:\Rust\.tools\rustup\toolchains\1.98.1-x86_64-pc-windows-msvc\bin
+Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-025c84bbd3a64fbb9dc7e92a2bc884de
+EXE SHA256: 5648E143634DAAF61974A980BFE7A080F61C3C1FA98919A2E65360BBE1799B64
+
 rustc 1.98.1 (48a229cea 2026-09-01)
 binary: rustc
 commit-hash: 48a229ceaefd4985c50990b14116b6d856af0985
@@ -14,6 +20,7 @@ host: x86_64-pc-windows-msvc
 release: 1.98.1
 LLVM version: 22.1.8
 cargo 1.98.1 (797e8a9bc 2026-08-05)
+
 Microsoft (R) COFF/PE Dumper Version 14.29.30159.0
 Copyright (C) Microsoft Corporation.  All rights reserved.
 
@@ -28,20 +35,20 @@ File Type: EXECUTABLE IMAGE
     user32.dll
     kernel32.dll
     oleaut32.dll
+    propsys.dll
+    shlwapi.dll
     shell32.dll
     combase.dll
     ole32.dll
-    shlwapi.dll
-    propsys.dll
     api-ms-win-core-winrt-error-l1-1-0.dll
-    advapi32.dll
-    userenv.dll
     bcrypt.dll
     gdi32.dll
     crypt32.dll
-    api-ms-win-core-synch-l1-2-0.dll
+    advapi32.dll
+    userenv.dll
     dwmapi.dll
     winhttp.dll
+    api-ms-win-core-synch-l1-2-0.dll
     mpr.dll
     ADVAPI32.dll
     KERNEL32.dll
@@ -51,9 +58,9 @@ File Type: EXECUTABLE IMAGE
   Summary
 
         3000 .data
-       77000 .pdata
-      CAA000 .rdata
+       79000 .pdata
+     2A16000 .rdata
         9000 .reloc
        3D000 .rsrc
-      B9C000 .text
+      BEB000 .text
         1000 _RDATA

@@ -110,6 +110,9 @@ pub(super) enum ProjectCommand {
         conversation: String,
         path: String,
     },
+    OpenFolder {
+        id: String,
+    },
     Resume {
         conversation: String,
         run_id: String,
@@ -850,6 +853,19 @@ impl App {
             });
             return Ok(());
         }
+        if let ProjectCommand::OpenFolder { id } = &command {
+            if !self.logged_in() || self.versions.blocked() {
+                return Err("請先完成登入及必要更新，再開啟專案資料夾。".into());
+            }
+            let project = self
+                .projects
+                .store
+                .projects
+                .iter()
+                .find(|p| p.id == *id)
+                .ok_or("找不到此專案。")?;
+            return projects::files::open_folder(project);
+        }
         if let Some(error) = &self.projects.error {
             return Err(error.clone());
         }
@@ -1029,7 +1045,8 @@ impl App {
                 self.projects.store = store;
                 self.toast("已清除匯入文字");
             }
-            ProjectCommand::Reveal { .. }
+            ProjectCommand::OpenFolder { .. }
+            | ProjectCommand::Reveal { .. }
             | ProjectCommand::Review { .. }
             | ProjectCommand::Methods { .. } => unreachable!("已於上方處理專案審閱"),
             ProjectCommand::AnswerPreference { .. }
@@ -1843,6 +1860,7 @@ impl App {
                     if self.config.notification_popups && !self.is_foreground() {
                         self.projects.attention_conversation =
                             waiting.then(|| conversation.clone());
+                        self.work.tray_restore_only = false;
                         self.work.task_balloon = true;
                         tray(self.window, NIM_MODIFY, Some(&self.projects.status));
                     }

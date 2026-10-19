@@ -40,6 +40,7 @@ mod projects;
 mod retry;
 mod site;
 mod vnc;
+mod window_behavior;
 mod work;
 const TRAY_MESSAGE: u32 = WM_APP + 4;
 
@@ -112,8 +113,14 @@ enum Command {
     },
     Preferences {
         font_size: u8,
+        #[serde(default)]
+        ui_font: Option<crate::config::UiFont>,
+        #[serde(default)]
+        interface_scale: Option<u16>,
         sidebar_collapsed: bool,
         notification_popups: bool,
+        #[serde(default)]
+        minimize_to_taskbar: Option<bool>,
         #[serde(default)]
         dark_mode: Option<bool>,
     },
@@ -728,6 +735,7 @@ impl App {
                 }
             }
             Command::Ready => {
+                self.view.set_interface_scale(self.config.interface_scale)?;
                 self.ready = true;
                 self.publish();
                 if self.smoke {
@@ -863,8 +871,11 @@ impl App {
                                     root: folder.into(),
                                     imports: Default::default(),
                                 };
-                                let path =
-                                    crate::projects::files::save_user_chart(&project, &custom_png)?;
+                                let path = crate::projects::files::save_user_chart(
+                                    &project,
+                                    "ui-smoke",
+                                    &custom_png,
+                                )?;
                                 // 驗證真正 WebView2 awaitPromise 橋接、MMD 中文及三種成果落盤。
                                 let svg = crate::projects::diagrams::decode_rendered(
                                     &mermaid_svg_response
@@ -884,7 +895,12 @@ impl App {
                                     ("流程.png", png.as_slice()),
                                 ] {
                                     let relative = crate::projects::files::diagrams::save(
-                                        &project, name, bytes,
+                                        &project,
+                                        &crate::projects::files::conversation_folder_name(
+                                            "ui-smoke",
+                                        )?,
+                                        name,
+                                        bytes,
                                     )?;
                                     if std::fs::read(project.root.join(&relative))
                                         .map_err(|e| e.to_string())?
@@ -999,17 +1015,32 @@ impl App {
             }
             Command::Preferences {
                 font_size,
+                ui_font,
+                interface_scale,
                 sidebar_collapsed,
                 notification_popups,
+                minimize_to_taskbar,
                 dark_mode,
             } => {
-                self.config.font_size = font_size.clamp(12, 20);
-                self.config.sidebar_collapsed = sidebar_collapsed;
-                self.config.notification_popups = notification_popups;
-                if let Some(dark_mode) = dark_mode {
-                    self.config.dark_mode = dark_mode;
+                let mut config = self.config.clone();
+                config.font_size = font_size.clamp(12, 20);
+                if let Some(font) = ui_font {
+                    config.ui_font = font;
                 }
-                storage::save_config(&self.root, &self.config)?;
+                if let Some(scale) = interface_scale {
+                    config.interface_scale = crate::config::interface_scale(scale);
+                }
+                config.sidebar_collapsed = sidebar_collapsed;
+                config.notification_popups = notification_popups;
+                if let Some(enabled) = minimize_to_taskbar {
+                    config.minimize_to_taskbar = enabled;
+                }
+                if let Some(dark_mode) = dark_mode {
+                    config.dark_mode = dark_mode;
+                }
+                storage::save_config(&self.root, &config)?;
+                self.config = config;
+                self.view.set_interface_scale(self.config.interface_scale)?;
                 apply_window_theme(self.window, self.config.dark_mode);
             }
             Command::ChartPalette { colors } => {
@@ -1535,6 +1566,7 @@ impl App {
                         self.inbox = inbox;
                         self.notification_status = "通知已同步；即時通道與定期補查並行".into();
                         if added > 0 && self.config.notification_popups && !self.is_foreground() {
+                            self.work.tray_restore_only = false;
                             self.work.task_balloon = false;
                             tray(
                                 self.window,
@@ -1927,9 +1959,7 @@ unsafe extern "system" fn window_proc(
                         return 0;
                     }
                     if wparam == 0 {
-                        unsafe {
-                            ShowWindow(window, SW_HIDE);
-                        }
+                        app.hide_to_tray();
                         return 0;
                     }
                     unsafe {
@@ -1952,9 +1982,9 @@ unsafe extern "system" fn window_proc(
                         app.fail(e);
                     }
 
-                    // 最小化只隱藏視窗；全域快捷鍵、通知與工作查詢繼續。
-                    unsafe {
-                        ShowWindow(window, SW_HIDE);
+                    // Windows 已完成最小化；保留工作列時不要再呼叫 SW_HIDE。
+                    if !app.config.minimize_to_taskbar {
+                        app.hide_to_tray();
                     }
                     return 0;
                 }
@@ -1982,6 +2012,7 @@ unsafe extern "system" fn window_proc(
                         app.restore_window();
                     }
                     if lparam as u32 == NIN_BALLOONUSERCLICK
+                        && !app.work.tray_restore_only
                         && !app.open_project_attention().unwrap_or(false)
                     {
                         let _ = app.view.post(&json!({"type":if app.work.task_balloon {"show_tasks"} else {"show_notifications"}}));
@@ -2306,8 +2337,10 @@ fn run_with_local(
                 }
             }
             if smoke {
-                if let Some(done) = state.borrow_mut().smoke_result.take() {
-                    result = done;
+                let done = state.borrow_mut().smoke_result.take();
+                if let Some(done) = done {
+                    // 放開 RefCell 借用後，真正送出原生最小化／關閉訊息。
+                    result = done.and_then(|()| window_behavior::verify(&state));
                     break;
                 }
                 if started.elapsed() > Duration::from_secs(45) {
