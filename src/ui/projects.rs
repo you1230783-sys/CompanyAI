@@ -1,6 +1,7 @@
 //! 專案 UI 控制器。只有使用者原生命令可新增授權，模型不能建立專案或擴大根目錄。
 use super::*;
 use crate::projects::{self, Store};
+mod artifacts;
 mod attention;
 mod chart_edit;
 mod composer;
@@ -13,6 +14,13 @@ mod weekly;
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(super) enum ProjectCommand {
+    ArtifactCenter {
+        conversation: String,
+        #[serde(default)]
+        offset: usize,
+        #[serde(default)]
+        export_ids: Vec<String>,
+    },
     CadReady {
         conversation: String,
         run_id: String,
@@ -35,6 +43,10 @@ pub(super) enum ProjectCommand {
     DiagramSave {
         target: diagrams::Target,
         format: projects::diagrams::Format,
+    },
+    DiagramSource {
+        target: diagrams::Target,
+        node_id: String,
     },
     ChartSave {
         target: chart_edit::Target,
@@ -183,9 +195,14 @@ pub(super) enum ProjectCommand {
         /// Some(true) 只複製用量，Some(false) 複製 JSON；不把長正文經 JS 橋送回。
         #[serde(default)]
         copy: Option<bool>,
+        /// 簡短用量仍在原生層複製，不把模型／工具正文送回橋接。
+        #[serde(default)]
+        short_usage: bool,
     },
 }
 pub(super) enum ProjectEvent {
+    DiagramSource(String, AppResult<String>),
+    ArtifactCenter(String, AppResult<String>),
     CadReadProgress(String, serde_json::Value),
     CadClosed(String, String),
     CadConnect(String, String, serde_json::Value, mpsc::Sender<String>),
@@ -452,6 +469,9 @@ impl App {
             "running":self.projects.running.is_some(),"running_id":self.projects.running.as_ref().map(|r|&r.id),"activity":self.projects.running.as_ref().map(|r|&r.activity),"charts":self.projects.running.as_ref().map(|r|&r.charts),"analysis":self.projects.running.as_ref().and_then(|r|r.analysis.as_ref()),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
     }
     pub(super) fn project_command(&mut self, command: ProjectCommand) -> AppResult<()> {
+        if self.artifact_command(&command)? {
+            return Ok(());
+        }
         if let ProjectCommand::Review {
             conversation,
             message_index,
@@ -793,6 +813,7 @@ impl App {
             index,
             view_request,
             copy,
+            short_usage,
         } = &command
         {
             if self.active_id.as_deref() != Some(conversation.as_str())
@@ -820,6 +841,7 @@ impl App {
             let selected = *index;
             let view_request = *view_request;
             let copy = *copy;
+            let short_usage = *short_usage;
             let chat_task = self
                 .work
                 .store
@@ -836,11 +858,19 @@ impl App {
                     selected,
                     chat_task.as_ref(),
                 )
-                .map(|text| {
-                    if token.is_empty() {
-                        text
+                .and_then(|text| {
+                    let text = if short_usage && copy == Some(true) {
+                        let mut report: serde_json::Value =
+                            serde_json::from_str(&text).map_err(|e| e.to_string())?;
+                        report["tokens"] = report["tokens_short"].clone();
+                        serde_json::to_string(&report).map_err(|e| e.to_string())?
                     } else {
-                        text.replace(&token, "[已隱藏]")
+                        text
+                    };
+                    if token.is_empty() {
+                        Ok(text)
+                    } else {
+                        Ok(text.replace(&token, "[已隱藏]"))
                     }
                 });
                 let _ = tx.send(Event::Project(ProjectEvent::Diagnostics(
@@ -1051,7 +1081,8 @@ impl App {
             | ProjectCommand::Methods { .. } => unreachable!("已於上方處理專案審閱"),
             ProjectCommand::AnswerPreference { .. }
             | ProjectCommand::SetDebug { .. }
-            | ProjectCommand::Diagnostics { .. } => {
+            | ProjectCommand::Diagnostics { .. }
+            | ProjectCommand::ArtifactCenter { .. } => {
                 unreachable!("已於上方處理診斷讀取")
             }
             ProjectCommand::ChartChoice { .. }
@@ -1062,6 +1093,7 @@ impl App {
             ProjectCommand::Stop
             | ProjectCommand::ChartCustomize { .. }
             | ProjectCommand::DiagramSave { .. }
+            | ProjectCommand::DiagramSource { .. }
             | ProjectCommand::ChartSave { .. }
             | ProjectCommand::WeeklyPrepare { .. }
             | ProjectCommand::WeeklySubmit { .. }
@@ -1622,6 +1654,16 @@ impl App {
                         return Ok(());
                     }
                     self.view.post(&json!({"type":"project_diagnostics","view_request":view_request,"conversation":conversation,"run_id":id,"text":result.unwrap_or_else(|e|self.friendly_error("diagnostics_read", &e))}))?;
+                }
+            }
+            ProjectEvent::ArtifactCenter(conversation, result) => {
+                if self.logged_in() && self.active_id.as_deref() == Some(&conversation) {
+                    self.view.post(&json!({"type":"project_artifact_center","conversation":conversation,"ok":result.is_ok(),"text":result.unwrap_or_else(|e|e)}))?;
+                }
+            }
+            ProjectEvent::DiagramSource(conversation, result) => {
+                if self.logged_in() && self.active_id.as_deref() == Some(&conversation) {
+                    self.view.post(&json!({"type":"diagram_source","conversation":conversation,"ok":result.is_ok(),"text":result.unwrap_or_else(|e|e)}))?;
                 }
             }
             ProjectEvent::UserDiagramSaved(conversation, result) => {

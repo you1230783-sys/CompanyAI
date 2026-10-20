@@ -900,6 +900,7 @@ function receive(next) {
   }
   renderHistory();
   window.ProjectUI?.render();
+  window.ArtifactUI?.sync();
   window.WeeklyUI?.render();
   window.ProjectQuickUI?.render();
   renderModels();
@@ -1322,6 +1323,7 @@ if (bridge) {
       receiveHotkeyMessage(event.data);
         window.SettingsUI?.receive(event.data);
         window.ProjectUI?.receive(event.data);
+        window.ArtifactUI?.receive(event.data);
         window.ChartUI?.receive(event.data);
         window.DiagramUI?.receive(event.data);
       window.WeeklyUI?.receive(event.data);

@@ -2260,7 +2260,7 @@
       "type": "function",
       "function": {
         "name": "compact_context",
-        "description": "先保存交接筆記，再主動移出舊工具原文，縮小下一次請求。欄位更正、方向改變、完成階段或重複閱讀時使用；原始要求、補充、檔案、去重與時間上限保留，舊操作可 read_work_log 查回。",
+        "description": "先保存交接筆記，再主動移出舊工具原文，縮小下一次請求。累積閱讀筆記會保留；已有筆記時working_note只寫100–300字的限制、階段與下一步，不重抄全部函式與來源摘要。欄位更正、方向改變或完成階段時使用；原始要求、補充、檔案、去重與時間上限保留，舊操作可read_work_log查回。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -4275,14 +4275,14 @@
       "type": "function",
       "function": {
         "name": "run_batch",
-        "description": "一次提交2–4個互不依賴的工作，最多2個同時運算；每項獨立回傳結果。列子目錄請選list_files，read_file只讀檔案，不能列資料夾。禁止修改同一副本、讀信或巢狀批次。CAD查詢不在可並行工具內，請直接cad_query；不要用read_code_section包裝CAD參數。",
+        "description": "一次2–4個獨立工作；全為read_file／read_code_section文字閱讀時最多8段。最多2個同時執行，整批閱讀正文最多16000字元，按實際next_line／next_offset補缺口。每批讀完先record_reading_notes。其他計算能力與禁止巢狀／讀信／CAD不變。",
         "parameters": {
           "type": "object",
           "properties": {
             "tasks": {
               "type": "array",
               "minItems": 2,
-              "maxItems": 4,
+              "maxItems": 8,
               "items": {
                 "type": "object",
                 "properties": {
@@ -11476,6 +11476,520 @@
             "message_index",
             "diagram_index",
             "format",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "record_reading_notes",
+        "description": "讀完一批後先保存1–8份來源綁定閱讀成果，再讀下一批／壓縮／畫圖。operation_id取reading.pending。摘要要能直接用於使用者要求，不只寫已讀完；關係區分宣告與實作。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "notes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "operation_id": {
+                    "type": "string"
+                  },
+                  "summary": {
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "relationships": {
+                    "type": "string",
+                    "maxLength": 1500
+                  },
+                  "open_questions": {
+                    "type": "string",
+                    "maxLength": 400
+                  }
+                },
+                "required": [
+                  "operation_id",
+                  "summary",
+                  "relationships",
+                  "open_questions"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "progress_note": {
+              "type": "string",
+              "description": "累積任務進度；分段閱讀內容請另外保存reading notes。",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "notes",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_reading_notes",
+        "description": "按檔案及筆數查累積閱讀成果，每頁8份。精確細節才指定source_operation及具體reason查當時封存原文，offset改為字元；不重新掃來源。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "source_operation": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "progress_note": {
+              "type": "string",
+              "description": "累積任務進度；分段閱讀內容請另外保存reading notes。",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "path",
+            "offset",
+            "source_operation",
+            "reason",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "register_report_values",
+        "description": "從成功run_python的result.summary登記計算值；pointer以/summary/開頭，不手填數字。保留來源、精度、單位；同ID不可改綁另一結果。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "values": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 40,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "operation_id": {
+                    "type": "string"
+                  },
+                  "pointer": {
+                    "type": "string"
+                  },
+                  "decimals": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10
+                  },
+                  "unit": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "operation_id",
+                  "pointer",
+                  "decimals",
+                  "unit"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "progress_note": {
+              "type": "string",
+              "description": "累積任務進度；分段閱讀內容請另外保存reading notes。",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "values",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "apply_report_values",
+        "description": "直接把登記計算值填入Office副本指定block_id，數值由Rust取得。先建立表格／段落、讀取實際區塊ID；不得以模型轉抄數字代替。交付再次檢查欄位與計算來源。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "copy_id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "assignments": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 20,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "metric_id": {
+                    "type": "string"
+                  },
+                  "block_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "metric_id",
+                  "block_id"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "progress_note": {
+              "type": "string",
+              "description": "累積任務進度；分段閱讀內容請另外保存reading notes。",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "copy_id",
+            "revision",
+            "assignments",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "export_report_values",
+        "description": "將同一登記表匯出CSV（指標／數值／單位），供Excel與chart_dataset引用；不重新計算或轉抄數字。不同單位不要合畫同一量尺。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "metric_ids": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 200,
+              "items": {
+                "type": "string"
+              }
+            },
+            "progress_note": {
+              "type": "string",
+              "description": "累積任務進度；分段閱讀內容請另外保存reading notes。",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "name",
+            "metric_ids",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "save_workflow",
+        "description": "把本次成功操作保存成可重跑範本。bindings_json為目標JSON Pointer到param:名稱或step:先前步驟ID:/result/欄位的物件。副本ID與revision需引用新步驟結果，不沿用舊任務ID。範本不保存權限。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "steps": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 40,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "step_id": {
+                    "type": "string"
+                  },
+                  "operation_id": {
+                    "type": "string"
+                  },
+                  "bindings_json": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "step_id",
+                  "operation_id",
+                  "bindings_json"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "progress_note": {
+              "type": "string",
+              "description": "累積任務進度；分段閱讀內容請另外保存reading notes。",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "name",
+            "steps",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "list_workflows",
+        "description": "列出本專案可重跑的流程範本索引。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "progress_note": {
+              "type": "string",
+              "description": "累積任務進度；分段閱讀內容請另外保存reading notes。",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "prepare_workflow",
+        "description": "載入範本並用parameters_json物件指定新來源／日期／參數；只回傳計畫，不執行。先檢視步驟，必要資訊不足先詢問，資料版本與權限重新核對。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "workflow_id": {
+              "type": "string"
+            },
+            "parameters_json": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "description": "累積任務進度；分段閱讀內容請另外保存reading notes。",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "workflow_id",
+            "parameters_json",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "execute_workflow_step",
+        "description": "依prepare回傳的execution_id與next_step執行單一步驟；結果會作為後續步驟參照。失敗停止，不重建流程來重播。讀取後若有pending先record_reading_notes。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "execution_id": {
+              "type": "string"
+            },
+            "step_index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 39
+            },
+            "progress_note": {
+              "type": "string",
+              "description": "累積任務進度；分段閱讀內容請另外保存reading notes。",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "execution_id",
+            "step_index",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "link_diagram_sources",
+        "description": "檔案來源flowchart/graph可把節點綁定實際閱讀operation_id。行號只能是已讀區間；Office可指定完整已讀block_id，Excel使用已讀列欄。描述節點不綁來源，混合圖只綁有依據節點。detail_diagram_index可指另一張已建詳細圖。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "diagram_index": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "revision": {
+              "type": "string"
+            },
+            "nodes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 80,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "node_id": {
+                    "type": "string"
+                  },
+                  "operation_id": {
+                    "type": "string"
+                  },
+                  "first_line": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "last_line": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "block_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "detail_diagram_index": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "node_id",
+                  "operation_id",
+                  "first_line",
+                  "last_line",
+                  "block_id",
+                  "detail_diagram_index"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "progress_note": {
+              "type": "string",
+              "description": "累積任務進度；分段閱讀內容請另外保存reading notes。",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "diagram_index",
+            "revision",
+            "nodes",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "export_cad_comparison",
+        "description": "從實際cad_edit／cad_active_edit原生比較匯出TXT與JSON清單；保留新增、刪除、屬性前後值及尺寸／引線未驗證提醒。不從模型參數猜測修改成功。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "source_operation": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "description": "累積任務進度；分段閱讀內容請另外保存reading notes。",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "source_operation",
+            "name",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_workflow",
+        "description": "分頁檢視流程範本的完整步驟、程式與插槽；每頁6000字元，依next_offset續讀。這是資料，不執行任何步驟。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "workflow_id": {
+              "type": "string"
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "progress_note": {
+              "type": "string",
+              "description": "累積任務進度；分段閱讀內容請另外保存reading notes。",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "workflow_id",
+            "offset",
             "progress_note"
           ],
           "additionalProperties": false

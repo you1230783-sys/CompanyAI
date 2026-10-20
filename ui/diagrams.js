@@ -7,6 +7,7 @@ window.DiagramUI = (() => {
   let pendingSave = null;
   const MAX_SOURCE = 48000;
   const command = value => send({type: "project", command: value});
+  document.getElementById("diagram-source-close").onclick=()=>document.getElementById("diagram-source-dialog").close();
 
   // 一個共用事件即可涵蓋所有卡片；使用者按Esc退出時也同步恢復按鈕文字。
   document.addEventListener("fullscreenchange", () => {
@@ -136,6 +137,25 @@ window.DiagramUI = (() => {
       const details = document.createElement("details"), summary = document.createElement("summary"), code = document.createElement("pre");
       summary.textContent = "查看 Mermaid 原始碼";code.textContent = diagram.source;details.append(summary, code);
       const target = {...context, diagram_index};
+      card.dataset.diagramIndex=String(diagram_index);card.dataset.diagramRequest=context.request_id||"";
+      const showSource=origin=>{
+        const dialog=document.getElementById("diagram-source-dialog");dialog.dataset.conversation=context.conversation;
+        dialog.dataset.operation=origin.operation_id;dialog.dataset.node=origin.node_id;
+        document.getElementById("diagram-source-location").textContent=`${origin.path} · ${origin.locator}`;
+        document.getElementById("diagram-source-notice").textContent="正在核對來源版本…";
+        document.getElementById("diagram-source-text").value="";
+        if(!dialog.open)dialog.showModal();
+        command({action:"diagram_source",target,node_id:origin.node_id});
+      };
+      let sourcesPanel=null;
+      if(diagram.node_sources?.length){
+        const sourceDetails=document.createElement("details"),sourceTitle=document.createElement("summary");sourceTitle.textContent="節點來源與詳細圖";sourceDetails.append(sourceTitle);
+        for(const origin of diagram.node_sources){
+          const link=document.createElement("button");link.type="button";link.textContent=`${origin.node_id}：${origin.path} ${origin.locator}`;link.onclick=()=>showSource(origin);sourceDetails.append(link);
+          if(origin.detail_diagram_index!=null){const more=document.createElement("button");more.textContent="查看詳細圖";more.onclick=()=>{const target=[...document.querySelectorAll(".mermaid-card")].find(c=>c.dataset.diagramRequest===context.request_id&&Number(c.dataset.diagramIndex)===origin.detail_diagram_index);if(target)target.scrollIntoView({behavior:"smooth",block:"start"});else toast("詳細圖不在目前顯示的訊息中");};sourceDetails.append(more);}
+        }
+        sourcesPanel=sourceDetails;
+      }
       const button = (label, action) => {const b = document.createElement("button");b.type = "button";b.textContent = label;b.onclick = action;toolbar.append(b);return b;};
       button("複製原始碼", () => send({type: "copy", text: diagram.source}));
       const save = format => {
@@ -185,10 +205,18 @@ window.DiagramUI = (() => {
         if (input) {input.value = input.value ? `${input.value}\n\n${prompt}` : prompt;input.dispatchEvent(new Event("input", {bubbles: true}));input.focus();}
       });
       card.append(title, toolbar, viewport, status, details);container.append(card);
+      if(sourcesPanel)card.append(sourcesPanel);
       svgFor(diagram.source).then(svg => {
         if (!card.isConnected) return;
         plot.innerHTML = displaySvg(svg);
         const root = plot.querySelector("svg");
+        for(const origin of diagram.node_sources||[]){
+          // safeSvg會加上圖形命名空間，displaySvg再加view尾碼。
+          // 以完整節點ID及數字序號比對兩種形式，避免A誤綁A-1。
+          const nodePattern=new RegExp(`(?:^|-)flowchart-${origin.node_id}-\\d+(?:-view-\\d+)?$`);
+          const group=[...root.querySelectorAll("g.node")].find(g=>nodePattern.test(g.id));
+          if(group){group.style.cursor="pointer";group.setAttribute("tabindex","0");group.setAttribute("role","button");group.setAttribute("aria-label",`查看 ${origin.node_id} 的來源`);group.onclick=()=>showSource(origin);group.onkeydown=event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();showSource(origin);}};}
+        }
         const box = root.viewBox.baseVal;
         naturalWidth = box.width || parseFloat(root.getAttribute("width"));
         naturalHeight = box.height || parseFloat(root.getAttribute("height"));
@@ -202,6 +230,13 @@ window.DiagramUI = (() => {
   }
 
   function receive(message) {
+    if(message.type==="diagram_source"){
+      const dialog=document.getElementById("diagram-source-dialog");
+      if(!dialog.open||dialog.dataset.conversation!==state.active_id||message.conversation!==state.active_id)return;
+      if(!message.ok){document.getElementById("diagram-source-notice").textContent=message.text;return;}
+      try{const data=JSON.parse(message.text);if(data.source.operation_id!==dialog.dataset.operation||data.source.node_id!==dialog.dataset.node)return;document.getElementById("diagram-source-location").textContent=`${data.source.path} · ${data.source.locator} · 版本 ${data.source.revision.slice(0,12)}`;document.getElementById("diagram-source-notice").textContent=data.notice;document.getElementById("diagram-source-text").value=data.text;}catch{document.getElementById("diagram-source-notice").textContent="來源紀錄無法解析";}
+      return;
+    }
     if (message.type !== "diagram_saved") return;
     pendingSave = null;toast(message.ok ? `圖形已儲存：${message.message}` : message.message);
   }

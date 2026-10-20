@@ -1,6 +1,8 @@
 //! desktop-agent-v1 的專用傳輸型別。一般聊天的 Message 與路由不受影響。
 //! 網頁只推論一次；所有工具仍由本機 broker 驗證並執行。
 mod schema;
+// 批次子工具沿用單次呼叫的可選參數還原規則，避免同一工具在批次中拒絕null預設。
+pub(crate) use schema::restore_optional;
 #[cfg(test)]
 mod tests;
 

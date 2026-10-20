@@ -1,6 +1,7 @@
 //! 專案資料與固定工具契約。授權及副本所有權由桌面保存，不由模型文字決定。
 pub(crate) mod agent;
 pub mod analysis;
+pub mod artifacts;
 pub mod cad_index;
 pub mod charts;
 pub mod code_review;
@@ -8,6 +9,7 @@ pub mod context;
 pub mod datasets;
 mod delegation;
 pub mod diagnostics;
+pub mod diagram_sources;
 pub mod diagrams;
 pub mod events;
 pub mod excel_plan;
@@ -22,7 +24,9 @@ pub mod office;
 mod pdf;
 mod progress;
 pub mod python;
+pub mod reading;
 pub mod reply;
+pub mod report_values;
 pub mod review;
 pub mod runner;
 pub mod sandbox;
@@ -34,6 +38,7 @@ pub mod text;
 pub mod timeline;
 mod tool_calls;
 pub(crate) mod vision;
+pub mod workflows;
 
 use crate::{jobs, storage, AppResult};
 use serde::{Deserialize, Serialize};
@@ -201,6 +206,54 @@ pub enum Tool {
     },
     RunBatch {
         tasks: Vec<files::batch::Task>,
+    },
+    RecordReadingNotes {
+        notes: Vec<reading::Digest>,
+    },
+    RegisterReportValues {
+        values: Vec<report_values::Spec>,
+    },
+    ApplyReportValues {
+        copy_id: String,
+        revision: String,
+        assignments: Vec<report_values::Assignment>,
+    },
+    ExportReportValues {
+        name: String,
+        metric_ids: Vec<String>,
+    },
+    SaveWorkflow {
+        name: String,
+        steps: Vec<workflows::Capture>,
+    },
+    ListWorkflows {},
+    ReadWorkflow {
+        workflow_id: String,
+        offset: usize,
+    },
+    ExportCadComparison {
+        source_operation: String,
+        name: String,
+    },
+    LinkDiagramSources {
+        diagram_index: usize,
+        revision: String,
+        nodes: Vec<diagram_sources::Link>,
+    },
+    PrepareWorkflow {
+        workflow_id: String,
+        parameters_json: String,
+    },
+    ExecuteWorkflowStep {
+        execution_id: String,
+        step_index: usize,
+    },
+    ReadReadingNotes {
+        path: Option<String>,
+        #[serde(default)]
+        offset: usize,
+        source_operation: Option<String>,
+        reason: Option<String>,
     },
     RecordLogEvents {
         events: Vec<timeline::Event>,
@@ -614,6 +667,18 @@ impl Tool {
             Self::CadPlanInspect { .. } => "查閱 CAD 已保存的計畫",
             Self::CadPlanCommit { .. } => "合併 CAD 計畫並繪製同一張圖",
             Self::RunBatch { .. } => "並行處理獨立工作",
+            Self::RecordReadingNotes { .. } => "保存本批閱讀成果",
+            Self::RegisterReportValues { .. } => "登記實際計算值",
+            Self::ApplyReportValues { .. } => "將計算值填入報告欄位",
+            Self::ExportReportValues { .. } => "匯出共用計算值資料表",
+            Self::SaveWorkflow { .. } => "保存可重跑的工作流程",
+            Self::ListWorkflows {} => "列出工作流程範本",
+            Self::ReadWorkflow { .. } => "檢視工作流程完整步驟",
+            Self::ExportCadComparison { .. } => "匯出CAD修改比較報告",
+            Self::LinkDiagramSources { .. } => "綁定圖形節點來源",
+            Self::PrepareWorkflow { .. } => "檢視工作流程與新參數",
+            Self::ExecuteWorkflowStep { .. } => "執行工作流程下一步",
+            Self::ReadReadingNotes { .. } => "查閱累積閱讀成果",
             Self::RecordLogEvents { .. } => "整理有原文依據的 LOG 事件",
             Self::RecordAnalysis { .. } => "保存分析狀態、證據與核對結果",
             Self::RunPython { .. } => "Python 本機資料分析",

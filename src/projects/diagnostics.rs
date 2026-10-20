@@ -62,6 +62,77 @@ fn read_json(path: &Path, limit: u64) -> AppResult<Value> {
     serde_json::from_slice(&storage::protect(&bytes, false)?)
         .map_err(|_| "診斷紀錄無法解析。".into())
 }
+
+/// 簡短用量只投影服務端實際數值。缺少任何欄位時保留「未取得」，
+/// 不使用估算或將缺值當零；合計明示各欄位取得的輪數。
+pub fn short_usage(turns: &[Value]) -> String {
+    let mut lines = vec!["輪次\t實際輸入\t實際輸出\t實際合計".to_owned()];
+    let mut sums = [0u128; 3];
+    let mut counts = [0usize; 3];
+    for (index, turn) in turns.iter().enumerate() {
+        let actual = &turn["actual"];
+        let values = [
+            actual["prompt_tokens"]
+                .as_u64()
+                .or_else(|| actual["input_tokens"].as_u64()),
+            actual["completion_tokens"]
+                .as_u64()
+                .or_else(|| actual["output_tokens"].as_u64()),
+            actual["total_tokens"].as_u64(),
+        ];
+        let fields: Vec<_> = values
+            .iter()
+            .enumerate()
+            .map(|(field, value)| {
+                if let Some(value) = value {
+                    sums[field] += u128::from(*value);
+                    counts[field] += 1;
+                    value.to_string()
+                } else {
+                    "未取得".to_owned()
+                }
+            })
+            .collect();
+        let number = turn["turn"]
+            .as_u64()
+            .filter(|n| *n > 0)
+            .unwrap_or(index as u64 + 1);
+        lines.push(format!("{number}\t{}", fields.join("\t")));
+    }
+    lines.push(String::new());
+    for (index, label) in ["輸入合計", "輸出合計", "實際總計"].iter().enumerate() {
+        let sum = if counts[index] == 0 {
+            "未取得".into()
+        } else {
+            sums[index].to_string()
+        };
+        lines.push(format!(
+            "{label}：{sum}（已取得 {}/{} 輪）",
+            counts[index],
+            turns.len()
+        ));
+    }
+    lines.join("\n")
+}
+
+#[cfg(test)]
+mod short_usage_tests {
+    use super::*;
+    #[test]
+    fn keeps_actual_zero_and_missing_fields_distinct_without_estimates() {
+        let report = short_usage(&[
+            serde_json::json!({"turn":1,"actual":{"prompt_tokens":10,"completion_tokens":0,"total_tokens":10},"estimate":{"secret":"never"}}),
+            serde_json::json!({"turn":2,"actual":null,"estimate":{"estimated_input_tokens":9999}}),
+            serde_json::json!({"turn":3,"actual":{"input_tokens":5,"output_tokens":2}}),
+        ]);
+        assert!(report.contains("1\t10\t0\t10"));
+        assert!(report.contains("2\t未取得\t未取得\t未取得"));
+        assert!(report.contains("輸入合計：15（已取得 2/3 輪）"));
+        assert!(report.contains("實際總計：10（已取得 1/3 輪）"));
+        assert!(!report.contains("9999"));
+        assert!(!report.contains("secret"));
+    }
+}
 /// 每次只載入選定一輪的 JSON；全部用量可獨立複製，不含正文或檔名。
 pub fn read_reports(
     root: &Path,
@@ -110,7 +181,7 @@ pub fn read_reports(
         .enumerate()
         .map(|(index, (_, entry))| serde_json::json!({"index":index,"turn":entry["turn"]}))
         .collect();
-    serde_json::to_string(&serde_json::json!({"trace":trace,"selected":selected,"rounds":rounds,
+    serde_json::to_string(&serde_json::json!({"trace":trace,"selected":selected,"rounds":rounds,"tokens_short":short_usage(&metrics),
         "tokens":serde_json::to_string_pretty(&serde_json::json!({"format":"lmai-usage-v1","contains_content":false,"turns":metrics})).map_err(|e|e.to_string())?})).map_err(|e|e.to_string())
 }
 
@@ -156,7 +227,9 @@ pub fn task_reports(task: &jobs::Task, debug: bool) -> AppResult<String> {
     let tokens=serde_json::to_string_pretty(&serde_json::json!({"format":"lmai-usage-v1","contains_content":false,
         "notice":"一般聊天由網站附加歷史，因此桌面只能估算本次送出的內容；API usage 可能包含網站歷史與技能。",
         "turns":[{"index":0,"turn":0,"estimate":estimate,"actual":actual,"error_percent":error}]})).map_err(|e|e.to_string())?;
-    serde_json::to_string(&serde_json::json!({"trace":trace,"tokens":tokens,"selected":0,"rounds":[{"index":0,"turn":0}]})).map_err(|e|e.to_string())
+    let parsed: Value = serde_json::from_str(&tokens).map_err(|e| e.to_string())?;
+    let concise = short_usage(parsed["turns"].as_array().ok_or("用量紀錄格式不正確。")?);
+    serde_json::to_string(&serde_json::json!({"trace":trace,"tokens":tokens,"tokens_short":concise,"selected":0,"rounds":[{"index":0,"turn":0}]})).map_err(|e|e.to_string())
 }
 
 pub fn read(root: &Path, id: &str, conversation: &str) -> AppResult<String> {

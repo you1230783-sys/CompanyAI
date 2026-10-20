@@ -13,7 +13,7 @@ pub(super) struct Section {
     touched: u64,
 }
 
-fn section_id(copy: &str, revision: &str, first: usize, last: usize) -> String {
+pub(super) fn section_id(copy: &str, revision: &str, first: usize, last: usize) -> String {
     text::revision(&format!("code-section:{copy}:{revision}:{first}:{last}"))
 }
 
@@ -332,6 +332,10 @@ impl Broker {
             "offset":content[..start].chars().count(),"next_offset":content[..end].chars().count(),"total":content.chars().count(),
             "guidance":"副本修改優先傳copy_id、section_id、replacement。若用舊介面，範圍須等於實際first_line/last_line，不能拿大段hash改小段。原件只供對照；修改與測試讀copy_id。"});
         result["read_only"] = json!(copy_id.is_none());
+        self.reading.project_saved_read(&mut result);
+        if result["reused_reading_note"] == true {
+            return Ok(result);
+        }
         if !name.to_ascii_lowercase().ends_with(".py") {
             result["guidance"] = json!("原件唯讀；需要修改時create_working_copy保留原格式，再用read_file(copy_id)與edit_text、save_copy修改及發布文字副本。每份副本上限200KB。不自動執行指令檔；依next_line續讀並核對revision，不可把部分區段說成整個專案已讀完。");
         }

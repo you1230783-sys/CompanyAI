@@ -5,7 +5,7 @@
     "notice": "每項獨立成功或失敗；成功項目不重做，只另提失敗項目。不能把整批已回傳當作每項均成功。",
     "tasks": [
       {
-        "finished_local": "2026-10-19 22:01:45",
+        "finished_local": "2026-10-20 15:28:51",
         "outcome": {
           "ok": true,
           "operation_id": "274cfd6b2a8cae8f16cb9072c469a7d570af3363311406388b2be891e9a84cda",
@@ -15,12 +15,12 @@
             "displayed_in_conversation": true
           }
         },
-        "started_local": "2026-10-19 22:01:45",
+        "started_local": "2026-10-20 15:28:51",
         "task_id": "chart",
         "tool": "chart_dataset"
       },
       {
-        "finished_local": "2026-10-19 22:01:45",
+        "finished_local": "2026-10-20 15:28:51",
         "outcome": {
           "ok": true,
           "operation_id": "68f15359d0e85383ff44e484d27f933e1e25c193112a43c1f7a3044524d2341a",
@@ -37,11 +37,12 @@
             "working_copy": false
           }
         },
-        "started_local": "2026-10-19 22:01:45",
+        "started_local": "2026-10-20 15:28:51",
         "task_id": "read",
         "tool": "read_file"
       }
-    ]
+    ],
+    "text_budget_chars": 16000
   },
   "parallel": {
     "execution": "parallel_compute_serial_commit",
@@ -49,7 +50,7 @@
     "notice": "每項獨立成功或失敗；成功項目不重做，只另提失敗項目。不能把整批已回傳當作每項均成功。",
     "tasks": [
       {
-        "finished_local": "2026-10-19 22:01:45",
+        "finished_local": "2026-10-20 15:28:51",
         "outcome": {
           "ok": true,
           "operation_id": "32b6f00c1a6937d31536dfc3a2838c7dc50bdb9298cb1e3e42e3bcae3d6fa0c1",
@@ -145,8 +146,8 @@
             "sources": [],
             "stdout": "",
             "summary": {
-              "end": 1792418504.8672495,
-              "start": 1792418496.864049,
+              "end": 1792481330.937515,
+              "start": 1792481322.9367356,
               "value": 42
             },
             "versions": {
@@ -157,12 +158,12 @@
             }
           }
         },
-        "started_local": "2026-10-19 22:01:33",
+        "started_local": "2026-10-20 15:28:40",
         "task_id": "a",
         "tool": "run_python"
       },
       {
-        "finished_local": "2026-10-19 22:01:45",
+        "finished_local": "2026-10-20 15:28:51",
         "outcome": {
           "ok": true,
           "operation_id": "4741e9f1c15440acaff49b1587a45dfa55cd00b2312a1073683fad0e48cdbf62",
@@ -242,8 +243,8 @@
             "sources": [],
             "stdout": "",
             "summary": {
-              "end": 1792418504.8658805,
-              "start": 1792418496.86428,
+              "end": 1792481330.9244692,
+              "start": 1792481322.922523,
               "value": 84
             },
             "versions": {
@@ -254,11 +255,12 @@
             }
           }
         },
-        "started_local": "2026-10-19 22:01:33",
+        "started_local": "2026-10-20 15:28:40",
         "task_id": "b",
         "tool": "run_python"
       }
-    ]
+    ],
+    "text_budget_chars": 16000
   },
   "python_partial": {
     "execution": "parallel_compute_serial_commit",
@@ -266,19 +268,19 @@
     "notice": "每項獨立成功或失敗；成功項目不重做，只另提失敗項目。不能把整批已回傳當作每項均成功。",
     "tasks": [
       {
-        "finished_local": "2026-10-19 22:01:49",
+        "finished_local": "2026-10-20 15:28:54",
         "outcome": {
           "error": "Python 分析失敗：Traceback (most recent call last):\n  File \"Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\examples\\python\\lm_worker.py\", line 169, in main\n    response = analyze(json.loads(payload))\n  File \"Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\examples\\python\\lm_worker.py\", line 149, in analyze\n    exec(compile(request[\"code\"], \"<company-ai-analysis>\", \"exec\"), scope)\n    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<company-ai-analysis>\", line 1, in <module>\nValueError: fixture\n",
           "ok": false,
           "operation_id": "85fe8d42006e24dc7e792234d70498413e899c8d49eb327292b508797c844af1",
           "retry_same_operation": false
         },
-        "started_local": "2026-10-19 22:01:45",
+        "started_local": "2026-10-20 15:28:51",
         "task_id": "fail",
         "tool": "run_python"
       },
       {
-        "finished_local": "2026-10-19 22:01:49",
+        "finished_local": "2026-10-20 15:28:54",
         "outcome": {
           "ok": true,
           "operation_id": "1f246b7c021f66ae1ebe505583bd43f07cbd70f35bcd74304d5e249de999d0cb",
@@ -300,11 +302,12 @@
             }
           }
         },
-        "started_local": "2026-10-19 22:01:45",
+        "started_local": "2026-10-20 15:28:51",
         "task_id": "valid",
         "tool": "run_python"
       }
-    ]
+    ],
+    "text_budget_chars": 16000
   },
   "result": "PASS"
 }

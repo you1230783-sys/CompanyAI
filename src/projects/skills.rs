@@ -86,7 +86,7 @@ const SKILLS: &[(&str, &str, &str)] = &[
     ),
     (
         "notes",
-        "保存及修訂文件摘要、任務筆記",
+        "保存文件摘要、任務筆記與可重跑工作流程範本",
         include_str!("skills/notes.md"),
     ),
     (
@@ -233,8 +233,11 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
     let has = |id: &str| ids.iter().any(|i| i == id);
     match tool {
         // 舊 checkpoint 保留原工具權限；新任務只公告與目標文件相關的工具。
-        "create_mermaid" | "inspect_mermaid" | "export_mermaid" => has("mermaid"),
+        "create_mermaid" | "inspect_mermaid" | "export_mermaid" | "link_diagram_sources" => {
+            has("mermaid")
+        }
         "cad_inventory" => ids.iter().any(|id| id.starts_with("cad-")),
+        "export_cad_comparison" => ids.iter().any(|id| id.starts_with("cad-")),
         "cad_snapshot" | "cad_query" | "cad_preview" => {
             has("cad-active") || has("cad-copy") || has("cad-excel") || has("cad-drawing")
         }
@@ -247,7 +250,18 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
         "cad_excel_plan" | "cad_excel_apply" => has("cad-excel") || has("cad-drawing"),
         "record_log_events" => has("log-analysis") || has("python-analysis"),
         "run_python" => has("python-analysis"),
-        "analyze_image" | "read_mail_notes" | "set_work_stage" | "run_batch" => true,
+        "analyze_image"
+        | "read_mail_notes"
+        | "set_work_stage"
+        | "run_batch"
+        | "record_reading_notes"
+        | "read_reading_notes" => true,
+        "register_report_values" | "export_report_values" => {
+            has("python-analysis") || has("office-edit") || has("dataset-charts")
+        }
+        "apply_report_values" => has("office-edit"),
+        "execute_workflow_step" => true,
+        "save_workflow" | "list_workflows" | "read_workflow" | "prepare_workflow" => has("notes"),
         "plan_excel_analysis" | "export_planned_excel" => has("excel-read"),
         "outlook_compare" => has("outlook-coverage"),
         "list_files" | "read_file" | "load_skill" | "read_skill_guide" | "ask_preference"

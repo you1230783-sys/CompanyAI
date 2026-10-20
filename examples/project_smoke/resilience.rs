@@ -66,6 +66,8 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         let mut ids = BTreeSet::new();
         let mut turns = BTreeSet::new();
         let mut copy = String::new();
+        let mut previous_action = Value::Null;
+        let mut note_posts = 0;
         while !stopped.load(Ordering::Relaxed) {
             let (mut stream, _) = match listener.accept() {
                 Ok(s) => s,
@@ -87,8 +89,16 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                 posts += 1;
                 assert!(ids.insert(body["client_request_id"].as_str().unwrap().to_owned()));
                 assert!(turns.insert(body["context"]["turn_index"].as_u64().unwrap()));
-                let previous = super::native::last_result(&body);
-                let failing = step == 4
+                // 筆記是獨立且唯一的HTTP請求，但不推進本案例原來的副本／重試步驟。
+                // 產品可能移出上一輪原文，固定服務自行保存步驟狀態，不要求重送全部歷史。
+                let note_message = super::native::reading_note_message(&body);
+                let delivered = super::native::last_result(&body);
+                if !delivered.is_null() {
+                    previous_action = delivered;
+                }
+                let previous = previous_action.clone();
+                let failing = note_message.is_none()
+                    && step == 4
                     && match case {
                         0 | 3 => failures < 2,
                         1 => !resumed.load(Ordering::Relaxed),
@@ -104,29 +114,35 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     status["result"] = Value::Null;
                     status["error"] = json!({"error_code":match case {2=>"QUOTA_EXCEEDED",6=>"UPSTREAM_RESULT_UNKNOWN",_=>"AI_BACKEND_ERROR"},"message":"fixture upstream failure","retryable":false,"details":{}});
                 } else {
-                    let (name, args) = match step {
-                        0 => ("load_skill", json!({"id":"text-edit"})),
-                        1 => ("read_file", json!({"path":"source.txt","offset":0})),
-                        2 => (
-                            "create_working_copy",
-                            json!({"source":"source.txt","name":"retry-output.txt"}),
-                        ),
-                        3 => {
-                            copy = previous["result"]["copy_id"].as_str().unwrap().into();
-                            (
-                                "edit_text",
-                                json!({"copy_id":copy,"revision":previous["result"]["revision"],"start":0,"expected":"原始","replacement":"修改"}),
-                            )
-                        }
-                        4 => (
-                            "save_copy",
-                            json!({"copy_id":copy,"revision":previous["result"]["revision"]}),
-                        ),
-                        _ => ("finish", json!({"message":"恢復後完成","artifacts":[copy]})),
+                    let message = if let Some(message) = note_message {
+                        note_posts += 1;
+                        message
+                    } else {
+                        let (name, args) = match step {
+                            0 => ("load_skill", json!({"id":"text-edit"})),
+                            1 => ("read_file", json!({"path":"source.txt","offset":0})),
+                            2 => (
+                                "create_working_copy",
+                                json!({"source":"source.txt","name":"retry-output.txt"}),
+                            ),
+                            3 => {
+                                copy = previous["result"]["copy_id"].as_str().unwrap().into();
+                                (
+                                    "edit_text",
+                                    json!({"copy_id":copy,"revision":previous["result"]["revision"],"start":0,"expected":"原始","replacement":"修改"}),
+                                )
+                            }
+                            4 => (
+                                "save_copy",
+                                json!({"copy_id":copy,"revision":previous["result"]["revision"]}),
+                            ),
+                            _ => ("finish", json!({"message":"恢復後完成","artifacts":[copy]})),
+                        };
+                        step += 1;
+                        super::native::call(&body, name, args)
                     };
                     status["result"] = json!({"id":format!("c{posts}"),"object":"chat.completion","created":1,"model":"quality",
-                        "choices":[{"index":0,"finish_reason":"tool_calls","message":super::native::call(&body,name,args)}]});
-                    step += 1;
+                        "choices":[{"index":0,"finish_reason":"tool_calls","message":message}]});
                 }
                 if case == 8 {
                     status["state"] = json!("queued");
@@ -166,6 +182,8 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
             let bytes = response.to_string();
             write!(stream,"HTTP/1.1 {http} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{bytes}",bytes.len()).map_err(|e|e.to_string())?;
         }
+        // 保存閱讀筆記也須真正成功一次；不能把產品門檻關掉讓舊fixture通過。
+        assert_eq!(note_posts, if matches!(case, 7 | 8) { 0 } else { 1 });
         Ok((posts, failures, cancels))
     });
     let session = Session::from_token(
@@ -239,7 +257,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         assert_eq!(failures, 1);
     } else {
         assert!(result?.contains("恢復後完成"));
-        assert_eq!(posts, 6 + failures);
+        assert_eq!(posts, 7 + failures, "含一次實際保存閱讀筆記的POST");
         assert_eq!(
             activity
                 .iter()

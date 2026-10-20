@@ -1,9 +1,10 @@
 <!-- 開頭版本公告最多保留最新 3 個版本；歷史文件保留於 docs。 -->
+**0.8.74：累積閱讀筆記與交付核對。** 新增八段唯讀批次、跨壓縮閱讀筆記、簡短實際tokens、計算值綁定Word／Excel、可重跑範本、成果中心與ZIP、圖形來源導覽及CAD修改比較。公開專案已能續作並匯出圖形；部分圖有內容錯誤，Strata多成果報告仍出現重複工作而未完成交付。正式建置與分項結果見[驗證紀錄](docs/VALIDATION_0_8_74.md)。
+
 **0.8.73：介面偏好與專案操作修正。** 新增四字型、介面大小、VNC JSON匯入／匯出與縮小保留工作列選項；未知文字／INI可讀取與另存，同對話共用成果資料夾，修正CAD預檢／報告與Mermaid檢視／改圖。完整本機自動測試、Strata功能情境與NSIS安裝生命週期已完成；本機模型Word額外統計有誤，內容未列為通過，公司服務與通知點擊仍待現場確認。[驗證紀錄](docs/VALIDATION_0_8_73.md)
 
 **0.8.72：專案 Mermaid 與 CAD 擴充。** 可從敘述／程式碼畫圖、複製來源、保存 MMD／SVG／PNG 與跨輪修改；新增原生 CAD 幾何／尺寸／圖層／圖塊及有限 2D 編輯，背景等待確認會通知。本機 Strata 與基本針對性驗證完成，完整驗證延後。[驗證紀錄](docs/VALIDATION_0_8_72.md) · [公司實測提示詞](docs/COMPANY_TEST_PROMPTS_0_8_72.txt)
 
-**0.8.71：CAD 註記更新與額度續接。** 2008 支援文字／引線附屬文字與直徑標註更新，新圖自動解析並固定 CAD 版本；輸出額度耗盡最多自動續接五次。本輪基本與針對性驗證完成，完整驗證延後。[驗證紀錄](docs/VALIDATION_0_8_71.md)
 
 
 
@@ -11,17 +12,17 @@
 
 CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供日常問答、文件整理、專案副本修訂與 Classic Outlook 郵件分析。
 
-**目前 EXE／NSIS：0.8.73** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
+**目前 EXE／NSIS：0.8.74** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
 
 ## 下載與開始使用
 
-1. [下載 0.8.72 完整 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從系統托盤選「離開」，再以一般權限安裝至 `C:\largan\LM_AI`；Python 會放在旁邊的 `python` 子目錄。驗證範圍請見該版驗證紀錄；公司服務與真實 CAD 圖面仍需公司實機確認。
+1. [下載 0.8.74 完整 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從系統托盤選「離開」，再以一般權限安裝至 `C:\largan\LM_AI`；Python 會放在旁邊的 `python` 子目錄。驗證範圍請見[本版紀錄](docs/VALIDATION_0_8_74.md)；公司服務與真實 CAD 圖面仍需公司實機確認。
 2. 開啟程式，按「登入」，在瀏覽器核對短碼並允許授權。
 3. 選擇模型後開始對話；需要讀取或修改資料夾內的文件時，先建立「專案」。
 
 執行需要 WebView2 Runtime，不需安裝 Rust、Node 或 Python。若啟動時提示缺少 WebView2，請依 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md) 處理。正式功能需要公司服務連線與桌面帳號權限。
 
-目前交付的 EXE 與 NSIS 都是 **0.8.72**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
+目前交付的 EXE 與 NSIS 都是 **0.8.74**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
 
 ## 可以做什麼
 
@@ -40,6 +41,9 @@ CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供�
 | 執行中傳送 | 主輸入框選下一輪提示、停止後新任務或完成後新任務；待送訊息可取消。 |
 | 本地 CSV 畫圖 | Excel／LOG 批次保存 CSV，對話只帶首尾預覽，直接引用檔案作圖及更正欄位。 |
 | 主動整理上下文 | 保存交接筆記與失效結論，移出舊工具原文，完整紀錄按需查回。 |
+| 累積閱讀筆記 | 實際區段與來源版本綁定，跨壓縮保留；概要先看README與目錄，缺細節再定向補讀。 |
+| 成果與流程 | 跨對話成果、版本／來源變更提示、ZIP交付；保存參數化流程並逐步重跑。 |
+| 報告數值綁定 | Python同次結果填入Word／Excel指定欄位，交付前檢查來源與綁定數字。 |
 | 即時進度筆記 | 執行時顯示工作摘要，結束後收進工具紀錄，保持最終答案清楚。 |
 | 長任務與專案記憶 | 每段最長 24 小時，工作筆記、加密 checkpoint、工具計數與原始結果按需回讀。 |
 | Outlook 助理與專案 | 本機勾選可用資料夾，最多1000封前文比對、AI最多50封，優先最新信與必要補讀，專案快速入口可整理待辦、回覆與追蹤事項，也可接續生成週報。 |

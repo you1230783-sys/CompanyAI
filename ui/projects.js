@@ -252,11 +252,12 @@
     diagnosticsRequest = {conversation, run_id:runId, index, view_request:++diagnosticsSequence};
     $("project-diagnostics-text").value = "正在讀取本機紀錄…";
     $("project-token-text").value = "";
+    $("project-token-short-text").value = "";
     if (!$("project-diagnostics-dialog").open) $("project-diagnostics-dialog").showModal();
     command({action:"diagnostics", ...diagnosticsRequest});
   }
   $("project-diagnostics-close").onclick = () => $("project-diagnostics-dialog").close();
-  $("project-diagnostics-dialog").addEventListener("close", () => { diagnosticsRequest = null; $("project-diagnostics-text").value = ""; $("project-token-text").value = ""; $("project-diagnostics-round").replaceChildren(); });
+  $("project-diagnostics-dialog").addEventListener("close", () => { diagnosticsRequest = null; $("project-diagnostics-text").value = ""; $("project-token-text").value = ""; $("project-token-short-text").value = ""; $("project-diagnostics-round").replaceChildren(); });
   $("project-diagnostics-round").onchange=()=>{if(diagnosticsRequest)openDiagnostics(diagnosticsRequest.conversation,diagnosticsRequest.run_id,Number($("project-diagnostics-round").value));};
   // 重新整理維持已選回合；只有「查看最新」會主動跳到尾端。
   $("project-diagnostics-refresh").onclick = () => { if (diagnosticsRequest) openDiagnostics(diagnosticsRequest.conversation, diagnosticsRequest.run_id, diagnosticsRequest.index); };
@@ -266,6 +267,7 @@
     if(diagnosticsRequest && next>=0 && next<select.options.length) openDiagnostics(diagnosticsRequest.conversation,diagnosticsRequest.run_id,Number(select.options[next].value));
   };
   $("project-diagnostics-copy").onclick = () => {if(diagnosticsRequest)command({action:"diagnostics",...diagnosticsRequest,copy:false});};
+  $("project-token-short-copy").onclick = () => {if(diagnosticsRequest)command({action:"diagnostics",...diagnosticsRequest,copy:true,short_usage:true});};
   $("project-diagnostics-open").onclick = () => {
     const runId = $("project-diagnostics-run").value;
     if (!runId) return;
@@ -348,14 +350,14 @@
         if (diagnosticsRequest && $("project-diagnostics-dialog").open && message.conversation === state.active_id &&
             message.conversation === diagnosticsRequest.conversation && message.run_id === diagnosticsRequest.run_id &&
             message.view_request === diagnosticsRequest.view_request) {
-          try { const reports=JSON.parse(message.text); if(diagnosticsRequest.index!=null && reports.selected!==diagnosticsRequest.index)return; $("project-diagnostics-text").value=reports.trace; $("project-token-text").value=reports.tokens;
+          try { const reports=JSON.parse(message.text); if(diagnosticsRequest.index!=null && reports.selected!==diagnosticsRequest.index)return; $("project-diagnostics-text").value=reports.trace; $("project-token-text").value=reports.tokens; $("project-token-short-text").value=reports.tokens_short || "此紀錄尚無簡短用量。";
             const select=$("project-diagnostics-round");select.replaceChildren();
             for(const round of reports.rounds||[]){const option=document.createElement("option");option.value=round.index;option.textContent=`第 ${Number(round.turn)||round.index+1} 輪（紀錄 ${round.index+1}）`;select.append(option);}
             select.value=reports.selected;select.disabled=!(reports.rounds||[]).length;
             diagnosticsRequest.index=reports.selected;
             $("project-diagnostics-prev").disabled=select.selectedIndex<=0;
             $("project-diagnostics-next").disabled=select.selectedIndex<0 || select.selectedIndex>=select.options.length-1; }
-          catch { $("project-diagnostics-text").value=message.text; $("project-token-text").value="此紀錄沒有獨立用量統計。"; }
+          catch { $("project-diagnostics-text").value=message.text; $("project-token-text").value="此紀錄沒有獨立用量統計。"; $("project-token-short-text").value="此紀錄沒有獨立用量統計。"; }
         }
         return;
       }

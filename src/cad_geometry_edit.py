@@ -433,6 +433,7 @@ def execute(app, doc, legacy, request, report, api, entities, before, output, gu
             row['handle'] = handles[index]
             expected[handles[index]] = row
         def verify(target):
+            from cad_existing import comparison
             actual, actual_rows = snapshot(target,api)
             described = {row['handle']:row for row in actual_rows}
             ensure(set(actual)==set(expected), '幾何修改後Handle集合不符，不能宣稱完成')
@@ -450,7 +451,7 @@ def execute(app, doc, legacy, request, report, api, entities, before, output, gu
                            and all(api.equal(a,b) for a,b in zip(observed['vertices'],expected_geometry['vertices'])), '多段線修改後頂點核對失敗')
                 if handle in rows and handle not in modified and rows[handle].get('native_revision'):
                     ensure(described[handle].get('native_revision') == rows[handle]['native_revision'], '未指定圖元的原生資料改變：'+handle)
-            return dict(handles_verified=len(actual),available_properties_verified=True,
+            return dict(handles_verified=len(actual),available_properties_verified=True,comparison=comparison(before,actual_rows),
                         unavailable_properties_not_verified=True,geometry_actions_verified=len(plans))
         report['step']='verify_before_save'
         check_document()

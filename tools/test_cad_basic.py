@@ -17,6 +17,30 @@ from unittest.mock import patch
 
 
 class BasicTests(unittest.TestCase):
+    def test_comparison_uses_actual_snapshots_and_marks_unlinked_annotation(self):
+        import cad_existing
+        before = [{'handle': 'A', 'kind': 'circle', 'properties': {'Radius': 30, 'Center': [0, 0, 0]}},
+                  {'handle': 'D', 'kind': 'dimension', 'properties': {'Measurement': 60, 'TextOverride': '60'}}]
+        after = [{'handle': 'A', 'kind': 'circle', 'properties': {'Radius': 40, 'Center': [5, 0, 0]}},
+                 {'handle': 'D', 'kind': 'dimension', 'properties': {'Measurement': 60, 'TextOverride': '60'}},
+                 {'handle': 'B', 'kind': 'line', 'properties': {'StartPoint': [0, 0, 0], 'EndPoint': [10, 0, 0]}}]
+        result = cad_existing.comparison(before, after)
+        self.assertTrue(result['complete'])
+        self.assertEqual(result['changed'][0]['measurements'], {'before_diameter': 60, 'after_diameter': 80})
+        self.assertEqual(result['added'][0]['handle'], 'B')
+        self.assertEqual(result['annotation_checks'][0]['geometry_consistency'], 'unverified')
+        self.assertIn('固定標註文字', result['annotation_checks'][0]['warning'])
+        self.assertEqual(before[0]['properties']['Radius'], 30)
+
+    def test_comparison_does_not_call_own_dimension_measurement_a_geometry_link(self):
+        import cad_existing
+        dimension = {'handle': 'D', 'kind': 'dimension', 'properties': {
+            'DiameterStart': [0, 0, 0], 'DiameterEnd': [10, 0, 0], 'Measurement': 10}}
+        result = cad_existing.comparison([], [dimension])
+        check = result['annotation_checks'][0]
+        self.assertTrue(check['own_endpoints_match_measurement'])
+        self.assertEqual(check['geometry_consistency'], 'unverified')
+
     def test_legacy_annotation_plan_splits_text_and_scales_real_endpoints(self):
         rows = {'A':dict(kind='mtext',native_text='舊孔%%c12',properties={'TextString':'舊孔%%c12'}),
                 'B':dict(kind='dimension',properties={'DiameterStart':[-30.,0.,0.],

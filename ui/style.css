@@ -1448,7 +1448,7 @@ body.collapsed .project-section { overflow: visible; }
 .project-activity-history { margin: 0; padding: 0 18px 12px 36px; max-height: 260px; overflow-y: auto; overflow-anchor: none; color: var(--muted); }
 .project-activity-history li { padding: 3px 0; white-space: pre-wrap; }
 #project-diagnostics-dialog { width: min(960px, 92vw); }
-#project-diagnostics-text, #project-token-text { box-sizing: border-box; width: 100%; height: min(24vh, 240px); min-height: 120px; max-height: none; padding: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); resize: vertical; font-family: Consolas, monospace; white-space: pre-wrap; }
+#project-diagnostics-text, #project-token-text, #project-token-short-text { box-sizing: border-box; width: 100%; height: min(24vh, 240px); min-height: 120px; max-height: none; padding: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); resize: vertical; font-family: Consolas, monospace; white-space: pre-wrap; }
 #project-activity { margin: 12px auto; max-width: 880px; }
 .notification-card .event-content { min-width: 0; overflow-wrap: anywhere; }
 .message-tools .retry-message { font-size: inherit; }
@@ -1650,3 +1650,10 @@ dialog button.icon-button { padding:6px; }
 .mermaid-card:fullscreen .mermaid-toolbar { position: sticky; top: 0; z-index: 1; flex-shrink: 0; background: var(--surface); padding: 6px 0; }
 .mermaid-card:fullscreen .mermaid-viewport { flex: 1 1 auto; min-height: 80px; max-height: none; }
 .mermaid-card:fullscreen details { flex-shrink: 0; max-height: 25vh; overflow: auto; }
+/* 成果中心與來源預覽沿用原生對話框，長路徑及差異資料可獨立捲動。 */
+#project-artifact-dialog, #diagram-source-dialog { width: min(960px, 92vw); max-height: 86vh; overflow: auto; }
+#project-artifact-list section { padding: 10px 0; border-bottom: 1px solid var(--border, #ccc); overflow-wrap: anywhere; }
+#project-artifact-list pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* 來源不是聊天輸入框，避免全域textarea高度把二十行原文壓成兩行。 */
+#diagram-source-text { width: 100%; box-sizing: border-box; height: min(48vh, 480px); min-height: 180px; max-height: none; padding: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); resize: vertical; font-family: Consolas, monospace; white-space: pre; }
+#diagram-source-location { overflow-wrap: anywhere; }

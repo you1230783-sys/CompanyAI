@@ -197,7 +197,8 @@ impl Broker {
         let skill_loaded = self.loaded_skills.iter().any(|id| id == "mermaid");
         let describe = |message: Option<usize>, index: usize, diagram: &Diagram| {
             json!({"message_index":message,"diagram_index":index,"name":diagram.name,
-                "path":diagram.path,"revision":diagram.revision,"based_on":diagram.based_on})
+                "path":diagram.path,"revision":diagram.revision,"based_on":diagram.based_on,
+                "linked_nodes":diagram.node_sources.iter().map(|origin|&origin.node_id).collect::<Vec<_>>()})
         };
         let mut revisions = BTreeSet::new();
         let mut recent: Vec<_> = self
@@ -261,6 +262,23 @@ impl Broker {
         let sources: Vec<_> = self
             .diagram_sources
             .iter()
+            // 已保存可用筆記的區段不再常駐重送原文；確切細節仍可依來源操作查回。
+            // 舊checkpoint未啟用筆記時保留原有快照行為。
+            .filter(|source| {
+                !self.reading.enabled
+                    || !self.reading.notes.values().any(|note| {
+                        note.source.path.eq_ignore_ascii_case(&source.path)
+                            && note.source.revision == source.revision
+                            && note
+                                .source
+                                .first_line
+                                .is_some_and(|first| first <= source.first_line)
+                            && note
+                                .source
+                                .last_line
+                                .is_some_and(|last| last >= source.last_line)
+                    })
+            })
             .map(|source| {
                 let mut row = json!(source);
                 let numbered: String = source
@@ -469,6 +487,7 @@ impl Broker {
             revision: text::revision(source),
             path,
             based_on: based_on.map(str::to_owned),
+            node_sources: Vec::new(),
         };
         diagram.validate()?;
         self.diagrams.push(diagram.clone());
@@ -522,6 +541,7 @@ mod tests {
             revision: text::revision(source),
             path: "_AI_Output/fixture/流程.mmd".into(),
             based_on: None,
+            node_sources: Vec::new(),
         };
         let messages: Vec<_> = (0..10)
             .map(|index| {

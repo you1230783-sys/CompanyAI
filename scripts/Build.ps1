@@ -1,8 +1,8 @@
 [CmdletBinding()]
-param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$BasicValidation, [switch]$TestVnc, [switch]$TestOffice, [string]$NetworkTestRoot)
+param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$BasicValidation, [switch]$TestVnc, [switch]$TestOffice, [switch]$TestCadComparison, [string]$NetworkTestRoot)
 $ErrorActionPreference = 'Stop'
 if ($ValidateOnly -and $IncludeInstaller) { throw 'ValidateOnly cannot be combined with IncludeInstaller.' }
-if ($BasicValidation -and ($TestOffice -or $TestVnc -or $NetworkTestRoot)) { throw 'BasicValidation cannot be combined with full Office, VNC or network checks.' }
+if ($BasicValidation -and ($TestOffice -or $TestCadComparison -or $TestVnc -or $NetworkTestRoot)) { throw 'BasicValidation cannot be combined with full Office, CAD, VNC or network checks.' }
 # 統一載入 v142 與指定 SDK，讓手動執行及未來網頁呼叫使用相同編譯環境。
 . (Join-Path $PSScriptRoot 'Enter-DevShell.ps1')
 # 空快取驗證直接讀取專案 vendor，不依賴開發機已有的 registry 下載。
@@ -230,6 +230,21 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         $imageProbe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\office_images.exe'
         & $imageProbe $exe (Join-Path $projectRoot ('.build\office-images-' + [guid]::NewGuid().ToString('N')))
         if ($LASTEXITCODE -ne 0) { throw 'Office PNG embed/save/reopen verification failed.' }
+        # 計算結果必須由同一登記表填入Word／Excel及圖表，並拒絕被修改的來源或欄位。
+        & cargo build --example delivery_smoke --frozen
+        if ($LASTEXITCODE -ne 0) { throw 'Bound report values harness build failed.' }
+        $deliveryProbe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\delivery_smoke.exe'
+        & $deliveryProbe $exe (Join-Path $projectRoot ('.build\delivery-smoke-' + [guid]::NewGuid().ToString('N')))
+        if ($LASTEXITCODE -ne 0) { throw 'Bound values, workflow rerun and artifact export verification failed.' }
+    }
+    if ($TestCadComparison) {
+        # 僅新建獨立圖面：核對兩版CAD的實際差異與固定尺寸文字警告。
+        & cargo build --example cad_comparison_smoke --frozen
+        if ($LASTEXITCODE -ne 0) { throw 'CAD comparison harness build failed.' }
+        $comparisonProbe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\cad_comparison_smoke.exe'
+        & (Join-Path $PSScriptRoot 'Stage-Cad.ps1') -ExecutableDirectory (Split-Path $comparisonProbe -Parent)
+        & $comparisonProbe $exe (Join-Path $projectRoot ('.build\cad-comparison-' + [guid]::NewGuid().ToString('N')))
+        if ($LASTEXITCODE -ne 0) { throw 'Native CAD comparison/report verification failed.' }
     }
     if ($NetworkTestRoot) {
         & (Join-Path $PSScriptRoot 'Test-Network.ps1') -Exe $exe -TestRoot $NetworkTestRoot
@@ -341,6 +356,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         installer_built = [bool]$IncludeInstaller
         real_vnc_tested = [bool]$TestVnc
         real_office_tested = [bool]$TestOffice
+        real_cad_comparison_tested = [bool]$TestCadComparison
         real_loopback_smb_tested = [bool]$NetworkTestRoot
         offline_zip_built = $false
     } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $projectRoot 'offline\exe-verification.json') -Encoding UTF8

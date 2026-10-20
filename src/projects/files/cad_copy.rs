@@ -343,7 +343,7 @@ impl Broker {
             "error":result["error"].as_str().map(|s|s.chars().take(4096).collect::<String>()),
             "source":path,"source_revision":revision,"intended_path":copy.relative,
             "path":result["path"],"saved":result["saved"],"drawing_started":result["drawing_started"],
-            "recovery":result["recovery"],"before_save":result["before_save"],"after_reopen":result["after_reopen"],
+            "recovery":result["recovery"],"before_save":super::cad_comparison::project_verification(&result["before_save"]),"after_reopen":super::cad_comparison::project_verification(&result["after_reopen"]),
             "modified_handles":result["modified_handles"],"added_handles":result["added_handles"],
             "report_path":copy.report.strip_prefix(&self.project.root).ok().map(|p|p.to_string_lossy()),
             "verification_scope":"原生核對實際提交的修改與未指定圖元，不代表使用者規格或外觀已全部通過。",

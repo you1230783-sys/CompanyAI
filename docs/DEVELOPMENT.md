@@ -1,3 +1,19 @@
+## 0.8.74 維護位置與驗證入口
+
+| 功能 | 主要位置 |
+| --- | --- |
+| 累積閱讀筆記、目錄索引、精確補讀與checkpoint | `src/projects/reading.rs`、`files.rs`、`files/batch.rs`、`runner.rs` |
+| 實際用量簡短投影 | `src/projects/diagnostics.rs`、`src/ui/projects.rs`、`ui/projects.js` |
+| Python值登記與Office／CSV綁定 | `src/projects/report_values.rs`、`files/report_values.rs` |
+| 參數化流程與原生逐步執行 | `src/projects/workflows.rs`、`files/workflows.rs`、`memory.rs` |
+| 成果索引、來源核對與ZIP | `src/projects/artifacts.rs`、`src/ui/projects/artifacts.rs`、`ui/artifacts.js` |
+| 圖形節點來源與唯讀預覽 | `src/projects/diagram_sources.rs`、`files/diagram_sources.rs`、`src/ui/projects/diagrams.rs`、`ui/diagrams.js` |
+| CAD前後差異與報告 | `src/cad_existing.py`、`src/cad_geometry_edit.py`、`src/projects/files/cad_comparison.rs` |
+
+本版完整發行命令為`Build.ps1 -EmptyCargoCache -IncludeInstaller -TestOffice -TestCadComparison`。必須以v142 x64實際編譯器探針核對，沿用Cargo.lock、vendor及`--frozen`。Office選項需要已安裝Office；CAD比較選項需要本機2008及2022，只建立獨立新圖與副本，不改使用者原圖，缺少環境就回報未完成。
+
+`examples/reading_smoke.rs`使用已下載公開C++專案核對八段預算及精確補讀；`delivery_smoke.rs`驗證真Python→Word／Excel／圖表、流程範本新資料重跑及成果ZIP；`cad_comparison_smoke.rs`驗證雙版CAD保存重開及差異報告。這些是固定參數的原生驗證，與真正Luna／Strata的原始參數、輪數、失敗及圖形語意分開。結果見[0.8.74驗證](VALIDATION_0_8_74.md)。
+
 ## 0.8.73 維護位置
 
 - 介面偏好：`src/config.rs` 保存字型、介面比例與縮小行為；`src/ui/window_behavior.rs` 管理工作列／托盤，`src/webview.rs` 設定原生縮放。三份開源字型的版本、雜湊與授權位於 `ui/fonts/`；微軟正黑體只引用 Windows 系統字型。

@@ -14,11 +14,37 @@ pub struct Diagram {
     pub revision: String,
     pub path: String,
     pub based_on: Option<String>,
+    #[serde(default)]
+    pub node_sources: Vec<super::diagram_sources::Origin>,
 }
 
 impl Diagram {
     /// 加密歷史與 checkpoint 還原時也核對原始碼，不信任舊的版本標籤。
     pub fn validate(&self) -> AppResult<()> {
+        if self.node_sources.len() > 80
+            || self
+                .node_sources
+                .iter()
+                .map(|n| n.excerpt.len())
+                .sum::<usize>()
+                > 64000
+        {
+            return Err("圖形來源超過80節點或64KB摘錄。".into());
+        }
+        for origin in &self.node_sources {
+            super::files::relative(&origin.path)?;
+            if origin.node_id.is_empty()
+                || origin.node_id.len() > 80
+                || !origin
+                    .node_id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
+                || origin.source_sha256.len() != 64
+                || !origin.source_sha256.bytes().all(|b| b.is_ascii_hexdigit())
+            {
+                return Err("圖形來源節點或版本無效。".into());
+            }
+        }
         validate_source(&self.source)?;
         validate_name(&self.name)?;
         if self.revision != super::text::revision(&self.source) {

@@ -296,6 +296,7 @@ impl Coverage {
                 "Python 的來源範圍與計算結果未新增；請調整分析或使用已有結果。"
             }
             Tool::CompactContext { .. }
+            | Tool::RecordReadingNotes { .. }
             | Tool::RecordAnalysis { .. }
             | Tool::RecordLogEvents { .. }
             | Tool::CreateNote { .. }

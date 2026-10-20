@@ -17,3 +17,4 @@
 cad_session是程式維護的執行事實，優先於舊筆記。stopped=true或unsupported_capability時finish回報實際失敗步驟與是否已修改，不重讀、不換CAD、不改副本、不重畫。editable_session=false直接回報identity_reason。純ZOOM E/A不要求Undo群組，其餘修改需要通過驗證的Undo方法。
 
 進度筆記只記新進展，ID及精確資料已有常駐狀態，不反覆抄寫；最後答案只說工具已核對的數值。cad_active_read保留舊分頁相容入口，新任務使用快照查詢。
+修改結果有comparison_available時，用export_cad_comparison(source_operation=實際修改操作ID,name="修改比較.txt")輸出TXT／JSON。列出實際差異及固定尺寸文字警告；未建立關聯的尺寸／引線仍未驗證，不猜與圓／孔一致。此工具不儲存目前DWG；報告失敗不重做修改。

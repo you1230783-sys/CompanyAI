@@ -426,9 +426,13 @@ impl Session {
                     let range = child(&item(&paragraphs, i)?, "Range")?;
                     let raw = string(&get(&range, "Text")?)?;
                     let content = raw.trim_end_matches(['\r', '\u{7}']);
-                    // 只縮短尾端標記，不取代整個段落容器；保留表格結構。
-                    let end = integer(&range, "End")?
-                        - raw[content.len()..].encode_utf16().count() as i32;
+                    // Word表格空白格的文字含 CR／儲存格結束標記，但Range座標不一定
+                    // 逐字對應這些標記。End若減到Start之前，COM會連帶把Start移往前格，
+                    // 後續插入便修改錯格。只裁掉尾標記，最短保留在原Start的空範圍。
+                    let start = integer(&range, "Start")?;
+                    let end = (integer(&range, "End")?
+                        - raw[content.len()..].encode_utf16().count() as i32)
+                        .max(start);
                     set(&range, "End", end.into())?;
                     let plain = integer(&child(&range, "Fields")?, "Count")? == 0
                         && integer(&child(&range, "InlineShapes")?, "Count")? == 0;

@@ -19,6 +19,29 @@ pub(super) fn system_prompt() -> AppResult<String> {
 pub(super) fn system_prompt_for(model: &str) -> AppResult<String> {
     let mut definitions: Value =
         serde_json::from_str(DEFINITIONS).map_err(|_| "內建專案工具定義無法解析，已停止。")?;
+    // 文字協定只延續舊checkpoint，不公告本版新增的原生工具，避免重複大型
+    // 參數結構突破64KB。完整目錄仍供原生Schema與共同解析／執行驗證使用。
+    if let Some(tools) = definitions["tools"].as_array_mut() {
+        tools.retain(|t| {
+            !matches!(
+                t["function"]["name"].as_str(),
+                Some(
+                    "record_reading_notes"
+                        | "read_reading_notes"
+                        | "register_report_values"
+                        | "apply_report_values"
+                        | "export_report_values"
+                        | "save_workflow"
+                        | "list_workflows"
+                        | "read_workflow"
+                        | "prepare_workflow"
+                        | "execute_workflow_step"
+                        | "link_diagram_sources"
+                        | "export_cad_comparison"
+                )
+            )
+        });
+    }
     if !super::vision::input::model_supported(model) {
         if let Some(tools) = definitions["tools"].as_array_mut() {
             tools.retain(|tool| tool["function"]["name"] != "analyze_image");
@@ -738,6 +761,18 @@ mod tests {
             ("cad_plan_part",json!({"plan_id":"plan-1","plan_revision":0,"part_id":"walls","summary":"牆","operations":[{"kind":"line","color":7,"start":[0,0],"end":[10,0]}]})),
             ("cad_plan_inspect",json!({"plan_id":"plan-1","part_id":null})),
             ("cad_plan_commit",json!({"plan_id":"plan-1","plan_revision":1})),
+            ("record_reading_notes",json!({"notes":[{"operation_id":"read-1","summary":"入口處理初始化","relationships":"呼叫設定函式","open_questions":""}]})),
+            ("read_reading_notes",json!({"path":null,"offset":0,"source_operation":null,"reason":null})),
+            ("register_report_values",json!({"values":[{"id":"mean","operation_id":"calc","pointer":"/summary/mean","decimals":2,"unit":"mm"}]})),
+            ("apply_report_values",json!({"copy_id":"copy","revision":"r","assignments":[{"metric_id":"mean","block_id":"p1"}]})),
+            ("export_report_values",json!({"name":"計算值.csv","metric_ids":["mean"]})),
+            ("save_workflow",json!({"name":"統計報告","steps":[{"step_id":"calc","operation_id":"calc-op","bindings_json":"{}"}]})),
+            ("list_workflows",json!({})),
+            ("read_workflow",json!({"workflow_id":"flow","offset":0})),
+            ("prepare_workflow",json!({"workflow_id":"flow","parameters_json":"{}"})),
+            ("execute_workflow_step",json!({"execution_id":"run","step_index":0})),
+            ("link_diagram_sources",json!({"diagram_index":0,"revision":"r","nodes":[{"node_id":"A","operation_id":"read-1","first_line":1,"last_line":5,"block_id":null,"detail_diagram_index":null}]})),
+            ("export_cad_comparison",json!({"source_operation":"cad-edit","name":"修改比較.txt"})),
         ]);
         let definitions: Value = serde_json::from_str(DEFINITIONS).unwrap();
         assert_eq!(

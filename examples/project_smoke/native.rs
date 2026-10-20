@@ -92,9 +92,45 @@ pub(super) fn last_result(body: &Value) -> Value {
         .unwrap()
         .iter()
         .rev()
-        .find(|m| m["role"] == "tool")
+        .filter(|m| m["role"] == "tool")
         .map(|m| serde_json::from_str(m["content"].as_str().unwrap()).unwrap())
+        // 固定參數案例的步驟追蹤以原動作為準；閱讀筆記另由下方契約回合保存。
+        .find(|value: &Value| {
+            !(value["result"]["saved"].is_u64() && value["result"]["pending"].is_array())
+        })
         .unwrap_or(Value::Null)
+}
+
+/// 合成模型也遵守新增的閱讀筆記契約，不關閉產品閘門來讓舊測試通過。
+/// 此固定筆記只核對原生往返，不能用來判定真模型的理解品質。
+fn reading_context(body: &Value) -> Option<Value> {
+    body["messages"]
+        .as_array()?
+        .iter()
+        .rev()
+        .filter_map(|message| message["content"].as_str())
+        .find_map(|text| text.strip_prefix("累積閱讀成果（來源由程式核對，摘要是模型判斷）："))
+        .and_then(|text| serde_json::from_str(text).ok())
+}
+
+pub(super) fn reading_note_message(body: &Value) -> Option<Value> {
+    if body["model"] == "fast" {
+        return None;
+    }
+    let context = reading_context(body)?;
+    let pending = context["pending"].as_array()?;
+    if pending.is_empty() {
+        return None;
+    }
+    let notes: Vec<_> = pending
+        .iter()
+        .map(|source| {
+            json!({"operation_id":source["operation_id"],
+        "summary":"原生傳輸測試來源區段已取得；本例不判定模型語意品質。",
+        "relationships":"依測試案例原有步驟繼續副本操作，原件唯讀。","open_questions":""})
+        })
+        .collect();
+    Some(call(body, "record_reading_notes", json!({"notes":notes})))
 }
 
 /// 0 正常；1 非 strict 格式修復；2 原 POST 回覆遺失＋暫停續接；3 截斷不執行；
@@ -191,8 +227,10 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
     };
     let held = Arc::new(std::sync::Mutex::new(held));
     let file_prompts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let server = std::thread::spawn(move || -> AppResult<(usize, usize)> {
+    let server = std::thread::spawn(move || -> AppResult<(usize, usize, usize)> {
         let mut posts = 0;
+        let mut transport_posts = 0;
+        let mut previous_action = Value::Null;
         let mut dataset = Value::Null;
         let mut before_csv_bytes = 0usize;
         let mut old_operation = String::new();
@@ -233,7 +271,13 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
             } else if route.ends_with("/models") {
                 json!({"models":[{"id":"quality","label":"品質"},{"id":"fast","label":"快速"}],"default_model":"quality"})
             } else if route.ends_with("/agent/turns") {
-                posts += 1;
+                transport_posts += 1;
+                let note_message = reading_note_message(&body);
+                let saving_notes = note_message.is_some();
+                // 保留原案例的邏輯步驟編號；筆記仍是真實獨立HTTP往返與唯一請求。
+                if !saving_notes {
+                    posts += 1;
+                }
                 assert_eq!(body["contract_version"], "desktop-agent-v1");
                 assert_eq!(body["skills"], false);
                 assert_eq!(body["context"]["context_policy"], "client_snapshot");
@@ -257,14 +301,20 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                         );
                     }
                 }
-                if posts == 1 {
+                if posts == 1 && !saving_notes {
                     assert_eq!(
                         body["tools"].as_array().unwrap().len(),
-                        15,
-                        "首次提供基本閱讀、程式碼搜尋／分段閱讀、按需圖片、技能手冊、工作階段、並行批次與可選問題"
+                        18,
+                        "首次提供基本閱讀、累積筆記、流程步驟、程式搜尋、圖片、技能、並行批次與可選問題"
                     );
                     // 程式碼唯讀工具已移入基本工具；不必先載入 Python 編輯技能。
-                    for name in ["find_text", "read_code_section"] {
+                    for name in [
+                        "find_text",
+                        "read_code_section",
+                        "record_reading_notes",
+                        "read_reading_notes",
+                        "execute_workflow_step",
+                    ] {
                         assert!(body["tools"]
                             .as_array()
                             .unwrap()
@@ -292,21 +342,28 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                         body["messages"][0]["content"].as_str().unwrap().len()
                     );
                 }
-                let previous = last_result(&body);
-                if matches!(case, 18 | 19) && posts == 2 {
-                    let state = messages
+                // 固定案例自行保存步驟狀態，不要求產品把所有舊工具原文一直重送。
+                // 真模型的摘要／理解品質由另行公開專案案例驗收。
+                let delivered = last_result(&body);
+                if !delivered.is_null() {
+                    previous_action = delivered;
+                }
+                let previous = previous_action.clone();
+                if matches!(case, 18 | 19) && posts == 2 && !saving_notes {
+                    let context = reading_context(&body).ok_or("缺少累積閱讀狀態。")?;
+                    // 第一份來源的操作ID取自累積筆記，最新操作可能已是保存筆記。
+                    copy = context["notes"]
+                        .as_array()
+                        .ok_or("缺少累積閱讀筆記。")?
                         .iter()
-                        .filter_map(|m| m["content"].as_str())
-                        .find(|t| t.starts_with("本機續接資料"))
-                        .unwrap();
-                    let state: Value = serde_json::from_str(state.split_once('\n').unwrap().1)
-                        .map_err(|e| e.to_string())?;
-                    copy = state["recent_operations"][0]["id"]
-                        .as_str()
-                        .unwrap()
+                        .find(|note| note["source"]["path"] == "part1.txt")
+                        .and_then(|note| note["source"]["operation_id"].as_str())
+                        .ok_or("第一份來源操作未保存。")?
                         .to_owned();
                 }
-                let mut message = if body["model"] == "fast" {
+                let mut message = if let Some(message) = note_message {
+                    message
+                } else if body["model"] == "fast" {
                     fast += 1;
                     assert_eq!(body["tools"], json!([]));
                     assert_eq!(body["tool_choice"], "none");
@@ -416,8 +473,17 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     match posts {
                         1 => call(&body, "read_file", json!({"path":"source.txt","offset":0})),
                         2 => {
-                            old_operation =
-                                state["recent_operations"][0]["id"].as_str().unwrap().into();
+                            old_operation = reading_context(&body).ok_or("缺少累積閱讀狀態。")?
+                                ["notes"]
+                                .as_array()
+                                .and_then(|notes| {
+                                    notes
+                                        .iter()
+                                        .find(|note| note["source"]["path"] == "source.txt")
+                                })
+                                .and_then(|note| note["source"]["operation_id"].as_str())
+                                .ok_or("來源文字操作未保存。")?
+                                .into();
                             call(&body, "load_skill", json!({"id":"dataset-charts"}))
                         }
                         3 => call(
@@ -778,7 +844,11 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                 } else {
                     "tool_calls"
                 };
-                let task_id = format!("task_{posts}");
+                let task_id = if saving_notes {
+                    format!("notes_{}", body["context"]["turn_index"])
+                } else {
+                    format!("task_{posts}")
+                };
                 let mut completed = json!({"contract_version":"desktop-agent-v1","task_id":task_id,
                     "client_request_id":body["client_request_id"],"conversation_id":body["conversation_id"],"context":body["context"],
                     "state":"completed","result":{"id":format!("completion_{posts}"),"object":"chat.completion","created":1,"model":body["model"],
@@ -808,7 +878,8 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     completed.clone(),
                 );
                 statuses.insert(task_id, completed.clone());
-                if (case == 2 && posts == 1) || (case == 8 && body["model"] == "fast" && fast == 1)
+                if (case == 2 && posts == 1 && !saving_notes)
+                    || (case == 8 && body["model"] == "fast" && fast == 1)
                 {
                     continue;
                 }
@@ -850,7 +921,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
             let bytes = response.to_string();
             write!(stream,"HTTP/1.1 {http} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{bytes}",bytes.len()).map_err(|e|e.to_string())?;
         }
-        Ok((posts, fast))
+        Ok((posts, fast, transport_posts))
     });
     let session = Session::from_token(
         TokenResponse {
@@ -969,7 +1040,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         );
     }
     stopped.store(true, Ordering::Relaxed);
-    let (posts, fast) = server.join().map_err(|_| "原生測試 server 中斷")??;
+    let (posts, fast, transport_posts) = server.join().map_err(|_| "原生測試 server 中斷")??;
     match case {
         0..=2 => {
             let answer = result?;
@@ -1083,7 +1154,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         original
     );
     println!(
-        "PASS native agent case {case}: {posts} POST, {fast} delegated calls; original preserved."
+        "PASS native agent case {case}: {transport_posts} POST, {posts} fixture steps, {fast} delegated calls; original preserved."
     );
     Ok(())
 }

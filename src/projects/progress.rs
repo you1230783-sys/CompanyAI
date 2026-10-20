@@ -13,19 +13,25 @@ const COMPACT_BYTES: usize = HARD_BYTES * 65 / 100;
 
 /// 交接資料有界且必須包含下一步；摘要不改寫使用者授權。
 pub(super) fn validate_handoff(note: &str, superseded: &[String], next: &str) -> AppResult<()> {
-    if note.trim().is_empty()
-        || note.chars().count() > 2000
-        || next.trim().is_empty()
-        || next.chars().count() > 500
-        || superseded.len() > 12
-        || superseded
-            .iter()
-            .any(|s| s.trim().is_empty() || s.chars().count() > 200)
-    {
-        return Err(
-            "交接需包含 1–2000 字工作筆記、1–500 字下一步，及最多 12 條各 200 字的失效結論。"
-                .into(),
-        );
+    for (field, value, limit) in [("working_note", note, 2000), ("next_step", next, 500)] {
+        let count = value.chars().count();
+        if value.trim().is_empty() || count > limit {
+            return Err(format!("{field}目前{count}字，需1–{limit}字；本次尚未精簡上下文。請將工作筆記大幅縮成100–300字的有效限制、目前階段與下一步，不只微調幾個字；已保存內容不必全部重抄。"));
+        }
+    }
+    if superseded.len() > 12 {
+        return Err(format!(
+            "superseded目前{}條，上限12條；請合併相同的失效結論。",
+            superseded.len()
+        ));
+    }
+    for (index, value) in superseded.iter().enumerate() {
+        let count = value.chars().count();
+        if value.trim().is_empty() || count > 200 {
+            return Err(format!(
+                "superseded[{index}]目前{count}字，需1–200字；只修正此失效結論後重送。"
+            ));
+        }
     }
     Ok(())
 }
@@ -1005,6 +1011,18 @@ mod tests {
         assert_eq!(restored.no_progress, 6);
         assert!(restored.seen_ids.contains("compact"));
         assert!(validate_handoff("", &[], "下一步").is_err());
+    }
+
+    #[test]
+    fn handoff_errors_report_the_exact_field_and_character_count() {
+        let error = validate_handoff(&"中".repeat(2077), &[], "建立流程圖").unwrap_err();
+        assert!(error.contains("working_note目前2077字") && error.contains("100–300字"));
+        assert!(validate_handoff(&"中".repeat(2000), &[], "建立流程圖").is_ok());
+        let error = validate_handoff("已保存閱讀筆記", &[], &"步".repeat(501)).unwrap_err();
+        assert!(error.contains("next_step目前501字"));
+        let error =
+            validate_handoff("已保存閱讀筆記", &["舊".repeat(201)], "建立流程圖").unwrap_err();
+        assert!(error.contains("superseded[0]目前201字"));
     }
     #[test]
     fn correction_retains_verbatim_instruction_and_marks_old_note_for_review() {

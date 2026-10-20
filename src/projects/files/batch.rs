@@ -28,7 +28,6 @@ impl Task {
         {
             return Err(format!("批次子項 {} 的 arguments_json 不得包含 tool／progress_note／mail_note；只保留子工具參數，progress_note 請放在外層 run_batch。", self.task_id));
         }
-        object.insert("tool".into(), json!(self.tool));
         if self.tool.starts_with("cad_")
             || (self.tool == "read_code_section"
                 && ["snapshot_id", "details", "filter"]
@@ -37,6 +36,11 @@ impl Task {
         {
             return Err("run_batch不支援CAD工具。CAD圖元查詢請直接呼叫cad_query，不要把snapshot_id／details等參數包成read_code_section；後者只讀程式文字。".into());
         }
+        arguments = crate::projects::agent::restore_optional(&self.tool, arguments)?;
+        arguments
+            .as_object_mut()
+            .ok_or("批次參數必須為JSON物件。")?
+            .insert("tool".into(), json!(self.tool));
         let request: Tool = serde_json::from_value(arguments)
             .map_err(|e| format!("批次工具參數不符（子項 {}）：{e}", self.task_id))?;
         if !matches!(
@@ -93,6 +97,7 @@ fn pair_map<T: Sync, R: Send>(items: &[T], work: impl Fn(&T) -> R + Sync) -> Vec
 fn compute(
     project: &Project,
     copies: &BTreeMap<String, (String, String, Option<drafts::Draft>)>,
+    reading: &crate::projects::reading::Notebook,
     request: &Tool,
     executable: &Path,
     cancel: &AtomicBool,
@@ -140,6 +145,7 @@ fn compute(
         })));
     }
     let mut broker = Broker::new(project.clone(), crate::jobs::new_id()?)?;
+    broker.reading = reading.clone();
     for (id, (name, text, draft)) in copies {
         broker.copies.insert(
             id.clone(),
@@ -173,8 +179,10 @@ impl Broker {
         executable: &Path,
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
-        if !(2..=4).contains(&tasks.len()) {
-            return Err("run_batch需要2–4項互不依賴的工作。".into());
+        if !(2..=8).contains(&tasks.len()) {
+            return Err(
+                "run_batch需要2–8項；超過4項只允許read_file／read_code_section文字閱讀。".into(),
+            );
         }
         let mut seen = std::collections::BTreeSet::new();
         let requests: Vec<_> = tasks
@@ -189,6 +197,17 @@ impl Broker {
                 task.request()
             })
             .collect::<AppResult<_>>()?;
+        let text_batch = requests
+            .iter()
+            .all(|r| matches!(r, Tool::ReadFile { .. } | Tool::ReadCodeSection { .. }));
+        if tasks.len() > 4 && !text_batch {
+            return Err("只有獨立文字閱讀可一次提交5–8段；其他工具仍最多4項。".into());
+        }
+        let read_budget = if text_batch {
+            16_000 / requests.len()
+        } else {
+            6_000
+        };
         // 所有來源在批次開始時就必須存在；不能讓後一項依賴前一項剛生成的檔案。
         // 每項各自記錄錯誤，某一來源不存在不會取消其他有效工作。
         let preflight: Vec<AppResult<Option<Value>>> = tasks
@@ -260,6 +279,7 @@ impl Broker {
         for (group, jobs) in requests.chunks(2).enumerate() {
             let started = crate::calendar::local_timestamp();
             let project = &self.project;
+            let reading = &self.reading;
             let jobs: Vec<_> = jobs.iter().enumerate().collect();
             let computed = pair_map(&jobs, |(offset, request)| {
                 match &preflight[group * 2 + offset] {
@@ -268,7 +288,7 @@ impl Broker {
                     Ok(None) => (),
                 }
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    compute(project, &copies, request, executable, cancel)
+                    compute(project, &copies, reading, request, executable, cancel)
                 }))
                 .unwrap_or_else(|_| Err("並行工作非預期中止，未提交該項成果。".into()))
             });
@@ -284,7 +304,17 @@ impl Broker {
                 let result = match prepared.and_then(|prepared| {
                     crate::projects::runner::check_cancel(cancel)?;
                     match (prepared, request) {
-                        (Prepared::Read(value), _) => Ok(value),
+                        (Prepared::Read(mut value), _) => {
+                            if matches!(
+                                request,
+                                Tool::ReadFile { .. } | Tool::ReadCodeSection { .. }
+                            ) {
+                                limit_read(&mut value, read_budget)?;
+                                // 批次配額可能再次縮短區段，須以實際交付範圍核對筆記。
+                                self.reading.project_saved_read(&mut value);
+                            }
+                            Ok(value)
+                        }
                         (
                             Prepared::Python { sources, response },
                             Tool::RunPython { purpose, code, .. },
@@ -316,7 +346,7 @@ impl Broker {
             }
         }
         Ok(
-            json!({"execution":"parallel_compute_serial_commit","max_parallel":2,"tasks":results,
+            json!({"execution":"parallel_compute_serial_commit","max_parallel":2,"text_budget_chars":16000,"tasks":results,
             "notice":"每項獨立成功或失敗；成功項目不重做，只另提失敗項目。不能把整批已回傳當作每項均成功。"}),
         )
     }
@@ -378,9 +408,105 @@ impl Broker {
     }
 }
 
+/// 整批正文共用16K字元，程式閱讀按整行縮短，不冒稱原要求範圍已交付。
+/// 所有版本雜湊仍針對完整來源；section_hash只對應實際回傳原文。
+fn limit_read(value: &mut Value, budget: usize) -> AppResult<()> {
+    let Some(text) = value["text"].as_str() else {
+        return Ok(());
+    };
+    if text.chars().count() <= budget {
+        return Ok(());
+    }
+    let code = value["first_line"].as_u64();
+    let text = if code.is_some() {
+        let mut part = String::new();
+        let mut chars = 0;
+        for line in text.split_inclusive('\n') {
+            let count = line.chars().count();
+            if chars + count > budget {
+                break;
+            }
+            chars += count;
+            part.push_str(line);
+        }
+        if part.is_empty() {
+            return Err("單行超過本批正文配額，請減少批次段數再定向閱讀。".into());
+        }
+        part
+    } else {
+        text.chars().take(budget).collect()
+    };
+    let end = value["offset"].as_u64().ok_or("閱讀結果缺少offset。")? + text.chars().count() as u64;
+    value["text"] = json!(text);
+    value["next_offset"] = json!(end);
+    value["truncated"] = json!(true);
+    if let Some(first) = code {
+        let last = first + text.split_inclusive('\n').count() as u64 - 1;
+        value["last_line"] = json!(last);
+        value["next_line"] = json!(last + 1);
+        value["eof"] = json!(false);
+        value["section_hash"] = json!(text::revision(&text));
+        if let (Some(copy), Some(revision)) =
+            (value["copy_id"].as_str(), value["revision"].as_str())
+        {
+            value["section_id"] = json!(super::code_sections::section_id(
+                copy,
+                revision,
+                first as usize,
+                last as usize
+            ));
+        }
+    }
+    value["batch_budget_applied"] = json!(true);
+    Ok(())
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::*;
+    #[test]
+    fn whole_lines_and_actual_copy_reference_survive_batch_budget() {
+        let mut data = json!({"text":"甲乙\n丙丁\n戊己\n","offset":10,"next_offset":19,"total":99,"first_line":4,"last_line":6,"copy_id":"copy","revision":"revision","section_id":"old","section_hash":"old"});
+        limit_read(&mut data, 7).unwrap();
+        assert_eq!(data["text"], "甲乙\n丙丁\n");
+        assert_eq!(data["next_offset"], 16);
+        assert_eq!(data["last_line"], 5);
+        assert_eq!(data["next_line"], 6);
+        assert_eq!(
+            data["section_id"],
+            super::super::code_sections::section_id("copy", "revision", 4, 5)
+        );
+        assert_eq!(data["section_hash"], text::revision("甲乙\n丙丁\n"));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn batch_uses_the_same_optional_defaults_as_single_calls() {
+        let request = Task {
+            task_id: "read".into(),
+            tool: "read_file".into(),
+            arguments_json: r#"{"path":"README.md","offset":null}"#.into(),
+        }
+        .request()
+        .unwrap();
+        assert!(matches!(request, Tool::ReadFile { offset: 0, .. }));
+        // 必填path仍不能為null，未知欄位也不會因還原預設而被忽略。
+        for arguments in [
+            r#"{"path":null,"offset":null}"#,
+            r#"{"path":"README.md","offset":null,"unknown":true}"#,
+        ] {
+            assert!(Task {
+                task_id: "read".into(),
+                tool: "read_file".into(),
+                arguments_json: arguments.into()
+            }
+            .request()
+            .is_err());
+        }
+    }
     #[test]
     fn argument_errors_identify_the_child_and_explain_where_progress_belongs() {
         let error = Task {

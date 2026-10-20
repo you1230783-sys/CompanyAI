@@ -5,6 +5,7 @@ mod analysis;
 pub mod batch;
 mod cad;
 mod cad_active;
+mod cad_comparison;
 mod cad_copy;
 mod cad_design;
 mod cad_excel;
@@ -16,6 +17,7 @@ mod chart_annotations;
 mod chart_preferences;
 mod code_review;
 mod code_sections;
+mod diagram_sources;
 pub mod diagrams;
 mod drafts;
 mod mail_notes;
@@ -24,8 +26,10 @@ pub use output::conversation_folder_name;
 use output::{ensure_output_folder, reserve_external_output, shared_output_folder};
 mod python;
 mod python_edit;
+mod report_values;
 mod review;
 mod source_code;
+mod workflows;
 
 /// 常見程式格式僅供分析結果加上類型提示，不作為文字閱讀權限。
 pub(super) fn is_source_code(path: &Path) -> bool {
@@ -702,7 +706,7 @@ fn pin_named_stage_access(path: &Path, anchor_name: &str, access: u32) -> AppRes
     })
 }
 
-pub(super) fn fingerprint(project: &Project, source: &str) -> AppResult<String> {
+pub(crate) fn fingerprint(project: &Project, source: &str) -> AppResult<String> {
     use sha2::{Digest, Sha256};
     let target = project.root.join(relative(source)?);
     let _pins = pin(target.parent().ok_or("缺少來源資料夾。")?)?;
@@ -838,6 +842,18 @@ struct ChartExport {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(super) struct SavedBroker {
     #[serde(default)]
+    comparison_records: BTreeMap<String, Value>,
+    #[serde(default)]
+    comparison_artifacts: Vec<super::python::Artifact>,
+    #[serde(default)]
+    source_versions: BTreeMap<String, String>,
+    #[serde(default)]
+    workflow: Option<super::workflows::Active>,
+    #[serde(default)]
+    report_values: super::report_values::State,
+    #[serde(default)]
+    reading: super::reading::Notebook,
+    #[serde(default)]
     analysis: super::analysis::State,
     #[serde(default)]
     excel_plans: BTreeMap<String, super::excel_plan::Plan>,
@@ -894,6 +910,12 @@ pub(super) struct SavedBroker {
     cad_previews: BTreeMap<String, Value>,
 }
 pub struct Broker {
+    comparison_records: BTreeMap<String, Value>,
+    comparison_artifacts: Vec<super::python::Artifact>,
+    source_versions: BTreeMap<String, String>,
+    pub(crate) workflow: Option<super::workflows::Active>,
+    pub(crate) report_values: super::report_values::State,
+    pub(crate) reading: super::reading::Notebook,
     model: String,
     task_id: String,
     pub(super) analysis: super::analysis::State,
@@ -955,6 +977,97 @@ pub struct Broker {
     chart_palette: Vec<String>,
 }
 impl Broker {
+    /// 新任務啟用批後閱讀成果契約；舊checkpoint不隱式變更協定。
+    pub fn enable_reading_notes(&mut self) {
+        self.reading.enabled = true;
+    }
+    /// 複本編輯與Office沿用原有驗證；此階段筆記僅涵蓋原件程式／文字閱讀。
+    fn observe_reading(&mut self, id: &str, tool: &Tool, result: &Value) -> AppResult<()> {
+        if let Tool::ListFiles { path, offset } = tool {
+            self.reading.remember_directory(path, *offset, result);
+            return Ok(());
+        }
+        let path = match tool {
+            Tool::ReadCodeSection { path, .. } => path,
+            Tool::ReadFile { path, .. } if plain_text_candidate(Path::new(path)) => path,
+            _ => return Ok(()),
+        };
+        if self.code_copy_id(path).is_some() {
+            return Ok(());
+        }
+        self.reading.observe(id, result)
+    }
+
+    /// 只追蹤原生工具確實讀取的來源，採任務範圍保守關聯，避免猜測單一數字因果。
+    fn observe_source_versions(&mut self, tool: &Tool, result: &Value) {
+        if result["ok"] != true {
+            return;
+        }
+        let mut paths = Vec::new();
+        match tool {
+            Tool::ReadFile { path, .. }
+            | Tool::ReadCodeSection { path, .. }
+            | Tool::ReadExcelRange { path, .. }
+            | Tool::InspectExcel { path, .. }
+            | Tool::ReadDocumentSection { path, .. } => paths.push(path.clone()),
+            Tool::RunPython { inputs, .. } => paths.extend(inputs.iter().map(|s| s.path.clone())),
+            _ => (),
+        }
+        for path in paths {
+            if !self.copies.contains_key(&path) {
+                if let Ok(version) = fingerprint(&self.project, &path) {
+                    self.source_versions.insert(path, version);
+                }
+            }
+        }
+    }
+    pub(crate) fn register_artifacts(&self, paths: &[String]) -> AppResult<()> {
+        if self.output_conversation.is_none() {
+            return Ok(());
+        }
+        let conversation = self.output_conversation.as_deref().unwrap();
+        let mut entries = Vec::new();
+        for path in paths {
+            entries.push(super::artifacts::entry(
+                &self.project,
+                path,
+                &self.task_id,
+                conversation,
+                self.artifact_sources(path),
+                false,
+            )?);
+        }
+        self.memory()?.store_artifacts(&entries)
+    }
+
+    /// 匯出舊圖時沿用該圖原生綁定的來源版本，避免新任務沒有讀檔便遺失追溯。
+    /// 其餘來源仍採本任務的保守集合，不宣稱已證明每一條因果關係。
+    fn artifact_sources(&self, path: &str) -> BTreeMap<String, String> {
+        let mut sources = self.source_versions.clone();
+        let diagram = self.diagrams.iter().find(|d| d.path == path).or_else(|| {
+            let source = self
+                .diagram_exports
+                .iter()
+                .find(|e| e.path == path)?
+                .source
+                .as_ref()?;
+            let diagram = match source.message_index {
+                Some(message) => self
+                    .previous_diagrams
+                    .get(&message)?
+                    .get(source.diagram_index),
+                None => self.diagrams.get(source.diagram_index),
+            }?;
+            (diagram.revision == source.revision).then_some(diagram)
+        });
+        if let Some(diagram) = diagram {
+            for origin in &diagram.node_sources {
+                sources.insert(origin.path.clone(), origin.source_sha256.clone());
+            }
+        }
+        sources
+    }
+
     pub fn new(mut project: Project, task: String) -> AppResult<Self> {
         project.root = super::setup::resolve_project_path(&project.root)?;
         validate_root(&project.root)?;
@@ -982,6 +1095,12 @@ impl Broker {
             output_folder: None,
             copies: BTreeMap::new(),
             results: BTreeMap::new(),
+            reading: super::reading::Notebook::default(),
+            report_values: super::report_values::State::default(),
+            workflow: None,
+            source_versions: BTreeMap::new(),
+            comparison_artifacts: Vec::new(),
+            comparison_records: BTreeMap::new(),
             archived_results: BTreeMap::new(),
             work_log_index: None,
             published: Vec::new(),
@@ -1016,13 +1135,19 @@ impl Broker {
     pub(super) fn saved(&self) -> AppResult<SavedBroker> {
         // 經序列化建立不含程序資源的快照；授權與執行中的 COM 物件不保存。
         serde_json::from_value(
-            json!({"analysis":self.analysis,"mail_notes":self.mail_notes,"mail_draft":self.mail_draft,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
+            json!({"comparison_records":self.comparison_records,"comparison_artifacts":self.comparison_artifacts,"source_versions":self.source_versions,"workflow":self.workflow,"report_values":self.report_values,"reading":self.reading,"analysis":self.analysis,"mail_notes":self.mail_notes,"mail_draft":self.mail_draft,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
             "cad_design":self.cad_design,"cad_copy_version":self.cad_copy_version,
             "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"diagrams":self.diagrams,"diagram_sources":self.diagram_sources,"diagram_exports":self.diagram_exports,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts,"cad_artifacts":self.cad_artifacts,"cad_failed":self.cad_failed,"cad_last_result":self.cad_last_result,"cad_attempts":self.cad_attempts,"cad_partial_plans":self.cad_partial_plans,"cad_reads":self.cad_reads,"cad_previews":self.cad_previews}),
         )
         .map_err(|e| e.to_string())
     }
     pub(super) fn restore(&mut self, state: SavedBroker, cancel: &AtomicBool) -> AppResult<()> {
+        self.reading = state.reading;
+        self.report_values = state.report_values;
+        self.workflow = state.workflow;
+        self.source_versions = state.source_versions;
+        self.comparison_artifacts = state.comparison_artifacts;
+        self.comparison_records = state.comparison_records;
         self.analysis = state.analysis;
         state.mail_notes.validate()?;
         self.mail_notes = state.mail_notes;
@@ -1788,6 +1913,8 @@ impl Broker {
         result: &Value,
     ) -> AppResult<()> {
         self.cached_result(id, tool)?;
+        self.observe_reading(id, tool, result)?;
+        self.observe_source_versions(tool, result);
         if result["ok"] == true {
             self.retain_diagram_read(tool, &result["result"]);
         }
@@ -1885,6 +2012,29 @@ impl Broker {
             }
             return Ok(self.current_cad_result(tool, result.clone()));
         }
+        // 容量守衛必須在真正改圖之前，不能改完才因報告容量不足回報失敗。
+        if matches!(tool, Tool::CadEdit { .. } | Tool::CadActiveEdit { .. })
+            && self.comparison_records.len() >= 20
+        {
+            return Ok(
+                json!({"ok":false,"operation_id":id,"error":"CAD比較已達20批上限，本次尚未修改圖面；請先交付本任務成果。"}),
+            );
+        }
+        if self.reading.enabled
+            && !self.reading.pending.is_empty()
+            && !matches!(
+                tool,
+                Tool::RecordReadingNotes { .. }
+                    | Tool::ReadReadingNotes { .. }
+                    | Tool::LoadSkill { .. }
+                    | Tool::ReadSkillGuide { .. }
+                    | Tool::ReadWorkLog { .. }
+            )
+        {
+            return Ok(
+                json!({"ok":false,"operation_id":id,"error":"上一批閱讀尚未保存成果。先record_reading_notes，逐項引用目前reading.pending的operation_id，保存實際流程／分區／關係／疑問；不可只重述已讀完。"}),
+            );
+        }
         let outcome = loop {
             let result = if let Tool::RunBatch { tasks } = tool {
                 self.run_batch(id, tasks, worker.executable(), cancel)
@@ -1945,7 +2095,16 @@ impl Broker {
                 json!({"ok":false,"operation_id":id,"error":error,"retry_same_operation":false})
             }
         };
-        let result = cad_preflight::normalize_outcome(tool, result);
+        let mut result = cad_preflight::normalize_outcome(tool, result);
+        if matches!(tool, Tool::ExecuteWorkflowStep { .. })
+            && result["result"]["outcome"]["ok"] == false
+        {
+            result["ok"] = json!(false);
+            result["error"] = json!("工作流程步驟失敗，已停止；詳outcome，不重播已成功操作。");
+        }
+        self.retain_cad_comparison(id, &mut result)?;
+        self.observe_reading(id, tool, &result)?;
+        self.observe_source_versions(tool, &result);
         if result["ok"] == true {
             self.retain_diagram_read(tool, &result["result"]);
         }
@@ -2105,6 +2264,87 @@ impl Broker {
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
         match tool {
+            Tool::RegisterReportValues { values } => self.register_values(values),
+            Tool::LinkDiagramSources {
+                diagram_index,
+                revision,
+                nodes,
+            } => self.link_diagram_sources(*diagram_index, revision, nodes, worker, cancel),
+            Tool::ExportCadComparison {
+                source_operation,
+                name,
+            } => self.export_cad_comparison(source_operation, name),
+            Tool::SaveWorkflow { name, steps } => self.save_workflow(name, steps),
+            Tool::ListWorkflows {} => self.memory()?.list_workflows(),
+            Tool::ReadWorkflow {
+                workflow_id,
+                offset,
+            } => {
+                let template = self.memory()?.load_workflow(workflow_id)?;
+                let content = serde_json::to_string_pretty(&template).map_err(|e| e.to_string())?;
+                let total = content.chars().count();
+                if *offset > total {
+                    return Err("範本檢視位置超出範圍。".into());
+                }
+                let text: String = content.chars().skip(*offset).take(6000).collect();
+                Ok(
+                    json!({"workflow_id":workflow_id,"text":text,"offset":offset,"next_offset":offset+text.chars().count(),"total":total,"executed":false}),
+                )
+            }
+            Tool::PrepareWorkflow {
+                workflow_id,
+                parameters_json,
+            } => self.prepare_workflow(workflow_id, parameters_json),
+            Tool::ExecuteWorkflowStep {
+                execution_id,
+                step_index,
+            } => self.execute_workflow_step(execution_id, *step_index, worker, cancel),
+            Tool::ApplyReportValues {
+                copy_id,
+                revision,
+                assignments,
+            } => self.apply_values(copy_id, revision, assignments, cancel),
+            Tool::ExportReportValues { name, metric_ids } => {
+                self.export_values(name, metric_ids, cancel)
+            }
+            Tool::RecordReadingNotes { notes } => self.reading.accept(notes),
+            Tool::ReadReadingNotes {
+                path,
+                offset,
+                source_operation,
+                reason,
+            } => {
+                if let Some(id) = source_operation {
+                    if reason
+                        .as_deref()
+                        .is_none_or(|s| s.trim().is_empty() || s.chars().count() > 300)
+                    {
+                        return Err(
+                            "定向查原文需提供1–300字具體缺項理由，不以『上下文沒有』要求重讀全文。"
+                                .into(),
+                        );
+                    }
+                    if !self.reading.notes.contains_key(id)
+                        && !self.reading.pending.contains_key(id)
+                    {
+                        return Err("找不到這份筆記的來源操作。".into());
+                    }
+                    let (_, result) = self.recorded_operation(id)?.ok_or("閱讀來源封存遺失。")?;
+                    let text = result["result"]["text"]
+                        .as_str()
+                        .ok_or("來源沒有可讀原文。")?;
+                    let total = text.chars().count();
+                    if *offset > total {
+                        return Err("原文查閱位置超出範圍。".into());
+                    }
+                    let part: String = text.chars().skip(*offset).take(6000).collect();
+                    Ok(
+                        json!({"source":result["result"]["path"],"revision":result["result"]["revision"],"text":part,"offset":offset,"next_offset":offset+part.chars().count(),"total":total,"reason":reason,"snapshot_only":true}),
+                    )
+                } else {
+                    self.reading.read(path.as_deref(), *offset)
+                }
+            }
             Tool::ReadMailNotes {
                 mode,
                 note_ids,
@@ -2386,7 +2626,11 @@ impl Broker {
                 superseded,
                 next_step,
             } => {
-                super::progress::validate_handoff(working_note, superseded, next_step)?;
+                super::progress::validate_handoff(working_note, superseded, next_step).map_err(|error| {
+                    if self.reading.notes.is_empty() { error } else {
+                        format!("{error} 本任務{}份來源閱讀筆記已獨立保存，compact_context會保留它們；交接只需引用這些筆記並說明下一步，不要重抄全部函式／檔案摘要。", self.reading.notes.len())
+                    }
+                })?;
                 // runner 在本結果封存成功後才套用；此處不可自行丟棄正在執行的對話。
                 self.archive_results()?;
                 if self.loaded_skills.iter().any(|id| id == "cad-new") {
@@ -3010,9 +3254,9 @@ impl Broker {
                     } else {
                         Value::Null
                     };
-                Ok(
-                    json!({"path":path,"working_copy":self.copies.contains_key(path),"text":text,"offset":offset,"next_offset":next,"total":total,"truncated":next<total,"revision":text::revision(&content),"document":document,"imported_snapshot":self.project.imports.contains_key(&path.replace('\\', "/"))}),
-                )
+                let mut result = json!({"path":path,"working_copy":self.copies.contains_key(path),"text":text,"offset":offset,"next_offset":next,"total":total,"truncated":next<total,"revision":text::revision(&content),"document":document,"imported_snapshot":self.project.imports.contains_key(&path.replace('\\', "/"))});
+                self.reading.project_saved_read(&mut result);
+                Ok(result)
             }
             Tool::ReadCodeSection {
                 path,
@@ -3436,7 +3680,18 @@ impl Broker {
         artifacts: &[String],
         cancel: &AtomicBool,
     ) -> AppResult<Vec<String>> {
+        if self.reading.enabled && !self.reading.pending.is_empty() {
+            return Err("尚有上一批閱讀成果未保存，請先record_reading_notes再交付。".into());
+        }
         let unique: std::collections::BTreeSet<_> = artifacts.iter().collect();
+        self.verify_report_values(cancel)?;
+        if self
+            .workflow
+            .as_ref()
+            .is_some_and(|a| !a.blocked && a.next < a.template.steps.len())
+        {
+            return Err("工作流程仍有未執行步驟，請完成或明確回報中止原因。".into());
+        }
         if unique.len() != artifacts.len() || artifacts.len() != self.copies.len() {
             return Err(
                 "交付清單必須列出本次所有工作副本且不可重複；不需要的未發布副本請先捨棄。".into(),
@@ -3473,6 +3728,14 @@ impl Broker {
         }
         for artifact in &self.cad_artifacts {
             self.verify_cad_artifact(artifact)?;
+            paths.push(artifact.path.clone());
+        }
+        for artifact in &self.comparison_artifacts {
+            use sha2::{Digest, Sha256};
+            let bytes = super::artifacts::bytes(&self.project, &artifact.path)?;
+            if format!("{:x}", Sha256::digest(&bytes)) != artifact.sha256 {
+                return Err("CAD比較報告已變更，不能交付。".into());
+            }
             paths.push(artifact.path.clone());
         }
         for artifact in &self.python_artifacts {
@@ -4304,5 +4567,65 @@ mod tests {
             relative("資料/文件.txt").unwrap().to_str().unwrap(),
             r"資料\文件.txt"
         );
+    }
+    #[test]
+    fn historical_diagram_export_keeps_its_original_source_version() {
+        let root = std::env::temp_dir().join(format!(
+            "diagram-lineage-{}",
+            crate::jobs::new_id().unwrap()
+        ));
+        fs::create_dir(&root).unwrap();
+        let project = Project {
+            id: "lineage".into(),
+            name: "來源版本".into(),
+            root: root.clone(),
+            imports: Default::default(),
+        };
+        let mut broker = Broker::new(project, "lineage".into()).unwrap();
+        let source = "flowchart TD\nA-->B";
+        let revision = text::revision(source);
+        let diagram = super::super::diagrams::Diagram {
+            name: "test.mmd".into(),
+            source: source.into(),
+            revision: revision.clone(),
+            path: "_AI_Output/old/test.mmd".into(),
+            based_on: None,
+            node_sources: vec![super::super::diagram_sources::Origin {
+                node_id: "A".into(),
+                operation_id: "read-old".into(),
+                path: "main.cpp".into(),
+                revision: "a".repeat(64),
+                source_sha256: "b".repeat(64),
+                locator: "第1行".into(),
+                excerpt: "entry".into(),
+                first_line: Some(1),
+                last_line: Some(1),
+                detail_diagram_index: None,
+            }],
+        };
+        broker.previous_diagrams.insert(2, vec![diagram]);
+        broker
+            .source_versions
+            .insert("main.cpp".into(), "c".repeat(64));
+        broker.diagram_exports.push(super::super::diagrams::Export {
+            path: "_AI_Output/new/test.svg".into(),
+            sha256: "d".repeat(64),
+            format: super::super::diagrams::Format::Svg,
+            source: Some(super::super::diagrams::ExportSource {
+                revision,
+                message_index: Some(2),
+                diagram_index: 0,
+            }),
+        });
+        assert_eq!(
+            broker.artifact_sources("_AI_Output/new/test.svg")["main.cpp"],
+            "b".repeat(64)
+        );
+        assert_eq!(
+            broker.artifact_sources("_AI_Output/new/unrelated.csv")["main.cpp"],
+            "c".repeat(64)
+        );
+        drop(broker);
+        fs::remove_dir(root).unwrap();
     }
 }

@@ -391,7 +391,7 @@ fn field_path(parent: &str, name: &str) -> String {
     }
 }
 
-pub(super) fn restore_optional(name: &str, mut args: Value) -> AppResult<Value> {
+pub(crate) fn restore_optional(name: &str, mut args: Value) -> AppResult<Value> {
     let source = catalog()?;
     let tool = source["tools"]
         .as_array()

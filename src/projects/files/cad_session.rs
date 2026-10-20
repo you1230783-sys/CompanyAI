@@ -53,7 +53,7 @@ impl ActiveSession {
             "recovery":result["recovery"],"drawing_started":result["drawing_started"],
             "completed_operations":result["completed_operations"],"saved":result["saved"],
             "modified_handles":result["modified_handles"],"report_path":result["report_path"],
-            "verification":result["verification"],"submitted_edits":edits.iter().take(10).collect::<Vec<_>>(),
+            "verification":super::cad_comparison::project_verification(&result["verification"]),"submitted_edits":edits.iter().take(10).collect::<Vec<_>>(),
             "omitted_submitted_edits":edits.len().saturating_sub(10)
         }));
     }

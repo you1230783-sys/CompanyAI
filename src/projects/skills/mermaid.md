@@ -1,5 +1,11 @@
 # Mermaid 圖形與原始碼
 
+先判斷深度：未要求全文閱讀時，架構總覽先看README（若存在）、目錄、套件設定與入口，再核對主要呼叫；沒有README就依目錄與入口繼續，不反覆找README。詳細流程才深入相關函式／分支。只有明確要求讀完才追蹤全文覆蓋。README不代替程式證據；圖與交付說明標示概覽、已核對及未讀範圍，不因目錄龐大便逐檔讀到底。
+
+閱讀成果：run_batch文字閱讀最多8段、正文共16000字元，依實際next_line補缺口。每批回來先record_reading_notes引用pending的operation_id，保存可直接畫圖的分區／流程／分支／呼叫／疑問，不能只寫讀完。原文移出後先用累積筆記，缺具體細節才read_reading_notes定向查封存原文，不再全檔重讀。
+
+檔案圖可用link_diagram_sources把node_id綁定實際閱讀操作與已讀行號／Office區塊；Excel採該次已讀工作表列欄。可先建總覽與詳細圖，再用detail_diagram_index連結。對話描述圖不綁檔案；混合圖只綁有來源節點。來源改變顯示待核對，不自動重畫或把舊行號當新內容。來源存在不等於語意正確。
+
 成果位置由桌面管理：同一專案對話的MMD／PNG／SVG共用一個輸出資料夾，後續訊息沿用，同名檔案加序號保留。不要自行建立格式專用資料夾；以工具回傳的實際path交付。
 
 需要AI直接存圖時使用export_mermaid(message_index,diagram_index,format="png"/"svg"/"mmd")；圖形索引取實際工具結果，不重送原始碼。SVG適合大型圖與向量編輯，PNG適合文件簡報，MMD是後續改圖依據。draw.io可貼Mermaid語法，但MMD不是原生.drawio檔，各桌面版本轉換能力不同，不承諾PNG可還原為可編輯流程節點。

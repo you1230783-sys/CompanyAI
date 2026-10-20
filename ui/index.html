@@ -110,6 +110,7 @@
               <button id="project-stop" hidden>停止專案任務</button>
               <button id="weekly-start" hidden>生成週報</button>
                 <button id="project-methods" hidden>重用分析方法</button>
+                <button id="project-artifacts" hidden>成果與流程</button>
               <button id="project-outlook-start" hidden title="查看您選擇的 Outlook 信件，整理需要您處理、回覆或追蹤的事項。">Outlook 助理</button>
               <button data-action="translate">
                 <span data-icon="languages"></span>翻譯</button
@@ -677,8 +678,27 @@
       <textarea id="project-diagnostics-text" readonly rows="20" aria-label="AI 回覆與工具結果"></textarea>
       <div class="dialog-actions"><button id="project-diagnostics-refresh">重新讀取</button><button id="project-diagnostics-copy">複製 JSON／紀錄</button></div>
       <p>用量統計（不含對話、檔名或工具參數，可單獨複製）</p>
+      <p>簡短用量（僅實際 tokens；缺少回傳時顯示未取得）</p>
+      <textarea id="project-token-short-text" readonly rows="8" aria-label="簡短實際用量"></textarea>
+      <button id="project-token-short-copy">複製簡短用量</button>
+      <details><summary>完整用量與估算區塊</summary>
       <textarea id="project-token-text" readonly rows="12" aria-label="用量統計"></textarea>
       <button id="project-token-copy">只複製用量統計</button>
+      </details>
+    </dialog>
+    <dialog id="project-artifact-dialog" aria-labelledby="project-artifact-title">
+      <div class="dialog-heading"><h2 id="project-artifact-title">成果與工作流程</h2><button id="project-artifact-close">關閉</button></div>
+      <p>本專案所有對話的已交付成果。重新整理會核對版本；來源有變更時提醒更新，不自動重做。</p>
+      <div class="dialog-actions"><button id="project-artifact-refresh">重新整理</button><button id="project-artifact-more">下一頁</button><button id="project-artifact-export">打包勾選成果</button></div>
+      <p id="project-artifact-status" role="status"></p>
+      <div id="project-artifact-list"></div>
+      <h3>可重跑工作流程</h3><p>選取後填入草稿，確認新資料與參數後送出。每一步仍會重新核對權限與結果。</p>
+      <div id="project-workflow-list"></div>
+    </dialog>
+    <dialog id="diagram-source-dialog" aria-labelledby="diagram-source-title">
+      <div class="dialog-heading"><h2 id="diagram-source-title">節點檔案依據</h2><button id="diagram-source-close">關閉</button></div>
+      <p id="diagram-source-location"></p><p id="diagram-source-notice" role="status"></p>
+      <textarea id="diagram-source-text" readonly rows="20" aria-label="唯讀來源預覽"></textarea>
     </dialog>
     <div id="toast" role="status" aria-live="polite" popover="manual" hidden></div>
     <script src="vendor/markdown-it.min.js"></script>
@@ -715,6 +735,7 @@
     <script src="vnc-sync.js"></script>
     <script src="chart-review-examples.js"></script>
     <script src="projects.js"></script>
+    <script src="artifacts.js"></script>
     <script src="settings.js"></script>
     <script src="onboarding.js"></script>
     <script src="weekly.js"></script>

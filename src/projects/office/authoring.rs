@@ -908,6 +908,7 @@ mod tests {
     fn edits_preserve_unmodified_runs_and_unicode_boundaries() {
         assert_eq!(difference("a😀 old z", "a😀 new z"), (4, 3, "new".into()));
         assert_eq!(difference("abc", "abcd"), (3, 0, "d".into()));
+        assert_eq!(difference("", "3.50 筆"), (0, 0, "3.50 筆".into()));
         assert_eq!(difference("same", "same"), (4, 0, String::new()));
         assert!(plain("text\u{7}").is_err());
     }

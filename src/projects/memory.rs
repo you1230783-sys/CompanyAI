@@ -130,6 +130,128 @@ fn accessible(note: &Note, conversation: &str) -> bool {
 }
 
 impl Memory {
+    pub fn store_artifacts(&self, entries: &[super::artifacts::Entry]) -> AppResult<()> {
+        let tx = self.vault.transaction()?;
+        let mut all: Vec<super::artifacts::Entry> =
+            tx.read("artifacts", "index")?.unwrap_or_default();
+        for entry in entries {
+            if let Some(old) = all.iter_mut().find(|e| e.id == entry.id) {
+                *old = entry.clone();
+            } else {
+                all.push(entry.clone());
+            }
+        }
+        if all.len() > 5000 {
+            return Err("成果索引超過5000份，未丟棄舊版本。".into());
+        }
+        tx.write("artifacts", "index", &all)
+    }
+    pub fn artifact_entries(&self) -> AppResult<Vec<super::artifacts::Entry>> {
+        let mut all: Vec<super::artifacts::Entry> = self
+            .vault
+            .transaction()?
+            .read("artifacts", "index")?
+            .unwrap_or_default();
+        let index: Index = self
+            .vault
+            .transaction()?
+            .read("project", "index")?
+            .unwrap_or_default();
+        // 歷史任務只有路徑，列為未知來源；不把目前位元組冒稱當時驗證版本。
+        for run in index.runs.iter().rev().take(1000) {
+            for path in &run.outputs {
+                if all.iter().any(|e| e.run == run.id && e.path == *path) {
+                    continue;
+                }
+                if let Ok(mut entry) = super::artifacts::entry(
+                    &self.project,
+                    path,
+                    &run.id,
+                    &run.conversation,
+                    BTreeMap::new(),
+                    true,
+                ) {
+                    entry.created = run.updated;
+                    all.push(entry);
+                }
+            }
+        }
+        if all.len() > 5000 {
+            return Err("成果索引超過5000份。".into());
+        }
+        all.sort_by_key(|e| std::cmp::Reverse(e.created));
+        Ok(all)
+    }
+    pub fn artifact_center(&self, offset: usize) -> AppResult<Value> {
+        let entries = self.artifact_entries()?;
+        if offset > entries.len() {
+            return Err("成果清單位置超出範圍。".into());
+        }
+        Ok(
+            json!({"artifacts":entries.iter().skip(offset).take(100).map(|e|super::artifacts::status(&self.project,e)).collect::<Vec<_>>(),"total":entries.len(),"offset":offset,"next_offset":(offset+100).min(entries.len()),"workflows":self.list_workflows()?["workflows"]}),
+        )
+    }
+    pub fn export_artifacts(&self, ids: &[String]) -> AppResult<String> {
+        let all = self.artifact_entries()?;
+        let mut selected = Vec::new();
+        let mut seen = std::collections::BTreeSet::new();
+        for id in ids {
+            if !seen.insert(id) {
+                return Err("交付選取不可重複。".into());
+            }
+            selected.push(
+                all.iter()
+                    .find(|e| e.id == *id)
+                    .ok_or("成果選取已失效。")?
+                    .clone(),
+            );
+        }
+        super::artifacts::export(&self.project, &selected)
+    }
+    /// 範本位於本專案加密儲存，與聊天筆記分開；不保存任何登入授權。
+    pub fn store_workflow(&self, template: &super::workflows::Template) -> AppResult<()> {
+        template.validate()?;
+        jobs::validate_id(&template.id)?;
+        let tx = self.vault.transaction()?;
+        let mut ids: Vec<String> = tx.read("workflows", "index")?.unwrap_or_default();
+        if !ids.contains(&template.id) {
+            if ids.len() >= 50 {
+                return Err("每專案最多50份流程範本。".into());
+            }
+            ids.push(template.id.clone());
+        }
+        tx.write("workflows", &template.id, template)?;
+        tx.write("workflows", "index", &ids)
+    }
+    pub fn load_workflow(&self, id: &str) -> AppResult<super::workflows::Template> {
+        jobs::validate_id(id)?;
+        let template: super::workflows::Template = self
+            .vault
+            .transaction()?
+            .read("workflows", id)?
+            .ok_or("找不到本專案的流程範本。")?;
+        template.validate()?;
+        if template.id != id {
+            return Err("流程範本識別不符。".into());
+        }
+        Ok(template)
+    }
+    pub fn list_workflows(&self) -> AppResult<Value> {
+        let ids: Vec<String> = self
+            .vault
+            .transaction()?
+            .read("workflows", "index")?
+            .unwrap_or_default();
+        if ids.len() > 50 {
+            return Err("流程範本索引過大。".into());
+        }
+        let mut items = Vec::new();
+        for id in ids {
+            let template = self.load_workflow(&id)?;
+            items.push(json!({"id":id,"name":template.name,"created":template.created,"steps":template.steps.len()}));
+        }
+        Ok(json!({"workflows":items}))
+    }
     /// 只列本專案的分析方法；使用者選取後填入可編輯草稿，不自動執行舊操作。
     pub fn analysis_methods(&self) -> AppResult<Value> {
         let index: Index = self

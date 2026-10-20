@@ -1,5 +1,13 @@
 use super::*;
 
+#[test]
+fn reading_depth_defaults_to_readme_first_overview_and_keeps_explicit_full_reading() {
+    let prompt = system_prompt_for("fast");
+    assert!(prompt.contains("先看README") && prompt.contains("不預設逐行讀完"));
+    assert!(prompt.contains("明確要求全文閱讀") && prompt.contains("最多8段"));
+    assert!(prompt.contains("record_reading_notes"));
+}
+
 fn caps() -> Capabilities {
     serde_json::from_str(include_str!("test_capabilities.json")).unwrap()
 }

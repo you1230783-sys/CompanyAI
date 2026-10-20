@@ -1,3 +1,11 @@
+## 本機發行驗證：0.8.74（2026-10-20，優先於下方歷史）
+
+- 使用者授權的八項已實作。修正後R3於15:54:46退出0：v142 14.29.30133／cl192930159 x64／link14.29，空Cargo快取frozen/vendor、430 Rust／101 CAD契約、完整原生／Office／雙版CAD及NSIS安裝／更新／重新啟動／失敗回復／修復／移除通過。EXE SHA256為74dc4a9da455317a75bcc23225aa3fb79b2cf999776eaff9ae290a88fbe2e584，Setup為d9acabeb31f8af47acc47ed2128b8d818856a49865d4e484f89be27b87003a56。
+- Strata R11真空白Word表格重現錯格；已限制裁切尾標記後End不小於原Start，保留內容／格式核對。先以舊EXE重現，再做修正後空白／預填Word及Excel保存重開。R13模型的真空白Word格亦成功套用與讀回，沒有相同原生錯誤。
+- 閱讀筆記有真模型續作證據：Luna R14完成MMD／SVG與16節點，Strata R7兩張圖、R10 tinyxml2兩張圖；仍有分支／常數／函式名稱錯誤。R12 Luna在來源綁定失敗後240秒逾時，未完成匯出，保留不改判。詳docs/VALIDATION_0_8_74.md與offline/feature-verification-0.8.74.json。
+- R13 Strata報告案62輪後因四次重複出圖／綁定而取消。Word／Excel即時值4／3.5／1／7與同一Python／CSV一致，但沒有保存交付兩份Office報告；只有CSV與四PNG。屬模型完整需求未完成，不稱通過，閱讀筆記亦不代表所有多成果任務無輪迴。Excel此模板為含單位文字欄，非數值欄。
+- 最新產品來源已凍結，之後只整理文件／公開摘要與Git交付。使用者已明確授權完成後推送既有main；以提交及遠端實際LFS下載核對為準，不強制推送。排除.build/、.codex/、dist/onboarding-state.json與icon.png；保留歷史0.8.73／離線Rust ZIP與原失敗證據。公司GLM、公司服務與使用者原cpp/h未在此機實測。
+
 ## 發行結果：0.8.73本機驗證完成（2026-10-19）
 
 - 使用者授權的1–15項已實作，410 Rust／99 CAD、完整v142 x64空快取frozen、原生及Strata四組／八次要求、Office／VNC與NSIS生命週期通過。最終EXE 5648e143634daaf61974a980bfe7a080f61c3c1fa98919a2e65360bbe1799b64、Setup 80396172b65f97104514de25a87b92c9787152534c21f998134a89b59d006ae7；公開摘要與docs/VALIDATION_0_8_73.md保存確切範圍、原始失敗與手動／公司環境限制。Git交付以main提交及遠端實際LFS下載核對為準，不能只憑這段宣稱推送。
@@ -1096,3 +1104,14 @@
 - **85項Python CAD契約通過**：.build/run_unicode_path_unit.py從src/cad_worker.py以worker別名載入本次來源，其他固定依賴使用凍結runtime；最新log .build/cad-name-and-native-bounds-unit.log。含新增路徑反例、全原生範圍／缺圖元／DBMOD變更／重複Handle／非模型空間拒絕，以及回覆指引。這不是v142重建或新版模型流程通過。後續矩陣完成後做新來源兩版native回歸、v142正式空快取frozen建置及必要新模型定向測試。不要拿本85項說舊候選build有85；舊候選原80。
 
 - **05:04即時**：仍11／14，住宅2022 t80 461.918秒／20k無工具，已進最後continuation2，無cad-report／無新圖。current／session20035／舊runtime7018不變。來源兩修正＋cad-new指引已改、85 Python契約通過，尚未新runtime/v142建置或完整native修正流程；詳04:58追加及docs/PENDING_CAD_Q2_OPTIMIZATION.md最新段。保持繼續等待，不重啟現有任務。
+## 本輪授權：閱讀成果與交付核對八項（2026-10-20）
+
+- 使用者已確認開始實作討論中的八項：唯讀批次最多八段與整批預算、來源綁定累積閱讀筆記與定向回讀、實際用量簡短檢視／複製、計算值綁定報告與跨成果核對、可重跑流程範本、成果中心／版本追蹤、檔案來源圖形導覽、CAD修改比較報告。詳細範圍與進度見 docs/IMPLEMENTATION_2026_10_20.md。
+- 使用者明確同意本輪所需的本機Strata、CompanyAI、Word／Excel與CAD測試操作；CAD只使用新圖或獨立測試副本，不覆寫使用者原圖。驗證需真正透過Strata及原生工具，保留失敗與限制，不用固定參數測試冒充模型通過。
+- 原0.8.73交付保持歷史證據；本輪尚未完成、未發布，不冒用前版PASS。沿用Build.ps1與v142 x64實際探針、空Cargo快取frozen/vendor；新增功能完成後做相關測試及必要封裝。不得因使用者離席提前回報完成。未追蹤.codex/、dist/onboarding-state.json、icon.png保持原狀；本輪沒有新增Git推送指示。
+
+### 本輪最新交付授權
+
+- 使用者後續明確要求：本版完成測試、修改、編譯及NSIS打包後，提交並推送既有main。此條取代上一段「本輪沒有新增Git推送指示」的狀態。
+- 以0.8.74候選完成v142 x64實際探針、空Cargo快取frozen/vendor、完整相關回歸及NSIS安裝／更新／重新啟動／解除安裝驗證後才發布；失敗與模型能力限制據實保留。不得跳過尚未通過的Office數值綁定等驗證。
+- 仍只使用本輪獨立測試資料、公開GitHub專案及CAD新圖／副本；不修改公司原碼或使用者原圖，不納入私人.build紀錄及既有未追蹤資料。保留歷史0.8.73證據與使用者設定。

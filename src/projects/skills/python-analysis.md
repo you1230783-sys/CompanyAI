@@ -1,4 +1,6 @@
 # Python 分析入口
+
+報告數值：統計值放result的具名數字欄位，成功後register_report_values以/summary/...引用，指定小數位與單位；缺失值先明確處理。Word／Excel切office-edit，建立表格後read_file取得block_id，再apply_report_values直接填欄，不能轉抄或猜額外min/max/std。圖表用export_report_values的CSV作圖，量尺不同單位分開。交付會核對綁定欄位與來源版本；數字一致不代表公式符合需求。
 用 run_python 完成跨檔統計、合併、文字分析及產出表格；不必先讀所有參考頁。
 inputs.revision可沿用read_file回傳的同檔SHA，或既有sha256:/log:表示；只有同一原始位元組雜湊才相容，檔案變更仍拒絕，不拿其他區段或資料集版本代用。
 inputs 必填 name/path/kind；dataset/csv→tables[name]，text→texts[name]，生成的xlsx→tables['name/工作表名']，來源資訊在metadata[name]。CSV欄位起初是文字；資料集保留型別與原欄字母。

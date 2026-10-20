@@ -22,6 +22,79 @@ GEOMETRY_FIELDS = {
 READ_BATCH_SIZE = 50
 
 
+def comparison(before, after):
+    """以實際可讀快照比較，不從提交參數推測修改結果，也不猜測尺寸的幾何關聯。"""
+    old = {row['handle']: row for row in before}
+    new = {row['handle']: row for row in after}
+    if len(old) != len(before) or len(new) != len(after):
+        raise ValueError('比較快照含重複Handle')
+    added, deleted, changed = [], [], []
+    geometry_changed = False
+    for handle in sorted(set(old) | set(new)):
+        previous, current = old.get(handle), new.get(handle)
+        if previous is None:
+            added.append({'handle': handle, 'kind': current.get('kind'),
+                          'properties': current.get('properties', {})})
+            geometry_changed |= current.get('kind') in ('line', 'circle', 'arc', 'polyline')
+            continue
+        if current is None:
+            deleted.append({'handle': handle, 'kind': previous.get('kind'),
+                            'properties': previous.get('properties', {})})
+            geometry_changed |= previous.get('kind') in ('line', 'circle', 'arc', 'polyline')
+            continue
+        fields = []
+        for key in sorted(set(previous.get('properties', {})) | set(current.get('properties', {}))):
+            a, b = previous.get('properties', {}).get(key), current.get('properties', {}).get(key)
+            if a != b:
+                fields.append({'field': key, 'before': a, 'after': b})
+                geometry_changed |= key in ('Radius', 'Center', 'StartPoint', 'EndPoint',
+                                            'DiameterStart', 'DiameterEnd')
+        if previous.get('geometry') != current.get('geometry'):
+            fields.append({'field': 'geometry', 'before': previous.get('geometry'),
+                           'after': current.get('geometry')})
+            geometry_changed = True
+        if fields:
+            measurements = {}
+            if current.get('kind') == 'circle':
+                for label, row in (('before', previous), ('after', current)):
+                    radius = row.get('properties', {}).get('Radius')
+                    if isinstance(radius, (int, float)) and not isinstance(radius, bool):
+                        measurements[label + '_diameter'] = 2 * radius
+            changed.append({'handle': handle, 'kind': current.get('kind'),
+                            'fields': fields, 'measurements': measurements})
+    annotations = []
+    for row in after:
+        if row.get('kind') not in ('dimension', 'leader'):
+            continue
+        props = row.get('properties', {})
+        item = {'handle': row['handle'], 'kind': row.get('kind'),
+                'measurement': props.get('Measurement'), 'text_override': props.get('TextOverride'),
+                'association': row.get('association'), 'geometry_consistency': 'unverified'}
+        a, b, measured = props.get('DiameterStart'), props.get('DiameterEnd'), props.get('Measurement')
+        if (isinstance(a, (list, tuple)) and isinstance(b, (list, tuple))
+                and len(a) == len(b) == 3 and isinstance(measured, (int, float))):
+            distance = math.sqrt(sum((x-y)**2 for x, y in zip(a, b)))
+            item['own_endpoints_match_measurement'] = math.isclose(distance, measured, rel_tol=1e-7, abs_tol=1e-6)
+        if props.get('TextOverride') not in (None, '', '<>'):
+            item['warning'] = '固定標註文字可能未反映幾何；需要人工確認或明確關聯核對'
+        elif geometry_changed:
+            item['warning'] = '幾何已變更；此尺寸／引線與目標幾何關係尚未驗證'
+        annotations.append(item)
+    result = {'before_count': len(before), 'after_count': len(after),
+              'added': added, 'deleted': deleted, 'changed': changed,
+              'annotation_checks': annotations,
+              'scope': '實際可讀ModelSpace屬性；精確差異含微小浮點變化，不等於需求或外觀通過。'
+                       '尺寸端點與Measurement相符只核對尺寸自身，不代表與圓／孔／外框關聯正確。'}
+    # 不截斷後假裝完整；大圖比較無法安全交付時明示需要縮小範圍。
+    encoded = json.dumps(result, ensure_ascii=False, allow_nan=False)
+    if len(encoded.encode('utf-8')) > 2_000_000:
+        return {'before_count': len(before), 'after_count': len(after), 'complete': False,
+                'reason': '比較結果超過2MB，未宣稱全部差異已交付',
+                'added_count': len(added), 'deleted_count': len(deleted), 'changed_count': len(changed)}
+    result['complete'] = True
+    return result
+
+
 def iter_entities(collection):
     """每次重設 COM 列舉器；舊版可能重用已走到尾端的 IEnumVARIANT。"""
     ole = getattr(collection, "_oleobj_", None)
@@ -55,6 +128,15 @@ def describe(entity, api):
     if lower.startswith("dim"):
         kind = "dimension"  # 佑達 2008 使用 DimAligned／DimDiametric 名稱。
     row = {"handle": str(entity.Handle).upper(), "type": name, "kind": kind, "properties": {}}
+    if kind == 'dimension':
+        override = optional(entity, 'TextOverride')
+        if isinstance(override, str) and len(override) <= 2000:
+            row['properties']['TextOverride'] = override
+    elif kind == 'leader':
+        annotation = optional(entity, 'Annotation')
+        annotation_handle = optional(annotation, 'Handle') if annotation is not None else None
+        if annotation_handle:
+            row['association'] = {'annotation_handle': str(annotation_handle).upper()}
     # 名稱含有 line 不一定是直線（例如 Spline／外掛圖元）；只有已知原生名稱縮減欄位。
     native_geometry = lower in ("line", "acdbline", "circle", "acdbcircle", "arc", "acdbarc")
     scalar_fields, point_fields = GEOMETRY_FIELDS.get(kind, (SCALAR_FIELDS, POINT_FIELDS)) if native_geometry else (SCALAR_FIELDS, POINT_FIELDS)
@@ -230,6 +312,7 @@ def edit_document(app, doc, legacy, request, report, api, entities, before, outp
 def _edit_document(app, doc, legacy, request, report, api, entities, before, output, guard, cleanup):
     """執行已限定的修改；cleanup讓原生群組持續到整個核對流程結束。"""
     report["step"] = "validate_edit"
+    original_before = copy.deepcopy(before)
     edits = request["edits"]
     api.require(isinstance(edits, list) and len(edits) <= 100, "每次最多修改 100 個圖元")
     from cad_geometry import EDIT_KINDS
@@ -428,6 +511,7 @@ def _edit_document(app, doc, legacy, request, report, api, entities, before, out
                 api.require(described[handle].get("native_revision") == previous["native_revision"],
                             f"未指定圖元的原生資料已變更：{handle}")
         return {"handles_verified": len(actual), "available_properties_verified": True,
+                "comparison": comparison(original_before, actual_rows),
                 "unavailable_properties_not_verified": True}
 
     report["step"] = "verify_before_save"

@@ -1,4 +1,5 @@
-//! 文字解碼不等於解密。嚴格拒絕替代字元與二進位控制碼，歧義交回使用者。
+//! 文字解碼不等於解密。嚴格解碼且拒絕二進位控制碼，不使用有損替代解碼。
+//! 位元組本來就包含的合法U+FFFD與解碼失敗不同；不明來源的貼上文字仍維持原檢查。
 use crate::AppResult;
 use sha2::{Digest, Sha256};
 use windows_sys::Win32::Globalization::*;
@@ -25,9 +26,18 @@ pub fn validate(text: &str) -> AppResult<()> {
 
 /// 只核對文字內容；大量 LOG 的呼叫端另設大小上限，不沿用文件的 200 KB 限制。
 pub(super) fn validate_content(text: &str) -> AppResult<()> {
+    if text.contains('\u{fffd}') {
+        return Err("文字包含替代字元，請確認解密及編碼後再匯入文字。".into());
+    }
+    validate_decoded_content(text)
+}
+
+/// 僅供已嚴格解碼的資料使用（含serde_json的UTF-8測試快照），不得搭配有損解碼。
+/// 例如Click的原始碼文件刻意說明U+FFFD，不能因此誤判為編碼損毀。
+pub(crate) fn validate_decoded_content(text: &str) -> AppResult<()> {
     if text
         .chars()
-        .any(|c| c == '\u{fffd}' || (c.is_control() && !matches!(c, '\n' | '\r' | '\t')))
+        .any(|c| c.is_control() && !matches!(c, '\n' | '\r' | '\t'))
     {
         return Err("文字過大或包含無法辨識的內容。請先用公司核准的記事本開啟，確認解密及編碼後再匯入文字。".into());
     }
@@ -61,7 +71,7 @@ pub(super) fn decode_with_limit(bytes: &[u8], limit: usize) -> AppResult<(String
             })
             .collect();
         let text = String::from_utf16(&words).map_err(|_| "UTF-16 內容無法辨識。")?;
-        validate_content(&text)?;
+        validate_decoded_content(&text)?;
         if text.len() > limit {
             return Err("解碼後文字超過讀取上限。".into());
         }
@@ -69,7 +79,7 @@ pub(super) fn decode_with_limit(bytes: &[u8], limit: usize) -> AppResult<(String
     }
     let bom = bytes.starts_with(&[0xef, 0xbb, 0xbf]);
     if let Ok(text) = std::str::from_utf8(if bom { &bytes[3..] } else { bytes }) {
-        validate_content(text)?;
+        validate_decoded_content(text)?;
         return Ok((text.into(), Encoding::Utf8(bom)));
     }
     if bom {
@@ -83,7 +93,7 @@ pub(super) fn decode_with_limit(bytes: &[u8], limit: usize) -> AppResult<(String
             continue;
         }
         if let Ok(text) = decode_cp(bytes, codepage) {
-            if text.len() > limit || validate_content(&text).is_err() {
+            if text.len() > limit || validate_decoded_content(&text).is_err() {
                 continue;
             }
             if encode_content(&text, Encoding::CodePage(codepage))
@@ -224,6 +234,23 @@ pub fn edit(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn literal_replacement_character_is_preserved_after_strict_decoding() {
+        let original = "# A documented replacement character: \u{fffd}\n";
+        let decoded = decode(original.as_bytes()).unwrap().0;
+        assert_eq!(decoded, original);
+        assert_eq!(decoded.as_bytes(), original.as_bytes());
+        assert!(validate(original).is_err(), "貼上文字的原檢查仍保留");
+        assert!(
+            decode(&[0xef, 0xbb, 0xbf, 0xff]).is_err(),
+            "錯誤UTF-8不轉成替代字元"
+        );
+        assert!(
+            decode(&[0xff, 0xfe, 0x00, 0xd8]).is_err(),
+            "錯誤UTF-16不轉成替代字元"
+        );
+        assert!(decode(b"a\0b").is_err());
+    }
     #[test]
     fn encodings_preserve_chinese_and_reject_loss() {
         for enc in [

@@ -1,5 +1,6 @@
 //! 明確命令列啟用的本機情境測試。使用正式App／runner／WebView2，不偽造模型工具。
-//! 所有文件與歷史都留在 LocalTest 剛建立的獨立目錄；必要同意不自動代答。
+//! 歷史留在LocalTest新目錄，專案可用新建文字快照或.build內的獨立公開checkout。
+//! 必要同意不自動代答，也不執行第三方建置／安裝腳本。
 use super::*;
 
 #[derive(Deserialize)]
@@ -8,6 +9,8 @@ pub(in crate::ui) struct Scenario {
     requests: Vec<String>,
     #[serde(default)]
     files: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    project_root: Option<PathBuf>,
     #[serde(skip)]
     started: bool,
     #[serde(skip)]
@@ -34,22 +37,43 @@ impl Scenario {
             .file_name()
             .and_then(|s| s.to_str())
             .ok_or("本機測試目錄名稱無效。")?;
-        let workspace = root.with_file_name(format!("{name}-project"));
-        std::fs::create_dir(&workspace).map_err(|e| e.to_string())?;
+        let workspace = if let Some(fixture) = &value.project_root {
+            if !value.files.is_empty() || !fixture.is_absolute() {
+                return Err("外部測試checkout需絕對路徑，不能混入合成files。".into());
+            }
+            let allowed = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join(".build")
+                .canonicalize()
+                .map_err(|e| e.to_string())?;
+            let resolved = fixture.canonicalize().map_err(|e| e.to_string())?;
+            if !resolved.is_dir() || resolved == allowed || !resolved.starts_with(&allowed) {
+                return Err("外部情境只接受本專案.build內的獨立測試checkout。".into());
+            }
+            fixture.clone()
+        } else {
+            let workspace = root.with_file_name(format!("{name}-project"));
+            std::fs::create_dir(&workspace).map_err(|e| e.to_string())?;
+            workspace
+        };
         let mut store = projects::Store::load(root)?;
         store.projects.first_mut().ok_or("本機專案不存在。")?.root = workspace.clone();
         store.save(root)?;
         let _guard = projects::files::pin(&workspace)?;
         for (name, text) in &value.files {
-            if projects::files::relative(name)?.components().count() != 1 {
-                return Err("合成情境文件只接受單一檔名。".into());
-            }
-            projects::text::validate(text)?;
+            // 公開專案需保留src/models等原始結構；只能在本次新建工作區建立相對路徑。
+            // 不執行下載專案的程式、安裝腳本或Git hook。
+            let relative = projects::files::relative(name)?;
+            let target = workspace.join(relative);
+            let parent = target.parent().ok_or("測試文件缺少父目錄。")?;
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            let _parent = projects::files::pin(parent)?;
+            // 整份JSON已限1MB且由serde嚴格解碼；合法原始碼可刻意含U+FFFD。
+            projects::text::validate_decoded_content(text)?;
             use std::io::Write;
             let mut file = std::fs::OpenOptions::new()
                 .create_new(true)
                 .write(true)
-                .open(workspace.join(name))
+                .open(target)
                 .map_err(|e| e.to_string())?;
             file.write_all(text.as_bytes())
                 .and_then(|_| file.sync_all())
