@@ -1,0 +1,400 @@
+use super::*;
+#[test]
+fn long_cross_task_history_keeps_requirements_and_bounds_optional_memory() {
+    let memory = Memory::open(fixture(), "chat").unwrap();
+    let mut messages = Vec::new();
+    for i in 0..3 {
+        let id = format!("task_{i}");
+        let requirement = format!("要求{i}：原檔唯讀，不儲存目前CAD圖面");
+        let answer = "已完成的長篇答案".repeat(8000);
+        memory
+            .save_run(
+                &id,
+                &requirement,
+                &answer,
+                "completed",
+                Some("已完成；下一步核對外觀"),
+                &[],
+            )
+            .unwrap();
+        let mut user = Message::user(&requirement);
+        user.request_id = Some(id);
+        messages.push(user);
+        messages.push(Message::assistant(answer));
+    }
+    messages.push(Message::user("繼續，但保持不儲存"));
+    let projected = memory.context(&messages).unwrap();
+    for i in 0..3 {
+        assert!(projected
+            .iter()
+            .any(|m| m.content == format!("要求{i}：原檔唯讀，不儲存目前CAD圖面")));
+    }
+    assert!(context_sizes(&projected)["total_tokens"].as_u64().unwrap() < 5500);
+    assert!(!projected
+        .iter()
+        .any(|m| m.content.contains("已完成的長篇答案")));
+    let huge = "不得修改來源。".repeat(2000);
+    messages[0].content = huge.clone();
+    let projected = memory.context(&messages).unwrap();
+    assert!(projected.iter().any(|m| m.content == huge));
+    assert!(projected[0]
+        .content
+        .contains("\"history_exceeds_budget\":true"));
+}
+fn fixture() -> Project {
+    let root = std::env::current_dir()
+        .unwrap()
+        .join(".build")
+        .join("memory-tests")
+        .join(jobs::new_id().unwrap());
+    std::fs::create_dir_all(&root).unwrap();
+    Project {
+        id: "test".into(),
+        name: "test".into(),
+        root,
+        imports: BTreeMap::new(),
+    }
+}
+#[test]
+fn notes_are_persistent_versioned_scoped_and_restorable() {
+    let project = fixture();
+    let memory = Memory::open(project.clone(), "chat_a").unwrap();
+    let created = memory
+        .create_note("conversation", "條件", "保留數值 42")
+        .unwrap();
+    let id = created["id"].as_str().unwrap();
+    let reopened = Memory::open(project.clone(), "chat_a").unwrap();
+    assert_eq!(reopened.read_note(id).unwrap()["body"], "保留數值 42");
+    assert!(reopened
+        .change_note(id, "wrong", Some(("條件", "錯誤覆寫")), false)
+        .is_err());
+    assert_eq!(
+        reopened
+            .change_note(id, "1", Some(("條件", "保留數值 43")), false)
+            .unwrap()["revision"],
+        "2"
+    );
+    assert_eq!(
+        reopened.change_note(id, "2", None, false).unwrap()["deleted"],
+        true
+    );
+    assert_eq!(
+        reopened.change_note(id, "3", None, true).unwrap()["deleted"],
+        false
+    );
+    assert_eq!(reopened.read_note(id).unwrap()["body"], "保留數值 43");
+    let other = Memory::open(project.clone(), "chat_b").unwrap();
+    assert!(other.read_note(id).is_err());
+    let shared = memory
+        .create_note("project", "專案事實", "使用者確認版本 A")
+        .unwrap();
+    assert!(other.read_note(shared["id"].as_str().unwrap()).is_ok());
+    let bytes = std::fs::read(project.root.join(".lmai/project/index.dpapi")).unwrap();
+    assert!(!String::from_utf8_lossy(&bytes).contains("保留數值"));
+    assert!(crate::storage::protect(&bytes, false).is_ok());
+}
+#[test]
+fn document_sections_require_read_evidence_and_reject_stale_sources() {
+    let project = fixture();
+    let source = "α😀內容\n\n".repeat(2000);
+    std::fs::write(project.root.join("source.txt"), &source).unwrap();
+    let mut memory = Memory::open(project.clone(), "chat").unwrap();
+    let stamp = memory.source_stamp("source.txt").unwrap();
+    memory
+        .register_document("source.txt", &source, &stamp)
+        .unwrap();
+    let revision = text::revision(&source);
+    assert!(memory
+        .update_document_note("source.txt", &revision, "1", None, "假裝完整摘要")
+        .is_err());
+    assert!(memory.document_info("source.txt", usize::MAX).is_err());
+    let info = memory.document_info("source.txt", 0).unwrap();
+    let id = info["sections"][0]["section_id"].as_str().unwrap();
+    assert!(memory
+        .update_document_note("source.txt", &revision, "1", Some(id), "未讀部分")
+        .is_err());
+    let read = memory.read_section("source.txt", &revision, id).unwrap();
+    assert!(read["text"].as_str().unwrap().chars().count() <= 4000);
+    let changed = memory
+        .update_document_note(
+            "source.txt",
+            &revision,
+            "1",
+            Some(id),
+            "本段包含測試文字與 emoji",
+        )
+        .unwrap();
+    assert_eq!(changed["note_revision"], "2");
+    assert!(memory
+        .update_document_note("source.txt", &revision, "1", Some(id), "舊版本覆寫")
+        .is_err());
+    memory.record_read("source.txt", 0, source.chars().count());
+    memory
+        .update_document_note("source.txt", &revision, "2", None, "完整文件摘要")
+        .unwrap();
+    let reopened = Memory::open(project.clone(), "chat").unwrap();
+    assert_eq!(
+        reopened.document_info("source.txt", 0).unwrap()["summary"],
+        "完整文件摘要"
+    );
+    std::fs::write(project.root.join("source.txt"), "新版本").unwrap();
+    assert!(reopened.document_info("source.txt", 0).is_err());
+    let context = reopened.context(&[Message::user("source.txt")]).unwrap();
+    assert!(!context[0].content.contains("完整文件摘要"));
+    assert!(memory
+        .register_document("source.txt", "新版本", &stamp)
+        .is_err());
+}
+#[test]
+fn context_keeps_original_results_on_disk_and_only_sends_selected_memory() {
+    let project = fixture();
+    let memory = Memory::open(project.clone(), "chat").unwrap();
+    let long = "UNIQUE_FULL_ANSWER_".repeat(2000);
+    memory
+        .save_run(
+            "previous",
+            "原始要求",
+            &long,
+            "completed",
+            Some("上一輪已確認數值 42"),
+            &["_AI_Output/report.txt".into()],
+        )
+        .unwrap();
+    let mut user = Message::user("原始要求");
+    user.request_id = Some("previous".into());
+    let messages = vec![
+        user,
+        Message::assistant(long.clone()),
+        Message::user("請修改第三點"),
+    ];
+    memory
+        .save_run(
+            "future",
+            "後來要求",
+            "後來答案",
+            "failed",
+            Some("不應附帶的後來結果"),
+            &[],
+        )
+        .unwrap();
+    let context = memory.context(&messages).unwrap();
+    assert!(!context[0].content.contains("不應附帶的後來結果"));
+    assert!(!memory.context(&[Message::user("原始要求")]).unwrap()[0]
+        .content
+        .contains("上一輪已確認"));
+    assert!(!context
+        .iter()
+        .any(|m| m.content.contains("UNIQUE_FULL_ANSWER_")));
+    assert!(context[0].content.contains("上一輪已確認數值 42"));
+    assert!(context[0].content.contains("previous"));
+    assert_eq!(context.last().unwrap().content, "請修改第三點");
+    let old = memory.read_task_result("previous", "result", 6000).unwrap();
+    assert_eq!(old["offset"], 6000);
+    assert_eq!(old["text"].as_str().unwrap().chars().count(), 6000);
+    let other = Memory::open(project, "other").unwrap();
+    assert!(other.read_task_result("previous", "result", 0).is_err());
+    for i in 0..12 {
+        memory
+            .create_note("conversation", &format!("note {i}"), &"甲".repeat(2000))
+            .unwrap();
+    }
+    assert!(memory.context(&messages).unwrap()[0].content.len() < 42_000);
+}
+#[test]
+fn next_conversation_uses_final_answers_and_counts_with_chunked_details_on_demand() {
+    let project = fixture();
+    let memory = Memory::open(project.clone(), "chat").unwrap();
+    memory
+        .save_run("prior", "原要求", "最終回覆", "completed", None, &[])
+        .unwrap();
+    let raw = "中間原文不送入下一輪".repeat(30_000);
+    let operations = json!([
+        {"operation_id":"one","request":{"tool":"read_file","path":"x.txt","offset":0},"result":{"ok":true,"result":{"text":raw}}},
+        {"operation_id":"two","request":{"tool":"read_file","path":"x.txt","offset":6000},"result":{"ok":true}},
+        {"operation_id":"list","request":{"tool":"list_files","path":""},"result":{"ok":true}}
+    ]);
+    memory.save_operations("prior", &operations).unwrap();
+    let mut user = Message::user("原要求");
+    user.request_id = Some("prior".into());
+    let mut answer = Message::assistant("最終回覆".into());
+    answer.request_id = Some("prior".into());
+    let context = memory
+        .context(&[user, answer, Message::user("第三輪")])
+        .unwrap();
+    assert!(context.iter().any(|m| m.content == "原要求"));
+    assert!(context[0].content.contains("最終回覆"));
+    assert!(context
+        .iter()
+        .any(|m| m.content.contains("read_task_result(task_id=")));
+    assert!(context[0].content.contains("tool_usage"));
+    assert!(!context
+        .iter()
+        .any(|m| m.content.contains("中間原文不送入下一輪")));
+    let index: Index = memory
+        .vault
+        .transaction()
+        .unwrap()
+        .read("project", "index")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        index.runs[0].tool_usage[Tool::ReadFile {
+            path: String::new(),
+            offset: 0
+        }
+        .label()],
+        2
+    );
+    let boundary = OPERATION_CHUNK_CHARS - 100;
+    let part = memory
+        .read_task_result("prior", "operations", boundary)
+        .unwrap();
+    assert_eq!(
+        part["text"].as_str().unwrap(),
+        operations
+            .to_string()
+            .chars()
+            .skip(boundary)
+            .take(6000)
+            .collect::<String>()
+    );
+    assert!(Memory::open(project, "other")
+        .unwrap()
+        .read_task_result("prior", "operations", 0)
+        .is_err());
+}
+#[test]
+fn reserved_folder_and_linked_private_files_are_rejected() {
+    let project = fixture();
+    let memory = Memory::open(project.clone(), "chat").unwrap();
+    for path in [
+        ".lmai",
+        ".LMAI/a.txt",
+        "sub/.lmai/source.txt",
+        ".lmai/../a.txt",
+    ] {
+        assert!(files::relative(path).is_err());
+    }
+    assert!(files::validate_root(&project.root.join(".lmai")).is_err());
+    std::fs::write(project.root.join("original.txt"), "original").unwrap();
+    std::fs::create_dir(project.root.join(".lmai/project")).unwrap_or(());
+    let target = project.root.join(".lmai/project/index.dpapi");
+    std::fs::hard_link(project.root.join("original.txt"), target).unwrap();
+    assert!(memory
+        .create_note("project", "should fail", "do not touch original")
+        .is_err());
+    assert_eq!(
+        std::fs::read_to_string(project.root.join("original.txt")).unwrap(),
+        "original"
+    );
+}
+
+#[test]
+fn archived_operation_survives_reopen_and_detects_changed_content() {
+    let project = fixture();
+    let memory = Memory::open(project.clone(), "chat").unwrap();
+    let raw = json!([{"tool":"save_copy","copy_id":"copy","revision":"v1"},{"ok":true,"result":{"path":"result.txt"}}]);
+    let hash = memory.archive_operation(&raw).unwrap();
+    let reopened = Memory::open(project, "chat").unwrap();
+    assert_eq!(reopened.archived_operation(&hash).unwrap(), raw);
+    reopened
+        .vault
+        .transaction()
+        .unwrap()
+        .write("operation-parts", &hash, &json!([{}, {}]))
+        .unwrap();
+    assert!(reopened.archived_operation(&hash).is_err());
+}
+
+#[test]
+fn valid_large_tool_result_is_archived_in_bounded_encrypted_chunks() {
+    let memory = Memory::open(fixture(), "chat").unwrap();
+    let result = json!([{"tool":"create_chart"},{"payload":"字".repeat(2_700_000)}]);
+    let hash = memory.archive_operation(&result).unwrap();
+    assert_eq!(memory.archived_operation(&hash).unwrap(), result);
+}
+#[test]
+fn pdf_cache_survives_reopen_checks_hash_and_has_a_bounded_index() {
+    let project = fixture();
+    pdf_write(&project.root, "source", "profile", "# 原文").unwrap();
+    assert_eq!(
+        pdf_read(&project.root, "source", "profile")
+            .unwrap()
+            .as_deref(),
+        Some("# 原文")
+    );
+    assert!(pdf_read(&project.root, "new-source", "profile")
+        .unwrap()
+        .is_none());
+    assert!(pdf_read(&project.root, "source", "changed-profile")
+        .unwrap()
+        .is_none());
+    let vault = Vault::new(&project.root).unwrap();
+    vault
+        .transaction()
+        .unwrap()
+        .write(
+            "cache",
+            &text::revision("source:profile"),
+            &PdfCache {
+                source_hash: "source".into(),
+                profile: "profile".into(),
+                markdown: "altered".into(),
+                markdown_hash: "incorrect".into(),
+            },
+        )
+        .unwrap();
+    assert!(pdf_read(&project.root, "source", "profile")
+        .unwrap()
+        .is_none());
+    for i in 0..25 {
+        pdf_write(&project.root, &format!("s{i}"), "profile", "text").unwrap();
+    }
+    assert_eq!(
+        std::fs::read_dir(project.root.join(".lmai/cache"))
+            .unwrap()
+            .count(),
+        21
+    );
+}
+
+#[test]
+fn reusable_methods_are_project_scoped_versioned_and_exclude_deleted_notes() {
+    let memory = Memory::open(fixture(), "method-chat").unwrap();
+    memory
+        .create_note("conversation", "分析方法：私人", "不可公開")
+        .unwrap();
+    memory
+        .create_note("project", "一般筆記", "不是方法")
+        .unwrap();
+    let method = super::super::analysis::Method {
+        title: "時間配對".into(),
+        applicability: "LOG有日期時間".into(),
+        steps: "先看樣本".into(),
+        validation: "核對未配對筆數".into(),
+        limitations: "時間倒退不配對".into(),
+    };
+    let saved = memory
+        .save_analysis_method(&method, &[], "source-run")
+        .unwrap();
+    let methods = memory.analysis_methods().unwrap();
+    assert_eq!(methods.as_array().unwrap().len(), 1);
+    assert!(methods[0]["body"]
+        .as_str()
+        .unwrap()
+        .contains("無核對不代表通過"));
+    memory
+        .change_note(
+            saved["id"].as_str().unwrap(),
+            saved["revision"].as_str().unwrap(),
+            None,
+            false,
+        )
+        .unwrap();
+    assert!(memory
+        .analysis_methods()
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .is_empty());
+}

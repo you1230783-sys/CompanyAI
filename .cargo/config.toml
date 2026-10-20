@@ -1,0 +1,14 @@
+[build]
+# 使用一般 Windows x64 目標，不依賴家裡 CPU 特有的指令。
+target = "x86_64-pc-windows-msvc"
+
+[target.x86_64-pc-windows-msvc]
+# 靜態連結 C 執行階段；程式仍會使用 Windows 自帶的系統 DLL。
+rustflags = ["-C", "target-feature=+crt-static"]
+
+# 套件原始碼隨離線包攜帶；不依賴開發者機器的 Cargo registry 快取。
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"

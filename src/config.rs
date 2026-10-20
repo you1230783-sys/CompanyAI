@@ -1,0 +1,669 @@
+//! 固定公司端點與可保存的個人偏好。測試可用記憶體設定指定 loopback。
+use crate::AppResult;
+use serde::{Deserialize, Serialize};
+use url::Url;
+
+pub const CLIENT_ID: &str = "company-ai-desktop";
+// 公司部署位置集中於此；正式介面與設定檔都不提供覆寫入口。
+pub const SERVER_URL: &str = "http://lp2-en-server";
+pub const CHAT_PATH: &str = "/lm_server/v1/chat/completions";
+pub const DEVICE_PATH: &str = "/lm_server/api/desktop/oauth/device";
+pub const TOKEN_PATH: &str = "/lm_server/api/desktop/oauth/token";
+pub const VERSION_PATH: &str = "/lm_server/api/desktop/version";
+pub const MODELS_PATH: &str = "/lm_server/api/desktop/models";
+pub const DOWNLOAD_PATH: &str = "/lm_server/desktop/download";
+/// 0.8.1 另查兩份靜態清單；未提供的格式回 404 即可，舊 download 路由仍可用。
+pub const UPDATE_MANIFEST_PATHS: [&str; 3] = [
+    DOWNLOAD_PATH,
+    "/lm_server/desktop/releases/update-manifest-exe.json",
+    "/lm_server/desktop/releases/update-manifest.json",
+];
+pub const MAX_SESSION_SECONDS: u64 = 30 * 24 * 60 * 60;
+
+/// 未自訂圖表的八個系列色；順序與前端預設一致，舊設定直接沿用。
+pub fn default_chart_palette() -> Vec<String> {
+    [
+        "#5470c6", "#91cc75", "#fac858", "#ee6666", "#73c0de", "#3ba272", "#fc8452", "#9a60b4",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
+/// 原生入口只接受固定數量的RGB色碼，不讓任意CSS或可執行字串落入設定。
+pub fn valid_chart_palette(colors: &[String]) -> bool {
+    colors.len() == 8
+        && colors.iter().all(|color| {
+            color.len() == 7
+                && color.starts_with('#')
+                && color[1..].bytes().all(|b| b.is_ascii_hexdigit())
+        })
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthHeader {
+    #[default]
+    Bearer,
+    XApiKey,
+}
+
+/// 字型只保存固定代號；不接受任意 CSS、網址或本機字型路徑。
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UiFont {
+    MicrosoftJhenghei,
+    Huninn,
+    WenkaiMonoTc,
+    #[default]
+    #[serde(other)]
+    WenkaiTc,
+}
+
+/// 與一般設定的選項一致，舊檔案或未知比例回到100%，不沿用瀏覽器手動縮放。
+pub fn interface_scale(value: u16) -> u16 {
+    if [75, 90, 100, 110, 125, 150, 175, 200].contains(&value) {
+        value
+    } else {
+        100
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Config {
+    pub server_url: String,
+    pub chat_path: String,
+    /// 正式值由 Default 指定，反序列化不接受舊設定檔覆寫。
+    pub device_path: String,
+    pub token_path: String,
+    pub model: String,
+    pub auth_header: AuthHeader,
+    pub allow_http: bool,
+    pub hotkey: String,
+    pub font_size: u8,
+    pub ui_font: UiFont,
+    pub interface_scale: u16,
+    pub sidebar_collapsed: bool,
+    pub projects_collapsed: bool,
+    pub recent_collapsed: bool,
+    pub notification_popups: bool,
+    /// 勾選時最小化保留工作列；關閉按鈕仍一律收到托盤。
+    pub minimize_to_taskbar: bool,
+    pub dark_mode: bool,
+    /// 快捷鍵只在啟用時註冊；浮動圖示為獨立、預設關閉的選項。
+    pub hotkey_enabled: bool,
+    pub selection_icon: bool,
+    pub enter_sends: bool,
+    pub quick_actions_fast: bool,
+    pub always_new_chat: bool,
+    /// 選用本機工具，預設隱藏；啟用後才允許讀取 VNC 機台設定。
+    pub vnc_enabled: bool,
+    /// DEBUG 僅保存本機加密 JSON，數字用量報表與正文分開。
+    pub debug_mode: bool,
+    /// 僅影響未自訂系列顏色的呈現，不傳送模型或修改來源數據。
+    pub chart_palette: Vec<String>,
+}
+
+/// 只有個人偏好能落盤；舊版檔案中的網址、路由、Header 和 HTTP 欄位會被忽略。
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+struct Preferences {
+    model: String,
+    hotkey: Option<String>,
+    font_size: Option<u8>,
+    ui_font: Option<UiFont>,
+    interface_scale: Option<u16>,
+    sidebar_collapsed: bool,
+    projects_collapsed: bool,
+    recent_collapsed: bool,
+    notification_popups: Option<bool>,
+    minimize_to_taskbar: Option<bool>,
+    dark_mode: bool,
+    hotkey_enabled: Option<bool>,
+    selection_icon: bool,
+    enter_sends: bool,
+    quick_actions_fast: Option<bool>,
+    always_new_chat: bool,
+    vnc_enabled: bool,
+    debug_mode: bool,
+    chart_palette: Vec<String>,
+}
+
+impl Serialize for Config {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Preferences {
+            model: self.model.clone(),
+            hotkey: Some(self.hotkey.clone()),
+            font_size: Some(self.font_size),
+            ui_font: Some(self.ui_font),
+            interface_scale: Some(self.interface_scale),
+            sidebar_collapsed: self.sidebar_collapsed,
+            projects_collapsed: self.projects_collapsed,
+            recent_collapsed: self.recent_collapsed,
+            notification_popups: Some(self.notification_popups),
+            minimize_to_taskbar: Some(self.minimize_to_taskbar),
+            dark_mode: self.dark_mode,
+            hotkey_enabled: Some(self.hotkey_enabled),
+            selection_icon: self.selection_icon,
+            enter_sends: self.enter_sends,
+            quick_actions_fast: Some(self.quick_actions_fast),
+            always_new_chat: self.always_new_chat,
+            vnc_enabled: self.vnc_enabled,
+            debug_mode: self.debug_mode,
+            chart_palette: self.chart_palette.clone(),
+        }
+        .serialize(serializer)
+    }
+}
+impl<'de> Deserialize<'de> for Config {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let saved = Preferences::deserialize(deserializer)?;
+        Ok(Self {
+            model: saved.model,
+            hotkey: saved.hotkey.unwrap_or_else(|| "Win+Esc".into()),
+            font_size: saved.font_size.unwrap_or(14).clamp(12, 20),
+            ui_font: saved.ui_font.unwrap_or_default(),
+            interface_scale: interface_scale(saved.interface_scale.unwrap_or(100)),
+            sidebar_collapsed: saved.sidebar_collapsed,
+            projects_collapsed: saved.projects_collapsed,
+            recent_collapsed: saved.recent_collapsed,
+            notification_popups: saved.notification_popups.unwrap_or(true),
+            minimize_to_taskbar: saved.minimize_to_taskbar.unwrap_or(true),
+            dark_mode: saved.dark_mode,
+            hotkey_enabled: saved.hotkey_enabled.unwrap_or(true),
+            selection_icon: saved.selection_icon,
+            enter_sends: saved.enter_sends,
+            quick_actions_fast: saved.quick_actions_fast.unwrap_or(true),
+            always_new_chat: saved.always_new_chat,
+            vnc_enabled: saved.vnc_enabled,
+            debug_mode: saved.debug_mode,
+            chart_palette: if valid_chart_palette(&saved.chart_palette) {
+                saved.chart_palette
+            } else {
+                default_chart_palette()
+            },
+            ..Self::default()
+        })
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            server_url: SERVER_URL.into(),
+            chat_path: CHAT_PATH.into(),
+            device_path: DEVICE_PATH.into(),
+            token_path: TOKEN_PATH.into(),
+            model: String::new(),
+            auth_header: AuthHeader::Bearer,
+            allow_http: true,
+            hotkey: "Win+Esc".into(),
+            font_size: 14,
+            ui_font: UiFont::default(),
+            interface_scale: 100,
+            sidebar_collapsed: false,
+            projects_collapsed: false,
+            recent_collapsed: false,
+            notification_popups: true,
+            minimize_to_taskbar: true,
+            dark_mode: false,
+            hotkey_enabled: true,
+            selection_icon: false,
+            enter_sends: false,
+            quick_actions_fast: true,
+            always_new_chat: false,
+            vnc_enabled: false,
+            debug_mode: false,
+            chart_palette: default_chart_palette(),
+        }
+    }
+}
+
+impl Config {
+    /// 網站可以部署在子目錄；將它視為目錄，避免 URL join 把最後一段當成檔名取代。
+    /// 主機名稱交由 URL 函式庫解析，單段內網名稱、IP 與自訂埠號都可以使用。
+    pub fn base_url(&self) -> AppResult<Url> {
+        let input = self.server_url.trim();
+        reject_ambiguous_characters(input)?;
+        let mut url = Url::parse(input).map_err(|_| {
+            "請輸入完整網站網址，例如 https://ai.company.example 或 http://intranet-host。"
+                .to_string()
+        })?;
+        validate_url(&url, self.allow_http)?;
+        if url.query().is_some() {
+            return Err("網站網址不可含查詢字串；API Key 請由登入授權取得。".into());
+        }
+        if !url.path().ends_with('/') {
+            // path_segments_mut 避免重新編碼既有的 %xx 路徑。
+            url.path_segments_mut()
+                .map_err(|_| "網站網址必須使用 HTTP 或 HTTPS。".to_string())?
+                .push("");
+        }
+        Ok(url)
+    }
+
+    pub fn validate(&self) -> AppResult<()> {
+        self.base_url()
+            .map_err(|error| format!("網站網址：{error}"))?;
+        for (label, path) in [
+            ("聊天 API", &self.chat_path),
+            ("登入碼路徑", &self.device_path),
+            ("Token 路徑", &self.token_path),
+        ] {
+            self.endpoint(path)
+                .map_err(|error| format!("{label}：{error}"))?;
+        }
+        // 登入及版本查詢必須能在尚未取得模型清單時執行。
+        if self.model.len() > 200 {
+            return Err("模型選項格式錯誤，請重新整理服務。".into());
+        }
+        Ok(())
+    }
+
+    /// 支援完整 URL、以 / 開頭的主機根路徑，以及相對於網站子目錄的路徑。
+    /// 最終 URL 必須同來源，避免把登入憑證送到不同主機、埠號或協定。
+    pub fn endpoint(&self, path: &str) -> AppResult<Url> {
+        let path = path.trim();
+        if path.is_empty() {
+            return Err("請填寫路徑或完整網址，例如 v1/chat/completions。".into());
+        }
+        reject_ambiguous_characters(path)?;
+        if path.starts_with("//") || path.contains(['?', '#']) {
+            return Err(
+                "請填寫 API 路徑或完整 HTTP(S) 網址；不可使用 // 開頭、查詢字串或 # 片段。".into(),
+            );
+        }
+        let base = self.base_url()?;
+        let url = base
+            .join(path)
+            .map_err(|_| "無法解析 API 路徑或完整網址。".to_string())?;
+        validate_url(&url, self.allow_http)?;
+        if url.origin() != base.origin() {
+            return Err("API 必須與網站網址使用相同的協定、主機名稱及埠號。".into());
+        }
+        Ok(url)
+    }
+
+    /// PDF API 與登入端點同屬 desktop；保留實際部署子路徑，不以根路徑覆蓋。
+    pub fn pdf_endpoint(&self) -> AppResult<Url> {
+        self.endpoint(&self.token_path)?
+            .join("../documents/pdf-to-markdown")
+            .map_err(|_| "PDF 轉換路由無效。".into())
+    }
+
+    /// 憑證綁定解析後的實際路由及 Header；避免只改網站子目錄卻沿用舊 Key。
+    /// 模型名稱不影響憑證綁定，因此可以在同一 API 下切換模型。
+    pub fn binding(&self) -> AppResult<String> {
+        Ok(format!(
+            "v2|{}|{}|{}|{:?}",
+            self.endpoint(&self.chat_path)?,
+            self.endpoint(&self.device_path)?,
+            self.endpoint(&self.token_path)?,
+            self.auth_header
+        ))
+    }
+
+    pub fn verification_url(&self, value: &str) -> AppResult<Url> {
+        let url = Url::parse(value).map_err(|_| "網站回傳的登入網址無效。".to_string())?;
+        validate_url(&url, self.allow_http)?;
+        if url.origin() != self.base_url()?.origin() {
+            return Err(
+                "網站回傳了不同來源的登入網址，已停止。請檢查 verification_uri 設定。".into(),
+            );
+        }
+        Ok(url)
+    }
+}
+
+/// URL 解析器會忽略部分換行或將反斜線當成斜線，先拒絕這些容易誤導的輸入。
+fn reject_ambiguous_characters(value: &str) -> AppResult<()> {
+    if value.contains('\\') || value.chars().any(char::is_control) {
+        return Err("網址或路徑不可含反斜線、換行或控制字元。".into());
+    }
+    Ok(())
+}
+
+/// HTTPS 使用 Windows 憑證信任庫。正式內網 HTTP 由程式預設值明確允許。
+pub fn validate_url(url: &Url, allow_http: bool) -> AppResult<()> {
+    let loopback = matches!(url.host_str(), Some("127.0.0.1" | "[::1]" | "localhost"));
+    if url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.fragment().is_some()
+    {
+        return Err("網址不可含帳號、密碼或 # 片段。".into());
+    }
+    match url.scheme() {
+        "https" => Ok(()),
+        "http" if allow_http || loopback => Ok(()),
+        _ => Err("此服務未允許目前的 HTTP(S) 連線協定，請聯絡管理者。".into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn minimize_preference_defaults_to_taskbar_and_preserves_both_choices() {
+        let old: Config = serde_json::from_str("{}").unwrap();
+        assert!(old.minimize_to_taskbar);
+        assert!(Config::default().minimize_to_taskbar);
+        for enabled in [true, false] {
+            let config = Config {
+                minimize_to_taskbar: enabled,
+                ..Config::default()
+            };
+            let loaded: Config =
+                serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
+            assert_eq!(loaded.minimize_to_taskbar, enabled);
+        }
+    }
+
+    #[test]
+    fn fonts_and_interface_scale_roundtrip_without_accepting_arbitrary_css() {
+        let old: Config = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.ui_font, UiFont::WenkaiTc);
+        assert_eq!(old.interface_scale, 100);
+        for font in [
+            UiFont::MicrosoftJhenghei,
+            UiFont::Huninn,
+            UiFont::WenkaiTc,
+            UiFont::WenkaiMonoTc,
+        ] {
+            for scale in [75, 90, 100, 110, 125, 150, 175, 200] {
+                let config = Config {
+                    ui_font: font,
+                    interface_scale: scale,
+                    ..Config::default()
+                };
+                let saved = serde_json::to_string(&config).unwrap();
+                let loaded: Config = serde_json::from_str(&saved).unwrap();
+                assert_eq!(loaded.ui_font, font);
+                assert_eq!(loaded.interface_scale, scale);
+            }
+        }
+        let invalid: Config =
+            serde_json::from_str(r#"{"ui_font":"url(invalid)","interface_scale":42}"#).unwrap();
+        assert_eq!(invalid.ui_font, UiFont::WenkaiTc);
+        assert_eq!(invalid.interface_scale, 100);
+    }
+    #[test]
+    fn pdf_route_keeps_the_desktop_deployment_prefix() {
+        assert_eq!(
+            Config::default().pdf_endpoint().unwrap().as_str(),
+            "http://lp2-en-server/lm_server/api/desktop/documents/pdf-to-markdown"
+        );
+        let config = Config {
+            server_url: "http://localhost:8000/company/".into(),
+            token_path: "api/desktop/oauth/token".into(),
+            ..Config::default()
+        };
+        assert_eq!(
+            config.pdf_endpoint().unwrap().as_str(),
+            "http://localhost:8000/company/api/desktop/documents/pdf-to-markdown"
+        );
+    }
+    #[test]
+    fn behavior_preferences_round_trip_with_safe_legacy_defaults() {
+        let old: Config = serde_json::from_str("{}").unwrap();
+        assert!(old.hotkey_enabled);
+        assert!(
+            !old.selection_icon && !old.enter_sends && !old.always_new_chat && !old.vnc_enabled
+        );
+        let value = Config {
+            hotkey_enabled: false,
+            selection_icon: true,
+            enter_sends: true,
+            always_new_chat: true,
+            quick_actions_fast: false,
+            vnc_enabled: true,
+            ..old
+        };
+        let saved: Config = serde_json::from_str(&serde_json::to_string(&value).unwrap()).unwrap();
+        assert!(!saved.hotkey_enabled && !saved.quick_actions_fast);
+        assert!(
+            saved.selection_icon && saved.enter_sends && saved.always_new_chat && saved.vnc_enabled
+        );
+    }
+
+    #[test]
+    fn section_collapse_preferences_are_independent_and_persistent() {
+        let config = Config {
+            projects_collapsed: true,
+            recent_collapsed: false,
+            ..Config::default()
+        };
+        let loaded: Config =
+            serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
+        assert!(loaded.projects_collapsed);
+        assert!(!loaded.recent_collapsed);
+        let old: Config = serde_json::from_str("{}").unwrap();
+        assert!(!old.projects_collapsed && !old.recent_collapsed);
+    }
+
+    #[test]
+    fn saved_preferences_cannot_override_company_routes() {
+        let config: Config = serde_json::from_str(r#"{"server_url":"https://other-host","chat_path":"/wrong","device_path":"/wrong","token_path":"/wrong","allow_http":false,"auth_header":"x_api_key","model":"quality","hotkey":"Ctrl+Shift+F8"}"#).unwrap();
+        assert_eq!(
+            config.endpoint(&config.chat_path).unwrap().as_str(),
+            "http://lp2-en-server/lm_server/v1/chat/completions"
+        );
+        assert_eq!(config.device_path, DEVICE_PATH);
+        assert_eq!(config.token_path, TOKEN_PATH);
+        assert_eq!(config.auth_header, AuthHeader::Bearer);
+        assert_eq!(config.model, "quality");
+        assert_eq!(config.hotkey, "Ctrl+Shift+F8");
+        let saved = serde_json::to_value(&config).unwrap();
+        assert_eq!(saved.as_object().unwrap().len(), 19);
+        assert!(saved.get("ui_font").is_some());
+        assert!(saved.get("interface_scale").is_some());
+        assert!(saved.get("server_url").is_none());
+        assert!(Config::default().validate().is_ok());
+    }
+
+    #[test]
+    fn rejects_cross_origin_and_insecure_endpoints() {
+        let config = Config {
+            server_url: "https://company.example".into(),
+            model: "test".into(),
+            allow_http: false,
+            ..Config::default()
+        };
+        assert!(config.validate().is_ok());
+        for path in [
+            "//other.example/api",
+            "/\\other.example",
+            "https://other.example",
+            "/chat?key=secret",
+        ] {
+            assert!(config.endpoint(path).is_err());
+        }
+        assert!(config
+            .verification_url("https://other.example/login")
+            .is_err());
+        assert!(Config {
+            server_url: "http://company.example".into(),
+            ..config
+        }
+        .validate()
+        .is_err());
+    }
+
+    #[test]
+    fn model_change_keeps_binding_but_route_change_does_not() {
+        let mut config = Config {
+            server_url: "https://company.example".into(),
+            ..Config::default()
+        };
+        let before = config.binding().unwrap();
+        config.model = "another-model".into();
+        assert_eq!(before, config.binding().unwrap());
+        config.chat_path = "/other/chat".into();
+        assert_ne!(before, config.binding().unwrap());
+    }
+
+    #[test]
+    fn intranet_routes_accept_root_relative_and_complete_urls() {
+        // 使用與公司部署相同的單段主機和多層路徑形式，不在公開原始碼記錄真實主機。
+        let expected = "http://intranet-host/gateway/api/v1/desktop/v1/chat/completions";
+        for (server_url, chat_path) in [
+            (
+                "http://intranet-host",
+                "/gateway/api/v1/desktop/v1/chat/completions",
+            ),
+            (
+                "http://intranet-host",
+                "gateway/api/v1/desktop/v1/chat/completions",
+            ),
+            ("http://intranet-host", expected),
+            (
+                "http://intranet-host/gateway/api/v1/desktop",
+                "v1/chat/completions",
+            ),
+            (
+                "http://intranet-host/gateway/api/v1/desktop/",
+                "v1/chat/completions",
+            ),
+            // 單一 / 表示從主機根目錄開始，不重複附加網站的子目錄。
+            (
+                "http://intranet-host/gateway",
+                "/gateway/api/v1/desktop/v1/chat/completions",
+            ),
+        ] {
+            let config = Config {
+                server_url: server_url.into(),
+                chat_path: chat_path.into(),
+                model: "test".into(),
+                allow_http: true,
+                ..Config::default()
+            };
+            config.validate().unwrap();
+            assert_eq!(
+                config.endpoint(&config.chat_path).unwrap().as_str(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn ip_port_and_encoded_base_paths_are_preserved() {
+        for host in ["https://192.0.2.1:8443", "https://[::1]:8443"] {
+            let config = Config {
+                server_url: format!("{host}/a%20b"),
+                ..Config::default()
+            };
+            assert_eq!(
+                config.endpoint("v1/chat/completions").unwrap().as_str(),
+                format!("{host}/a%20b/v1/chat/completions")
+            );
+        }
+    }
+
+    #[test]
+    fn flexible_routes_still_reject_unsafe_or_cross_origin_urls() {
+        let config = Config {
+            server_url: "http://intranet-host/gateway".into(),
+            allow_http: true,
+            ..Config::default()
+        };
+        for route in [
+            "",
+            "//other-host/chat",
+            "/\\other-host/chat",
+            "v1/cha\nt",
+            "v1/chat?key=secret",
+            "http://other-host/chat",
+            "http://intranet-host:8080/chat",
+            "https://intranet-host/chat",
+            "http://user:password@intranet-host/chat",
+            "http://intranet-host/chat#fragment",
+            "file:///chat",
+        ] {
+            assert!(
+                config.endpoint(route).is_err(),
+                "unexpected accepted route: {route:?}"
+            );
+        }
+        for website in [
+            "http://intranet-host?key=secret",
+            "http://intranet-host/#fragment",
+            "http://user:password@intranet-host",
+            "http://intranet-host/a\nb",
+            "http://intranet-host\\gateway",
+        ] {
+            assert!(Config {
+                server_url: website.into(),
+                ..config.clone()
+            }
+            .base_url()
+            .is_err());
+        }
+        let error = Config {
+            allow_http: false,
+            ..config
+        }
+        .base_url()
+        .unwrap_err();
+        assert!(error.contains("HTTP"));
+    }
+
+    #[test]
+    fn resolved_routes_define_session_binding() {
+        let mut config = Config {
+            server_url: "https://intranet-host/gateway".into(),
+            chat_path: "v1/chat/completions".into(),
+            device_path: "oauth/device".into(),
+            token_path: "oauth/token".into(),
+            ..Config::default()
+        };
+        let before = config.binding().unwrap();
+        config.chat_path = "https://intranet-host/gateway/v1/chat/completions".into();
+        assert_eq!(before, config.binding().unwrap());
+        config.token_path = "oauth/another-token".into();
+        assert_ne!(before, config.binding().unwrap());
+        config.token_path = "oauth/token".into();
+        config.server_url = "https://intranet-host/another-gateway".into();
+        assert_ne!(before, config.binding().unwrap());
+    }
+
+    #[test]
+    fn previous_settings_keep_default_auth_routes() {
+        let config: Config = serde_json::from_str(
+            r#"{"server_url":"https://company.example","chat_path":"/v1/chat/completions","model":"test"}"#,
+        ).unwrap();
+        assert_eq!(config.device_path, DEVICE_PATH);
+        assert_eq!(config.token_path, TOKEN_PATH);
+        config.validate().unwrap();
+    }
+
+    #[test]
+    fn dark_mode_round_trips_and_old_preferences_stay_light() {
+        assert!(!serde_json::from_str::<Config>("{}").unwrap().dark_mode);
+        let config = Config {
+            dark_mode: true,
+            ..Config::default()
+        };
+        let saved = serde_json::to_string(&config).unwrap();
+        assert!(serde_json::from_str::<Config>(&saved).unwrap().dark_mode);
+        assert!(!saved.contains(SERVER_URL));
+    }
+
+    #[test]
+    fn chart_palette_round_trips_and_invalid_saved_colors_fall_back() {
+        let mut config: Config = serde_json::from_str("{}").unwrap();
+        assert_eq!(config.chart_palette, default_chart_palette());
+        config.chart_palette[0] = "#AA2288".into();
+        let saved = serde_json::to_string(&config).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Config>(&saved)
+                .unwrap()
+                .chart_palette[0],
+            "#AA2288"
+        );
+        let bad: Config = serde_json::from_str(r##"{"chart_palette":["url(script)"]}"##).unwrap();
+        assert_eq!(bad.chart_palette, default_chart_palette());
+        config.chart_palette[0] = "#你好".into();
+        assert!(!valid_chart_palette(&config.chart_palette));
+    }
+}

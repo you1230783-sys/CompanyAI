@@ -1,0 +1,595 @@
+use super::*;
+
+#[test]
+fn reading_depth_defaults_to_readme_first_overview_and_keeps_explicit_full_reading() {
+    let prompt = system_prompt_for("fast");
+    assert!(prompt.contains("先看README") && prompt.contains("不預設逐行讀完"));
+    assert!(prompt.contains("明確要求全文閱讀") && prompt.contains("最多8段"));
+    assert!(prompt.contains("record_reading_notes"));
+}
+
+fn caps() -> Capabilities {
+    serde_json::from_str(include_str!("test_capabilities.json")).unwrap()
+}
+
+#[test]
+fn image_payload_is_multimodal_and_keeps_request_limit() {
+    let root = std::env::current_dir().unwrap().join("examples/fixtures");
+    let project = crate::projects::Project {
+        id: "fixture".into(),
+        name: "fixture".into(),
+        root,
+        imports: Default::default(),
+    };
+    let image = crate::projects::vision::input::load(&project, "vision.png").unwrap();
+    let mut body = build_request(
+        &caps(),
+        "c",
+        "r",
+        json!({}),
+        &[Message::user("描述圖片")],
+        false,
+    )
+    .unwrap();
+    attach_image(&caps(), &mut body, std::slice::from_ref(&image)).unwrap();
+    assert_eq!(body["messages"][0]["content"][0]["text"], "描述圖片");
+    assert!(body["messages"][0]["content"][1]["image_url"]["url"]
+        .as_str()
+        .unwrap()
+        .starts_with("data:image/jpeg;base64,/9j/"));
+    assert_eq!(body["tools"], json!([]));
+    let mut small = caps();
+    small.limits.request_bytes = 100;
+    let mut body = json!({"messages":[{"role":"user","content":"圖片"}]});
+    assert!(attach_image(&small, &mut body, std::slice::from_ref(&image)).is_err());
+    for bad in [
+        "../outside.png",
+        "C:\\outside.png",
+        ".lmai/private.png",
+        "vision.svg",
+    ] {
+        assert!(crate::projects::vision::input::load(&project, bad).is_err());
+    }
+}
+fn request() -> Value {
+    build_request(&caps(),"conversation_demo","req1",
+        json!({"project_id":"p","run_id":"r","turn_index":1,"parent_request_id":null,"context_policy":"client_snapshot"}),
+        &[Message::user("請閱讀文件")],true).unwrap()
+}
+fn task(request: Value) -> jobs::Task {
+    jobs::Task {
+        request_id: "req1".into(),
+        conversation_id: "local".into(),
+        request,
+        mode: "background".into(),
+        title: String::new(),
+        created_at: 0,
+        remote: None,
+        applied: false,
+        message: String::new(),
+        mail_analysis: false,
+        title_generation: false,
+        tool_events: vec![],
+        partial: String::new(),
+        project_retry: Default::default(),
+    }
+}
+fn status(task: &jobs::Task, args: &str) -> jobs::TaskStatus {
+    serde_json::from_value(json!({"task_id":"task1","client_request_id":task.request_id,
+        "contract_version":CONTRACT,"conversation_id":task.request["conversation_id"],"context":task.request["context"],
+        "state":"completed","error_message":"","result":{"id":"completion_1","object":"chat.completion","created":1,"model":"quality","choices":[{"index":0,"finish_reason":"tool_calls",
+        "message":{"role":"assistant","content":null,"tool_calls":[{"id":"call:001","type":"function",
+        "function":{"name":"read_file","arguments":args}}]}}]}})).unwrap()
+}
+#[test]
+fn request_uses_native_fields_and_no_legacy_flags() {
+    let r = request();
+    assert_eq!(r["contract_version"], CONTRACT);
+    assert_eq!(r["skills"], false);
+    assert_eq!(r["tool_choice"], "required");
+    assert_eq!(r["parallel_tool_calls"], false);
+    assert!(r.get("attachment_tokens").is_none());
+    assert!(r.get("outlook_triage").is_none());
+    let c = caps();
+    let empty = build_request(&c, "c", "r", json!({}), &[Message::user("摘要")], false).unwrap();
+    assert_eq!(empty["tools"], json!([]));
+    assert_eq!(empty["tool_choice"], "none");
+}
+
+#[test]
+fn fast_model_does_not_receive_delegation_and_blank_copy_is_repairable() {
+    let mut capabilities = caps();
+    capabilities.model = "fast".into();
+    let request = build_request(
+        &capabilities,
+        "c",
+        "r",
+        json!({}),
+        &[Message::user("閱讀")],
+        true,
+    )
+    .unwrap();
+    assert!(!request["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|t| t["function"]["name"] == "summarize_document"));
+    assert!(!request.to_string().contains("analyze_image"));
+    assert!(!request.to_string().contains("image-read"));
+    let prompt = system_prompt_for("fast");
+    assert!(!prompt.contains("image-read") && !prompt.contains("analyze_image"));
+    assert!(prompt.contains("此模型不支援圖片傳入"));
+    assert_eq!(
+        crate::projects::skills::context_for(&["image-read".into()], "fast").unwrap(),
+        ""
+    );
+    let mut capabilities = caps();
+    capabilities.strict_tool_arguments = false;
+    let task = task(
+        build_request(
+            &capabilities,
+            "c",
+            "req1",
+            json!({}),
+            &[Message::user("修改")],
+            true,
+        )
+        .unwrap(),
+    );
+    let mut status = status(
+        &task,
+        r#"{"copy_id":"","revision":"","start":0,"expected":"","replacement":""}"#,
+    );
+    status.result.as_mut().unwrap()["choices"][0]["message"]["tool_calls"][0]["function"]["name"] =
+        json!("edit_text");
+    assert!(matches!(
+        parse(&status, &task, &capabilities.principal_id, "run"),
+        Ok(Parsed::Repair { .. })
+    ));
+}
+#[test]
+fn native_null_content_call_is_accepted_without_parsing_text() {
+    let task = task(request());
+    let status = status(
+        &task,
+        r#"{"path":"測試.txt","offset":0,"progress_note":"已確認目前要求；下一步讀取來源。"}"#,
+    );
+    let Parsed::Operation {
+        parsed,
+        message,
+        call_id,
+    } = parse(&status, &task, "owner", "run").unwrap()
+    else {
+        panic!("expected tool")
+    };
+    assert_eq!(call_id, "call:001");
+    assert!(message.content.is_empty());
+    let super::super::Decision::Tool { operation_id, .. } = parsed.decision else {
+        panic!("tool")
+    };
+    assert_eq!(
+        operation_id,
+        operation_key("owner", "run", "req1", "call:001")
+    );
+}
+#[test]
+fn provider_metadata_is_ignored_and_not_forwarded_in_history() {
+    let task = task(request());
+    let args =
+        r#"{"path":"測試.txt","offset":0,"progress_note":"已確認目前要求；下一步讀取來源。"}"#;
+    let mut status = status(&task, args);
+    status
+        .agent_envelope
+        .insert("provider_metadata".into(), json!(true));
+    status.agent_envelope.get_mut("context").unwrap()["provider_metadata"] = json!(true);
+    let result = status.result.as_mut().unwrap();
+    // 每層都加入不同型別的未知欄位；內部只留下原生訊息白名單。
+    result["provider_metadata"] = json!({"unexpected":"ignored"});
+    result["choices"][0]["provider_metadata"] = json!([1, 2]);
+    let value = &mut result["choices"][0]["message"];
+    value["provider_specific_fields"] = json!({"tool_calls":[{"name":"delete_copy"}]});
+    value["reasoning_content"] = json!("不回填模型私有內容");
+    value["tool_calls"][0]["provider_metadata"] = json!(true);
+    value["tool_calls"][0]["function"]["provider_metadata"] = json!("ignored");
+    let Parsed::Operation { message, .. } = parse(&status, &task, "owner", "run").unwrap() else {
+        panic!("expected tool")
+    };
+    assert_eq!(
+        message.wire(),
+        json!({"role":"assistant","content":null,
+        "tool_calls":[{"id":"call:001","type":"function",
+            "function":{"name":"read_file","arguments":args}}]})
+    );
+    assert!(
+        validate_history(&[message, Message::result("call:001", &json!({"ok":true})),]).is_ok()
+    );
+
+    // 忽略封裝額外欄位不等於忽略實際操作參數。
+    status.result.as_mut().unwrap()["choices"][0]["message"]["tool_calls"][0]["function"]
+        ["arguments"] = json!(
+        r#"{"path":"a","offset":0,"progress_note":"已確認目前要求；下一步讀取來源。","unknown_argument":true}"#
+    );
+    assert!(parse(&status, &task, "owner", "run").is_err());
+}
+
+#[test]
+fn response_allowlist_still_requires_valid_native_fields() {
+    let task = task(request());
+    let original = status(
+        &task,
+        r#"{"path":"a","offset":0,"progress_note":"已確認目前要求；下一步讀取來源。"}"#,
+    );
+    for key in [
+        "project_id",
+        "run_id",
+        "turn_index",
+        "parent_request_id",
+        "context_policy",
+    ] {
+        let mut missing = original.clone();
+        missing
+            .agent_envelope
+            .get_mut("context")
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .remove(key);
+        assert!(
+            parse(&missing, &task, "p", "r").is_err(),
+            "missing context.{key}"
+        );
+    }
+    for pointer in [
+        "/id",
+        "/object",
+        "/created",
+        "/model",
+        "/choices/0/index",
+        "/choices/0/finish_reason",
+        "/choices/0/message/role",
+        "/choices/0/message/content",
+        "/choices/0/message/tool_calls/0/id",
+        "/choices/0/message/tool_calls/0/type",
+        "/choices/0/message/tool_calls/0/function/name",
+        "/choices/0/message/tool_calls/0/function/arguments",
+    ] {
+        let mut missing = original.clone();
+        let result = missing.result.as_mut().unwrap();
+        result["provider_specific_fields"] = json!({"fallback":"must not be used"});
+        let (parent, key) = pointer.rsplit_once('/').unwrap();
+        result
+            .pointer_mut(parent)
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .remove(key);
+        assert!(
+            parse(&missing, &task, "p", "r").is_err(),
+            "missing {pointer}"
+        );
+        let mut wrong_type = original.clone();
+        *wrong_type
+            .result
+            .as_mut()
+            .unwrap()
+            .pointer_mut(pointer)
+            .unwrap() = json!(true);
+        assert!(
+            parse(&wrong_type, &task, "p", "r").is_err(),
+            "wrong type {pointer}"
+        );
+    }
+}
+
+#[test]
+fn delegated_text_ignores_provider_metadata() {
+    let request = build_request(
+        &caps(),
+        "c",
+        "req1",
+        json!({}),
+        &[Message::user("摘要")],
+        false,
+    )
+    .unwrap();
+    let task = task(request);
+    let mut status = status(&task, "{}");
+    let choice = &mut status.result.as_mut().unwrap()["choices"][0];
+    choice["finish_reason"] = json!("stop");
+    choice["message"] = json!({"role":"assistant", "content":"摘要內容",
+        "provider_specific_fields":{"anything":true}});
+    assert!(matches!(parse(&status, &task, "p", "r").unwrap(),
+        Parsed::Text(text) if text == "摘要內容"));
+}
+
+#[test]
+fn strict_schema_duplicate_keys_unknown_fields_and_malformed_arguments_fail() {
+    let task = task(request());
+    for args in [
+        r#"{"path":"a","path":"b","offset":0,"progress_note":"已確認目前要求；下一步讀取來源。"}"#,
+        r#"{"path":"a","offset":0,"progress_note":"已確認目前要求；下一步讀取來源。","escape":true}"#,
+        r#"{"path":"a"}"#,
+        "{broken",
+    ] {
+        assert!(
+            parse(&status(&task, args), &task, "p", "r").is_err(),
+            "{args}"
+        );
+    }
+    assert!(schema::decode_json(r#"{"result":{},"result":{}}"#).is_err());
+}
+#[test]
+fn non_strict_repair_retains_native_call_for_tool_error() {
+    let mut r = request();
+    for tool in r["tools"].as_array_mut().unwrap() {
+        tool["function"]["strict"] = json!(false);
+    }
+    let task = task(r);
+    assert!(matches!(
+        parse(&status(&task, "{broken"), &task, "p", "r").unwrap(),
+        Parsed::Repair {
+            message: Some(_),
+            call_id: Some(_),
+            ..
+        }
+    ));
+}
+#[test]
+fn truncated_refused_multiple_or_wrong_identity_never_execute() {
+    let task = task(request());
+    let original = status(
+        &task,
+        r#"{"path":"a","offset":0,"progress_note":"已確認目前要求；下一步讀取來源。"}"#,
+    );
+    let mut truncated = original.clone();
+    truncated.result.as_mut().unwrap()["choices"][0]["finish_reason"] = json!("length");
+    assert!(matches!(
+        parse(&truncated, &task, "p", "r").unwrap(),
+        Parsed::Repair { message: None, .. }
+    ));
+    let mut refused = original.clone();
+    refused.result.as_mut().unwrap()["choices"][0]["message"]["refusal"] = json!("拒絕");
+    assert!(parse(&refused, &task, "p", "r").is_err());
+    let mut multiple = original.clone();
+    let calls = multiple.result.as_mut().unwrap()["choices"][0]["message"]["tool_calls"]
+        .as_array_mut()
+        .unwrap();
+    calls.push(calls[0].clone());
+    assert!(parse(&multiple, &task, "p", "r").is_err());
+    multiple.result.as_mut().unwrap()["choices"][0]["message"]["tool_calls"][1]["id"] =
+        json!("call:002");
+    assert!(matches!(
+        parse(&multiple, &task, "p", "r").unwrap(),
+        Parsed::Repair {
+            message: None,
+            call_id: None,
+            ..
+        }
+    ));
+    multiple.result.as_mut().unwrap()["choices"][0]["message"]["tool_calls"][1]["function"]
+        ["name"] = json!("unknown_tool");
+    assert!(parse(&multiple, &task, "p", "r").is_err());
+    let mut wrong = original;
+    wrong.agent_envelope.insert("context".into(), json!({}));
+    assert!(parse(&wrong, &task, "p", "r").is_err());
+}
+#[test]
+fn history_pairs_and_request_scoped_ids_survive_repeated_calls() {
+    let mut assistant = Message::assistant("正在閱讀".into());
+    assistant.tool_calls = vec![
+        json!({"id":"call_001","type":"function","function":{"name":"old_tool","arguments":"{}"}}),
+    ];
+    let result = Message::result("call_001", &json!({"ok":true}));
+    assert!(validate_history(&[assistant.clone()]).is_err());
+    assert!(validate_history(std::slice::from_ref(&result)).is_err());
+    assert!(validate_history(&[assistant.clone(), result.clone(), assistant, result]).is_ok());
+    assert_ne!(
+        operation_key("p", "r", "req1", "call_001"),
+        operation_key("p", "r", "req2", "call_001")
+    );
+    assert_ne!(
+        operation_key("ab", "c", "d", "e"),
+        operation_key("a", "bc", "d", "e")
+    );
+}
+#[test]
+fn catalog_is_portable_and_nullable_fields_restore_original_defaults() {
+    let tools = schema::definitions(true).unwrap();
+    // 與正式目錄逐一比對名稱，新增工具時不需同步維護另一個魔術數字；
+    // 同時抓出漏轉換、重複或意外新增的傳輸工具。
+    let source: Value = serde_json::from_str(include_str!("../tools.json")).unwrap();
+    let names = |items: &[Value]| -> std::collections::BTreeSet<String> {
+        items
+            .iter()
+            .map(|tool| tool["function"]["name"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let expected = names(source["tools"].as_array().unwrap());
+    assert!(!expected.is_empty());
+    assert_eq!(tools.len(), expected.len());
+    assert_eq!(names(&tools), expected);
+    let encoded = serde_json::to_string(&tools).unwrap();
+    for key in [
+        "\"oneOf\":",
+        "\"maxLength\":",
+        "\"minimum\":",
+        "\"default\":",
+        "\"const\":",
+    ] {
+        assert!(!encoded.contains(key), "{key}");
+    }
+    let restored = schema::restore_optional(
+        "read_file",
+        json!({"path":"a","offset":null,"progress_note":null}),
+    )
+    .unwrap();
+    assert!(restored.get("offset").is_none());
+    let query=schema::restore_optional("search_logs",json!({"query":{"paths":["20260623_system_A01-01.log"],"terms":null,"date":null,"start_time":null,"end_time":null,"case_sensitive":null,"context_lines":null},"cursor":null})).unwrap();
+    let mut request = query.as_object().unwrap().clone();
+    request.insert("tool".into(), json!("search_logs"));
+    let tool: crate::projects::Tool = serde_json::from_value(Value::Object(request)).unwrap();
+    assert!(
+        matches!(tool,crate::projects::Tool::SearchLogs { query, cursor:None } if query.terms.is_empty() && !query.case_sensitive)
+    );
+}
+/// 實際傳送的全部工具都需符合契約；不能只驗證幾個 read_file 範例。
+#[test]
+fn every_tool_uses_only_nullable_type_arrays_in_both_modes() {
+    fn check(node: &Value, path: &str) {
+        match node {
+            Value::Object(object) => {
+                if let Some(types) = object.get("type").and_then(Value::as_array) {
+                    assert_eq!(types.len(), 2, "{path}: {types:?}");
+                    assert_eq!(types.iter().filter(|v| **v == "null").count(), 1, "{path}");
+                    assert!(types.iter().all(Value::is_string), "{path}");
+                }
+                for (name, child) in object {
+                    check(child, &format!("{path}.{name}"));
+                }
+            }
+            Value::Array(array) => {
+                for (index, child) in array.iter().enumerate() {
+                    check(child, &format!("{path}[{index}]"));
+                }
+            }
+            _ => (),
+        }
+    }
+    for strict in [false, true] {
+        let tools = schema::definitions(strict).unwrap();
+        for tool in &tools {
+            let parameters = &tool["function"]["parameters"];
+            assert_eq!(parameters["type"], "object");
+            assert!(parameters.get("anyOf").is_none());
+            check(parameters, tool["function"]["name"].as_str().unwrap());
+        }
+    }
+}
+
+#[test]
+fn unsupported_model_and_limits_do_not_fall_back_or_truncate() {
+    let mut c = caps();
+    c.native_tool_calls = false;
+    assert!(c.validate("quality", true).is_err());
+    assert!(c.validate("quality", false).is_ok());
+    c.limits.tools = 0;
+    c.limits.tools_bytes = 0;
+    assert!(build_request(&c, "c", "r", json!({}), &[Message::user("摘要")], false).is_ok());
+    c = caps();
+    c.limits.request_bytes = 20;
+    assert!(build_request(&c, "c", "r", json!({}), &[Message::user("保留全文")], true).is_err());
+}
+
+/// 代表模型依當輪 Schema 填入參數；所有內建工具都需能轉回既有 Rust 型別。
+/// 此測試不執行工具，也不宣稱虛構檔案／版本具備授權。
+#[test]
+fn every_native_tool_schema_maps_to_existing_decision() {
+    fn example(s: &Value, source: &Value) -> Value {
+        if let Some(v) = s["enum"].as_array() {
+            return v[0].clone();
+        }
+        if let Some(v) = s["anyOf"].as_array() {
+            if v.iter().any(|s| s["type"] == "null") {
+                return Value::Null;
+            }
+            return example(&v[0], source);
+        }
+        let kind = s["type"]
+            .as_str()
+            .or_else(|| s["type"].as_array().and_then(|a| a[0].as_str()))
+            .unwrap();
+        match kind {
+            "object" => Value::Object(
+                s["properties"]
+                    .as_object()
+                    .unwrap()
+                    .iter()
+                    .map(|(k, v)| (k.clone(), example(v, &source["properties"][k])))
+                    .collect(),
+            ),
+            // 可攜 Schema 省略 minItems；合成模型仍須遵守原工具的固定座標長度。
+            "array" => Value::Array(
+                (0..source["minItems"].as_u64().unwrap_or(1))
+                    .map(|_| example(&s["items"], &source["items"]))
+                    .collect(),
+            ),
+            "string" => json!("範例"),
+            "integer" => json!(0),
+            "number" => json!(1.0),
+            "boolean" => json!(true),
+            "null" => Value::Null,
+            _ => panic!("unexpected type"),
+        }
+    }
+    let task = task(request());
+    let source: Value = serde_json::from_str(include_str!("../tools.json")).unwrap();
+    for tool in task.request["tools"].as_array().unwrap() {
+        let name = tool["function"]["name"].as_str().unwrap();
+        let original = source["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["function"]["name"] == name)
+            .unwrap();
+        let args = example(
+            &tool["function"]["parameters"],
+            &original["function"]["parameters"],
+        );
+        let mut result = status(&task, &args.to_string());
+        result.result.as_mut().unwrap()["choices"][0]["message"]["tool_calls"][0]["function"]
+            ["name"] = json!(name);
+        assert!(
+            matches!(
+                parse(&result, &task, "p", "r").unwrap(),
+                Parsed::Operation { .. }
+            ),
+            "{name}: {args}"
+        );
+    }
+}
+
+#[test]
+fn nested_office_nullable_format_preserves_explicit_properties() {
+    let tool = schema::definitions(true)
+        .unwrap()
+        .into_iter()
+        .find(|t| t["function"]["name"] == "office_action")
+        .unwrap();
+    let format_schema = &tool["function"]["parameters"]["properties"]["operation"]["anyOf"][0]
+        ["properties"]["format"];
+    let mut format = serde_json::Map::new();
+    for name in format_schema["properties"].as_object().unwrap().keys() {
+        format.insert(name.clone(), Value::Null);
+    }
+    format.insert("bold".into(), json!(true));
+    let args = json!({"copy_id":"copy","revision":"revision","operation":{"kind":"format","target":"p1","format":format},"progress_note":"已確認目前要求；下一步讀取來源。"});
+    let verified =
+        schema::decode_arguments(&args.to_string(), &tool["function"]["parameters"]).unwrap();
+    let restored = schema::restore_optional("office_action", verified).unwrap();
+    assert_eq!(restored["operation"]["format"], json!({"bold":true}));
+}
+
+/// 舊請求已提交時維持其原始 Schema；新請求才要求每輪非 null 的工作筆記。
+#[test]
+fn pending_old_request_keeps_nullable_note_but_new_request_requires_string() {
+    let mut old = task(request());
+    let tool = old.request["tools"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|tool| tool["function"]["name"] == "read_file")
+        .unwrap();
+    let note = &mut tool["function"]["parameters"]["properties"]["progress_note"];
+    assert_eq!(note["type"], "string");
+    *note = json!({"anyOf":[note.clone(), {"type":"null"}]});
+    let args = r#"{"path":"a","offset":0,"progress_note":null}"#;
+    assert!(matches!(
+        parse(&status(&old, args), &old, "owner", "run"),
+        Ok(Parsed::Operation { .. })
+    ));
+    let new = task(request());
+    assert!(parse(&status(&new, args), &new, "owner", "run")
+        .err()
+        .unwrap()
+        .contains("progress_note"));
+}

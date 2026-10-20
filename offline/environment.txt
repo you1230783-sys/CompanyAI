@@ -1,0 +1,59 @@
+Scope: basic validation; full validation pending
+MSVC: 14.29.30133
+Compiler: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\cl.exe
+v142.c
+Verified _MSC_FULL_VER=192930159 x64
+Linker: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\link.exe
+SDK: 10.0.19041.0\
+Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-34bc8394a9c7400ab006382eaf60d045
+rustc 1.98.1 (48a229cea 2026-09-01)
+binary: rustc
+commit-hash: 48a229ceaefd4985c50990b14116b6d856af0985
+commit-date: 2026-09-01
+host: x86_64-pc-windows-msvc
+release: 1.98.1
+LLVM version: 22.1.8
+cargo 1.98.1 (797e8a9bc 2026-08-05)
+Microsoft (R) COFF/PE Dumper Version 14.29.30159.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file Y:\Rust\Project\CompanyAI\target\x86_64-pc-windows-msvc\release\company-ai.exe
+
+File Type: EXECUTABLE IMAGE
+
+  Image has the following dependencies:
+
+    bcryptprimitives.dll
+    kernel32.dll
+    ole32.dll
+    user32.dll
+    combase.dll
+    shell32.dll
+    oleaut32.dll
+    shlwapi.dll
+    propsys.dll
+    api-ms-win-core-winrt-error-l1-1-0.dll
+    winhttp.dll
+    bcrypt.dll
+    api-ms-win-core-synch-l1-2-0.dll
+    crypt32.dll
+    dwmapi.dll
+    advapi32.dll
+    userenv.dll
+    mpr.dll
+    gdi32.dll
+    ADVAPI32.dll
+    KERNEL32.dll
+    ntdll.dll
+    WS2_32.dll
+
+  Summary
+
+        3000 .data
+       82000 .pdata
+     2A63000 .rdata
+        9000 .reloc
+       3D000 .rsrc
+      CBC000 .text
+        1000 _RDATA

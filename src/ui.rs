@@ -1,0 +1,2403 @@
+//! 主視窗與工作流程。背景工作只透過訊息傳回資料，不跨執行緒操作 WebView2。
+use crate::{
+    auth,
+    config::Config,
+    demo::DemoServer,
+    history::{self, Archive},
+    notifications::{self, Inbox},
+    outlook::{self, MailPreview},
+    protocol::{DeviceGrant, Message},
+    selection::{self, Hotkey},
+    service::{self, ModelCatalog, VersionState},
+    storage::{self, Session},
+    transport,
+    webview::WebView,
+    wide, AppResult,
+};
+use serde::Deserialize;
+use serde_json::json;
+use std::{
+    cell::RefCell,
+    path::{Path, PathBuf},
+    ptr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc,
+    },
+    thread,
+    time::{Duration, Instant},
+};
+use windows_sys::Win32::{
+    Foundation::*,
+    System::LibraryLoader::GetModuleHandleW,
+    UI::{HiDpi::*, Shell::*, WindowsAndMessaging::*},
+};
+mod access;
+mod diagnostics;
+mod mail_batch;
+mod onboarding;
+mod projects;
+mod retry;
+mod site;
+mod tutorial_preview;
+mod vnc;
+mod window_behavior;
+mod work;
+const TRAY_MESSAGE: u32 = WM_APP + 4;
+
+/// 明確列舉介面命令，不提供任意檔案、程式或任意 API 執行入口。
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum Command {
+    OnboardingWelcomeDismiss,
+    OnboardingAck {
+        topic: String,
+    },
+    Project {
+        command: projects::ProjectCommand,
+    },
+    Vnc {
+        command: vnc::VncCommand,
+    },
+    SiteAction {
+        command: crate::site_notifications::Action,
+    },
+    MailBatch {
+        command: mail_batch::MailCommand,
+    },
+    Work {
+        command: work::WorkCommand,
+    },
+    ExportDiagnostics {
+        include_details: bool,
+    },
+    StartHotkeyRecording,
+    CancelHotkeyRecording,
+    RecordedHotkey {
+        modifiers: u32,
+        key: u32,
+    },
+    Ready,
+    Draft {
+        text: String,
+    },
+    Chat {
+        text: String,
+        action: String,
+    },
+    RetryChat {
+        conversation_id: String,
+        user_index: usize,
+        message_count: usize,
+        request_id: Option<String>,
+    },
+    NewChat,
+    Behavior {
+        hotkey_enabled: bool,
+        selection_icon: bool,
+        enter_sends: bool,
+        quick_actions_fast: bool,
+        always_new_chat: bool,
+        #[serde(default)]
+        vnc_enabled: bool,
+    },
+    RenameChat {
+        id: String,
+        title: String,
+    },
+    PinChat {
+        id: String,
+        pinned: bool,
+    },
+    CollapseSection {
+        section: String,
+        collapsed: bool,
+    },
+    Preferences {
+        font_size: u8,
+        #[serde(default)]
+        ui_font: Option<crate::config::UiFont>,
+        #[serde(default)]
+        interface_scale: Option<u16>,
+        sidebar_collapsed: bool,
+        notification_popups: bool,
+        #[serde(default)]
+        minimize_to_taskbar: Option<bool>,
+        #[serde(default)]
+        dark_mode: Option<bool>,
+    },
+    Hotkey {
+        value: String,
+    },
+    ChartPalette {
+        colors: Vec<String>,
+    },
+    Login,
+    Logout,
+    CancelLogin,
+    ReopenLogin,
+    Refresh,
+    Download,
+    Exit,
+    Model {
+        id: String,
+    },
+    SelectChat {
+        id: String,
+    },
+    DeleteChat {
+        id: String,
+    },
+    Copy {
+        text: String,
+    },
+    RefreshEvents,
+    ReadEvent {
+        id: String,
+    },
+    AllEvents {
+        dismiss: bool,
+    },
+    NotificationsLeft,
+    ReadMail,
+    ReadMailBody,
+    OmitMailBody,
+    AnalyzeMail,
+    OpenLink {
+        url: String,
+    },
+    SelfTestResult {
+        ok: bool,
+        detail: String,
+    },
+}
+enum Event {
+    SmokePng(AppResult<()>),
+    Project(projects::ProjectEvent),
+    VncSync(String, crate::vnc::sync::SessionEvent),
+    VncSearch(String, AppResult<PathBuf>),
+    Site(u64, site::SiteEvent),
+    MailBatch(u64, u64, mail_batch::MailEvent),
+    Work(u64, work::WorkEvent),
+    Services(
+        u64,
+        AppResult<service::VersionInfo>,
+        AppResult<ModelCatalog>,
+    ),
+    Grant(u64, AppResult<DeviceGrant>),
+    Login(u64, AppResult<Session>),
+    Capture(u64, AppResult<String>),
+    UpdateReady(AppResult<crate::deployment::ReadyUpdate>),
+    SelectionRect(Option<crate::selection_popup::SelectionRect>),
+    Mail(u64, AppResult<MailPreview>),
+    Events(u64, AppResult<notifications::EventPage>),
+    Read(u64, String, AppResult<()>),
+    Socket(u64, bool),
+    AllRead(u64, usize),
+}
+struct App {
+    onboarding: onboarding::Onboarding,
+    projects: projects::ProjectRuntime,
+    vnc: vnc::VncRuntime,
+    site: site::SiteRuntime,
+    mail_flow: mail_batch::MailRuntime,
+    work: work::WorkRuntime,
+    window: HWND,
+    selection_popup: crate::selection_popup::Popup,
+    view: WebView,
+    root: PathBuf,
+    config: Config,
+    session: Option<Session>,
+    archive: Archive,
+    active_id: Option<String>,
+    messages: Vec<Message>,
+    history_error: Option<String>,
+    draft: String,
+    draft_revision: u64,
+    focus_draft: bool,
+    busy: &'static str,
+    status: String,
+    /// 每次錯誤都有新序號，讓同一操作再次失敗時仍顯示通知。
+    status_notice_id: u64,
+    error: bool,
+    models: Option<ModelCatalog>,
+    versions: VersionState,
+    version_status: String,
+    update_ready: Option<crate::deployment::ReadyUpdate>,
+    update_busy: bool,
+    /// 僅當次啟動、指定版本的下載及安裝同意；不跨重啟保存。
+    update_consent: Option<String>,
+    update_status: String,
+    services_loading: bool,
+    generation: u64,
+    login_operation: u64,
+    cancelled: Arc<AtomicBool>,
+    grant: Option<DeviceGrant>,
+    inbox: Inbox,
+    notifications_loading: bool,
+    notifications_pending: bool,
+    notification_status: String,
+    socket_cancel: Arc<AtomicBool>,
+    last_events: Instant,
+    last_services: Instant,
+    mail: Option<MailPreview>,
+    mail_busy: bool,
+    hotkey: Option<Hotkey>,
+    recording_since: Option<Instant>,
+    suppress_hotkey: bool,
+    tx: mpsc::Sender<Event>,
+    rx: mpsc::Receiver<Event>,
+    commands: mpsc::Receiver<String>,
+    demo: bool,
+    smoke: bool,
+    ready: bool,
+    smoke_result: Option<AppResult<()>>,
+}
+impl Drop for App {
+    fn drop(&mut self) {
+        self.projects.cancel();
+        self.vnc.shutdown();
+        let _ = self.preserve_draft();
+        self.mail_flow.cancel.store(true, Ordering::Relaxed);
+        self.cancelled.store(true, Ordering::Relaxed);
+        self.socket_cancel.store(true, Ordering::Relaxed);
+        selection::unregister(self.window);
+        tray(self.window, NIM_DELETE, None);
+    }
+}
+impl App {
+    /// WebView 子視窗與主視窗視為同一個前景 App。
+    fn is_foreground(&self) -> bool {
+        unsafe { GetAncestor(GetForegroundWindow(), GA_ROOT) == self.window }
+    }
+    fn logged_in(&self) -> bool {
+        self.session
+            .as_ref()
+            .is_some_and(|s| s.valid_for(&self.config))
+    }
+    fn can_send(&self) -> bool {
+        self.logged_in()
+            && self.busy == "none"
+            && !self.projects.active(self.active_id.as_deref())
+            && self.work_ready()
+            && !self.versions.blocked()
+            && self
+                .models
+                .as_ref()
+                .is_some_and(|c| c.models.iter().any(|m| m.id == self.config.model))
+    }
+    fn publish(&mut self) {
+        if !self.logged_in() || self.versions.blocked() {
+            self.projects.cancel();
+        }
+        if !self.ready {
+            return;
+        }
+        let models: Vec<_> = self
+            .models
+            .as_ref()
+            .map(|c| {
+                c.models
+                    .iter()
+                    .map(|m| json!({"id":m.id,"label":m.label,"description":m.description}))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let conversations: Vec<_> = self
+            .archive
+            .conversations
+            .iter()
+            .map(|c| json!({"id":c.id,"title":c.title,"updated_at":c.updated_at,"pinned":c.pinned,"project_id":self.projects.store.conversations.get(&c.id)}))
+            .collect();
+        let mut events:Vec<serde_json::Value>=self.inbox.events.iter().filter(|e|!e.expired()&&!e.dismissed&&e.visible_ai()&&!crate::projects::events::internal(&self.root,e.resource_id.as_deref())).map(|e|json!({
+            "id":e.id,"source":"ai","type":e.kind,"title":e.title,"summary":e.summary,"created_at":e.created_at,"read_at":e.read_at,"notification_key":format!("ai:{}",e.id)
+        })).collect();
+        events.extend(self.site.cache.items.iter().filter(|e|!crate::projects::events::internal(&self.root,e.resource_id.as_deref())).map(|e|json!({"id":e.id,"source":"site","origin":e.source,"type":e.kind,"title":e.title,"summary":e.body,"created_at":e.created_at,"read_at":if e.is_read{Some(e.read_at.clone().unwrap_or_default())}else{None},"is_read":e.is_read,"url":e.url,"resource_id":e.resource_id,"received_at":e.received_at,"notification_key":format!("site:{}",e.id)})));
+        events.sort_by(|a, b| {
+            b["created_at"]
+                .as_str()
+                .cmp(&a["created_at"].as_str())
+                .then_with(|| {
+                    a["notification_key"]
+                        .as_str()
+                        .cmp(&b["notification_key"].as_str())
+                })
+        });
+        let _=self.view.post(&json!({"type":"state","state":{
+            "update_available":self.versions.known.as_ref().is_some_and(|info| info.available()),
+            "update_status":self.update_status,"update_ready":self.update_ready.is_some(),"update_busy":self.update_busy,
+            "update_kind":self.update_ready.as_ref().map(|ready|ready.artifact.kind.as_str()),
+            "version":service::CURRENT_VERSION,"onboarding":self.onboarding.state(),"config":self.config,"status":self.status,"status_notice_id":self.status_notice_id,"error":self.error,
+            "busy":self.busy,"logged_in":self.logged_in(),"can_send":self.can_send(),"update_required":self.versions.blocked(),
+            "retry":self.retry_state(),"projects":self.project_state(),"models":models,"conversations":conversations,"active_id":self.active_id,"messages":self.messages,
+            "draft":self.draft,"draft_revision":self.draft_revision,"focus_draft":self.focus_draft,
+            "notifications":events,"notification_status":self.notification_status,"unread_count":self.inbox.events.iter().filter(|e| e.visible_ai()&&!e.dismissed&&!e.expired()&&e.read_at.is_none()&&!crate::projects::events::internal(&self.root,e.resource_id.as_deref())).count()+self.site.cache.unread_count.saturating_sub(self.site.cache.items.iter().filter(|e|!e.is_read&&crate::projects::events::internal(&self.root,e.resource_id.as_deref())).count()),"site_status":self.site.status,"site_loading":self.site.loading,"site_mutating":self.site.mutating,"notifications_loading":self.notifications_loading,
+            "mail":self.mail,"mail_busy":self.mail_busy,"mail_batch":self.mail_batch_state(),"history_error":self.history_error,
+            "work":self.work_state(),"vnc":self.vnc_state(),"version_status":self.version_status,"login_code":self.grant.as_ref().map(|g|&g.user_code)
+        }}));
+        self.focus_draft = false;
+    }
+    fn fail(&mut self, error: String) {
+        let error = if error.starts_with("Error Code: ") {
+            error
+        } else {
+            self.friendly_error("interface", &error)
+        };
+        self.status_notice_id = self.status_notice_id.wrapping_add(1);
+        // 強制更新對話框會遮住主畫面狀態列，下載／安裝錯誤須在對話框內可見。
+        if self.versions.blocked() {
+            self.update_status = error.clone();
+        }
+        self.status = error;
+        self.error = true;
+    }
+    fn toast(&self, text: &str) {
+        let _ = self.view.post(&json!({"type":"toast","text":text}));
+    }
+    fn set_draft(&mut self, text: String) {
+        self.draft = text;
+        if let Some(c) = self
+            .archive
+            .conversations
+            .iter_mut()
+            .find(|c| Some(&c.id) == self.active_id.as_ref())
+        {
+            c.draft = self.draft.clone();
+        }
+        self.draft_revision += 1;
+    }
+    /// 換頁前保留草稿，避免托盤還原或快捷鍵開新對話時丟失輸入。
+    fn preserve_draft(&mut self) -> AppResult<()> {
+        if self.draft.is_empty() && self.active_id.is_none() {
+            return Ok(());
+        }
+        if self.history_error.is_some() {
+            return Err("本機紀錄無法保存，請先處理後再切換對話。".into());
+        }
+        if self.active_id.is_none() {
+            self.active_id = Some(self.archive.insert(Vec::new())?);
+        }
+        if let Some(c) = self
+            .archive
+            .conversations
+            .iter_mut()
+            .find(|c| Some(&c.id) == self.active_id.as_ref())
+        {
+            c.draft = self.draft.clone();
+            if c.messages.is_empty() && !c.title_manual {
+                c.title = format!("草稿：{}", self.draft.chars().take(30).collect::<String>());
+            }
+        }
+        history::save(&self.root, &self.archive)
+    }
+    fn restore_window(&mut self) {
+        if self.logged_in()
+            && self.config.always_new_chat
+            && self.work.incoming.is_none()
+            && !self.versions.blocked()
+        {
+            self.new_chat();
+        }
+        self.publish();
+        show_window(self.window);
+    }
+    fn new_chat(&mut self) {
+        if let Err(e) = self.preserve_draft() {
+            self.fail(e);
+            return;
+        }
+        self.active_id = None;
+        self.messages.clear();
+        self.set_draft(String::new());
+        self.focus_draft = true;
+    }
+    /// 先保存副本，成功後採用；失敗仍保留畫面的回覆並標示未保存。
+    fn save_history(&mut self) -> AppResult<()> {
+        if self.history_error.is_some() {
+            return Err("對話暫未保存，請先處理本機紀錄讀寫問題後重新啟動。".into());
+        }
+        let mut archive = self.archive.clone();
+        let id = if let Some(id) = &self.active_id {
+            archive.update(id, self.messages.clone())?;
+            id.clone()
+        } else {
+            archive.insert(self.messages.clone())?
+        };
+        history::save(&self.root, &archive)?;
+        self.archive = archive;
+        self.active_id = Some(id);
+        Ok(())
+    }
+    fn apply_hotkey(&mut self, value: String) -> AppResult<()> {
+        let next = Hotkey::parse(&value)?;
+        if self.recording_since.is_some() {
+            self.stop_recording()?;
+        }
+        selection::unregister(self.window);
+        if let Err(e) = if self.config.hotkey_enabled && self.logged_in() {
+            selection::register(self.window, next)
+        } else {
+            Ok(())
+        } {
+            if let Some(old) = self.hotkey {
+                let _ = selection::register(self.window, old);
+            }
+            return Err(e);
+        }
+        let mut config = self.config.clone();
+        config.hotkey = next.label();
+        if let Err(e) = storage::save_config(&self.root, &config) {
+            selection::unregister(self.window);
+            if let Some(old) = self.hotkey {
+                let _ = selection::register(self.window, old);
+            }
+            return Err(e);
+        }
+        self.hotkey = (self.config.hotkey_enabled && self.logged_in()).then_some(next);
+        self.config = config;
+        Ok(())
+    }
+    fn start_recording(&mut self) -> AppResult<()> {
+        if self.recording_since.is_some() {
+            return Ok(());
+        }
+        if self.busy != "none" {
+            return Err("請等目前操作完成後再錄製快捷鍵。".into());
+        }
+        selection::unregister(self.window);
+        self.recording_since = Some(Instant::now());
+        self.view.set_recording(true);
+        self.view
+            .post(&json!({"type":"hotkey_recording","active":true}))
+    }
+    /// 結束錄製立即恢復舊快捷鍵。新組合只有按「套用」且註冊成功才生效。
+    fn stop_recording(&mut self) -> AppResult<()> {
+        self.view.set_recording(false);
+        if self.recording_since.take().is_none() {
+            return Ok(());
+        }
+        self.suppress_hotkey = true;
+        let _ = self
+            .view
+            .post(&json!({"type":"hotkey_recording","active":false}));
+        if let Some(old) = self.hotkey {
+            if let Err(e) = selection::register(self.window, old) {
+                self.hotkey = None;
+                return Err(format!("錄製已結束，但原快捷鍵無法恢復：{e}"));
+            }
+        }
+        Ok(())
+    }
+    fn refresh_services(&mut self) {
+        self.refresh_work_capabilities();
+        if self.services_loading || self.smoke {
+            return;
+        }
+        self.services_loading = true;
+        self.last_services = Instant::now();
+        let (config, session, tx, generation) = (
+            self.config.clone(),
+            self.session.clone(),
+            self.tx.clone(),
+            self.generation,
+        );
+        thread::spawn(move || {
+            let version = service::fetch_version(&config);
+            let models = service::fetch_models(&config, session.as_ref());
+            let _ = tx.send(Event::Services(generation, version, models));
+        });
+    }
+    fn start_notifications(&mut self) {
+        if self.versions.blocked() {
+            return;
+        }
+        self.start_site();
+        self.socket_cancel.store(true, Ordering::Relaxed);
+        self.socket_cancel = Arc::new(AtomicBool::new(false));
+        let Some(session) = self.session.clone().filter(|s| s.valid_for(&self.config)) else {
+            return;
+        };
+        self.inbox = notifications::load(&self.root, &session)
+            .unwrap_or_else(|_| Inbox::for_session(&session));
+        self.fetch_events();
+        let (config, tx, cancel, generation) = (
+            self.config.clone(),
+            self.tx.clone(),
+            self.socket_cancel.clone(),
+            self.generation,
+        );
+        thread::spawn(move || {
+            let Ok(url) = config.endpoint(notifications::SOCKET_PATH) else {
+                return;
+            };
+            let mut backoff = 5;
+            while !cancel.load(Ordering::Relaxed) && session.valid_for(&config) {
+                let _ = transport::watch_notifications(
+                    &url,
+                    &session.access_token,
+                    &cancel,
+                    |connected| {
+                        let _ = tx.send(Event::Socket(generation, connected));
+                    },
+                );
+                if cancel.load(Ordering::Relaxed) {
+                    break;
+                }
+                // 即時通道失敗仍定期補查；退避避免持續請求尚未部署的路由。
+                for _ in 0..backoff * 10 {
+                    if cancel.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    thread::sleep(Duration::from_millis(100));
+                }
+                backoff = (backoff * 2).min(60);
+            }
+        });
+    }
+    fn fetch_events(&mut self) {
+        if !self.logged_in() || self.smoke {
+            return;
+        }
+        if self.notifications_loading {
+            self.notifications_pending = true;
+            return;
+        }
+        self.notifications_loading = true;
+        self.last_events = Instant::now();
+        let (config, session, cursor, tx, generation) = (
+            self.config.clone(),
+            self.session.clone(),
+            self.inbox.cursor.clone(),
+            self.tx.clone(),
+            self.generation,
+        );
+        if let Some(session) = session {
+            thread::spawn(move || {
+                let result = notifications::fetch_page(&config, &session, cursor.as_deref());
+                let _ = tx.send(Event::Events(generation, result));
+            });
+        }
+    }
+    fn logout(&mut self) -> AppResult<()> {
+        self.projects.cancel();
+        self.vnc.disable();
+        self.mail_flow.cancel.store(true, Ordering::Relaxed);
+        self.selection_popup.enabled.store(false, Ordering::Relaxed);
+        self.selection_popup.update(None);
+        selection::unregister(self.window);
+        self.hotkey = None;
+        let _ = self.stop_recording();
+        self.site = site::SiteRuntime::default();
+        self.mail_flow = mail_batch::MailRuntime::default();
+        self.cancelled.store(true, Ordering::Relaxed);
+        self.socket_cancel.store(true, Ordering::Relaxed);
+        self.generation += 1;
+        self.login_operation += 1;
+        self.session = None;
+        self.work = work::WorkRuntime::default();
+        self.models = None;
+        self.grant = None;
+        self.services_loading = false;
+        self.notifications_loading = false;
+        self.notifications_pending = false;
+        self.inbox = Inbox::default();
+        self.mail = None;
+        self.mail_busy = false;
+        self.busy = "none";
+        self.new_chat();
+        self.notification_status = "登入後同步網站通知".into();
+        // 歷史屬於 Windows 使用者；下一次登入從空白對話開始，避免隱性沿用舊內容。
+        if !self.demo {
+            storage::clear_session(&self.root)?;
+        }
+        Ok(())
+    }
+    fn begin_chat(&mut self, text: String, action: &str) -> AppResult<()> {
+        if !self.can_send() {
+            return Err("請確認登入、可用模型與版本狀態後再送出。".into());
+        }
+        if text.trim().is_empty() && self.work.store.drafts(self.active_id.as_deref()).is_empty() {
+            return Err("請輸入文字或加入附件。".into());
+        }
+        let text = if text.trim().is_empty() {
+            "請分析附件內容。".to_string()
+        } else {
+            text
+        };
+        let content = match action {
+            "send" | "mail" => text.clone(),
+            "translate" => {
+                format!("請將以下文字翻譯為繁體中文；若原文為中文則翻譯成英文：\n\n{text}")
+            }
+            "summarize" => format!("請用繁體中文整理以下內容的重點：\n\n{text}"),
+            "polish" => format!("請保留原意並潤飾以下文字：\n\n{text}"),
+            "explain" => format!("請用繁體中文、容易理解的方式解釋以下內容與本次附件。先簡述核心意思，再說明重要概念，必要時用例子輔助。論文請區分研究問題、方法、結果與限制；專有名詞請說明定義及使用情境；程式碼請說明用途、流程、輸入輸出與重要注意事項，不執行或修改程式。只依提供的內容說明，缺少資料或不確定處請明示，不捏造背景。若使用者指定讀者程度或重點，優先遵循：\n\n{text}"),
+            _ => return Err("不支援的聊天操作。".into()),
+        };
+        let mut messages = self.messages.clone();
+        messages.push(Message::user(&content));
+        let project_chat = self
+            .active_id
+            .as_deref()
+            .and_then(|id| self.projects.store.project_for(id))
+            .is_some();
+        if project_chat && messages.len() >= 1000 {
+            return Err("此專案對話已達 500 輪，請新增專案對話。".into());
+        }
+        if self
+            .active_id
+            .as_deref()
+            .and_then(|id| self.projects.store.project_for(id))
+            .is_some()
+        {
+            if action == "mail" {
+                return Err("請在 Outlook 助理或一般對話分析郵件，專案對話只使用專案資料。".into());
+            }
+            self.begin_project_chat(messages)
+        } else {
+            self.begin_work_chat(messages, action)
+        }
+    }
+    fn read_mail(&mut self, body: bool) -> AppResult<()> {
+        if self.mail_busy {
+            return Ok(());
+        }
+        let expected = if body {
+            Some(
+                self.mail
+                    .as_ref()
+                    .ok_or("請先讀取郵件基本資訊。")?
+                    .entry_id
+                    .clone(),
+            )
+        } else {
+            None
+        };
+        self.mail_busy = true;
+        if !body {
+            self.mail = None;
+        }
+        let (tx, generation, demo) = (self.tx.clone(), self.generation, self.demo);
+        thread::spawn(move || {
+            let result = if demo {
+                Ok(outlook::demo_mail(body))
+            } else {
+                outlook::read_selected(expected.as_deref(), body)
+            };
+            let _ = tx.send(Event::Mail(generation, result));
+        });
+        Ok(())
+    }
+    fn command(&mut self, command: Command) -> AppResult<()> {
+        command.check_access(self.logged_in(), self.versions.blocked(), self.smoke)?;
+        match command {
+            Command::OnboardingAck { topic } => self.onboarding.acknowledge(&topic)?,
+            Command::OnboardingWelcomeDismiss => self.onboarding.dismiss_practice_welcome()?,
+            Command::ExportDiagnostics { include_details } => {
+                self.export_diagnostics(include_details)?
+            }
+            Command::Project { command } => {
+                let stage = if matches!(
+                    &command,
+                    projects::ProjectCommand::Create { .. }
+                        | projects::ProjectCommand::CreateDefault { .. }
+                ) {
+                    "project_folder"
+                } else {
+                    "project"
+                };
+                self.project_command(command)
+                    .map_err(|e| self.friendly_error(stage, &e))?;
+            }
+            Command::Vnc { command } => self.vnc_command(command)?,
+            Command::SiteAction { command } => self.site_action(command)?,
+            Command::MailBatch { command } => self.mail_batch_command(command)?,
+            Command::Work { command } => self.work_command(command)?,
+            Command::StartHotkeyRecording => {
+                if let Err(message) = self.start_recording() {
+                    // 設定對話框會遮住主畫面的狀態列，錯誤須直接顯示在錄製欄位旁。
+                    self.view
+                        .post(&json!({"type":"hotkey_error","message":message}))?;
+                    return Err(message);
+                }
+            }
+            Command::CancelHotkeyRecording => self.stop_recording()?,
+            Command::RecordedHotkey { modifiers, key } => {
+                if self.recording_since.is_some() {
+                    let hotkey = match Hotkey::from_keys(modifiers, key) {
+                        Ok(value) => value,
+                        Err(message) => {
+                            self.view
+                                .post(&json!({"type":"hotkey_error","message":message}))?;
+                            return Ok(());
+                        }
+                    };
+                    self.stop_recording()?;
+                    self.view
+                        .post(&json!({"type":"hotkey_recorded","value":hotkey.label()}))?;
+                }
+            }
+            Command::Ready => {
+                self.view.set_interface_scale(self.config.interface_scale)?;
+                self.ready = true;
+                self.publish();
+                if self.smoke {
+                    // 自檢樣本經正式 Rust 解析後，透過既有訊息橋傳給畫面。
+                    // 前端禁止自行連網，不為測試放寬 CSP 或開放 fetch。
+                    let payload: serde_json::Value =
+                        serde_json::from_str(include_str!("../ui/fixtures/structured-reply.json"))
+                            .map_err(|_| "內建結構化回覆測試資料無效。")?;
+                    let message = crate::protocol::assistant_message(&payload)?;
+                    let completion: serde_json::Value =
+                        serde_json::from_str(include_str!("../ui/fixtures/completion-reply.json"))
+                            .map_err(|_| "內建完成結果測試資料無效。")?;
+                    let completion_message = crate::protocol::assistant_message(&json!({
+                        "result":completion
+                    }))?;
+                    let inline_text = include_str!("../ui/fixtures/inline-reply.txt");
+                    let mut inline_message = crate::protocol::assistant_message(&json!({
+                        "answer":"您好！這是一個測試訊息。我已準備好為您提供協助。"
+                    }))?;
+                    crate::protocol::preserve_received_reply(
+                        &mut inline_message,
+                        inline_text,
+                        true,
+                    );
+                    let mut changed_message = crate::protocol::assistant_message(&json!({
+                        "answer":"完成後的正文已有修改。"
+                    }))?;
+                    crate::protocol::preserve_received_reply(
+                        &mut changed_message,
+                        inline_text,
+                        true,
+                    );
+                    self.view.post(&json!({
+                        "type":"self_test",
+                        "reply_fixture":{"payload":payload,"message":message,
+                            "inline_text":inline_text,"inline_message":inline_message,
+                            "changed_message":changed_message,"completion_message":completion_message}
+                    }))?;
+                }
+            }
+            Command::SelfTestResult { ok, detail } => {
+                if self.smoke {
+                    if !ok {
+                        self.smoke_result = Some(Err(detail));
+                    } else {
+                        if let Err(error) = self.verify_project_composer() {
+                            self.smoke_result = Some(Err(error));
+                            return Ok(());
+                        }
+                        if let Err(error) = self.verify_task_tracking() {
+                            self.smoke_result = Some(Err(error));
+                            return Ok(());
+                        }
+                        // 以正式 WebView2 callback 路徑取得 PNG，再由 Rust 驗證及落盤。
+                        // 不只檢查 JS 回傳前綴，確保下一次建置能驗收原生跨執行緒橋接。
+                        let chart = crate::projects::charts::Chart {
+                            transform: None,
+                            quality: None,
+                            reference_lines: Vec::new(),
+                            style: None,
+                            kind: "line".into(),
+                            title: "10,000 筆量測趨勢／PNG 匯出測試".into(),
+                            x_label: "時間 (秒)".into(),
+                            y_label: "量測值".into(),
+                            x: (0..10_000).map(|i| json!(i)).collect(),
+                            series: vec![crate::projects::charts::Series {
+                                skip_indices: vec![],
+                                name: "量測 A".into(),
+                                values: (0..10_000)
+                                    .map(|i| {
+                                        if (3000..3100).contains(&i) {
+                                            None
+                                        } else {
+                                            Some((i as f64 / 400.0).sin() * 10.0)
+                                        }
+                                    })
+                                    .collect(),
+                            }],
+                            data_note: String::new(),
+                            data_issues: vec![],
+                            source: "固定測試資料，包含 3000–3099 筆缺值；不讀使用者資料".into(),
+                        };
+                        let (reply, response) = mpsc::channel();
+                        self.view.export_chart_png(&chart, reply)?;
+                        let custom:crate::projects::charts::style::Style=serde_json::from_value(json!({
+                            "title":"使用者自訂圖表／上下限與顏色","x_label":"時間（秒）","y_label":"量測值","kind":"area","legend":"bottom_right",
+                            "x_min":2000,"x_max":6000,"y_min":-15,"y_max":15,
+                            "series":[{"name":"自訂量測名稱","color":"#008800"}],
+                            "lines":[{"axis":"y","value":8,"name":"上限","color":"#d62728"},{"axis":"y","value":-8,"name":"下限","color":"#d62728"},{"axis":"x","value":5000,"name":"事件","color":"#5470c6"}]
+                        })).map_err(|e|e.to_string())?;
+                        let mut custom = custom;
+                        custom.transform = Some(serde_json::from_value(json!({
+                            "x":{"mode":"index","offset":0,"start":1,"step":1},
+                            "y":{"mode":"offset","offset":2,"start":1,"step":1},"drop_empty":true
+                        })).map_err(|e|e.to_string())?);
+                        custom.validate(&chart)?;
+                        let (custom_reply, custom_response) = mpsc::channel();
+                        self.view
+                            .export_custom_chart_png(&chart, Some(&custom), custom_reply)?;
+                        let tx = self.tx.clone();
+                        let destination = self.root.join("chart-smoke.png");
+                        let mermaid_source = "flowchart TD\n A[\"讀取程式碼\"] --> B{\"資料完整？\"}\n B -->|是| C[\"產生流程圖\"]\n B -->|否| A";
+                        let (mermaid_svg_reply, mermaid_svg_response) = mpsc::channel();
+                        let (mermaid_png_reply, mermaid_png_response) = mpsc::channel();
+                        self.view.render_mermaid(
+                            mermaid_source,
+                            crate::projects::diagrams::Format::Svg,
+                            mermaid_svg_reply,
+                        )?;
+                        self.view.render_mermaid(
+                            mermaid_source,
+                            crate::projects::diagrams::Format::Png,
+                            mermaid_png_reply,
+                        )?;
+                        thread::spawn(move || {
+                            let result = (|| -> AppResult<()> {
+                                let url = response
+                                    .recv_timeout(Duration::from_secs(20))
+                                    .map_err(|_| "PNG 自檢逾時。")??;
+                                let png = crate::projects::charts::png::decode_url(&url)?;
+                                std::fs::write(&destination, png).map_err(|e| e.to_string())?;
+                                let custom_url = custom_response
+                                    .recv_timeout(Duration::from_secs(20))
+                                    .map_err(|_| "自訂PNG自檢逾時。")??;
+                                let custom_png =
+                                    crate::projects::charts::png::decode_url(&custom_url)?;
+                                let folder = destination.parent().ok_or("缺少測試資料夾。")?;
+                                std::fs::write(folder.join("chart-custom-smoke.png"), &custom_png)
+                                    .map_err(|e| e.to_string())?;
+                                let project = crate::projects::Project {
+                                    id: "chart-smoke".into(),
+                                    name: "圖表自檢".into(),
+                                    root: folder.into(),
+                                    imports: Default::default(),
+                                };
+                                let path = crate::projects::files::save_user_chart(
+                                    &project,
+                                    "ui-smoke",
+                                    &custom_png,
+                                )?;
+                                // 驗證真正 WebView2 awaitPromise 橋接、MMD 中文及三種成果落盤。
+                                let svg = crate::projects::diagrams::decode_rendered(
+                                    &mermaid_svg_response
+                                        .recv_timeout(Duration::from_secs(30))
+                                        .map_err(|_| "Mermaid SVG 自檢逾時。")??,
+                                    crate::projects::diagrams::Format::Svg,
+                                )?;
+                                let png = crate::projects::diagrams::decode_rendered(
+                                    &mermaid_png_response
+                                        .recv_timeout(Duration::from_secs(30))
+                                        .map_err(|_| "Mermaid PNG 自檢逾時。")??,
+                                    crate::projects::diagrams::Format::Png,
+                                )?;
+                                for (name, bytes) in [
+                                    ("流程.mmd", mermaid_source.as_bytes()),
+                                    ("流程.svg", svg.as_slice()),
+                                    ("流程.png", png.as_slice()),
+                                ] {
+                                    let relative = crate::projects::files::diagrams::save(
+                                        &project,
+                                        &crate::projects::files::conversation_folder_name(
+                                            "ui-smoke",
+                                        )?,
+                                        name,
+                                        bytes,
+                                    )?;
+                                    if std::fs::read(project.root.join(&relative))
+                                        .map_err(|e| e.to_string())?
+                                        != bytes
+                                    {
+                                        return Err("Mermaid 自檢讀回不符。".into());
+                                    }
+                                }
+                                std::fs::write(folder.join("mermaid-smoke.svg"), &svg)
+                                    .map_err(|e| e.to_string())?;
+                                std::fs::write(folder.join("mermaid-smoke.png"), &png)
+                                    .map_err(|e| e.to_string())?;
+                                std::fs::write(folder.join("chart-manual-save.json"),serde_json::to_vec_pretty(&json!({"result":"PASS","path":path,"bytes":custom_png.len(),"version":env!("CARGO_PKG_VERSION")})).map_err(|e|e.to_string())?).map_err(|e|e.to_string())
+                            })();
+                            let _ = tx.send(Event::SmokePng(result));
+                        });
+                    }
+                }
+            }
+            Command::Draft { text } => {
+                if self.busy != "chat" && text.encode_utf16().count() <= 16_000 {
+                    self.draft = text;
+                }
+            }
+            Command::Chat { text, action } => self.begin_chat(text, &action)?,
+            Command::RetryChat {
+                conversation_id,
+                user_index,
+                message_count,
+                request_id,
+            } => {
+                self.retry_chat(
+                    &conversation_id,
+                    user_index,
+                    message_count,
+                    request_id.as_deref(),
+                )?;
+            }
+            Command::NewChat => {
+                if self.busy == "none" && self.work.incoming.is_none() {
+                    self.new_chat();
+                }
+            }
+            Command::Behavior {
+                hotkey_enabled,
+                selection_icon,
+                enter_sends,
+                quick_actions_fast,
+                always_new_chat,
+                vnc_enabled,
+            } => {
+                let previous = self.config.clone();
+                self.config.hotkey_enabled = hotkey_enabled;
+                self.config.selection_icon = selection_icon;
+                self.config.enter_sends = enter_sends;
+                self.config.quick_actions_fast = quick_actions_fast;
+                self.config.always_new_chat = always_new_chat;
+                self.config.vnc_enabled = vnc_enabled;
+                if let Err(e) = self.apply_hotkey(self.config.hotkey.clone()) {
+                    self.config = previous;
+                    let _ = self.apply_hotkey(self.config.hotkey.clone());
+                    return Err(e);
+                }
+                self.selection_popup
+                    .enabled
+                    .store(selection_icon, Ordering::Relaxed);
+                if !selection_icon {
+                    self.selection_popup.update(None);
+                }
+                if !vnc_enabled {
+                    // 停用即清除記憶體中的機台與密碼；背景搜尋結果也不再套用。
+                    self.vnc.disable();
+                }
+            }
+            Command::RenameChat { id, title } => {
+                let title = title.trim();
+                if title.is_empty()
+                    || title.chars().count() > 100
+                    || title.chars().any(char::is_control)
+                {
+                    return Err("標題需為 1 至 100 字，不能包含換行。".into());
+                }
+                let mut archive = self.archive.clone();
+                let c = archive
+                    .conversations
+                    .iter_mut()
+                    .find(|c| c.id == id)
+                    .ok_or("找不到對話。")?;
+                c.title = title.into();
+                c.title_manual = true;
+                history::save(&self.root, &archive)?;
+                self.archive = archive;
+            }
+            Command::PinChat { id, pinned } => {
+                let mut archive = self.archive.clone();
+                archive
+                    .conversations
+                    .iter_mut()
+                    .find(|c| c.id == id)
+                    .ok_or("找不到對話。")?
+                    .pinned = pinned;
+                history::save(&self.root, &archive)?;
+                self.archive = archive;
+            }
+            Command::CollapseSection { section, collapsed } => {
+                match section.as_str() {
+                    "projects" => self.config.projects_collapsed = collapsed,
+                    "recent" => self.config.recent_collapsed = collapsed,
+                    _ => return Err("未知側欄區塊。".into()),
+                }
+                storage::save_config(&self.root, &self.config)?;
+            }
+            Command::Preferences {
+                font_size,
+                ui_font,
+                interface_scale,
+                sidebar_collapsed,
+                notification_popups,
+                minimize_to_taskbar,
+                dark_mode,
+            } => {
+                let mut config = self.config.clone();
+                config.font_size = font_size.clamp(12, 20);
+                if let Some(font) = ui_font {
+                    config.ui_font = font;
+                }
+                if let Some(scale) = interface_scale {
+                    config.interface_scale = crate::config::interface_scale(scale);
+                }
+                config.sidebar_collapsed = sidebar_collapsed;
+                config.notification_popups = notification_popups;
+                if let Some(enabled) = minimize_to_taskbar {
+                    config.minimize_to_taskbar = enabled;
+                }
+                if let Some(dark_mode) = dark_mode {
+                    config.dark_mode = dark_mode;
+                }
+                storage::save_config(&self.root, &config)?;
+                self.config = config;
+                self.view.set_interface_scale(self.config.interface_scale)?;
+                apply_window_theme(self.window, self.config.dark_mode);
+            }
+            Command::ChartPalette { colors } => {
+                if !crate::config::valid_chart_palette(&colors) {
+                    return Err("圖表預設配色需為八個 #RRGGBB 色碼。".into());
+                }
+                // 先保存成功再套用，避免寫入失敗時畫面宣稱設定已保留。
+                let mut config = self.config.clone();
+                config.chart_palette = colors;
+                storage::save_config(&self.root, &config)?;
+                self.config = config;
+                self.toast("圖表預設配色已儲存");
+            }
+            Command::Hotkey { value } => {
+                if let Err(message) = self.apply_hotkey(value) {
+                    self.view
+                        .post(&json!({"type":"hotkey_error","message":message}))?;
+                    return Err(message);
+                }
+                self.view
+                    .post(&json!({"type":"hotkey_saved","value":self.config.hotkey}))?;
+                self.toast("快捷鍵已更新");
+            }
+            Command::Refresh => self.refresh_services(),
+            Command::Exit => unsafe {
+                PostMessageW(self.window, WM_CLOSE, 1, 0);
+            },
+            Command::Download => {
+                if self.update_busy {
+                    return Ok(());
+                }
+                if self
+                    .update_ready
+                    .as_ref()
+                    .is_some_and(|ready| ready.artifact.kind == "exe")
+                {
+                    self.apply_ready_update()?;
+                } else if self.update_ready.is_some() {
+                    if self.confirm_update()? {
+                        self.apply_ready_update()?;
+                    }
+                } else {
+                    self.start_update_download()?;
+                }
+            }
+            Command::OpenLink { url } => open_browser(&url)?,
+            Command::Copy { text } => {
+                if text.len() > 1_048_576 {
+                    return Err("內容過長，無法複製。".into());
+                }
+                selection::copy_text(self.window, &text)?;
+                self.toast("已複製");
+            }
+            Command::Model { id } => {
+                if self.busy == "none"
+                    && self
+                        .models
+                        .as_ref()
+                        .is_some_and(|c| c.models.iter().any(|m| m.id == id))
+                {
+                    if self.mail_flow.phase != "idle" {
+                        return Err("請先停止郵件流程再切換模型。".into());
+                    }
+                    self.config.model = id;
+                    self.work.status = "正在重新確認此模型的附件規則…".into();
+                    self.refresh_work_capabilities();
+                    storage::save_config(&self.root, &self.config)?;
+                }
+            }
+            Command::SelectChat { id } => {
+                if self.busy == "none" && self.work.incoming.is_none() {
+                    self.preserve_draft()?;
+                    let c = self
+                        .archive
+                        .conversations
+                        .iter()
+                        .find(|c| c.id == id)
+                        .ok_or("找不到對話。")?;
+                    self.messages = c.messages.clone();
+                    let draft = c.draft.clone();
+                    self.active_id = Some(id);
+                    self.set_draft(draft);
+                }
+            }
+            Command::DeleteChat { id } => {
+                if self.projects.active(Some(&id)) {
+                    return Err("請先停止此專案任務再刪除對話。".into());
+                }
+                if self.mail_flow.phase != "idle"
+                    && self.mail_flow.conversation.as_ref() == Some(&id)
+                {
+                    return Err("請先停止郵件流程，再刪除對話。".into());
+                }
+                if self.work.store.pending(Some(&id))
+                    || self.work.incoming.is_some()
+                    || self
+                        .work
+                        .store
+                        .attachments
+                        .iter()
+                        .any(|a| a.conversation_id == id && !a.sent && !a.removed)
+                {
+                    return Err(
+                        "此對話仍有工作或草稿附件，請先完成／取消工作並移除草稿附件。".into(),
+                    );
+                }
+                if self.busy == "none" {
+                    let mut archive = self.archive.clone();
+                    archive.remove(&id)?;
+                    history::save(&self.root, &archive)?;
+                    self.archive = archive;
+                    self.work.store.tasks.retain(|t| t.conversation_id != id);
+                    self.work
+                        .store
+                        .attachments
+                        .retain(|a| a.conversation_id != id);
+                    self.work.store.conversations.remove(&id);
+                    if !self.work.store.principal_id.is_empty() {
+                        self.work.store.save(&self.root, &self.config)?;
+                    }
+                    if self.active_id.as_ref() == Some(&id) {
+                        self.new_chat();
+                    }
+                }
+            }
+            Command::Login => {
+                if self.busy != "none" {
+                    return Err("請先完成目前操作。".into());
+                }
+                self.busy = "login";
+                self.grant = None;
+                self.login_operation += 1;
+                self.cancelled = Arc::new(AtomicBool::new(false));
+                self.status = "正在申請一次性登入碼…".into();
+                self.error = false;
+                let (config, tx, id) = (self.config.clone(), self.tx.clone(), self.login_operation);
+                thread::spawn(move || {
+                    let _ = tx.send(Event::Grant(id, auth::request_device(&config)));
+                });
+            }
+            Command::CancelLogin => {
+                if self.busy != "login" {
+                    return Ok(());
+                }
+                self.cancelled.store(true, Ordering::Relaxed);
+                self.login_operation += 1;
+                self.busy = "none";
+                self.grant = None;
+                self.status = "已取消登入".into();
+            }
+            Command::ReopenLogin => {
+                if let Some(grant) = &self.grant {
+                    open_browser(self.config.verification_url(grant.browser_url())?.as_str())?;
+                }
+            }
+            Command::Logout => {
+                if self.busy == "none" {
+                    self.logout()?;
+                    self.status = "已登出".into();
+                    self.refresh_services();
+                }
+            }
+            Command::AllEvents { dismiss } => {
+                let mut inbox = self.inbox.clone();
+                let ids = inbox.mark_all(dismiss);
+                notifications::save(&self.root, &inbox)?;
+                self.inbox = inbox;
+                self.notification_status = if dismiss {
+                    "已清除本機通知"
+                } else {
+                    "已在本機全部標為已讀"
+                }
+                .into();
+                if let Some(session) = self.session.clone() {
+                    let (config, tx, generation) =
+                        (self.config.clone(), self.tx.clone(), self.generation);
+                    thread::spawn(move || {
+                        let mut failures = 0;
+                        for id in ids {
+                            if notifications::mark_read(&config, &session, &id).is_err() {
+                                failures += 1;
+                            }
+                        }
+                        let _ = tx.send(Event::AllRead(generation, failures));
+                    });
+                }
+            }
+            Command::NotificationsLeft => {
+                if self.logged_in() {
+                    self.command(Command::AllEvents { dismiss: false })?;
+                    // 全站若正在讀取／標記單則通知，排隊到該操作完成後才送 ReadAll。
+                    self.site.read_all_pending = true;
+                    self.site_tick();
+                }
+            }
+            Command::RefreshEvents => {
+                self.fetch_events();
+                self.fetch_site(true);
+            }
+            Command::ReadEvent { id } => {
+                let event = self
+                    .inbox
+                    .events
+                    .iter_mut()
+                    .find(|e| e.id == id)
+                    .ok_or("找不到通知。")?;
+                if event.kind.starts_with("project.") {
+                    event.read_at = Some(notifications::now_text());
+                    notifications::save(&self.root, &self.inbox)?;
+                    return Ok(());
+                }
+                let (config, session, tx, generation) = (
+                    self.config.clone(),
+                    self.session.clone().ok_or("請先登入。")?,
+                    self.tx.clone(),
+                    self.generation,
+                );
+                thread::spawn(move || {
+                    let result = notifications::mark_read(&config, &session, &id);
+                    let _ = tx.send(Event::Read(generation, id, result));
+                });
+            }
+            Command::ReadMail => self.read_mail(false)?,
+            Command::ReadMailBody => self.read_mail(true)?,
+            Command::OmitMailBody => {
+                if let Some(mail) = &mut self.mail {
+                    mail.body = None;
+                }
+            }
+            Command::AnalyzeMail => {
+                if !self.can_send() {
+                    return Err("請先登入並選擇可用模型。".into());
+                }
+                if !self
+                    .work
+                    .caps
+                    .as_ref()
+                    .is_some_and(|c| c.supports("background"))
+                {
+                    return Err("Outlook 判讀需要網站支援背景處理。".into());
+                }
+                self.work.mode = "background".into();
+                let subject = self.mail.as_ref().ok_or("請先選取郵件。")?.subject.clone();
+                let prompt = outlook::analysis_prompt(self.mail.as_ref().ok_or("請先選取郵件。")?)?;
+                self.new_chat();
+                self.begin_chat(prompt, "mail")?;
+                if let Some(c) = self
+                    .archive
+                    .conversations
+                    .iter_mut()
+                    .find(|c| Some(&c.id) == self.active_id.as_ref())
+                {
+                    c.title = format!("Outlook：{}", subject.chars().take(80).collect::<String>());
+                }
+                history::save(&self.root, &self.archive)?;
+            }
+        }
+        Ok(())
+    }
+    fn event(&mut self, event: Event) -> AppResult<()> {
+        if self.versions.blocked()
+            && !matches!(
+                event,
+                Event::Project(..)
+                    | Event::Services(..)
+                    | Event::UpdateReady(..)
+                    | Event::Grant(..)
+                    | Event::Login(..)
+            )
+        {
+            // 停止以舊版繼續串接自動郵件／附件流程，已提交的伺服器任務留給新版恢復。
+            return Ok(());
+        }
+        match event {
+            Event::Site(generation, event) if generation == self.generation => {
+                self.site_event(event)?
+            }
+            Event::MailBatch(generation, operation, event)
+                if generation == self.generation && operation == self.mail_flow.operation =>
+            {
+                self.mail_batch_event(event)?
+            }
+            Event::Work(generation, event) if generation == self.generation => {
+                self.work_event(event)?
+            }
+            Event::VncSearch(id, result) => self.vnc_search_result(id, result)?,
+            Event::VncSync(id, result) => self.vnc_sync_result(id, result),
+            Event::Services(generation, version, models) if generation == self.generation => {
+                self.services_loading = false;
+                self.version_status = match self.versions.apply(version) {
+                    Ok(()) => {
+                        let info = self.versions.known.as_ref().ok_or("版本狀態錯誤。")?;
+                        if info.required() {
+                            "此版本已停止支援，請下載更新".into()
+                        } else if info.available() {
+                            format!("可更新至 {}", info.latest_version)
+                        } else {
+                            "目前為最新版本".into()
+                        }
+                    }
+                    Err(error) => {
+                        if self.versions.blocked() {
+                            format!("請更新至已確認的最低版本；{error}")
+                        } else {
+                            format!("暫時無法檢查版本，允許使用；{error}")
+                        }
+                    }
+                };
+                match models {
+                    Ok(c) => {
+                        self.config.model =
+                            c.models[c.selected_index(&self.config.model)].id.clone();
+                        self.models = Some(c);
+                        if self.work.capability_model != self.config.model {
+                            self.refresh_work_capabilities();
+                        }
+                    }
+                    Err(e) => {
+                        self.models = None;
+                        self.fail(e);
+                    }
+                }
+                if self.update_ready.as_ref().is_some_and(|ready| {
+                    self.versions.known.as_ref().is_none_or(|info| {
+                        service::version_number(&ready.artifact.version).ok()
+                            < service::version_number(&info.latest_version).ok()
+                    })
+                }) {
+                    self.update_ready = None;
+                    self.update_status = "網站已發布不同版本，請重新同意下載。".into();
+                }
+                if self.versions.blocked() {
+                    self.versions.save(&self.root)?;
+                    self.mail_flow.cancel.store(true, Ordering::Relaxed);
+                    // 登入是未登入時唯一可用入口；背景版本檢查不得中止正在進行的授權。
+                    if self.busy != "login" {
+                        self.cancelled.store(true, Ordering::Relaxed);
+                    }
+                    self.socket_cancel.store(true, Ordering::Relaxed);
+                    self.selection_popup.update(None);
+                    self.selection_popup.enabled.store(false, Ordering::Relaxed);
+                    self.fail(self.version_status.clone());
+                    self.toast("目前版本需更新，請由設定下載新版");
+                }
+            }
+            Event::Grant(id, result) if id == self.login_operation => match result {
+                Ok(grant) => {
+                    let browser = self.config.verification_url(grant.browser_url())?;
+                    self.grant = Some(grant.clone());
+                    let (config, tx, cancel) =
+                        (self.config.clone(), self.tx.clone(), self.cancelled.clone());
+                    thread::spawn(move || {
+                        let _ = tx.send(Event::Login(
+                            id,
+                            auth::wait_for_login(&config, &grant, &cancel),
+                        ));
+                    });
+                    self.status = "請在瀏覽器完成登入授權".into();
+                    open_browser(browser.as_str())?;
+                }
+                Err(e) => {
+                    self.busy = "none";
+                    return Err(e);
+                }
+            },
+            Event::Login(id, result) if id == self.login_operation => {
+                self.busy = "none";
+                self.grant = None;
+                let session = result?;
+                if !self.demo {
+                    storage::save_session(&self.root, &session)?;
+                }
+                self.generation += 1;
+                self.session = Some(session);
+                if let Err(error) = self.apply_hotkey(self.config.hotkey.clone()) {
+                    self.toast(&error);
+                }
+                self.selection_popup
+                    .enabled
+                    .store(self.config.selection_icon && !self.smoke, Ordering::Relaxed);
+                self.work = work::WorkRuntime::default();
+                self.services_loading = false;
+                self.notifications_loading = false;
+                self.new_chat();
+                self.status = "登入成功".into();
+                self.refresh_services();
+                self.start_notifications();
+            }
+            Event::Project(event) => self.project_event(event)?,
+            Event::SmokePng(result) => {
+                if self.smoke {
+                    self.smoke_result = Some(result);
+                }
+            }
+            Event::UpdateReady(result) => {
+                self.update_busy = false;
+                match result {
+                    Ok(plan) => {
+                        if self.versions.known.as_ref().is_none_or(|info| {
+                            service::version_number(&plan.artifact.version).ok()
+                                < service::version_number(&info.latest_version).ok()
+                        }) {
+                            self.update_status = "下載期間版本資訊已變更，請重新下載。".into();
+                            return Ok(());
+                        }
+                        // 清單可能比版本 API 更新；下載期間發現更高的簽署版本亦可接受。
+                        if let Some(info) = &mut self.versions.known {
+                            info.latest_version = plan.artifact.version.clone();
+                        }
+                        self.update_status = if plan.artifact.kind == "exe" {
+                            format!("{} 獨立 EXE 已下載並驗證。請開啟下載資料夾，從系統托盤離開 LM_AI 後手動更換檔案；個人資料會保留。", plan.artifact.version)
+                        } else {
+                            format!(
+                                "{} 安裝包已下載並驗證。請點擊更新入口繼續；退出不會自動安裝。",
+                                plan.artifact.version
+                            )
+                        };
+                        let auto_install = plan.artifact.kind == "nsis"
+                            && self.update_consent.as_deref()
+                                == Some(plan.artifact.version.as_str());
+                        self.update_ready = Some(plan);
+                        if auto_install {
+                            self.update_status = "更新已驗證，正在保存並重新啟動 LM_AI…".into();
+                            self.apply_ready_update()?;
+                        } else {
+                            self.update_consent = None;
+                            self.toast(&self.update_status.clone());
+                        }
+                    }
+                    Err(e) => {
+                        self.update_status = e;
+                    }
+                }
+            }
+            Event::SelectionRect(rect) => {
+                self.selection_popup.update(
+                    if self.logged_in() && self.busy == "none" && !self.versions.blocked() {
+                        rect
+                    } else {
+                        None
+                    },
+                );
+            }
+            // 登出前啟動的擷取不得寫入下一次登入的草稿。
+            Event::Capture(generation, result)
+                if generation == self.generation && self.logged_in() =>
+            {
+                self.busy = "none";
+                let text = result?;
+                if self.config.always_new_chat {
+                    self.new_chat();
+                }
+                let joined = if self.draft.trim().is_empty() {
+                    text
+                } else {
+                    format!("{}\n\n{text}", self.draft)
+                };
+                if joined.encode_utf16().count() > 16_000 {
+                    return Err("目前草稿加上選字太長，原草稿已保留。".into());
+                }
+                self.set_draft(joined);
+                self.focus_draft = true;
+                self.status = "剪貼簿文字已帶入，確認後再送出".into();
+                // 先將草稿送到介面，前景切換成功與否都不影響已讀取的文字。
+                self.publish();
+                if show_window(self.window) {
+                    self.view.focus();
+                } else {
+                    self.status = "文字已帶入；請點工作列的 LM_AI 查看草稿".into();
+                }
+            }
+            Event::Mail(generation, result) if generation == self.generation => {
+                self.mail_busy = false;
+                self.mail = Some(result?);
+                self.status = "已讀取郵件預覽，尚未傳給 AI".into();
+            }
+            Event::Socket(generation, connected) if generation == self.generation => {
+                self.poll_work(true);
+                self.fetch_site(true);
+                if connected {
+                    self.notification_status = "即時通知已連線".into();
+                }
+                self.fetch_events();
+            }
+            Event::AllRead(generation, failures) if generation == self.generation => {
+                self.notification_status = if failures == 0 {
+                    "本機已讀／清除完成，已同步網站已讀狀態".into()
+                } else {
+                    format!("本機操作已完成；{failures} 則網站已讀同步失敗，可再次按全部已讀重試。")
+                };
+            }
+            Event::Events(generation, result) if generation == self.generation => {
+                self.notifications_loading = false;
+                match result {
+                    Ok(mut page) => {
+                        // 使用者正在 App 時靜默接收，不加未讀標示或系統氣泡。
+                        if self.is_foreground() {
+                            for event in &mut page.events {
+                                event.read_at = Some(notifications::now_text());
+                            }
+                        }
+                        let more = page.has_more;
+                        let mut inbox = self.inbox.clone();
+                        // 任務完成提示由結果落盤後統一發出，避免 REST 事件與任務輪詢各提示一次。
+                        let added = page
+                            .events
+                            .iter()
+                            .filter(|e| {
+                                e.visible_ai()
+                                    && !crate::projects::events::internal(
+                                        &self.root,
+                                        e.resource_id.as_deref(),
+                                    )
+                                    && !e.kind.starts_with("chat.")
+                                    && !e.kind.starts_with("attachment.")
+                                    && !self.inbox.events.iter().any(|old| old.id == e.id)
+                                    && e.read_at.is_none()
+                                    && !e.expired()
+                            })
+                            .count();
+                        inbox.merge(page)?;
+                        notifications::save(&self.root, &inbox)?;
+                        self.inbox = inbox;
+                        self.notification_status = "通知已同步；即時通道與定期補查並行".into();
+                        if added > 0 && self.config.notification_popups && !self.is_foreground() {
+                            self.work.tray_restore_only = false;
+                            self.work.task_balloon = false;
+                            tray(
+                                self.window,
+                                NIM_MODIFY,
+                                Some(&format!("收到 {added} 則新通知，點一下查看。")),
+                            );
+                        }
+                        if more || self.notifications_pending {
+                            self.notifications_pending = false;
+                            self.fetch_events();
+                        }
+                    }
+                    Err(e) => {
+                        self.notifications_pending = false;
+                        self.notification_status = e;
+                    }
+                }
+            }
+            Event::Read(generation, id, result) if generation == self.generation => {
+                result?;
+                let mut inbox = self.inbox.clone();
+                if let Some(event) = inbox.events.iter_mut().find(|e| e.id == id) {
+                    event.read_at = Some(notifications::now_text());
+                }
+                notifications::save(&self.root, &inbox)?;
+                self.inbox = inbox;
+            }
+            _ => {} // 登出或重新登入前的工作，不得更新新登入工作階段。
+        }
+        Ok(())
+    }
+    fn tick(&mut self) {
+        let mut changed = false;
+        // 先處理到期，再接受 UI 命令或背景結果，不能因本機工作忙碌而繼續使用過期授權。
+        if !self.smoke && self.session.is_some() && !self.logged_in() && self.busy != "login" {
+            let _ = self.logout();
+            self.fail("登入已到期，請重新登入。".into());
+            changed = true;
+        }
+        if self.logged_in() && !self.versions.blocked() {
+            changed |= self.site_tick();
+            match self.mail_batch_tick() {
+                Ok(updated) => changed |= updated,
+                Err(e) => {
+                    self.mail_flow.phase = "idle";
+                    self.mail_flow.status =
+                        format!("自動流程已暫停：{e} 附件保留，可在對話手動送出。");
+                    changed = true;
+                }
+            }
+        }
+        if self.suppress_hotkey && crate::hotkey::pressed_modifiers() == 0 {
+            self.suppress_hotkey = false;
+        }
+        if self
+            .recording_since
+            .is_some_and(|start| start.elapsed() > Duration::from_secs(15))
+        {
+            if let Err(e) = self.stop_recording() {
+                self.fail(e);
+            }
+            self.toast("錄製已逾時，原快捷鍵維持不變");
+            changed = true;
+        }
+        while let Ok(message) = self.commands.try_recv() {
+            changed = true;
+            match serde_json::from_str::<Command>(&message) {
+                Ok(command) => {
+                    if let Err(e) = self.command(command) {
+                        self.fail(e);
+                    }
+                }
+                Err(_) => self.fail("介面操作格式不正確。".into()),
+            }
+        }
+        while let Ok(event) = self.rx.try_recv() {
+            changed = true;
+            if let Err(e) = self.event(event) {
+                self.fail(e);
+            }
+        }
+        if !self.smoke {
+            if self.logged_in() && !self.versions.blocked() {
+                self.poll_work(false);
+            }
+            if self.last_events.elapsed() > Duration::from_secs(60) {
+                self.last_events = Instant::now();
+                if !self.versions.blocked() {
+                    self.fetch_events();
+                }
+                changed = true;
+            }
+            if self.last_services.elapsed() > Duration::from_secs(300) {
+                self.refresh_services();
+                changed = true;
+            }
+        }
+        // 自我檢查開始後由前端管理虛構資料，避免主程式的空白狀態覆蓋測試畫面。
+        if !self.smoke {
+            self.project_attention_tick();
+        }
+        if changed && !self.smoke {
+            self.publish();
+        }
+    }
+    /// 下載前一次告知關閉與重新開啟；同意只適用當時看到的版本。
+    fn confirm_update(&mut self) -> AppResult<bool> {
+        let info = self.versions.known.as_ref().ok_or("尚未取得版本資訊。")?;
+        if !info.available() {
+            return Ok(false);
+        }
+        let version = info.latest_version.clone();
+        let text = format!("是否要自動下載更新並安裝 {version}？\n\n提示：會暫時關閉 LM_AI，並在安裝完成後再次開啟，不會重新啟動電腦。正在執行的本機操作將停止。\n\n若此版本僅提供獨立 EXE，下載後會顯示手動更換方式。") ;
+        if unsafe {
+            MessageBoxW(
+                self.window,
+                wide(&text).as_ptr(),
+                wide("更新 LM_AI").as_ptr(),
+                MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION,
+            )
+        } != IDYES
+        {
+            return Ok(false);
+        }
+        self.update_consent = Some(version);
+        Ok(true)
+    }
+    fn start_update_download(&mut self) -> AppResult<()> {
+        if self.update_busy || self.update_ready.is_some() {
+            return Ok(());
+        }
+        let info = self
+            .versions
+            .known
+            .as_ref()
+            .ok_or("尚未取得版本資訊，請先重新整理服務。")?;
+        if !info.available() {
+            self.update_status = "目前已是最新版本。".into();
+            return Ok(());
+        }
+        let latest = info.latest_version.clone();
+        if !self.confirm_update()? {
+            return Ok(());
+        }
+        let config = self.config.clone();
+        let tx = self.tx.clone();
+        self.update_busy = true;
+        self.update_status = "正在背景下載並驗證更新…".into();
+        thread::spawn(move || {
+            let _ = tx.send(Event::UpdateReady(crate::deployment::download(
+                &config, &latest,
+            )));
+        });
+        Ok(())
+    }
+    fn apply_ready_update(&mut self) -> AppResult<()> {
+        // 更新時取消本機操作，伺服器持久任務會保留供新版恢復；先保存草稿。
+        let Some(ready) = &self.update_ready else {
+            return Ok(());
+        };
+        let latest = self
+            .versions
+            .known
+            .as_ref()
+            .ok_or("尚未取得版本資訊。")?
+            .latest_version
+            .clone();
+        crate::deployment::validate_artifact(&self.config, &ready.artifact, &latest)?;
+        if ready.artifact.kind == "exe" {
+            // 手動更新僅開啟檔案位置；不退出、不執行新版，也不解除強制版本門檻。
+            crate::deployment::show_download(ready)?;
+            let message = format!(
+                "新版位於：\n{}\n\n請從系統托盤選「離開」，再將新版 LM_AI.exe 複製到您原本使用的位置，取代舊檔後重新開啟。聊天、登入與偏好資料會保留。",
+                ready.path.display()
+            );
+            unsafe {
+                MessageBoxW(
+                    self.window,
+                    wide(&message).as_ptr(),
+                    wide("手動更新 LM_AI").as_ptr(),
+                    MB_OK | MB_ICONINFORMATION,
+                );
+            }
+            return Ok(());
+        }
+        if self.update_consent.as_deref() != Some(ready.artifact.version.as_str()) {
+            return Err("更新版本已改變，請重新點擊下載箭頭確認。".into());
+        }
+        self.preserve_draft()?;
+        crate::deployment::launch_update(
+            self.update_ready.as_ref().ok_or("更新檔不存在。")?,
+            &self.config,
+            &latest,
+        )?;
+        self.update_busy = true;
+        self.projects.cancel();
+        self.mail_flow.cancel.store(true, Ordering::Relaxed);
+        self.cancelled.store(true, Ordering::Relaxed);
+        unsafe {
+            PostMessageW(self.window, WM_CLOSE, 1, 0);
+        }
+        Ok(())
+    }
+    fn capture(&mut self) {
+        if !self.logged_in()
+            || self.versions.blocked()
+            || self.recording_since.is_some()
+            || self.suppress_hotkey
+        {
+            return;
+        }
+        if self.busy != "none" {
+            self.toast("請等待目前操作完成後再擷取");
+            return;
+        }
+        if let Some(hotkey) = self.hotkey {
+            let source = unsafe { GetForegroundWindow() } as usize;
+            let tx = self.tx.clone();
+            let generation = self.generation;
+            self.busy = "capture";
+            thread::spawn(move || {
+                let _ = tx.send(Event::Capture(
+                    generation,
+                    selection::capture(source as HWND, hotkey),
+                ));
+            });
+        }
+    }
+}
+fn open_browser(value: &str) -> AppResult<()> {
+    let url = url::Url::parse(value).map_err(|_| "連結格式不正確。")?;
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || value.chars().any(char::is_control)
+    {
+        return Err("只允許 HTTP(S) 網頁連結。".into());
+    }
+    let result = unsafe {
+        ShellExecuteW(
+            ptr::null_mut(),
+            wide("open").as_ptr(),
+            wide(value).as_ptr(),
+            ptr::null(),
+            ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    if result as isize <= 32 {
+        // ShellExecuteW 直接以回傳值表示失敗；不可把 GetLastError 當成其錯誤碼。
+        Err(format!(
+            "無法開啟預設瀏覽器（ShellExecuteW：{}）。請確認 Windows 的預設瀏覽器設定。",
+            result as isize
+        ))
+    } else {
+        Ok(())
+    }
+}
+fn show_window(window: HWND) -> bool {
+    unsafe {
+        ShowWindow(window, SW_SHOWNOACTIVATE);
+        let activated = SetForegroundWindow(window) != 0;
+        if !activated {
+            let info = FLASHWINFO {
+                cbSize: std::mem::size_of::<FLASHWINFO>() as u32,
+                hwnd: window,
+                dwFlags: FLASHW_TRAY | FLASHW_TIMERNOFG,
+                uCount: 3,
+                dwTimeout: 0,
+            };
+            FlashWindowEx(&info);
+        }
+        activated
+    }
+}
+/// 從 EXE 的多尺寸圖示選取大／小圖案，避免托盤直接縮小視窗的大圖示。
+/// LR_SHARED 讓 Windows 管理圖示生命週期，重複更新托盤時不需自行釋放。
+fn app_icon(small: bool) -> HICON {
+    unsafe {
+        let (width, height) = if small {
+            (GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON))
+        } else {
+            (GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON))
+        };
+        // Win32 MAKEINTRESOURCEW(1)：低位數值代表資源 ID，API 不會將它解參考。
+        let resource_id = ptr::without_provenance::<u16>(1);
+        let icon = LoadImageW(
+            GetModuleHandleW(ptr::null()),
+            resource_id,
+            IMAGE_ICON,
+            width,
+            height,
+            LR_SHARED,
+        ) as HICON;
+        if icon.is_null() {
+            // 資源載入失敗時仍保留可辨識的系統圖示，讓托盤還原操作繼續可用。
+            LoadIconW(ptr::null_mut(), IDI_APPLICATION)
+        } else {
+            icon
+        }
+    }
+}
+fn taskbar_created_message() -> u32 {
+    static MESSAGE: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+    *MESSAGE.get_or_init(|| unsafe { RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()) })
+}
+/// 原生通知不搶焦點，點擊後才顯示主視窗；Windows 可自行停用彈出提示。
+fn tray(window: HWND, operation: u32, message: Option<&str>) {
+    let mut data = NOTIFYICONDATAW {
+        cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
+        hWnd: window,
+        uID: 1,
+        uFlags: NIF_MESSAGE | NIF_ICON | NIF_TIP,
+        uCallbackMessage: TRAY_MESSAGE,
+        ..Default::default()
+    };
+    data.hIcon = app_icon(true);
+    for (dest, source) in data.szTip.iter_mut().zip(wide("LM_AI")) {
+        *dest = source;
+    }
+    if let Some(message) = message {
+        data.uFlags = NIF_INFO;
+        data.dwInfoFlags = NIIF_INFO;
+        for (dest, source) in data.szInfoTitle.iter_mut().zip(wide("LM_AI 通知")) {
+            *dest = source;
+        }
+        for (dest, source) in data.szInfo.iter_mut().take(255).zip(wide(message)) {
+            *dest = source;
+        }
+    }
+    unsafe {
+        Shell_NotifyIconW(operation, &data);
+    }
+}
+unsafe extern "system" fn window_proc(
+    window: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    if message == WM_DESTROY {
+        unsafe {
+            PostQuitMessage(0);
+        }
+        return 0;
+    }
+    let pointer = unsafe { GetWindowLongPtrW(window, GWLP_USERDATA) } as *const RefCell<App>;
+    if !pointer.is_null() {
+        // COM 可能重入視窗程序，try_borrow_mut 避免重疊的可變參照。
+        if let Ok(mut app) = unsafe { &*pointer }.try_borrow_mut() {
+            if message == taskbar_created_message() && !app.smoke {
+                // Explorer 重啟會清除通知區圖案；隱藏中的 App 必須重新加入，才能讓使用者還原。
+                tray(window, NIM_ADD, None);
+                return 0;
+            }
+            match message {
+                crate::single_instance::RESTORE_MESSAGE => {
+                    app.restore_window();
+                    return 0;
+                }
+                crate::selection_popup::CLICK_MESSAGE => {
+                    let source = app.selection_popup.source;
+                    app.selection_popup.update(None);
+                    if source != 0
+                        && app.logged_in()
+                        && app.busy == "none"
+                        && !app.versions.blocked()
+                    {
+                        let tx = app.tx.clone();
+                        let generation = app.generation;
+                        app.busy = "capture";
+                        thread::spawn(move || {
+                            let hotkey = Hotkey {
+                                modifiers: 0,
+                                key: 0,
+                            };
+                            let _ = tx.send(Event::Capture(
+                                generation,
+                                selection::capture(source as HWND, hotkey),
+                            ));
+                        });
+                    }
+                    return 0;
+                }
+                WM_CLOSE => {
+                    if let Err(e) = app.preserve_draft() {
+                        app.fail(e);
+                        app.publish();
+                        return 0;
+                    }
+                    if wparam == 0 {
+                        app.hide_to_tray();
+                        return 0;
+                    }
+                    unsafe {
+                        DestroyWindow(window);
+                    }
+                    return 0;
+                }
+                WM_ACTIVATEAPP if wparam == 0 => {
+                    if let Err(e) = app.stop_recording() {
+                        app.fail(e);
+                    }
+                    return 0;
+                }
+                WM_TIMER => {
+                    app.tick();
+                    return 0;
+                }
+                WM_SIZE if wparam == SIZE_MINIMIZED as usize => {
+                    if let Err(e) = app.preserve_draft() {
+                        app.fail(e);
+                    }
+
+                    // Windows 已完成最小化；保留工作列時不要再呼叫 SW_HIDE。
+                    if !app.config.minimize_to_taskbar {
+                        app.hide_to_tray();
+                    }
+                    return 0;
+                }
+                WM_SIZE => {
+                    let mut rect = RECT::default();
+                    unsafe {
+                        GetClientRect(window, &mut rect);
+                    }
+                    app.view.resize(rect.right, rect.bottom);
+                    return 0;
+                }
+                WM_HOTKEY if wparam == selection::HOTKEY_ID as usize => {
+                    app.capture();
+                    return 0;
+                }
+                TRAY_MESSAGE
+                    if matches!(
+                        lparam as u32,
+                        WM_LBUTTONUP | WM_LBUTTONDBLCLK | NIN_BALLOONUSERCLICK
+                    ) =>
+                {
+                    if lparam as u32 == NIN_BALLOONUSERCLICK {
+                        show_window(window);
+                    } else {
+                        app.restore_window();
+                    }
+                    if lparam as u32 == NIN_BALLOONUSERCLICK
+                        && !app.work.tray_restore_only
+                        && !app.open_project_attention().unwrap_or(false)
+                    {
+                        let _ = app.view.post(&json!({"type":if app.work.task_balloon {"show_tasks"} else {"show_notifications"}}));
+                    }
+                    return 0;
+                }
+                TRAY_MESSAGE if matches!(lparam as u32, WM_RBUTTONUP | WM_CONTEXTMENU) => {
+                    unsafe {
+                        let menu = CreatePopupMenu();
+                        if !menu.is_null() {
+                            AppendMenuW(menu, MF_STRING, 1, wide("還原視窗").as_ptr());
+                            AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
+                            AppendMenuW(menu, MF_STRING, 2, wide("離開 LM_AI").as_ptr());
+                            let mut point = POINT::default();
+                            GetCursorPos(&mut point);
+                            SetForegroundWindow(window);
+                            let action = TrackPopupMenu(
+                                menu,
+                                TPM_RETURNCMD | TPM_RIGHTBUTTON,
+                                point.x,
+                                point.y,
+                                0,
+                                window,
+                                ptr::null(),
+                            );
+                            DestroyMenu(menu);
+                            PostMessageW(window, WM_NULL, 0, 0);
+                            match action {
+                                1 => {
+                                    app.restore_window();
+                                }
+                                2 => {
+                                    PostMessageW(window, WM_CLOSE, 1, 0);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    return 0;
+                }
+                WM_GETMINMAXINFO => {
+                    let info = unsafe { &mut *(lparam as *mut MINMAXINFO) };
+                    info.ptMinTrackSize = POINT { x: 640, y: 500 };
+                    return 0;
+                }
+                WM_DPICHANGED => {
+                    let rect = unsafe { &*(lparam as *const RECT) };
+                    unsafe {
+                        SetWindowPos(
+                            window,
+                            ptr::null_mut(),
+                            rect.left,
+                            rect.top,
+                            rect.right - rect.left,
+                            rect.bottom - rect.top,
+                            SWP_NOZORDER | SWP_NOACTIVATE,
+                        );
+                    }
+                    return 0;
+                }
+                _ => {}
+            }
+        }
+    }
+    unsafe { DefWindowProcW(window, message, wparam, lparam) }
+}
+struct ComApartment;
+impl Drop for ComApartment {
+    fn drop(&mut self) {
+        unsafe {
+            windows::Win32::System::Com::CoUninitialize();
+        }
+    }
+}
+/// 自我檢查使用隔離資料夾，實際載入 WebView2 與 Markdown DOM，不連公司服務。
+pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
+    run_with_local(demo, smoke, None, None)
+}
+
+/// 手動體驗互動教學，不啟動正式 App、登入流程、模型或外部工具。
+pub fn run_tutorial_preview() -> AppResult<()> {
+    tutorial_preview::run()
+}
+
+/// 本機模型測試保留正式畫面與工具流程，所有個人資料寫入獨立目錄。
+pub fn run_local(local: crate::local_test::LocalTest) -> AppResult<()> {
+    run_with_local(None, false, Some(local), None)
+}
+
+/// 本機模型情境沿用正式控制器與離線呈現器；不使用一般使用者資料目錄。
+pub fn run_local_scenario(mut local: crate::local_test::LocalTest, path: &Path) -> AppResult<()> {
+    local.config.notification_popups = false;
+    run_with_local(None, false, Some(local), Some(path))
+}
+
+fn run_with_local(
+    demo: Option<&DemoServer>,
+    smoke: bool,
+    local: Option<crate::local_test::LocalTest>,
+    scenario_path: Option<&Path>,
+) -> AppResult<()> {
+    let mut scenario = match (scenario_path, local.as_ref()) {
+        (Some(path), Some(local)) => {
+            Some(projects::local_scenario::Scenario::load(path, &local.root)?)
+        }
+        (None, _) => None,
+        _ => return Err("情境只允許明確的本機測試連線。".into()),
+    };
+    let _instance = if !smoke && demo.is_none() && local.is_none() {
+        match crate::single_instance::acquire()? {
+            Some(instance) => Some(instance),
+            None => return Ok(()),
+        }
+    } else {
+        None
+    };
+    unsafe {
+        windows::Win32::System::Com::CoInitializeEx(
+            None,
+            windows::Win32::System::Com::COINIT_APARTMENTTHREADED,
+        )
+        .ok()
+    }
+    .map_err(|_| "無法初始化桌面介面。")?;
+    let _apartment = ComApartment;
+    let root = if let Some(local) = &local {
+        local.root.clone()
+    } else if smoke {
+        std::env::temp_dir().join("CompanyAI-ui-smoke")
+    } else {
+        let root = storage::data_dir()?;
+        if demo.is_some() {
+            root.join("demo")
+        } else {
+            root
+        }
+    };
+    let config = if let Some(local) = &local {
+        local.config.clone()
+    } else if let Some(demo) = demo {
+        demo.config()
+    } else if smoke {
+        Config::default()
+    } else {
+        storage::load_config(&root)?
+    };
+    let session = if let Some(local) = &local {
+        Some(local.session.clone())
+    } else if demo.is_none() && !smoke {
+        storage::load_session(&root, &config)?
+    } else {
+        None
+    };
+    let (archive, history_error) = match history::load(&root) {
+        Ok(a) => (a, None),
+        Err(e) => (Archive::default(), Some(e)),
+    };
+    let versions = VersionState::load(&root)?;
+    let (tx, rx) = mpsc::channel();
+    let (command_tx, commands) = mpsc::channel();
+    unsafe {
+        SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        let instance = GetModuleHandleW(ptr::null());
+        let name = wide(if demo.is_some() || smoke || local.is_some() {
+            "LM_AI_TestWindow"
+        } else {
+            "LM_AI_Window"
+        });
+        let class = WNDCLASSEXW {
+            cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
+            lpfnWndProc: Some(window_proc),
+            hInstance: instance,
+            lpszClassName: name.as_ptr(),
+            hCursor: LoadCursorW(ptr::null_mut(), IDC_ARROW),
+            hIcon: app_icon(false),
+            hIconSm: app_icon(true),
+            ..Default::default()
+        };
+        if RegisterClassExW(&class) == 0 {
+            return Err("無法註冊視窗。".into());
+        }
+        let window = CreateWindowExW(
+            0,
+            name.as_ptr(),
+            wide("LM_AI").as_ptr(),
+            WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
+            1120,
+            800,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            instance,
+            ptr::null(),
+        );
+        if window.is_null() {
+            return Err("無法建立視窗。".into());
+        }
+        apply_window_theme(window, config.dark_mode);
+        let view = WebView::create(window, &root.join("webview"), command_tx)?;
+        let mut rect = RECT::default();
+        GetClientRect(window, &mut rect);
+        view.resize(rect.right, rect.bottom);
+        let selection_tx = tx.clone();
+        let selection_popup = crate::selection_popup::Popup::new(window, move |rect| {
+            let _ = selection_tx.send(Event::SelectionRect(rect));
+        })?;
+        selection_popup.enabled.store(
+            config.selection_icon
+                && !smoke
+                && session.as_ref().is_some_and(|s| s.valid_for(&config)),
+            Ordering::Relaxed,
+        );
+        let mut app = App {
+            onboarding: onboarding::Onboarding::load(smoke || local.is_some()),
+            projects: projects::ProjectRuntime::load(&root),
+            vnc: vnc::VncRuntime::default(),
+            site: site::SiteRuntime::default(),
+            mail_flow: mail_batch::MailRuntime::default(),
+            work: work::WorkRuntime::default(),
+            window,
+            selection_popup,
+            view,
+            root,
+            config,
+            session,
+            archive,
+            active_id: None,
+            messages: Vec::new(),
+            history_error,
+            draft: String::new(),
+            draft_revision: 0,
+            focus_draft: false,
+            busy: "none",
+            status: "準備就緒".into(),
+            status_notice_id: 0,
+            error: false,
+            models: None,
+            versions,
+            version_status: "正在檢查版本".into(),
+            update_ready: None,
+            update_busy: false,
+            update_consent: None,
+            update_status: String::new(),
+            services_loading: false,
+            generation: 0,
+            login_operation: 0,
+            cancelled: Arc::new(AtomicBool::new(false)),
+            grant: None,
+            inbox: Inbox::default(),
+            notifications_loading: false,
+            notifications_pending: false,
+            notification_status: "登入後同步網站通知".into(),
+            socket_cancel: Arc::new(AtomicBool::new(false)),
+            last_events: Instant::now(),
+            last_services: Instant::now(),
+            mail: None,
+            mail_busy: false,
+            hotkey: None,
+            recording_since: None,
+            suppress_hotkey: false,
+            tx,
+            rx,
+            commands,
+            demo: demo.is_some() || local.is_some(),
+            smoke,
+            ready: false,
+            smoke_result: None,
+        };
+        if !smoke {
+            if let Err(error) = app.recover_project_history() {
+                app.fail(error);
+            }
+        }
+        if !smoke && !app.config.always_new_chat {
+            if let Some(c) = app
+                .archive
+                .conversations
+                .iter()
+                .max_by_key(|c| c.updated_at)
+            {
+                app.active_id = Some(c.id.clone());
+                app.messages = c.messages.clone();
+                let draft = c.draft.clone();
+                app.set_draft(draft);
+            }
+        }
+        if !smoke {
+            if let Err(e) = app.apply_hotkey(app.config.hotkey.clone()) {
+                app.fail(e);
+            }
+            app.refresh_services();
+            app.start_notifications();
+            tray(window, NIM_ADD, None);
+        }
+        let state = Box::new(RefCell::new(app));
+        SetWindowLongPtrW(
+            window,
+            GWLP_USERDATA,
+            (&*state as *const RefCell<App>) as isize,
+        );
+        SetTimer(window, 1, 50, None);
+        if !smoke && scenario.is_none() {
+            ShowWindow(window, SW_SHOW);
+        }
+        let started = Instant::now();
+        let mut result = Ok(());
+        loop {
+            let mut message = MSG::default();
+            if PeekMessageW(&mut message, ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
+                if message.message == WM_QUIT {
+                    break;
+                }
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+            } else {
+                thread::sleep(Duration::from_millis(5));
+            }
+            if let Some(scenario) = scenario.as_mut() {
+                if let Some(done) = scenario.tick(&mut state.borrow_mut()) {
+                    result = done;
+                    break;
+                }
+                if started.elapsed() > Duration::from_secs(3 * 60 * 60) {
+                    result = Err("本機情境逾時，保留未完成資料。".into());
+                    break;
+                }
+            }
+            if smoke {
+                let done = state.borrow_mut().smoke_result.take();
+                if let Some(done) = done {
+                    // 放開 RefCell 借用後，真正送出原生最小化／關閉訊息。
+                    result = done.and_then(|()| window_behavior::verify(&state));
+                    break;
+                }
+                if started.elapsed() > Duration::from_secs(45) {
+                    result = Err("WebView2 介面自我檢查逾時。".into());
+                    break;
+                }
+            }
+        }
+        KillTimer(window, 1);
+        SetWindowLongPtrW(window, GWLP_USERDATA, 0);
+        drop(state);
+        if IsWindow(window) != 0 {
+            DestroyWindow(window);
+        }
+        UnregisterClassW(name.as_ptr(), instance);
+        result
+    }
+}
+/// Windows 11 標題列同步使用灰藍色；切回淺色時還原系統預設。
+fn apply_window_theme(window: HWND, dark: bool) {
+    use windows_sys::Win32::Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR,
+    };
+    // COLORREF 是 0x00BBGGRR，而不是 CSS 的 RGB 順序。
+    let background: u32 = if dark { 0x0030251d } else { 0xffffffff };
+    let foreground: u32 = if dark { 0x00efe9e3 } else { 0xffffffff };
+    unsafe {
+        // 外觀設定失敗不應阻止使用者聊天；WebView2 仍會套用自己的完整色票。
+        DwmSetWindowAttribute(
+            window,
+            DWMWA_CAPTION_COLOR as u32,
+            (&background as *const u32).cast(),
+            4,
+        );
+        DwmSetWindowAttribute(
+            window,
+            DWMWA_TEXT_COLOR as u32,
+            (&foreground as *const u32).cast(),
+            4,
+        );
+    }
+}
+pub fn show_fatal_error(error: &str) {
+    unsafe {
+        MessageBoxW(
+            ptr::null_mut(),
+            wide(error).as_ptr(),
+            wide("LM_AI 啟動失敗").as_ptr(),
+            MB_OK | MB_ICONERROR,
+        );
+    }
+}

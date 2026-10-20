@@ -1,0 +1,41 @@
+{
+  "version": "0.8.19",
+  "exe_sha256": "6f01c77ab69f8583043aaeac9d8e98bd1db4e66ac42f3050d5ed9626f7f7f702",
+  "explorer": {
+    "result": "PASS",
+    "checks": [
+      "forward slash normalized",
+      "Chinese and space filename selected",
+      "Shell HRESULT 0x80070057 fallback selected",
+      "outside/non-output rejected"
+    ]
+  },
+  "pdf": {
+    "result": "PASS",
+    "checks": [
+      "actual AppContainer",
+      "ASCII fixture",
+      "Chinese PDF exported by Word",
+      "2 MB framed transfer",
+      "blank/corrupt rejection",
+      "TXT copy and original bytes preserved"
+    ]
+  },
+  "ui": {
+    "result": "PASS",
+    "checks": 23,
+    "screenshot_reviewed": true,
+    "checks_include": [
+      "live narration outside collapsed history",
+      "HTML remains text",
+      "completed narration retained"
+    ]
+  },
+  "msg": {
+    "result": "NOT_VERIFIED",
+    "reason": "Local Classic Outlook first-run welcome; COM returned RPC_E_CALL_REJECTED. Implementation now requires an already running configured Classic Outlook.",
+    "manual_test": "scripts/Test-Msg.ps1"
+  },
+  "company_encryption_tested": false,
+  "macro_payload_tested": false
+}

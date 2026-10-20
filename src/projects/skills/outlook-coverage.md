@@ -1,0 +1,5 @@
+# Outlook 前文比較
+先在outlook-research列標題取得完整mail_ids，再用outlook_compare；本機最多1000封、每頁30筆，原mail_ids及next_offset續頁。來源仍受本次資料夾授權約束，不讀附件／寄信。
+只有covered_exact_normalized_text表示舊信全文正規化後被covered_by涵蓋；recommended是候選，不是必讀。previous_text_present=false可能改寫或分支，不證明有人刪文。相同比對可重用，不換參數重做。
+比較不算模型已讀正文；相關性優先，最新信先讀、缺口才補。比對失敗／超過120秒或64MiB保留未涵蓋，不推論為空。
+選好後load_skill(outlook-research)讀必要內文，沿用既有ID；不用重新掃描。內文最多50封。讀後mail_note保存來源與草稿，read_mail_notes查回，完成足夠資料即整理交付。

@@ -1,0 +1,48 @@
+{
+  "result": "PASS_LOCAL_SELF_CHECK",
+  "actual_cad_tested": false,
+  "tool_version": "0.1.1",
+  "runtime_checks": [
+    {
+      "result": "PASS_LOCAL_SELF_CHECK",
+      "bits": 64,
+      "cad_tested": false,
+      "checks": [
+        "pywin32 imports",
+        "newest-year ordering",
+        "no inferred year from ProgID",
+        "quoted executable path",
+        "geometry and dimension verification",
+        "invalid geometry rejected",
+        "reported ICAD identity accepted",
+        "unknown identities and mismatched paths rejected",
+        "GstarCAD identity retained"
+      ]
+    },
+    {
+      "result": "PASS_LOCAL_SELF_CHECK",
+      "bits": 32,
+      "cad_tested": false,
+      "checks": [
+        "pywin32 imports",
+        "newest-year ordering",
+        "no inferred year from ProgID",
+        "quoted executable path",
+        "geometry and dimension verification",
+        "invalid geometry rejected",
+        "reported ICAD identity accepted",
+        "unknown identities and mismatched paths rejected",
+        "GstarCAD identity retained"
+      ]
+    }
+  ],
+  "binary_origin": "Official CPython embeddable and upstream PyPI wheels; not locally built with MSVC v142",
+  "recorded_at": "2026-10-14T18:11:55.163052+08:00",
+  "bundle": "GstarCAD-Probe.zip",
+  "sha256": "183c3c321d535be420c95015336545891e042a5fed0ed031ab2d406bff91e363",
+  "archive_hashes_verified": true,
+  "source_matches_archive": true,
+  "full_validation_completed": false,
+  "user_reported_connection": "ICAD 5.0.20.0, 32-bit COM connected from x64 Python; drawing stopped before Documents.Add in 0.1.0",
+  "actual_drawing_tested": false
+}

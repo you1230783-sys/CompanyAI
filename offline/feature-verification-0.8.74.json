@@ -1,0 +1,1090 @@
+{
+  "format": "company-ai-feature-verification-v1",
+  "version": "0.8.74",
+  "recorded_at": "2026-10-20T16:11:51.801649+08:00",
+  "result": "PASS_NATIVE_BUILD_AND_INSTALLER_WITH_MODEL_CONTENT_AND_DELIVERY_LIMITATIONS",
+  "artifacts": {
+    "dist/LM_AI.exe": {
+      "bytes": 58506240,
+      "sha256": "74dc4a9da455317a75bcc23225aa3fb79b2cf999776eaff9ae290a88fbe2e584"
+    },
+    "dist/LM_AI_Setup.exe": {
+      "bytes": 46801587,
+      "sha256": "d9acabeb31f8af47acc47ed2128b8d818856a49865d4e484f89be27b87003a56"
+    }
+  },
+  "cad_runtime_sha256": "eaafe8017161c27796a9fb152839979327d8904ff51b56cdd9cbdff82d9da7fa",
+  "build": {
+    "msvc": "14.29.30133",
+    "actual_compiler": "192930159 x64",
+    "empty_cargo_cache_frozen": true,
+    "rust_tests": 430,
+    "cad_contract_tests": 101,
+    "real_office_tested": true,
+    "real_cad_versions": [
+      "Icad.Application.1",
+      "GStarCAD.Application.22"
+    ],
+    "nsis_lifecycle_passed": true,
+    "historical_rust_zip_rebuilt": false
+  },
+  "reading_native": {
+    "result": "PASS",
+    "actual_batch_text_chars": 12633,
+    "note_gate": true,
+    "cropped_range_reuse": true,
+    "bounded_precision_read_and_reuse": true
+  },
+  "word_empty_cell_regression": {
+    "before_fix": "REPRODUCED_NATIVE_POSTCONDITION_FAILURE",
+    "after_fix": "PASS_NATIVE_SAVE_AND_REOPEN",
+    "cases": [
+      "Word prefilled table cells",
+      "Word empty table cells",
+      "Excel cells"
+    ],
+    "full_content_and_format_checks_retained": true
+  },
+  "real_report_model_review": {
+    "result": "PASS_NATIVE_LIVE_VALUE_BINDING_BUT_MODEL_DELIVERY_INCOMPLETE",
+    "request_fulfilled": false,
+    "source_unchanged": true,
+    "same_successful_python_calculation": true,
+    "actual_blank_word_cells_used": true,
+    "word_postcondition_errors": 0,
+    "observed_live_rows": [
+      {
+        "label": "有效數值筆數",
+        "word_text": "4 筆",
+        "excel_text": "4 筆",
+        "expected": 4
+      },
+      {
+        "label": "平均",
+        "word_text": "3.50 value",
+        "excel_text": "3.50 value",
+        "expected": 3.5
+      },
+      {
+        "label": "最小",
+        "word_text": "1.00 value",
+        "excel_text": "1.00 value",
+        "expected": 1
+      },
+      {
+        "label": "最大",
+        "word_text": "7.00 value",
+        "excel_text": "7.00 value",
+        "expected": 7
+      }
+    ],
+    "published_office_reports": 0,
+    "published_pngs": 4,
+    "chart_csv_values": [
+      1,
+      3.5,
+      7
+    ],
+    "png_visual_review": "First PNG reviewed: three bars and readable labels; other PNG files checked for signature/dimensions only.",
+    "excel_field_kind": "text with units, not numeric cells in this model-created template",
+    "general_task_loop": "After successful compaction, model repeatedly marked already exported PNG pending and reapplied completed bindings.",
+    "cancellation": {
+      "reason": "Word blank-cell and Excel bindings succeeded; model repeated completed chart exports and bindings four times without saving deliverables. Preserve failures, copies and source; classify full model request incomplete.",
+      "recorded_at": "2026-10-20T16:03:30.8072514+08:00",
+      "result": "STOPPED_REPEATED_COMPLETED_STEPS"
+    },
+    "original_csv_reads": 1,
+    "exact_working_copy_read_repeats": 5
+  },
+  "model_scope": {
+    "luna": "GPT-6 Luna low",
+    "strata": "qwen3.8-flash-next-q2_0 low",
+    "final_release_binary_tests": [
+      "runs074-luna-r12",
+      "runs074-strata-r13",
+      "runs074-luna-r14"
+    ],
+    "prior_candidate_lineage": [
+      {
+        "candidate": "runs074-strata-r7",
+        "exe_sha256": "54ad9139112d85e81c584fe3d81b2672ff3ae31ee6d0b5f3280766396f18e360",
+        "changes_since_test": [
+          "assets/release-notes.json",
+          "src/projects/office.rs",
+          "src/projects/office/authoring.rs"
+        ]
+      },
+      {
+        "candidate": "runs074-luna-r8",
+        "exe_sha256": "51d83e982aae7f7797b337bf4b42130bc8888dc4458146cf59a1431a0cd1902c",
+        "changes_since_test": [
+          "assets/release-notes.json",
+          "src/projects/office.rs",
+          "src/projects/office/authoring.rs"
+        ]
+      },
+      {
+        "candidate": "runs074-luna-r9",
+        "exe_sha256": "51d83e982aae7f7797b337bf4b42130bc8888dc4458146cf59a1431a0cd1902c",
+        "changes_since_test": [
+          "assets/release-notes.json",
+          "src/projects/office.rs",
+          "src/projects/office/authoring.rs"
+        ]
+      },
+      {
+        "candidate": "runs074-strata-r10",
+        "exe_sha256": "51d83e982aae7f7797b337bf4b42130bc8888dc4458146cf59a1431a0cd1902c",
+        "changes_since_test": [
+          "assets/release-notes.json",
+          "src/projects/office.rs",
+          "src/projects/office/authoring.rs"
+        ]
+      },
+      {
+        "candidate": "runs074-strata-r11",
+        "exe_sha256": "51d83e982aae7f7797b337bf4b42130bc8888dc4458146cf59a1431a0cd1902c",
+        "changes_since_test": [
+          "assets/release-notes.json",
+          "src/projects/office.rs",
+          "src/projects/office/authoring.rs"
+        ]
+      }
+    ],
+    "strata_latest_profile": "release; R7-R11 predate the empty Word cell fix",
+    "original_company_cpp_h_tested": false,
+    "company_glm_tested": false,
+    "controlled_old_version_performance_baseline": false,
+    "exact_duplicate_raw_reads_notice": "Exact duplicates exclude range overlap and do not prove no listing/note/skill loops."
+  },
+  "raw_text_read_notice": "Read counts also include serialized live working-copy snapshots; duplicates are not limited to original source files.",
+  "model_tests": [
+    {
+      "case": "cpp",
+      "native_result": "FINISHED_REQUIRES_REVIEW",
+      "turns": 24,
+      "calls": {
+        "load_skill": 4,
+        "list_files": 1,
+        "run_batch": 2,
+        "record_reading_notes": 6,
+        "read_code_section": 3,
+        "read_work_log": 1,
+        "compact_context": 2,
+        "create_mermaid": 1,
+        "link_diagram_sources": 2,
+        "export_mermaid": 1,
+        "finish": 1
+      },
+      "model_seconds": 161.405,
+      "actual_usage_rounds": 0,
+      "actual_usage_sums": null,
+      "codex_usage_rounds": 0,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 10,
+      "raw_text_chars": 17256,
+      "exact_duplicate_raw_reads": 0,
+      "reused_note_results": 0,
+      "diagrams": [
+        {
+          "name": "專案架構與執行流程.mmd",
+          "revision": "846886cfc18eaad02b70d1a80e959f703dfe19871d37b8435ac1258984c3c573",
+          "linked_nodes": 19
+        }
+      ],
+      "candidate": "runs074-luna-r4",
+      "tool_error_count": 5,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md"
+    },
+    {
+      "case": "medium-cpp",
+      "native_result": "FINISHED_REQUIRES_REVIEW",
+      "turns": 55,
+      "calls": {
+        "list_files": 3,
+        "load_skill": 11,
+        "run_batch": 2,
+        "record_reading_notes": 10,
+        "read_reading_notes": 16,
+        "find_text": 2,
+        "read_code_section": 6,
+        "read_work_log": 1,
+        "compact_context": 1,
+        "create_mermaid": 1,
+        "export_mermaid": 1,
+        "finish": 1
+      },
+      "model_seconds": 303.313,
+      "actual_usage_rounds": 0,
+      "actual_usage_sums": null,
+      "codex_usage_rounds": 5,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 12,
+      "raw_text_chars": 57565,
+      "exact_duplicate_raw_reads": 0,
+      "reused_note_results": 0,
+      "diagrams": [
+        {
+          "name": "tinyxml2-架構與流程.mmd",
+          "revision": "76f15c3ce65460ceb05ac7bc27c46c21083b67b32c038ef350facb37811996dd",
+          "linked_nodes": 0
+        }
+      ],
+      "candidate": "runs074-luna-r4",
+      "tool_error_count": 6,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md"
+    },
+    {
+      "case": "medium-python",
+      "native_result": "STOPPED",
+      "turns": 22,
+      "calls": {
+        "load_skill": 5,
+        "list_files": 10,
+        "run_batch": 4,
+        "record_reading_notes": 2,
+        "read_skill_guide": 1
+      },
+      "model_seconds": 109.63,
+      "actual_usage_rounds": 0,
+      "actual_usage_sums": null,
+      "codex_usage_rounds": 3,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 2,
+      "raw_text_chars": 6332,
+      "exact_duplicate_raw_reads": 0,
+      "reused_note_results": 0,
+      "diagrams": [],
+      "candidate": "runs074-luna-r4",
+      "tool_error_count": 2,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md"
+    },
+    {
+      "case": "medium-rust",
+      "native_result": "FINISHED_REQUIRES_REVIEW",
+      "turns": 43,
+      "calls": {
+        "load_skill": 7,
+        "list_files": 12,
+        "run_batch": 5,
+        "record_reading_notes": 4,
+        "read_reading_notes": 4,
+        "read_code_section": 2,
+        "compact_context": 2,
+        "create_mermaid": 2,
+        "export_mermaid": 3,
+        "link_diagram_sources": 1,
+        "finish": 1
+      },
+      "model_seconds": 237.808,
+      "actual_usage_rounds": 0,
+      "actual_usage_sums": null,
+      "codex_usage_rounds": 4,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 6,
+      "raw_text_chars": 29069,
+      "exact_duplicate_raw_reads": 0,
+      "reused_note_results": 0,
+      "diagrams": [
+        {
+          "name": "專案架構總覽.mmd",
+          "revision": "df67db4c298f8c7a62ac184dac01a36556ea276ee60838c55234e67563128328",
+          "linked_nodes": 0
+        },
+        {
+          "name": "專案架構與執行流程.mmd",
+          "revision": "139bf26d74f9e62d604344bcde74ff2eaf75d35cf60bd806970ab92d1fc9a81b",
+          "linked_nodes": 2
+        }
+      ],
+      "candidate": "runs074-luna-r4",
+      "tool_error_count": 5,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md"
+    },
+    {
+      "case": "python",
+      "native_result": "FINISHED_REQUIRES_REVIEW",
+      "turns": 29,
+      "calls": {
+        "load_skill": 4,
+        "list_files": 1,
+        "run_batch": 2,
+        "record_reading_notes": 9,
+        "create_mermaid": 3,
+        "read_code_section": 1,
+        "compact_context": 1,
+        "link_diagram_sources": 5,
+        "inspect_mermaid": 1,
+        "export_mermaid": 1,
+        "finish": 1
+      },
+      "model_seconds": 197.67,
+      "actual_usage_rounds": 0,
+      "actual_usage_sums": null,
+      "codex_usage_rounds": 2,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 6,
+      "raw_text_chars": 12328,
+      "exact_duplicate_raw_reads": 0,
+      "reused_note_results": 0,
+      "diagrams": [
+        {
+          "name": "待辦專案架構與執行流程.mmd",
+          "revision": "c8c6618ac14946d2ef291dcae4c4c8c5e7adff8311f0c25451a3436509be79aa",
+          "linked_nodes": 0
+        },
+        {
+          "name": "待辦專案架構與執行流程.mmd",
+          "revision": "8a3458dafefcdb0eb4f7a3728bd94754ed24ffe10020316e3e521c64410eb18c",
+          "linked_nodes": 5
+        }
+      ],
+      "candidate": "runs074-luna-r4",
+      "tool_error_count": 12,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md"
+    },
+    {
+      "case": "rust",
+      "native_result": "FINISHED_REQUIRES_REVIEW",
+      "turns": 38,
+      "calls": {
+        "load_skill": 8,
+        "list_files": 5,
+        "run_batch": 6,
+        "record_reading_notes": 5,
+        "read_code_section": 2,
+        "compact_context": 3,
+        "read_reading_notes": 4,
+        "create_mermaid": 1,
+        "link_diagram_sources": 2,
+        "export_mermaid": 1,
+        "finish": 1
+      },
+      "model_seconds": 206.412,
+      "actual_usage_rounds": 0,
+      "actual_usage_sums": null,
+      "codex_usage_rounds": 3,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 6,
+      "raw_text_chars": 7756,
+      "exact_duplicate_raw_reads": 0,
+      "reused_note_results": 0,
+      "diagrams": [
+        {
+          "name": "專案架構與執行流程.mmd",
+          "revision": "dd16cf80c4a91ac152d563f8527c1cfd2b1b8698a5ca280ed240e3ca07e899f3",
+          "linked_nodes": 5
+        }
+      ],
+      "candidate": "runs074-luna-r4",
+      "tool_error_count": 8,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md"
+    },
+    {
+      "case": "cpp",
+      "native_result": "STOPPED",
+      "turns": 36,
+      "calls": {
+        "list_files": 2,
+        "run_batch": 5,
+        "record_reading_notes": 6,
+        "read_code_section": 6,
+        "read_file": 1,
+        "compact_context": 2,
+        "load_skill": 1,
+        "create_mermaid": 2,
+        "export_mermaid": 2,
+        "link_diagram_sources": 2,
+        "read_work_log": 4,
+        "find_text": 3
+      },
+      "model_seconds": 1134.243,
+      "actual_usage_rounds": 36,
+      "actual_usage_sums": {
+        "prompt_tokens": 593045,
+        "completion_tokens": 26641,
+        "total_tokens": 619686
+      },
+      "codex_usage_rounds": 0,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 10,
+      "raw_text_chars": 21432,
+      "exact_duplicate_raw_reads": 0,
+      "reused_note_results": 5,
+      "diagrams": [
+        {
+          "name": "架構總覽.mmd",
+          "revision": "805ac8a4916fa9f5544fbee4904d00403680e4aa30bc84c6dabcaee311f6b9a9",
+          "linked_nodes": 0
+        },
+        {
+          "name": "主要執行流程.mmd",
+          "revision": "20b0be6272be11cfe93fc97d5fdcc83a3a3f42d7220a0441aa93cf2c1eebb281",
+          "linked_nodes": 20
+        }
+      ],
+      "candidate": "runs074-strata-r4",
+      "tool_error_count": 6,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md"
+    },
+    {
+      "case": "cpp",
+      "native_result": "STOPPED",
+      "turns": 14,
+      "calls": {
+        "list_files": 1,
+        "run_batch": 3,
+        "record_reading_notes": 4,
+        "read_code_section": 1,
+        "compact_context": 5
+      },
+      "model_seconds": 359.464,
+      "actual_usage_rounds": 14,
+      "actual_usage_sums": {
+        "prompt_tokens": 177066,
+        "completion_tokens": 10412,
+        "total_tokens": 187478
+      },
+      "codex_usage_rounds": 0,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 10,
+      "raw_text_chars": 21432,
+      "exact_duplicate_raw_reads": 0,
+      "reused_note_results": 0,
+      "diagrams": [],
+      "candidate": "runs074-strata-r5",
+      "tool_error_count": 6,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md"
+    },
+    {
+      "case": "medium-python",
+      "native_result": "STOPPED",
+      "turns": 15,
+      "calls": {
+        "load_skill": 5,
+        "list_files": 8,
+        "run_batch": 1,
+        "record_reading_notes": 1
+      },
+      "model_seconds": 72.961,
+      "actual_usage_rounds": 0,
+      "actual_usage_sums": null,
+      "codex_usage_rounds": 0,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 2,
+      "raw_text_chars": 6332,
+      "exact_duplicate_raw_reads": 0,
+      "reused_note_results": 0,
+      "diagrams": [],
+      "candidate": "runs074-luna-r5",
+      "tool_error_count": 0,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md"
+    },
+    {
+      "case": "medium-python",
+      "native_result": "FINISHED_REQUIRES_REVIEW",
+      "turns": 48,
+      "calls": {
+        "list_files": 3,
+        "read_file": 1,
+        "record_reading_notes": 8,
+        "run_batch": 3,
+        "load_skill": 7,
+        "read_skill_guide": 1,
+        "read_code_section": 5,
+        "read_work_log": 1,
+        "read_reading_notes": 11,
+        "compact_context": 3,
+        "create_mermaid": 1,
+        "link_diagram_sources": 1,
+        "export_mermaid": 1,
+        "finish": 2
+      },
+      "model_seconds": 259.705,
+      "actual_usage_rounds": 0,
+      "actual_usage_sums": null,
+      "codex_usage_rounds": 6,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 8,
+      "raw_text_chars": 40588,
+      "exact_duplicate_raw_reads": 0,
+      "reused_note_results": 0,
+      "diagrams": [
+        {
+          "name": "Click-架構與執行流程.mmd",
+          "revision": "fb62775002e644d7c7d2314782254bc4e062a7a3e5cfb9905d5485d540042e7f",
+          "linked_nodes": 6
+        }
+      ],
+      "candidate": "runs074-luna-r6",
+      "tool_error_count": 11,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md"
+    },
+    {
+      "case": "cpp",
+      "native_result": "FINISHED_REQUIRES_REVIEW",
+      "turns": 25,
+      "calls": {
+        "list_files": 1,
+        "run_batch": 4,
+        "record_reading_notes": 7,
+        "read_code_section": 1,
+        "compact_context": 1,
+        "load_skill": 1,
+        "create_mermaid": 3,
+        "link_diagram_sources": 4,
+        "export_mermaid": 2,
+        "finish": 1
+      },
+      "model_seconds": 898.504,
+      "actual_usage_rounds": 25,
+      "actual_usage_sums": {
+        "prompt_tokens": 367033,
+        "completion_tokens": 25045,
+        "total_tokens": 392078
+      },
+      "codex_usage_rounds": 0,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 9,
+      "raw_text_chars": 18456,
+      "exact_duplicate_raw_reads": 0,
+      "reused_note_results": 0,
+      "diagrams": [
+        {
+          "name": "架構總覽.mmd",
+          "revision": "3f6bf91aee61e0b16df1371336b86887c8f13a6e79195d40c991af5676bf15cb",
+          "linked_nodes": 9
+        },
+        {
+          "name": "主要執行流程.mmd",
+          "revision": "7811e454ede636ba241453c4231d2259d6b446922929e5b93b57958e769a3851",
+          "linked_nodes": 21
+        }
+      ],
+      "candidate": "runs074-strata-r7",
+      "tool_error_count": 9,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md"
+    },
+    {
+      "case": "cpp",
+      "native_result": "FINISHED_REQUIRES_REVIEW",
+      "turns": 22,
+      "calls": {
+        "load_skill": 5,
+        "list_files": 2,
+        "read_code_section": 2,
+        "record_reading_notes": 6,
+        "run_batch": 1,
+        "compact_context": 1,
+        "create_mermaid": 1,
+        "link_diagram_sources": 1,
+        "export_mermaid": 1,
+        "finish": 2
+      },
+      "model_seconds": 143.034,
+      "actual_usage_rounds": 0,
+      "actual_usage_sums": null,
+      "codex_usage_rounds": 1,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 10,
+      "raw_text_chars": 19379,
+      "exact_duplicate_raw_reads": 0,
+      "reused_note_results": 0,
+      "diagrams": [
+        {
+          "name": "專案架構與執行流程.mmd",
+          "revision": "a3b1cd08af6704db4281f09ce5e6d48a6e1cb5d5c05ceb6e28f1616d449e6f9a",
+          "linked_nodes": 13
+        }
+      ],
+      "candidate": "runs074-luna-r8",
+      "tool_error_count": 4,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md"
+    },
+    {
+      "case": "analysis",
+      "native_result": "FINISHED_REQUIRES_REVIEW",
+      "turns": 13,
+      "calls": {
+        "load_skill": 5,
+        "list_files": 1,
+        "read_file": 1,
+        "record_reading_notes": 1,
+        "run_python": 3,
+        "read_work_log": 1,
+        "finish": 1
+      },
+      "model_seconds": 80.183,
+      "actual_usage_rounds": 0,
+      "actual_usage_sums": null,
+      "codex_usage_rounds": 3,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 1,
+      "raw_text_chars": 14,
+      "exact_duplicate_raw_reads": 0,
+      "reused_note_results": 0,
+      "diagrams": [],
+      "candidate": "runs074-luna-r9",
+      "tool_error_count": 2,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md",
+      "request_fulfilled": false
+    },
+    {
+      "case": "medium-cpp",
+      "native_result": "FINISHED_REQUIRES_REVIEW",
+      "turns": 52,
+      "calls": {
+        "list_files": 1,
+        "read_file": 2,
+        "record_reading_notes": 14,
+        "run_batch": 13,
+        "read_code_section": 6,
+        "compact_context": 4,
+        "load_skill": 2,
+        "read_reading_notes": 1,
+        "create_mermaid": 3,
+        "find_text": 4,
+        "link_diagram_sources": 2,
+        "export_mermaid": 2,
+        "finish": 1
+      },
+      "model_seconds": 1418.226,
+      "actual_usage_rounds": 52,
+      "actual_usage_sums": {
+        "prompt_tokens": 917204,
+        "completion_tokens": 40186,
+        "total_tokens": 957390
+      },
+      "codex_usage_rounds": 0,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 27,
+      "raw_text_chars": 138071,
+      "exact_duplicate_raw_reads": 0,
+      "reused_note_results": 7,
+      "diagrams": [
+        {
+          "name": "tinyxml2-architecture-overview.mmd",
+          "revision": "09acc4d0d471b3b5c95283338f4f1582571902807ffb310e69c065fa844746d6",
+          "linked_nodes": 14
+        },
+        {
+          "name": "tinyxml2-execution-flow.mmd",
+          "revision": "b4a94cf3dbf43ea2544ba67f98c87d2a25178f49e6e8676e9f0b1fae9b2b27c0",
+          "linked_nodes": 18
+        }
+      ],
+      "candidate": "runs074-strata-r10",
+      "tool_error_count": 5,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md"
+    },
+    {
+      "case": "analysis",
+      "native_result": "STOPPED",
+      "turns": 35,
+      "calls": {
+        "list_files": 1,
+        "read_file": 10,
+        "record_reading_notes": 2,
+        "load_skill": 2,
+        "run_python": 5,
+        "register_report_values": 1,
+        "export_report_values": 2,
+        "create_working_copy": 1,
+        "office_batch": 3,
+        "apply_report_values": 7,
+        "read_work_log": 1
+      },
+      "model_seconds": 561.617,
+      "actual_usage_rounds": 35,
+      "actual_usage_sums": {
+        "prompt_tokens": 494628,
+        "completion_tokens": 15759,
+        "total_tokens": 510387
+      },
+      "codex_usage_rounds": 0,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 9,
+      "raw_text_chars": 18814,
+      "exact_duplicate_raw_reads": 7,
+      "reused_note_results": 0,
+      "diagrams": [],
+      "candidate": "runs074-strata-r11",
+      "tool_error_count": 14,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md",
+      "request_fulfilled": false,
+      "native_failure": "Word empty table cell postcondition failure; preserved before correction."
+    },
+    {
+      "case": "cpp",
+      "native_result": "STOPPED",
+      "turns": 24,
+      "calls": {
+        "list_files": 2,
+        "run_batch": 4,
+        "record_reading_notes": 5,
+        "load_skill": 3,
+        "read_work_log": 4,
+        "read_code_section": 1,
+        "compact_context": 2,
+        "create_mermaid": 1,
+        "link_diagram_sources": 1
+      },
+      "model_seconds": 149.364,
+      "actual_usage_rounds": 0,
+      "actual_usage_sums": null,
+      "codex_usage_rounds": 2,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 7,
+      "raw_text_chars": 18376,
+      "exact_duplicate_raw_reads": 0,
+      "reused_note_results": 0,
+      "diagrams": [
+        {
+          "name": "銀行系統架構與主要流程.mmd",
+          "revision": "1c1e2c9200086d0840385004082c030e3a9a33ec67c82e9814d2d51154736ec4",
+          "linked_nodes": 0
+        }
+      ],
+      "candidate": "runs074-luna-r12",
+      "tool_error_count": 4,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md",
+      "request_fulfilled": false,
+      "model_endpoint_failure": "Round 24 timed out after 240 seconds; no completed response.",
+      "timing_notice": "model_seconds sums completed response records and excludes the failed 240-second wait.",
+      "export_notice": "MMD retained; source binding failed and SVG export not completed."
+    },
+    {
+      "case": "analysis",
+      "native_result": "STOPPED",
+      "turns": 62,
+      "calls": {
+        "list_files": 1,
+        "read_file": 13,
+        "record_reading_notes": 2,
+        "load_skill": 11,
+        "run_python": 4,
+        "register_report_values": 1,
+        "export_report_values": 2,
+        "chart_dataset": 4,
+        "export_chart_png": 4,
+        "create_working_copy": 3,
+        "office_batch": 12,
+        "apply_report_values": 5,
+        "compact_context": 2
+      },
+      "model_seconds": 1199.835,
+      "actual_usage_rounds": 62,
+      "actual_usage_sums": {
+        "prompt_tokens": 921130,
+        "completion_tokens": 33019,
+        "total_tokens": 954149
+      },
+      "codex_usage_rounds": 0,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 10,
+      "raw_text_chars": 25371,
+      "exact_duplicate_raw_reads": 5,
+      "reused_note_results": 0,
+      "diagrams": [],
+      "candidate": "runs074-strata-r13",
+      "tool_error_count": 14,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md",
+      "request_fulfilled": false
+    },
+    {
+      "case": "cpp",
+      "native_result": "FINISHED_REQUIRES_REVIEW",
+      "turns": 22,
+      "calls": {
+        "load_skill": 3,
+        "list_files": 3,
+        "run_batch": 3,
+        "record_reading_notes": 4,
+        "read_code_section": 2,
+        "compact_context": 2,
+        "create_mermaid": 1,
+        "link_diagram_sources": 2,
+        "export_mermaid": 1,
+        "finish": 1
+      },
+      "model_seconds": 150.253,
+      "actual_usage_rounds": 0,
+      "actual_usage_sums": null,
+      "codex_usage_rounds": 0,
+      "usage_notice": "API未回傳usage時不以估算填入實際用量。",
+      "raw_text_reads": 9,
+      "raw_text_chars": 20378,
+      "exact_duplicate_raw_reads": 0,
+      "reused_note_results": 0,
+      "diagrams": [
+        {
+          "name": "專案架構與主要流程.mmd",
+          "revision": "e2a4ee3a47f537c387c4e17cd2dab47dc6326054ada9476a9eec221601ce73d8",
+          "linked_nodes": 16
+        }
+      ],
+      "candidate": "runs074-luna-r14",
+      "tool_error_count": 2,
+      "semantic_review": "NOT_FULLY_APPROVED; see docs/VALIDATION_0_8_74.md"
+    }
+  ],
+  "source_integrity": [
+    {
+      "candidate": "checkouts-r4b",
+      "case": "cpp",
+      "commit": "3e9781819e088184c2a5aff843f59344d119a7d2",
+      "tracked_files": 11,
+      "changed": []
+    },
+    {
+      "candidate": "checkouts-r4b",
+      "case": "medium-cpp",
+      "commit": "8224e427b655b83dae5e2298f1e6919523a78737",
+      "tracked_files": 273,
+      "changed": []
+    },
+    {
+      "candidate": "checkouts-r4b",
+      "case": "medium-python",
+      "commit": "2247b35ea1c47c727d7a06e51fa280e12a863ff6",
+      "tracked_files": 178,
+      "changed": []
+    },
+    {
+      "candidate": "checkouts-r4b",
+      "case": "medium-rust",
+      "commit": "6c0abf5681bfc30bb9d8f7f52b68a350b436fffa",
+      "tracked_files": 122,
+      "changed": []
+    },
+    {
+      "candidate": "checkouts-r4b",
+      "case": "python",
+      "commit": "f2740612d9a372dc4bab7e6e5466d933e29a3be8",
+      "tracked_files": 7,
+      "changed": []
+    },
+    {
+      "candidate": "checkouts-r4b",
+      "case": "rust",
+      "commit": "a49f7d2c8d8a56b0b8ad7b880f70e597c3726593",
+      "tracked_files": 9,
+      "changed": []
+    },
+    {
+      "candidate": "checkouts-r4-strata",
+      "case": "cpp",
+      "commit": "3e9781819e088184c2a5aff843f59344d119a7d2",
+      "tracked_files": 11,
+      "changed": []
+    },
+    {
+      "candidate": "checkouts-r5-strata",
+      "case": "cpp",
+      "commit": "3e9781819e088184c2a5aff843f59344d119a7d2",
+      "tracked_files": 11,
+      "changed": []
+    },
+    {
+      "candidate": "checkouts-r5-luna",
+      "case": "medium-python",
+      "commit": "2247b35ea1c47c727d7a06e51fa280e12a863ff6",
+      "tracked_files": 178,
+      "changed": []
+    },
+    {
+      "candidate": "checkouts-r6-luna",
+      "case": "medium-python",
+      "commit": "2247b35ea1c47c727d7a06e51fa280e12a863ff6",
+      "tracked_files": 178,
+      "changed": []
+    },
+    {
+      "candidate": "checkouts-r7-strata",
+      "case": "cpp",
+      "commit": "3e9781819e088184c2a5aff843f59344d119a7d2",
+      "tracked_files": 11,
+      "changed": []
+    },
+    {
+      "candidate": "checkouts-r8-luna",
+      "case": "cpp",
+      "commit": "3e9781819e088184c2a5aff843f59344d119a7d2",
+      "tracked_files": 11,
+      "changed": []
+    },
+    {
+      "candidate": "checkouts-r10-strata",
+      "case": "medium-cpp",
+      "commit": "8224e427b655b83dae5e2298f1e6919523a78737",
+      "tracked_files": 273,
+      "changed": []
+    },
+    {
+      "candidate": "checkouts-r12-luna",
+      "case": "cpp",
+      "commit": "3e9781819e088184c2a5aff843f59344d119a7d2",
+      "tracked_files": 11,
+      "changed": []
+    },
+    {
+      "candidate": "checkouts-r14-luna",
+      "case": "cpp",
+      "commit": "3e9781819e088184c2a5aff843f59344d119a7d2",
+      "tracked_files": 11,
+      "changed": []
+    }
+  ],
+  "independent_graph_export_checks": [
+    {
+      "candidate": "runs074-luna-r6",
+      "case": "medium-python",
+      "result": "PASS_SOURCE_BYTES_EXPORT_XML_AND_NODE_FILE_HASHES",
+      "diagrams": [
+        {
+          "name": "Click-架構與執行流程.mmd",
+          "mmd_bytes_equal_model_source": true,
+          "mmd_sha256": "fb62775002e644d7c7d2314782254bc4e062a7a3e5cfb9905d5485d540042e7f",
+          "svg_bytes": 54979,
+          "svg_xml_valid": true,
+          "svg_sha256": "a89aea7f0f4c53b4494a361f4c49a8ea9a4b63c62fad9a027614b755b3650b5a",
+          "verified_node_sources": 6
+        }
+      ],
+      "visual_review": "not performed for these exports; native UI controls were reviewed separately",
+      "semantic_review": "limitations retained in version validation document"
+    },
+    {
+      "candidate": "runs074-strata-r7",
+      "case": "cpp",
+      "result": "PASS_SOURCE_BYTES_EXPORT_XML_AND_NODE_FILE_HASHES",
+      "diagrams": [
+        {
+          "name": "架構總覽.mmd",
+          "mmd_bytes_equal_model_source": true,
+          "mmd_sha256": "3f6bf91aee61e0b16df1371336b86887c8f13a6e79195d40c991af5676bf15cb",
+          "svg_bytes": 45278,
+          "svg_xml_valid": true,
+          "svg_sha256": "dc8d20020b1dce73529614cc36e24d757d020731ba29eb4da03a26ed917ac808",
+          "verified_node_sources": 9
+        },
+        {
+          "name": "主要執行流程.mmd",
+          "mmd_bytes_equal_model_source": true,
+          "mmd_sha256": "7811e454ede636ba241453c4231d2259d6b446922929e5b93b57958e769a3851",
+          "svg_bytes": 71753,
+          "svg_xml_valid": true,
+          "svg_sha256": "6c338d341dbe6c34fcce7a65ba9cac3434aaef795b405fd9ec1094fd113fb928",
+          "verified_node_sources": 21
+        }
+      ],
+      "visual_review": "not performed for these exports; native UI controls were reviewed separately",
+      "semantic_review": "limitations retained in version validation document"
+    },
+    {
+      "candidate": "runs074-luna-r8",
+      "case": "cpp",
+      "result": "PASS_SOURCE_BYTES_EXPORT_XML_AND_NODE_FILE_HASHES",
+      "diagrams": [
+        {
+          "name": "專案架構與執行流程.mmd",
+          "mmd_bytes_equal_model_source": true,
+          "mmd_sha256": "a3b1cd08af6704db4281f09ce5e6d48a6e1cb5d5c05ceb6e28f1616d449e6f9a",
+          "svg_bytes": 165169,
+          "svg_xml_valid": true,
+          "svg_sha256": "ed6f1075c4b9c188388d01efad3df2bb911a70de98afc58a9ed2224f24ba10bd",
+          "verified_node_sources": 13
+        }
+      ],
+      "visual_review": "not performed for these exports; native UI controls were reviewed separately",
+      "semantic_review": "limitations retained in version validation document"
+    },
+    {
+      "candidate": "runs074-strata-r10",
+      "case": "medium-cpp",
+      "result": "PASS_SOURCE_BYTES_EXPORT_XML_AND_NODE_FILE_HASHES",
+      "diagrams": [
+        {
+          "name": "tinyxml2-architecture-overview.mmd",
+          "mmd_bytes_equal_model_source": true,
+          "mmd_sha256": "09acc4d0d471b3b5c95283338f4f1582571902807ffb310e69c065fa844746d6",
+          "svg_bytes": 52510,
+          "svg_xml_valid": true,
+          "svg_sha256": "77939a470680f14feefe37b2fb1ef7dbbaeeb0b10c53b9e3bae6a400a5056a46",
+          "verified_node_sources": 14
+        },
+        {
+          "name": "tinyxml2-execution-flow.mmd",
+          "mmd_bytes_equal_model_source": true,
+          "mmd_sha256": "b4a94cf3dbf43ea2544ba67f98c87d2a25178f49e6e8676e9f0b1fae9b2b27c0",
+          "svg_bytes": 54699,
+          "svg_xml_valid": true,
+          "svg_sha256": "538eb6e8fb5ca65ebb1dd3f749e8a8abf0dd7b6c3edb2d3df1be832d9f06177d",
+          "verified_node_sources": 18
+        }
+      ],
+      "visual_review": "not performed for these exports; native UI controls were reviewed separately",
+      "semantic_review": "ISSUES: wrong constant, nonexistent PopHeader, inaccurate read scope, primarily English graph labels"
+    },
+    {
+      "candidate": "runs074-luna-r14",
+      "case": "cpp",
+      "result": "PASS_SOURCE_BYTES_EXPORT_XML_AND_NODE_FILE_HASHES",
+      "diagrams": [
+        {
+          "name": "專案架構與主要流程.mmd",
+          "mmd_bytes_equal_model_source": true,
+          "mmd_sha256": "e2a4ee3a47f537c387c4e17cd2dab47dc6326054ada9476a9eec221601ce73d8",
+          "svg_bytes": 61491,
+          "svg_xml_valid": true,
+          "svg_sha256": "d182cd5ae5a470b45b58449e391970a1cc2070f916ed1c6321819527f84cc054",
+          "verified_node_sources": 16
+        }
+      ],
+      "visual_review": "not performed for these exports; native UI controls reviewed separately",
+      "semantic_review": "reviewed separately against original source; see validation document"
+    }
+  ],
+  "ui": {
+    "source_list_preview": "PASS actual main.cpp lines 1-7",
+    "changed_source_warning": "PASS old excerpt retained; independent source restored byte-for-byte",
+    "artifact_list": "PASS four MMD/SVG entries with sources and versions",
+    "zip_export": "PASS native UI export and independent zipfile CRC + original bytes",
+    "short_actual_usage": "PASS 23 rows actual Strata tokens + totals alongside detailed JSON",
+    "short_copy_button": "PASS native clipboard-success toast",
+    "source_preview_height": "PASS rebuilt preview shows multiple lines at once",
+    "svg_node_click": "PASS clicked actual Bank.h SVG node, opened verified line 1-50 preview"
+  },
+  "latest_ui_review": {
+    "result": "PASS_REVIEWED_CONTROLS",
+    "scope": "same final UI/source in isolated helper using copied Strata R7 history; source project unchanged",
+    "checks": {
+      "short_actual_usage": "25/25 rounds; input 367033, output 25045, total 392078 match raw usage",
+      "short_usage_height": "actual screenshot shows six rows at once; box no longer 48px",
+      "short_copy": "actual click produced native clipboard-success toast",
+      "detailed_json": "existing JSON and collapsed full usage/estimate section remain",
+      "graphs": "R7 graph controls and source-node accessibility exposed; only partial graph viewport visually reviewed"
+    },
+    "limitations": [
+      "Not a full visual review of every model graph",
+      "Earlier source preview and actual SVG-node-click reviews retained separately"
+    ]
+  },
+  "ui_lineage_notice": "UI code unchanged by the later Word range fix; UI helper checks preceded that fix.",
+  "portable_manifest": {
+    "result": "PASS",
+    "source_count": 7,
+    "crc": true,
+    "bytes_equal": true
+  },
+  "limitations": [
+    "Model summaries and graph arrows are not semantic proof.",
+    "Some runs stopped or delivered incomplete major execution flows; original failures preserved.",
+    "Actual API usage absent for Luna remains null, never an estimated actual total.",
+    "CAD geometry-to-dimension association remains unverified; fixed TextOverride only contract-tested.",
+    "Unbound prose numbers and model-selected calculation formulas are outside bound-value checks.",
+    "Bound-value checks verify the selected binding, not the semantic correctness of a model-selected field label.",
+    "Strata report case had correct live values but repeated completed steps and never published Word/Excel; stopped after four PNG exports.",
+    "Company services, company GLM, real Outlook and company original source require on-site validation."
+  ]
+}

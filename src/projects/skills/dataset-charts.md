@@ -1,0 +1,6 @@
+# 資料準備與直接繪圖
+已有追蹤CSV時inspect_dataset看結構／預覽，再chart_dataset；數列留在本機，不重讀或抄進提示詞。確認path/revision、欄位與單位。
+Excel需先excel-read的inspect_excel／plan_excel_analysis／export_planned_excel；已有明確選欄可export_excel_dataset。LOG符合固定格式時export_log_dataset，複雜解析切python-analysis。
+單張最多10000筆／8個Y系列，超額不得默默抽樣。空值不是0；日期系統、無效X及未掃描範圍需核對。原始欄字母不重新編號。
+chart_dataset成功才回報圖表；export_chart_png成功才交付PNG，修改後須重新匯出。成果自動加入，不把路徑填finish.artifacts。
+需要座標轉換、參考線或缺值政策切charts；只改標題、顏色、文字與排版切chart-edit，不重新讀來源。詳細繪圖規則按需讀chart-details。

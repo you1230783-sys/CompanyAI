@@ -1,0 +1,127 @@
+{
+  "version": "0.8.72",
+  "result": "PASS_BASIC_FOCUSED_FUNCTIONS_WITH_MODEL_CONTENT_ISSUES",
+  "runtime_sha256": "4ff7453eb569f48a547b9b007389fee66a02548a35f7b825e1191d596fc0f6fc",
+  "model": "local Strata",
+  "model_content_approved": false,
+  "requested_cad_intent_review_passed": false,
+  "model_parameters": {
+    "reasoning_effort": "low",
+    "max_output_tokens": 20000
+  },
+  "evidence_provenance": {
+    "cad_test_exe_sha256": "4dd36ed85e86266d66070581fc4129665a4b7bec3e5e4a50b419429b41c5243f",
+    "mermaid_test_exe_sha256": "986aa743be0cd45465bb0248a63f72e95cb5ba04076fb2ee6e4cfc180a2a53bb",
+    "mermaid_source_files_unchanged": 255,
+    "final_cad_python_compatibility_fix_retested_separately": true
+  },
+  "mermaid": {
+    "diagrams": 3,
+    "source_files_unchanged": true,
+    "old_versions_preserved": true,
+    "based_on_verified": true,
+    "svg_files": 3,
+    "png_files": 2,
+    "visual_review": "PASS_REVIEWED_PNGS",
+    "visual_observations": [
+      "Reviewed both actual first and v2 PNG exports: Chinese labels, arrows and the requested changed label are readable; the complete canvas is retained.",
+      "Long English names wrap within nodes; the diagram is text-heavy and the long retry connector runs close to the standalone note box. Complex diagrams still need layout review or splitting.",
+      "Rendering review is not semantic or citation approval: main.py line labels in the generated diagrams are inaccurate; original model output was not corrected."
+    ],
+    "renderer": "real offline Mermaid 12.2.0 in native WebView2",
+    "bounded_exact_sources_and_checkpoint_tested": true,
+    "semantic_approval": false,
+    "current_model_content_issues": [
+      "first flowchart main.py citations are inaccurate: run_job starts at 7, not 6; recursive call is at 14, not 11"
+    ],
+    "prior_model_content_issues": [
+      "conceptual state diagram failure guard incomplete",
+      "recursive call citation 13 should be 14"
+    ]
+  },
+  "cad": [
+    {
+      "cad": "Icad.Application.1",
+      "result": "PASS_MODEL_NATIVE_CONTRACT_WITH_CONTENT_ISSUES",
+      "content_issues": [
+        {
+          "kind": "radius_annotation_input_rounding",
+          "requested_radius": 20,
+          "actual_native_radii": [
+            19.996979771955555
+          ],
+          "native_matches_actual_model_chord": true,
+          "explanation": "Model rounded its dimension chord; the arc is R20, but its radius annotation is not exactly R20. Requested intent check remains failed."
+        }
+      ],
+      "requested_dimensions_verified": false,
+      "radial_dimensions_match_original_model_input": true,
+      "block_container_layers": [
+        "孔位"
+      ],
+      "block_containers_match_original_model_input": true,
+      "file": "_AI_Output/20261019_141535/固定座功能測試.dwg",
+      "sha256": "92008904e6f2fea7b2f93bd4a4dbbb3e426e7783265867b3e77730001e4e77f3",
+      "entities": 18,
+      "native_dimensions": 5,
+      "block_references": 4,
+      "source_layers_verified": true,
+      "visual_review": false
+    },
+    {
+      "cad": "GStarCAD.Application.22",
+      "result": "PASS_MODEL_NATIVE_CONTRACT_WITH_CONTENT_ISSUES",
+      "content_issues": [
+        {
+          "kind": "radius_annotation_input_rounding",
+          "requested_radius": 20,
+          "actual_native_radii": [
+            19.9998081990803
+          ],
+          "native_matches_actual_model_chord": true,
+          "explanation": "Model rounded its dimension chord; the arc is R20, but its radius annotation is not exactly R20. Requested intent check remains failed."
+        }
+      ],
+      "requested_dimensions_verified": false,
+      "radial_dimensions_match_original_model_input": true,
+      "block_container_layers": [
+        "0"
+      ],
+      "block_containers_match_original_model_input": true,
+      "file": "_AI_Output/20261019_142145/固定座功能測試.dwg",
+      "sha256": "f060ac22563dc4c6ef32b1f92ab8d650dd9837d9fd3229db1ddccc25d5e690ae",
+      "entities": 14,
+      "native_dimensions": 4,
+      "block_references": 4,
+      "source_layers_verified": true,
+      "visual_review": false
+    }
+  ],
+  "native_fixed_fixture": {
+    "cad_versions": [
+      "Icad.Application.1",
+      "GStarCAD.Application.22"
+    ],
+    "saved_reopened": true,
+    "edits_and_one_undo_verified": true,
+    "saved_source_unchanged": true,
+    "visual_review": false
+  },
+  "notification": {
+    "foreground_background_dedupe_tested": true,
+    "windows_delivery_click_acceptance_tested": false
+  },
+  "full_validation_completed": false,
+  "installer_lifecycle_tested": false,
+  "company_service_acceptance_tested": false,
+  "artifacts": {
+    "dist/LM_AI.exe": {
+      "bytes": 26224640,
+      "sha256": "4dd36ed85e86266d66070581fc4129665a4b7bec3e5e4a50b419429b41c5243f"
+    },
+    "dist/LM_AI_Setup.exe": {
+      "bytes": 37598149,
+      "sha256": "4d83efc1626fbafb9a670c8975417c65d3db1871eb4319c83e057d129823da6a"
+    }
+  }
+}

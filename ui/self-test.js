@@ -1,0 +1,1562 @@
+/* 只由 EXE --self-check 明確觸發；測試使用虛構資料，不讀帳號或 Outlook。 */
+"use strict";
+// 先於 app.js 載入，讓啟動錯誤能使自我檢查立即失敗，而不是只得到逾時。
+// 正常執行時 Rust 會忽略 self_test_result，不顯示或保存診斷內容。
+window.addEventListener("error", (event) => {
+  window.chrome?.webview?.postMessage({type: "self_test_result", ok: false,
+    detail: `UI script error: ${event.message} (${event.filename}:${event.lineno})`});
+});
+window.runSelfTest = async (structuredFixture) => {
+  const checks = [];
+  function check(condition, name) {
+    if (!condition) throw new Error(name);
+    checks.push(name);
+  }
+  const frame = () => new Promise((resolve) => setTimeout(resolve, 80));
+  // 舊傳送情境仍走真實確認流程，不以關閉快速模型警告的方式繞過新行為。
+  async function approveFastWarningIfPresent() {
+    const dialog = document.querySelector(".fast-model-dialog[open]");
+    if (dialog) {dialog.close("send");await frame();}
+  }
+  // Rust 訊息橋為非同步；等實際狀態回覆，避免固定等兩幀就在慢速主機誤報失敗。
+  // 有明確上限且保留原斷言，真正未回覆仍會使自檢失敗。
+  async function waitFor(condition, name) {
+    const deadline = performance.now() + 5000;
+    while (!condition()) {
+      if (performance.now() >= deadline) throw new Error(`Timed out: ${name}`);
+      await frame();
+    }
+  }
+  try {
+    // 原生 ready 訊息可能早於後續 script；先等全部介面入口就緒再驗證動態節點。
+    await waitFor(() => !!window.ProjectUI && !!window.AuthUI, "UI modules initialized");
+    await window.runReviewTests(check);
+    {
+      const old = LMUI.getState();
+      LMUI.receive({...old, logged_in:true, can_send:true});
+      let accepted = 0;
+      confirmFastModelSend(() => accepted++, () => true, "fast");
+      confirmFastModelSend(() => accepted++, () => true, "fast");
+      check(document.querySelectorAll(".fast-model-dialog[open]").length === 1 && accepted === 0, "fast model confirmation opens once and blocks send");
+      check(["rgb(211, 47, 47)","rgb(255, 118, 118)"].includes(getComputedStyle(document.querySelector(".fast-model-warning")).color), "fast model warning is red in either theme");
+      document.querySelector(".fast-model-dialog").close();await frame();
+      check(accepted === 0, "cancel fast model confirmation never sends");
+      confirmFastModelSend(() => accepted++, () => false, "fast");
+      await approveFastWarningIfPresent();
+      check(accepted === 0, "stale draft does not send after confirmation");
+      confirmFastModelSend(() => accepted++, () => true, "fast");
+      await approveFastWarningIfPresent();
+      check(accepted === 1, "confirmed fast model action sends once");
+      confirmFastModelSend(() => accepted++, () => true, "quality");
+      check(accepted === 2 && !document.querySelector(".fast-model-dialog"), "quality model needs no confirmation");
+      check($("ui-font").options.length === 4 && $("interface-scale").options.length === 8, "font and interface size settings contain all fixed choices");
+      check(document.querySelector("#project-dialog details li"), "new project support list is collapsible");
+      LMUI.receive(old);
+    }
+    // 使用真正的離線引擎驗證常用圖型與拒絕路徑，不以假 SVG 替代呈現。
+    for (const [kind, source] of [
+      ["flowchart", 'flowchart TD\n A["開始"] --> B{"通過？"}\n B -->|是| C["完成"]\n B -->|否| A'],
+      ["sequence", 'sequenceDiagram\n participant U as 使用者\n participant A as 應用程式\n U->>A: 請求流程圖\n A-->>U: 回傳結果'],
+      ["state", 'stateDiagram-v2\n [*] --> Ready\n Ready --> Done\n Done --> [*]'],
+      ["class", 'classDiagram\n class Project {\n +String name\n +run()\n }'],
+      ["er", 'erDiagram\n PROJECT ||--o{ DIAGRAM : contains\n DIAGRAM {\n string source\n }'],
+    ]) {
+      const result = JSON.parse(await DiagramUI.exportData(source, "svg"));
+      check(result.ok && result.data.startsWith("<svg") && !result.data.includes("foreignObject"), `Mermaid ${kind} renders offline as SVG`);
+    }
+    // 真正檢查文字，避免把 value >= 10 誤畫成 value = 10。
+    {
+      const source = ['flowchart TD', ' A["value >= 10"] -->|"x > 5"| B{value <= 20}', ' B --> C["score &gt;= 80"]', ' C --> D["angle < 30"]'].join(String.fromCharCode(10));
+      const result = JSON.parse(await DiagramUI.exportData(source, "svg"));
+      check(result.ok, "Mermaid comparison fixture renders");
+      const doc = new DOMParser().parseFromString(result.data, "image/svg+xml");
+      const labels = [...doc.querySelectorAll("text")].map(node => node.textContent.trim());
+      for (const expected of ["value >= 10", "x > 5", "value <= 20", "score >= 80", "angle < 30"]) {
+        check(labels.includes(expected), "Mermaid preserves comparison label: " + expected);
+      }
+      const clean = new DOMParser().parseFromString(DiagramUI.safeSvg('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(1)</script><image href="https://example.invalid/x"/><foreignObject/><text>&gt;=</text></svg>'), "image/svg+xml");
+      check(!clean.querySelector("script,image,foreignObject,[onload]") && clean.querySelector("text").textContent === ">=", "SVG sanitizer preserves operators and removes active/external content");
+    }
+    for (const source of ['flowchart TD\nA[', '%%{init: {securityLevel:"loose"}}%%\nflowchart TD', 'flowchart TD\nA-->B\nclick A "https://example.com"']) {
+      check(JSON.parse(await DiagramUI.exportData(source, "svg")).ok === false, "Mermaid invalid syntax/config/click returns explicit error");
+    }
+    {
+      const old = LMUI.getState();
+      LMUI.receive({...old, logged_in:true, can_send:true});
+      const container = document.createElement("div");document.body.append(container);
+      try {
+        DiagramUI.render(container,[{name:"尺寸測試",source:'flowchart TD\n A["中文開始"] --> B["中文完成"]',revision:"r"}],{conversation:"test",message_index:0});
+        await waitFor(() => !!container.querySelector("svg"), "Mermaid card rendered");
+        const svg = container.querySelector("svg"), original = svg.viewBox.baseVal.width;
+        check(original > 18 && Math.abs(svg.getBoundingClientRect().width - original) < 1, "Mermaid uses intrinsic SVG width instead of 18px icon size");
+        const button = label => [...container.querySelectorAll("button")].find(b => b.textContent === label);
+        for (let i=0;i<12;i++) button("放大").click();
+        check(container.querySelector(".mermaid-zoom").textContent === "800%" && Math.abs(svg.getBoundingClientRect().width - original*8) < 2, "Mermaid reaches 800 percent with matching scroll dimensions");
+        button("原始比例").click();
+        check(container.querySelector(".mermaid-zoom").textContent === "100%", "Mermaid original size resets scale");
+        check(!!button("符合視窗") && !!button("全畫面") && button("全畫面").title.includes("Esc"), "Mermaid fit and fullscreen escape guidance are available");
+      } finally {container.remove();LMUI.receive(old);}
+    }
+    {
+      const old=LMUI.getState(), originalSend=send, commands=[];
+      try {
+        send=message=>commands.push(message);
+        const projects={...(old.projects||{}),items:[],running:true,stopping:false,running_id:"cad-read-test",
+          running_conversation:"cad-read-chat",cad_read_progress:{active:true,completed:50,reported_count:644,phase:"reading",elapsed_seconds:65}};
+        LMUI.receive({...old,logged_in:true,active_id:"cad-read-chat",messages:[],projects});
+        const notice=$("project-cad-read-notice");
+        check(!notice.hidden && !notice.closest("dialog"),"CAD read notice is visible and nonmodal");
+        check(notice.textContent.includes("已讀 50") && notice.textContent.includes("644") && notice.textContent.includes("1 分 5 秒"),"CAD notice uses native counts and elapsed time");
+        notice.querySelector("button").click();
+        check(commands.at(-1)?.command?.action==="stop","CAD read cancel uses native task cancellation");
+        LMUI.receive({...LMUI.getState(),projects:{...projects,stopping:true}});
+        check(notice.hidden,"CAD notice hides while stopping");
+        LMUI.receive({...LMUI.getState(),projects:{...projects,cad_read_progress:null}});
+        check(notice.hidden,"CAD notice clears before model thinking");
+        LMUI.receive({...LMUI.getState(),projects:{...projects},logged_in:false});
+        check(notice.hidden,"CAD notice clears after logout");
+      } finally {send=originalSend;LMUI.receive(old);}
+    }
+    check(!!$("project-default-profile") && !$("project-default-desktop") && !$("project-default-downloads"),"default project uses one local profile action");
+    check($("project-default-dialog").textContent.includes("LM_AI_Projects"),"default project location is explained");
+    {
+      const originalToast=toast, old=LMUI.getState(), notices=[];
+      try {
+        toast=text=>notices.push(text);
+        LMUI.receive({...old,status:"相同的資料夾錯誤",error:true,status_notice_id:1001});
+        LMUI.receive({...LMUI.getState(),status:"相同的資料夾錯誤",error:true,status_notice_id:1002});
+        check(notices.filter(text=>text==="相同的資料夾錯誤").length===2,"same error is shown on every new failure");
+      } finally {toast=originalToast;LMUI.receive(old);}
+      const panel=document.createElement("div");
+      const analysis={coverage:{file:{path:"LOG/a.log",scope:"LOG 原文",status:"partial",detail:"已讀取 2 行"}},
+        report:{goal:"核對事件",current_step:"反例檢查",open_questions:["有一個反例"],superseded:[],findings:[{claim:"<img src=x onerror=alert(1)>",status:"hypothesis",
+          evidence:[{operation_id:"read",kind:"source",path:"LOG/a.log",excerpt:[{line:7,text:"原文 <script>"}]}]}],
+          checks:[{label:"解析數量",kind:"balance",total:10,parts:[{value:8},{value:2}],passed:true},{label:"反例",kind:"zero",total:1,parts:[],passed:false}],
+          method_note:{title:"分析方法：事件配對"}},review_required:true};
+      AnalysisUI.render(panel,analysis);
+      check(!panel.querySelector("img,script") && panel.textContent.includes("<script>"),"analysis source and claims cannot inject HTML");
+      check(panel.textContent.includes("10 = 8 + 2") && panel.textContent.includes("預期 0，實際 1"),"analysis shows recorded counts and nonzero counterexamples");
+      check(panel.textContent.includes("等待重新核對") && panel.textContent.includes("專案記憶"),"analysis shows stale findings and saved method");
+      panel.querySelector("details[data-key]").open=true;
+      AnalysisUI.render(panel,{...analysis,review_required:false});
+      check(panel.querySelector("details[data-key]").open,"analysis updates keep evidence expanded");
+      AnalysisUI.render(panel,null);check(panel.hidden,"analysis clears when conversation changes");
+    }
+    {
+      const old=LMUI.getState(), originalSend=send, commands=[];
+      try {
+        send=message=>commands.push(message);
+        const projects={...(old.projects||{}),items:[],running:true,running_id:"preference-run",running_conversation:"preference-chat",preferences:[
+          {id:"q1",question:"Y 空白的顯示",options:["保留缺值","設為 0"],default:"保留缺值",state:"pending"}]};
+        LMUI.receive({...old,logged_in:true,active_id:"preference-chat",messages:[],projects});
+        const card=$("project-preferences");
+        check(!card.hidden && card.querySelector("select").value==="保留缺值","optional question has an explicit default");
+        check(!card.closest("dialog"),"optional question is nonmodal");
+        card.querySelector("button").click();
+        check(commands.some(m=>m.command?.action==="answer_preference"&&m.command.run_id==="preference-run"&&m.command.question_id==="q1"),"preference answer is bound to its run and question");
+        ProjectUI.openDiagnostics("preference-chat","preference-run");
+        $("project-diagnostics-text").value="PRIVATE CONTENT";$("project-token-text").value="0".repeat(400000);
+        $("project-token-copy").click();
+        check(commands.at(-1).command?.copy===true && JSON.stringify(commands.at(-1)).length<500 && !JSON.stringify(commands.at(-1)).includes("PRIVATE"),"large usage copy sends only its record selection and never conversation text");
+        $("project-diagnostics-dialog").close();
+      } finally {send=originalSend;LMUI.receive(old);}
+      check($("project-preferences").hidden,"optional questions are cleared when leaving the run");
+    }
+    const sample =
+      '# Markdown 測試\n\n| 名稱 | 數值 |\n| --- | --- |\n| 快速 | 42 |\n\n- [x] 已完成\n\n行內公式 $E=mc^2$\n\n$$\\int_0^1 x^2\\,dx=\\frac{1}{3}$$\n\n```rust\nfn main() { println!("hello"); }\n```\n\n註腳[^1]\n\n[^1]: 補充說明\n\n<script>alert(1)</script>\n\n![外部圖片](https://example.com/private.png)\n\n[危險連結](javascript:alert(1))';
+    const parsed = document.createElement("div");
+    parsed.innerHTML = LMUI.renderMarkdown(sample);
+    check(!!parsed.querySelector("table"), "table");
+    check(!!parsed.querySelector(".katex"), "math");
+    check(!!parsed.querySelector(".hljs-keyword"), "code highlight");
+    check(!!parsed.querySelector(".footnotes"), "footnotes");
+    check(!!parsed.querySelector("input[type=checkbox]"), "task list");
+    check(
+      !parsed.querySelector("script,img,iframe"),
+      "no executable HTML or remote images",
+    );
+    check(
+      ![...parsed.querySelectorAll("a")].some((a) =>
+        a.getAttribute("href")?.startsWith("javascript:"),
+      ),
+      "safe links",
+    );
+    const fixture = {
+      ...LMUI.getState(),
+      version: "0.4.0",
+      config: {
+        font_size: 14,
+        hotkey: "Ctrl+Alt+Q",
+        sidebar_collapsed: false,
+        notification_popups: true,
+        model: "fast",
+      },
+      models: [{ id: "fast", label: "快速" }],
+      conversations: [{ id: "test", title: "測試對話", updated_at: 1 }],
+      active_id: "test",
+      draft_revision: 1,
+      draft: "",
+      messages: [
+        { role: "user", content: "請整理測試資料" },
+        {
+          role: "assistant",
+          content:
+            sample +
+            "\n\n" +
+            Array(45).fill("這是一段用來確認捲動位置的測試內容。").join("\n\n"),
+        },
+      ],
+      busy: "none",
+      logged_in: true,
+      can_send: true,
+      notifications: [],
+      version_status: "測試",
+      focus_draft: false,
+    };
+    LMUI.receive(fixture);
+    await frame();
+    LMUI.bottom();
+    check(LMUI.atBottom(), "follow bottom");
+    const transcript = document.getElementById("transcript");
+    transcript.scrollTop = 0;
+    await frame();
+    LMUI.setFollow(false);
+    const before = transcript.scrollTop;
+    fixture.messages.push({ role: "assistant", content: "新增的回覆內容。" });
+    LMUI.receive(fixture);
+    await frame();
+    check(
+      Math.abs(transcript.scrollTop - before) < 5,
+      `preserve reading position: before=${before}, after=${transcript.scrollTop}, height=${transcript.scrollHeight}, viewport=${transcript.clientHeight}`,
+    );
+    LMUI.bottom();
+    fixture.messages.push({ role: "assistant", content: "繼續回覆。" });
+    LMUI.receive(fixture);
+    await frame();
+    check(LMUI.atBottom(), "follow new reply");
+    fixture.config.projects_collapsed = true; fixture.config.recent_collapsed = false;
+    LMUI.receive(fixture);
+    check($("project-list").hidden && !$("history-list").hidden, "independent project collapse");
+    fixture.config.projects_collapsed = false; fixture.config.recent_collapsed = true;
+    LMUI.receive(fixture);
+    check(!$("project-list").hidden && $("history-list").hidden, "independent recent collapse");
+    fixture.config.recent_collapsed = false;
+    const narration = document.createElement("div");
+    renderProjectNarration(narration, ["AI 說明：" + sample]);
+    check(!!narration.querySelector("table") && !narration.querySelector("script,img"), "project narration renders sanitized Markdown");
+    const chartHost = document.createElement("div"); document.body.append(chartHost);
+    ChartUI.render(chartHost, [{kind:"line",title:"<script>test</script>",x_label:"時間 (s)",y_label:"電壓 (V)",x:[1,2,3],series:[{name:"A",values:[4,null,6]}],source:"測試來源"}]);
+    await frame();
+    chartHost.querySelector("details").open = true; await frame();
+    check(!!chartHost.querySelector("canvas") && chartHost.querySelectorAll("table tr").length === 4, "offline ECharts canvas and accessible data table");
+    check(!chartHost.querySelector("script") && chartHost.querySelector("h3").textContent.includes("<script>"), "chart labels are inert text");
+    chartHost.querySelector("button").click(); check(!!chartHost.querySelector(".chart-expanded"), "chart expand");
+    const largeChart = {kind:"line",title:"一萬筆趨勢",x_label:"時間",y_label:"數值",x:Array.from({length:10000},(_,i)=>i),series:[{name:"A",values:Array.from({length:10000},(_,i)=>i===3000?null:i)}],source:"本機測試"};
+    const png = ChartUI.exportPng(largeChart);
+    const custom=ChartEditor.defaults(largeChart);custom.title="自訂標題";custom.y_min=140;custom.y_max=180;custom.legend="bottom_right";custom.lines=[{axis:"y",value:170,name:"上限",color:"#ff0000"}];custom.series[0].color="#008800";
+    const customOption=ChartUI.option(largeChart,true,custom);
+    check(customOption.title.left==="center" && customOption.title.text==="自訂標題" && customOption.yAxis.min===140 && customOption.yAxis.max===180,"chart custom title and axis range");
+    check(customOption.series[0].markLine.data[0].yAxis===170 && customOption.series[0].itemStyle.color==="#008800","chart reference line and series color");
+    check(ChartUI.sourceLabel("量測.xlsx | excel:"+"a".repeat(64)+" | 工作表1 | 原始列2–60")==="量測.xlsx | 工作表1 | 原始列2–60","chart source hides revision only");
+    for(const kind of ["step","area","horizontal_bar"]){const data={...largeChart,kind};const out=ChartUI.exportPng(data);check(out.startsWith("data:image/png;base64,"),`chart PNG supports ${kind}`);}
+    check(ChartEditor.position({x:["12:00:00","13:00:00"]},"line","x","13:00:00")===1,"category time range uses original label");
+    let applied=null;ChartEditor.open(largeChart,custom,value=>{applied=value;});
+    const editor=document.querySelector(".chart-edit-dialog");editor.querySelector("input").value="使用者標題";editor.querySelector("form").requestSubmit();
+    check(applied?.title==="使用者標題" && !document.querySelector(".chart-edit-dialog"),"chart editor applies validated settings");
+    check(largeChart.title==="一萬筆趨勢" && largeChart.series[0].values[0]===0,"chart editing preserves original data");
+    {
+      const quality={kind:"line",title:"缺值測試",x_label:"x",y_label:"y",source:"fixture",x:[1,2,3,4],series:[{name:"a",values:[10,0,null,0]}],
+        data_issues:[{original_value:"NG"},{original_value:null}],quality:{cells:[{row:1,series:0,issue:0,blank:false},{row:2,series:0,issue:1,blank:true}]}};
+      let selected=null;ChartEditor.open(quality,null,value=>{selected=value;});
+      const editor=document.querySelector(".chart-edit-dialog");
+      editor.querySelector('[data-quality="blank"]').value="skip";
+      editor.querySelector('[data-quality="invalid"]').value="gap";
+      editor.querySelector("form").requestSubmit();
+      check(selected?.quality_policy.blank==="skip" && selected.quality_policy.invalid==="gap","chart editor persists separate blank and invalid policies");
+      const visible=ChartUI.option(quality,false,selected),png=ChartUI.option(quality,true,selected);
+      check(JSON.stringify(visible.series[0].data)==="[[0,10],[1,null],[3,0]]" && JSON.stringify(png.series[0].data)===JSON.stringify(visible.series[0].data),"quality edit and PNG restore missing data and preserve valid zero");
+      check(ChartUI.exportPng(quality,selected).startsWith("data:image/png;base64,"),"quality policy renders actual PNG");
+    }
+    const indexChart={kind:"scatter",title:"Index 7001 起",source:"假設 CSV",x_label:"Index",y_label:"Mean",x:[7001,7002,7003,7004,7005],series:[{name:"A",values:[10,null,20,null,0],skip_indices:[1]}]};
+    const transformed=ChartEditor.defaults(indexChart);
+    transformed.transform.x.mode="index";transformed.transform.y.mode="offset";transformed.transform.y.offset=-10;transformed.transform.drop_empty=true;
+    const indexed=ChartUI.option(indexChart,false,transformed), exportedIndex=ChartUI.option(indexChart,true,transformed);
+    check(JSON.stringify(indexed.series[0].data)==="[[1,0],[2,10],[3,-10]]" && indexed.series[0].type==="scatter","CSV index restarts at 1 after dropping empty positions; zero remains valid and scatter stays unconnected");
+    check(indexed.xAxis.min==="dataMin" && indexed.xAxis.max==="dataMax" && indexed.xAxis.minInterval===1,"numbered numeric axis starts at retained data and uses numbering step instead of adding zero");
+    check(JSON.stringify(indexed.series[0].data)===JSON.stringify(exportedIndex.series[0].data) && exportedIndex.graphic[0].style.text.includes("重新編號"),"PNG and visible chart share transformed coordinates and disclosure");
+    check(ChartUI.exportPng(indexChart,transformed).startsWith("data:image/png;base64,"),"transformed scatter exports through offline renderer");
+    const multi={...indexChart,kind:"line",series:[...indexChart.series,{name:"B",values:[null,null,30,40,null]}]};
+    const aligned=ChartTransform.view(multi,"line",transformed.transform);
+    check(JSON.stringify(aligned.source_indices)==="[0,2,3,4]" && aligned.series[0].values[2]===null,"drop only all-empty positions preserves other series and alignment");
+    const horizontal=ChartEditor.defaults({...indexChart,kind:"horizontal_bar"});horizontal.transform.y.mode="index";horizontal.transform.y.start=5;horizontal.transform.y.step=2;horizontal.transform.x.mode="offset";horizontal.transform.x.offset=100;horizontal.transform.drop_empty=true;
+    const horizontalOption=ChartUI.option(indexChart,false,horizontal);
+    check(JSON.stringify(horizontalOption.yAxis.data)==="[5,7,9]" && JSON.stringify(horizontalOption.series[0].data)==="[[110,0],[120,1],[100,2]]","horizontal bar maps Y numbering and X offset to physical axes");
+    check(indexChart.x[0]===7001 && indexChart.series[0].values[0]===10,"transform leaves source points unchanged");
+    let indexedStyle=null;ChartEditor.open(indexChart,null,value=>{indexedStyle=value;});
+    const transformEditor=document.querySelector(".chart-edit-dialog");
+    const changeTransform=(name,value)=>{const input=transformEditor.querySelector(`[data-transform="${name}"]`);input.value=value;input.dispatchEvent(new Event("input",{bubbles:true}));};
+    changeTransform("x-mode","index");changeTransform("x-step","0");transformEditor.querySelector("form").requestSubmit();
+    check(!indexedStyle && transformEditor.open,"editor refuses zero numbering step");
+    changeTransform("x-step","1");changeTransform("y-mode","index");changeTransform("y-start","10");changeTransform("y-step","-1");
+    const drop=transformEditor.querySelector('[data-transform="drop-empty"]');drop.checked=true;drop.dispatchEvent(new Event("change"));
+    transformEditor.querySelector("form").requestSubmit();
+    check(indexedStyle?.transform.y.start===10 && indexedStyle.transform.drop_empty,"editor applies both axes with shared missing-row policy");
+    check(JSON.stringify(ChartUI.option(indexChart,false,indexedStyle).series[0].data)==="[[1,10],[2,9],[3,8]]","Y numbering uses retained shared row order");
+    let tabbedStyle=null;ChartEditor.open(indexChart,null,value=>{tabbedStyle=value;});
+    const tabbed=document.querySelector(".chart-edit-dialog"),tabs=tabbed.querySelectorAll('[role="tab"]'),pages=tabbed.querySelectorAll('[role="tabpanel"]');
+    check(tabs.length===3 && !pages[0].hidden && pages[1].hidden && pages[2].hidden,"chart editor has three accessible tabs");
+    tabbed.querySelector('[data-auto-axis="y"]').click();
+    check(tabbed.querySelector('[data-bound="y_min"]').value==="-10" && tabbed.querySelector('[data-bound="y_max"]').value==="30","auto range pads all retained values including zero");
+    tabs[1].click();tabs[1].dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowRight",bubbles:true}));
+    check(!pages[2].hidden && tabs[2].getAttribute("aria-selected")==="true","tabs support keyboard navigation");
+    check(tabbed.querySelectorAll("details.chart-editor-help").length===3 && pages[1].textContent.includes("(3,0)"),"editor help includes concrete missing-value and numbering example");
+    const themeBefore=document.documentElement.dataset.theme;
+    for(const theme of ["light","dark"]) {
+      document.documentElement.dataset.theme=theme;
+      check([...document.querySelectorAll("dialog button")].every(button=>{
+        const background=getComputedStyle(button).backgroundColor;
+        return background!=="rgba(0, 0, 0, 0)" && background!==getComputedStyle(button.closest("dialog")).backgroundColor;
+      }),`all dialog buttons including secondary buttons differ from the panel in ${theme} theme`);
+    }
+    if(themeBefore===undefined) delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=themeBefore;
+    tabbed.querySelector("form").requestSubmit();
+    check(tabbedStyle?.y_max===30 && tabbedStyle?.y_min===-10 && !document.querySelector(".chart-edit-dialog"),"switching tabs preserves bounds and applies all pages");
+    custom.lines[0].name="";
+    const blankReference=ChartUI.option(largeChart,true,custom).series[0].markLine.data[0];
+    check(blankReference.label.show===false && blankReference.label.formatter()==="","blank reference labels never fall back to numbers");
+    check(ChartUI.exportPng(largeChart,custom).startsWith("data:image/png;base64,"),"unlabelled reference line exports with actual ECharts");
+    const hoverText=indexed.tooltip.formatter({seriesName:"<script>",value:[3,-10]});
+    check(hoverText.includes("X（Index）：3") && hoverText.includes("Y（Mean）：-10") && !hoverText.includes("<script>"),"hover shows transformed X and Y with inert labels");
+    const pngHeader = atob(png.slice("data:image/png;base64,".length, "data:image/png;base64,".length + 32));
+    check(png.startsWith("data:image/png;base64,") && pngHeader.slice(1,4)==="PNG", "PNG export returns PNG bytes");
+    ChartUI.render(chartHost,[largeChart]); await frame();
+    chartHost.querySelector("details").open = true; await frame();
+    check(chartHost.querySelectorAll("table tr").length === 101, "large chart table uses 100-row pages");
+    largeChart.data_note="異常值：略過 101";
+    largeChart.data_issues=Array.from({length:101},(_,i)=>({sheet:1,row:i+2,cell:`F${i+2}`,series:"電壓",x_value:`X${i}`,y_value:"<NG>",original_value:"<NG>",original_text:"<NG>",category:"文字",handling:"略過此點"}));
+    ChartUI.render(chartHost,[largeChart]);await frame();
+    const issues=chartHost.querySelector(".chart-issues");issues.open=true;await frame();
+    check(issues.querySelectorAll("tr").length===101 && issues.textContent.includes("F2") && issues.textContent.includes("<NG>"),"chart anomaly table shows source rows and original values with 100-row paging");
+    check(!issues.querySelector("ng,script,img"),"chart anomaly values are inert text");
+    issues.querySelectorAll("button")[1].click();
+    check(issues.querySelectorAll("tr").length===2 && issues.textContent.includes("F102"),"chart anomaly last page keeps excluded source row identity");
+    chartHost.remove(); ChartUI.cleanup();
+    fixture.config.sidebar_collapsed = true;
+    fixture.config.font_size = 12;
+    LMUI.receive(fixture);
+    check(document.body.classList.contains("collapsed"), "sidebar collapse");
+    check(
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--font-size")
+        .trim() === "12px",
+      "font preference",
+    );
+    check(
+      document.querySelector(".message.user .message-meta")?.textContent ===
+        "你",
+      "user bubble",
+    );
+    check(
+      document.querySelector(".message.assistant .message-meta")
+        ?.textContent === "AI",
+      "assistant label",
+    );
+    // 長任務 UI：伺服器規則、檔名安全顯示、Markdown 串流與閱讀位置。
+    fixture.work = {
+      rules: {
+        enabled: true,
+        max_count: 20,
+        max_file_bytes: 10485760,
+        max_total_bytes: 52428800,
+        allowed_extensions: [".pdf", ".png"],
+      },
+      modes: ["stream", "background"],
+      mode: "stream",
+      status: "附件與執行模式由網站提供",
+      attachments: [
+        {
+          id: "file1",
+          name: "<script>file.pdf",
+          size: 2048,
+          state: "processing",
+          progress: 42,
+          queue_position: 2,
+        },
+      ],
+      tasks: [
+        {
+          id: "task1",
+          conversation_id: fixture.active_id,
+          title: "長任務",
+          state: "running",
+          mode: "stream",
+          active: true,
+          partial: "**串流內容**",
+          progress: 25,
+        },
+      ],
+    };
+    LMUI.receive(fixture);
+    await frame();
+    check(!document.getElementById("estimate-time"), "time estimate control removed");
+    const modeBox = document.querySelector(".execution-switch").getBoundingClientRect();
+    const hintBox = document.querySelector(".compose-hint").getBoundingClientRect();
+    const statusBox = document.getElementById("work-status").getBoundingClientRect();
+    check(hintBox.left >= modeBox.right && hintBox.top < modeBox.bottom,
+      "keyboard hints share the mode row");
+    check(statusBox.top >= modeBox.bottom,
+      "work status stays below the mode and keyboard hints");
+    check(
+      document.querySelectorAll(".attachment-card").length === 1,
+      "attachment processing card",
+    );
+    check(
+      !document.querySelector(".attachment-card script"),
+      "attachment filename is text",
+    );
+    check(
+      document.querySelector("#live-task strong")?.textContent === "串流內容",
+      "stream Markdown",
+    );
+    check(
+      document.getElementById("attachment-rules").textContent.includes("20"),
+      "server attachment rules",
+    );
+    transcript.scrollTop = 50;
+    transcript.dispatchEvent(new Event("scroll"));
+    await frame();
+    const streamTop = transcript.scrollTop;
+    fixture.work.tasks[0].partial += "\n\n新的串流段落。";
+    LMUI.receive(fixture);
+    await frame();
+    check(
+      Math.abs(transcript.scrollTop - streamTop) < 5,
+      `stream preserves reading position: before=${streamTop}, after=${transcript.scrollTop}, height=${transcript.scrollHeight}, viewport=${transcript.clientHeight}, follow=${LMUI.getFollow()}`,
+    );
+    LMUI.bottom();
+    fixture.work.tasks[0].partial += "\n\n回覆完成。";
+    LMUI.receive(fixture);
+    await frame();
+    check(LMUI.atBottom(), "stream follows bottom");
+    fixture.work.attachments = Array.from({ length: 20 }, (_, i) => ({
+      id: "limit" + i,
+      name: "existing.png",
+      size: 10,
+      state: "ready",
+    }));
+    LMUI.receive(fixture);
+    const clipboard = new DataTransfer();
+    clipboard.items.add(
+      new File([new Uint8Array([137, 80, 78, 71])], "paste.png", {
+        type: "image/png",
+      }),
+    );
+    const pasteImage = new ClipboardEvent("paste", {
+      clipboardData: clipboard,
+      bubbles: true,
+      cancelable: true,
+    });
+    document.getElementById("prompt").dispatchEvent(pasteImage);
+    await frame();
+    check(pasteImage.defaultPrevented, "image paste is routed to attachments");
+    check(
+      document.getElementById("toast").textContent.includes("20"),
+      "paste image shares the 20-file limit",
+    );
+    fixture.work.tasks = [];
+    fixture.work.attachments = [];
+    LMUI.receive(fixture);
+    // 在已有文字對話的畫面，走真正的選檔接收流程；只模擬原生 ACK，不上傳使用者檔案。
+    // 先前只驗證附件數量超限，未進入 fileBatchBusy，無法抓到已移除按鈕的殘留引用。
+    const attachmentSend = send;
+    const fileCommands = [];
+    const controlLocks = [];
+    let rejectFileAction = null;
+    const sampleBytes = new Uint8Array(192 * 1024 + 17).map((_, i) => i % 251);
+    const sampleFile = new File([sampleBytes], "upload-regression.pdf", {type: "application/pdf"});
+    try {
+      send = message => {
+        if (message.type !== "work") return;
+        const command = message.command;
+        fileCommands.push(command);
+        if (command.action === "file_abort") return;
+        controlLocks.push(document.getElementById("new-chat").disabled &&
+          document.getElementById("send").disabled &&
+          [...document.querySelectorAll(".history-item,[data-history-action]")].every(button => button.disabled));
+        queueMicrotask(() => WorkUI.receive(command.action === rejectFileAction
+          ? {type: "file_error", message: "模擬附件接收失敗"}
+          : {type: "file_ack", id: "test-upload", offset: command.offset || 0,
+              finished: command.action === "file_finish"}));
+      };
+      const selection = new DataTransfer();
+      selection.items.add(sampleFile);
+      const picker = document.getElementById("attachment-input");
+      picker.files = selection.files;
+      await picker.onchange({target: picker});
+      check(fileCommands.map(command => command.action).join(",") === "file_begin,file_chunk,file_chunk,file_finish",
+        "selecting attachment in existing conversation completes native handoff");
+      const chunks = fileCommands.filter(command => command.action === "file_chunk");
+      const decoded = chunks.map(command => atob(command.data)).join("");
+      check(chunks[0].offset === 0 && chunks[1].offset === 192 * 1024 &&
+        decoded.length === sampleBytes.length && [...decoded].every((value, i) => value.charCodeAt(0) === sampleBytes[i]),
+        "attachment handoff preserves bytes and ordered chunk offsets");
+      check(controlLocks.every(Boolean), "file reception locks send and conversation row actions");
+      check(!WorkUI.getFileBusy() && !picker.value && !document.getElementById("add-attachment").disabled &&
+        !document.getElementById("new-chat").disabled && !document.getElementById("send").disabled &&
+        [...document.querySelectorAll(".history-item,[data-history-action]")].every(button => !button.disabled),
+        "file reception restores controls without waiting for state push");
+      rejectFileAction = "file_chunk";
+      fileCommands.length = 0;
+      await WorkUI.addFiles([sampleFile]);
+      check(fileCommands.map(command => command.action).join(",") === "file_begin,file_chunk,file_abort" &&
+        !WorkUI.getFileBusy() && !document.getElementById("add-attachment").disabled &&
+        document.getElementById("toast").textContent.includes("模擬附件接收失敗"),
+        "failed reception aborts partial file and unlocks picker");
+      rejectFileAction = null;
+      fileCommands.length = 0;
+      await WorkUI.addFiles([sampleFile]);
+      check(fileCommands.at(-1).action === "file_finish" && !WorkUI.getFileBusy(),
+        "same attachment can be selected again after failure");
+    } finally { send = attachmentSend; }
+    // 經過真正的 Rust 訊息橋錄製組合；測試不送出系統按鍵，也不改使用者的設定。
+    const binding = LMUI.keyBindingFromEvent({ code: "Escape", metaKey: true });
+    check(binding.modifiers === 8 && binding.key === 27, "Win+Esc key mapping");
+    check(
+      LMUI.keyBindingFromEvent({
+        code: "Digit8",
+        ctrlKey: true,
+        shiftKey: true,
+      }).key === 56,
+      "number key mapping",
+    );
+    check(
+      LMUI.keyBindingFromEvent({ code: "Numpad3", altKey: true }).key === 99,
+      "numpad key mapping",
+    );
+    document.getElementById("settings-button").click();
+    document.getElementById("record-hotkey").click();
+    await waitFor(() => document.getElementById("hotkey").classList.contains("recording"), "recording start acknowledgement");
+    check(
+      document.getElementById("hotkey").classList.contains("recording"),
+      "recording started through Rust bridge",
+    );
+    document.getElementById("hotkey").dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Escape",
+        code: "Escape",
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await waitFor(() => document.getElementById("hotkey").value === "Win+Esc" &&
+      !document.getElementById("save-hotkey").disabled, "recorded shortcut acknowledgement");
+    check(
+      document.getElementById("hotkey").value === "Win+Esc",
+      "recorded shortcut canonical name",
+    );
+    check(
+      !document.getElementById("save-hotkey").disabled,
+      "recording waits for explicit apply",
+    );
+    document.getElementById("record-hotkey").click();
+    await waitFor(() => document.getElementById("hotkey").classList.contains("recording"), "second recording start acknowledgement");
+    document.getElementById("cancel-hotkey").click();
+    await waitFor(() => !document.getElementById("hotkey").classList.contains("recording"), "recording cancellation acknowledgement");
+    check(
+      !document.getElementById("hotkey").classList.contains("recording"),
+      "recording cancel restores normal mode",
+    );
+    document.getElementById("settings-dialog").close();
+    fixture.notifications = [
+      {
+        id: "kanban:123",
+        source: "site",
+        origin: "kanban",
+        title: "<script>通知</script>",
+        summary: "網站內容",
+        created_at: "2026-09-17T00:00:00Z",
+        is_read: false,
+        url: "/lm_server/kanban/1",
+      },
+    ];
+    fixture.site_status = "全站同步測試";
+    fixture.mail_batch = {
+      phase: "idle",
+      busy: false,
+      list: {
+        mails: [
+          {
+            id: "m1",
+            subject: "測試一",
+            folder: "本機資料檔/<分類>",
+            sender: "甲",
+            to: "乙",
+            received_at: "今天",
+            unread: true,
+          },
+          {
+            id: "m2",
+            subject: "測試二",
+            sender: "丙",
+            to: "丁",
+            received_at: "今天",
+            unread: false,
+          },
+        ],
+      },
+      status: "基本資訊",
+    };
+    LMUI.receive(fixture);
+    await frame();
+    check(
+      document.querySelectorAll("[data-mail-period]").length === 6,
+      "six Outlook date/unread presets",
+    );
+    check(
+      document.getElementById("batch-scope").value === "current_folder",
+      "Outlook defaults to current folder and subfolders",
+    );
+    // 攔截前端命令，驗證兩個範圍的六種按鈕都帶對參數，不觸發真實 Outlook。
+    const originalMailSend = send;
+    const mailCommands = [];
+    try {
+      send = (command) => mailCommands.push(command);
+      LMUI.showView("chat");
+      mailCommands.length = 0;
+      LMUI.showView("outlook");
+      LMUI.showView("outlook");
+      check(mailCommands.length === 1 && mailCommands[0].command.action === "refresh_models",
+        "entering Outlook refreshes model catalog exactly once");
+      check(document.getElementById("batch-auto-export").disabled,
+        "automatic mail export disabled while refreshing models");
+      fixture.mail_batch.quality_status = "unavailable";
+      LMUI.receive(fixture);
+      check(document.getElementById("batch-auto-export").disabled && !document.getElementById("batch-auto-export").checked &&
+        document.getElementById("batch-quality-status").textContent.includes("品質模型維護中"), "missing quality model disables automatic export with maintenance notice");
+      document.getElementById("batch-analyze").click();
+      check(document.getElementById("confirm-message").textContent.includes("不讀取正文與任何附件"), "metadata analysis remains available without quality model");
+      document.getElementById("confirm-ok").click();
+      check(mailCommands.at(-1).command.allow_export === false, "metadata-only analysis never authorizes export");
+      fixture.models.push({id: "quality", label: "品質"});
+      fixture.mail_batch.quality_status = "available";
+      LMUI.receive(fixture);
+      check(!document.getElementById("batch-auto-export").disabled && !document.getElementById("batch-auto-export").checked,
+        "quality recovery enables option without silently granting consent");
+      document.getElementById("batch-auto-export").checked = true;
+      document.getElementById("batch-analyze").click();
+      check(document.querySelector("#confirm-message .consent-warning")?.textContent.includes("自動匯出本批郵件的完整內容") &&
+        document.getElementById("confirm-message").textContent.split("\n").length === 3,
+        "export consent has separate lines and highlighted authorization");
+      // 在確認視窗尚未關閉時撤回模型，舊的同意不得繼續啟動匯出。
+      fixture.models = fixture.models.filter(model => model.id !== "quality");
+      fixture.mail_batch.quality_status = "unavailable";
+      LMUI.receive(fixture);
+      const countBeforeConfirm = mailCommands.length;
+      document.getElementById("confirm-ok").click();
+      check(mailCommands.length === countBeforeConfirm, "quality removed during confirmation prevents export command");
+      fixture.models.push({id: "quality", label: "品質"});
+      fixture.mail_batch.quality_status = "available";
+      LMUI.receive(fixture);
+      document.getElementById("batch-auto-export").checked = true;
+      document.getElementById("batch-analyze").click();
+      document.getElementById("confirm-ok").click();
+      check(mailCommands.at(-1).command.allow_export === true, "explicit consent with available quality model authorizes export");
+      fixture.mail_batch.quality_status = "error";
+      LMUI.receive(fixture);
+      check(document.getElementById("batch-auto-export").disabled && document.getElementById("batch-quality-status").textContent.includes("無法確認"),
+        "catalog failure disables export without misreporting maintenance");
+      fixture.mail_batch.quality_status = "available";
+      LMUI.receive(fixture);
+      mailCommands.length = 0;
+      for (const scope of ["current_folder", "inbox"]) {
+        document.getElementById("batch-scope").value = scope;
+        for (const button of document.querySelectorAll("[data-mail-period]")) {
+          button.click();
+          const command = mailCommands[mailCommands.length - 1].command;
+          check(
+            command.scope === scope &&
+              command.period === button.dataset.mailPeriod &&
+              command.unread === (button.dataset.unread === "true"),
+            "Outlook date command includes scope and unread filter",
+          );
+        }
+      }
+      check(mailCommands.length === 12, "all scope and date combinations dispatched");
+    } finally {
+      send = originalMailSend;
+      document.getElementById("batch-scope").value = "current_folder";
+    }
+    check(
+      document.getElementById("batch-mail-list").textContent.includes("本機資料檔/<分類>") &&
+        !document.querySelector("#batch-mail-list 分類"),
+      "Outlook source folder displayed as text",
+    );
+    check(
+      document.querySelectorAll("#batch-mail-list input:checked").length === 2,
+      "batch mail selection",
+    );
+    document.getElementById("batch-select-all").click();
+    check(
+      document.querySelectorAll("#batch-mail-list input:checked").length === 0,
+      "batch deselect all",
+    );
+    check(
+      !document.querySelector("#notification-list script"),
+      "site notice escaped",
+    );
+    check(
+      document
+        .getElementById("notification-list")
+        .textContent.includes("開啟通知"),
+      "site mark-read then open action",
+    );
+    document.getElementById("settings-button").click();
+    const settings = document.getElementById("settings-dialog"),
+      box = settings.getBoundingClientRect();
+    // 在真正 WebView2 排版後核對邊界，涵蓋大字體及較窄設定面板。
+    const settingsContent = settings.querySelector(".settings-content");
+    const originalFont = fixture.config.font_size;
+    for (const font of [12, 14, 20]) {
+      fixture.config.font_size = font;
+      LMUI.receive(fixture);
+      for (const width of [320, 520]) {
+        settings.style.width = width + "px";
+        await frame();
+        check(settingsContent.scrollWidth <= settingsContent.clientWidth + 1,
+          `settings has no horizontal overflow at ${width}px / ${font}px`);
+        for (const row of settings.querySelectorAll(".option-row")) {
+          const circle = row.querySelector("input").getBoundingClientRect();
+          const text = row.querySelector("span").getBoundingClientRect();
+          check(circle.right <= text.left + 0.5 && circle.top < text.top + parseFloat(getComputedStyle(row).lineHeight),
+            `radio circle is beside the first text line: ${row.querySelector("input").id}, ${width}px / ${font}px`);
+          check(row.scrollWidth <= row.clientWidth + 1,
+            "radio label is not horizontally clipped");
+        }
+        for (const row of settings.querySelectorAll(".input-row,.button-row,fieldset")) {
+          check(row.scrollWidth <= row.clientWidth + 1, "settings controls fit their row");
+        }
+      }
+    }
+    settings.style.width = "";
+    fixture.config.font_size = originalFont;
+    LMUI.receive(fixture);
+    settings.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        clientX: box.left - 2,
+        clientY: box.top - 2,
+        bubbles: true,
+      }),
+    );
+    settings.dispatchEvent(
+      new MouseEvent("click", {
+        clientX: box.left - 2,
+        clientY: box.top - 2,
+        bubbles: true,
+      }),
+    );
+    check(!settings.open, "settings backdrop dismiss");
+    for (const answer of [
+      "1. Answer\n主要回答。\n\n2. Key points\n重點。\n\n3. Sources\n來源內容。\n\n4. Confidence\nHigh\n\n5. Limitations\n限制內容。",
+      "## 1. Answer\n主要回答。\n\n## 2. Key points\n重點。\n\n## 3. Sources\n來源內容。\n\n## 4. Confidence\nHigh\n\n## 5. Limitations\n限制內容。",
+      "**1. Answer**\n\n主要回答。\n\n**2. Key points**\n\n重點。\n\n**3. Sources**\n\n來源內容。\n\n**4. Confidence**\n\nHigh\n\n**5. Limitations**\n\n限制內容。",
+      "## 1. 回答\n主要回答。\n\n## 2. 回答重點\n重點。\n\n## 3. 來源\n來源內容。\n\n## 4. 信心度\nHigh\n\n## 5. 限制\n限制內容。",
+      "## (1) ANSWER:\n主要回答。\n\n## (2) KEY   POINTS：\n重點。\n\n## (3) SOURCES:\n來源內容。\n\n## (4) CONFIDENCE:\nHigh\n\n## (5) LIMITATIONS:\n限制內容。",
+      // 快速模型可能先給來源再補重點，或在來源後再次補上正文／重點。
+      "## 1. Answer\n主要回答。\n\n## 2. Sources\n來源內容。\n\n## 3. Key points\n重點。\n\n## 4. Confidence\nHigh\n\n## 5. Limitations\n限制內容。",
+      "## 1. Answer\n主要回答。\n\n## 2. Key points\n初步摘要。\n\n## 3. Sources\n來源內容。\n\n## 4. Key points\n重點。\n\n## 5. Answer\n補充正文。\n\n## 6. Confidence\nHigh\n\n## 7. Limitations\n限制內容。",
+      "1. Answer\n主要回答。\n\n2. Key points\n初步摘要。\n\n3. Sources\n來源內容。\n\n4. Key points\n重點。\n\n5. Confidence\nHigh\n\n6. Limitations\n限制內容。",
+      "**1. content：主要回答。**\n\n**2. keypoints：重點。**\n\n**3. references：來源內容。**\n\n**4. confidence：High**\n\n**5. limitation：限制內容。**",
+    ]) {
+      const reply = document.createElement("div");
+      reply.innerHTML = LMUI.renderAssistantReply(answer);
+      const details = reply.querySelector("details.answer-details");
+      check(details && !details.open && ["來源內容", "High", "限制內容"].every((text) => details.textContent.includes(text)), "structured answer secondary sections collapsed");
+      check(!details.textContent.includes("重點。") && !details.textContent.includes("補充正文"), "primary sections never enter collapsed details");
+      details.open = true;
+      check(details.open && details.querySelector(".answer-details-content"), "secondary sections can be expanded");
+      details.remove();
+      check(reply.textContent.includes("主要回答") && reply.textContent.includes("重點") && !reply.textContent.includes("來源內容"), "Answer and Key points stay visible");
+    }
+    // 逐一涵蓋網頁端提供的全部舊格式標籤，且冒號後同一行的內容也要保留。
+    const legacyLabels = [
+      ["answer", "content", "回答", "內容"],
+      ["keypoint", "key points", "keypoints", "回答重點"],
+      ["source", "sources", "references", "引用資料庫", "內容引用處", "來源", "來源摘要"],
+      ["confidence", "信心度"],
+      ["limitation", "limitations", "限制", "回答限制"],
+    ];
+    const legacyBodies = ["主要回答。", "重點。", "來源內容。", "High", "限制內容。"];
+    for (const [sectionIndex, labels] of legacyLabels.entries()) {
+      for (const label of labels) {
+        const text = legacyLabels.map((names, index) =>
+          `## ${index + 1}. ${index === sectionIndex ? label : names[0]}：${legacyBodies[index]}`
+        ).join("\n\n");
+        const reply = document.createElement("div");
+        reply.innerHTML = LMUI.renderAssistantReply(text);
+        const details = reply.querySelector("details");
+        check(details && ["來源內容。", "High", "限制內容。"].every((body) => details.textContent.includes(body)), `legacy alias is recognized: ${label}`);
+        details.remove();
+        check(reply.textContent.includes("主要回答。") && reply.textContent.includes("重點。"), `legacy alias preserves primary text: ${label}`);
+      }
+    }
+    check(!LMUI.renderAssistantReply("```text\n1. Answer\n2. Key points\n3. Sources\n```\n\n一般回覆。").includes("answer-details"), "code and ordinary replies are not folded");
+    for (const ordinary of [
+      "## Sources\n一般文章的來源章節。",
+      "> Answer\n>\n> Key points\n>\n> Sources",
+      "1. 一般清單\n   1. Answer\n   2. Key points\n   3. Sources",
+      "**Answer**\n正文。\n\n**Key points**\n重點。",
+      "## Answer\n正文。\n\n## Key points\n重點。\n\n## Sources\n來源。",
+      "**Answer**\n正文。\n\n**Key points**\n重點。\n\n**Sources**\n來源。",
+      "1. 回答包含 answer 關鍵字。\n\n2. 回答重點只是正文的一部分。\n\n3. sources 並非獨立標題。",
+    ]) {
+      check(LMUI.renderAssistantReply(ordinary) === LMUI.renderMarkdown(ordinary), "unrecognized structure retains original Markdown");
+    }
+    const structuredReply = "## 1. Answer\n主要回答。\n\n## 2. Key points\n初步摘要。\n\n## 3. Sources\n來源內容。\n\n### 資料庫\n來源的子章節。\n\n## 4. 回答重點\n重點。\n\n## 5. Confidence\nHigh\n\n## 6. Limitations\n限制內容。\n\n## 後續建議\n補充正文。";
+    const boundaries = document.createElement("div");
+    boundaries.innerHTML = LMUI.renderAssistantReply(structuredReply);
+    const secondary = boundaries.querySelector("details");
+    check(secondary.textContent.includes("來源的子章節") && !secondary.textContent.includes("補充正文"), "only subordinate headings stay in secondary sections");
+    secondary.remove();
+    check(boundaries.textContent.includes("重點。") && boundaries.textContent.includes("補充正文"), "later primary and unknown sections stay visible");
+
+    // 經過正式的串流與完成訊息渲染入口，防止只測獨立函式卻漏掉完成後的重繪。
+    // 前一組測試停在 Outlook；先切回對話，才能驗證展開內容實際可見。
+    LMUI.showView("chat");
+    const replyFixture = {
+      ...fixture,
+      active_id: "reply-sections",
+      conversations: [{ id: "reply-sections", title: "章節回歸測試", updated_at: 1 }],
+      messages: [],
+      work: { ...fixture.work, attachments: [], tasks: [{
+        id: "reply-task", conversation_id: "reply-sections", state: "running",
+        active: true, partial: structuredReply,
+      }] },
+    };
+    LMUI.receive(replyFixture);
+    const liveReply = document.querySelector("#live-task .bubble");
+    check(liveReply && !liveReply.querySelector("details").textContent.includes("重點。"), "stream keeps key points outside details");
+    replyFixture.work.tasks = [];
+    replyFixture.messages = [{ role: "assistant", content: structuredReply }];
+    LMUI.receive(replyFixture);
+    const savedReply = document.querySelector("#messages .bubble");
+    check(savedReply.innerHTML === liveReply.innerHTML, "completed response preserves all streamed sections");
+    const savedDetails = savedReply.querySelector("details");
+    savedDetails.querySelector("summary").click();
+    check(savedDetails.open, "completed response details expand by click");
+    replyFixture.messages.push({ role: "user", content: "下一題" });
+    LMUI.receive(replyFixture);
+    check(document.querySelector("#messages details").open, "expanded sections survive message redraw");
+    check(LMUI.getState().messages[0].content === structuredReply, "display folding preserves complete original message");
+
+    // 與 Rust 協定測試共用使用者提供的 JSON 範例，核對結構化欄位優先及完成切換。
+    check(structuredFixture?.payload && structuredFixture.message?.response_payload,
+      "structured reply fixture is parsed by Rust and delivered through the bridge");
+    const payload = structuredFixture.payload;
+    const structured = document.createElement("div");
+    structured.innerHTML = LMUI.renderAssistantReply("舊正文不應顯示", payload);
+    const payloadDetails = structured.querySelector("details");
+    check(payloadDetails && !payloadDetails.open && payloadDetails.textContent.includes("High (高)") &&
+      !structured.textContent.includes("medium") && !structured.textContent.includes("舊正文不應顯示"),
+      "structured sections override legacy content and top-level confidence");
+    check(payloadDetails.textContent.includes(payload.sections.sources[0]) &&
+      payloadDetails.textContent.includes(payload.sections.limitations[0]), "structured sources and limitations are retained");
+    payloadDetails.remove();
+    check(payload.sections.key_points.every((point) => structured.textContent.includes(point)) &&
+      structured.querySelector("code")?.textContent === "robocopy", "structured answer and both key points remain visible");
+    for(const points of [
+      ["| 欄位 | 表頭文字 | 欄寬 |\n|---|---|---|\n| A | 日期 | 12 |"],
+      ["| 欄位 | 表頭文字 | 欄寬 |","|---|---|---|","| A | 日期 | 12 |"],
+      ["| 欄位 | 表頭文字 | 欄寬 | |---|---|---| | A | 日期 | 12 |"]
+    ]) {
+      const source=JSON.stringify(points),tableReply=document.createElement("div");
+      tableReply.innerHTML=LMUI.renderAssistantReply("",{answer:"設定如下。",sections:{key_points:points}});
+      check(tableReply.querySelectorAll("table th").length===3 && tableReply.querySelector("table tbody td")?.textContent==="A","key points render multiline, split-row and compact Markdown tables");
+      check(JSON.stringify(points)===source,"table repair never changes stored reply fields");
+    }
+    const literal="```text\n| A | B | |---|---|\n```";
+    check(ReplyTables.normalize(literal)===literal && ReplyTables.normalize("一般文字 | A | B |")==="一般文字 | A | B |","table repair preserves code and ordinary pipe text");
+    const emptyPayload = { answer: "只有正文", sections: {}, citations: [] };
+    check(!LMUI.renderAssistantReply("", emptyPayload).includes("answer-details"), "empty sections produce no empty disclosure");
+    const hostilePayload = {
+      answer: "## 1. Sources\n這段仍屬於正文。", sections: { key_points: ["<script>bad()</script>"], confidence: "High" },
+      citations: ["[不安全連結](javascript:alert(1))", { title: "<img src=x onerror=bad()>", page: 2 }],
+    };
+    const safeReply = document.createElement("div");
+    safeReply.innerHTML = LMUI.renderAssistantReply("", hostilePayload);
+    check(safeReply.querySelector(".answer-body").textContent.includes("這段仍屬於正文") &&
+      !safeReply.querySelector("script,img,iframe") &&
+      ![...safeReply.querySelectorAll("a")].some((a) => a.getAttribute("href")?.startsWith("javascript:")),
+      "structured fields retain boundaries and sanitize Markdown and citation text");
+    check(safeReply.querySelector("details").textContent.includes("引用文件") &&
+      safeReply.querySelector(".citation-data").textContent.includes("page"), "citation objects are retained as inert text");
+
+    const completeText = structuredFixture.message.content;
+    check([...payload.sections.key_points, ...payload.sections.sources, payload.sections.confidence,
+      ...payload.sections.limitations].every((value) => completeText.includes(value)),
+      "Rust prepares complete copy text including every structured section");
+    // 舊 answer payload 與新版 choices + 同層 sections 共用實際完成渲染／複製驗證。
+    for (const completedMessage of [structuredFixture.message, structuredFixture.completion_message]) {
+      const payload = completedMessage.response_payload;
+      const completeText = completedMessage.content;
+      check(payload && [...payload.sections.key_points, ...payload.sections.sources,
+        payload.sections.confidence, ...payload.sections.limitations].every((text) => completeText.includes(text)),
+        "both wire formats retain every field in copy text");
+      for (const mode of ["background", "stream"]) {
+        replyFixture.messages = [];
+        replyFixture.work.tasks = [{ id: "payload-task", conversation_id: replyFixture.active_id,
+          state: "running", active: true, mode, partial: mode === "stream" ? payload.answer : "" }];
+        LMUI.receive(replyFixture);
+        replyFixture.work.tasks = [];
+        replyFixture.messages = [JSON.parse(JSON.stringify(completedMessage))];
+        LMUI.receive(replyFixture);
+        const completed = document.querySelector("#messages .bubble");
+        check(completed.querySelector(".answer-body") && completed.querySelector("details"), `${mode} completion uses structured result`);
+        const visible = completed.cloneNode(true);
+        visible.querySelector("details").remove();
+        check(payload.sections.key_points.every((point) => visible.textContent.includes(point)), `${mode} completion keeps every key point visible`);
+        const details = completed.querySelector("details");
+        check([...payload.sections.sources, payload.sections.confidence, ...payload.sections.limitations]
+          .every((text) => details.textContent.includes(text)), `${mode} retains all metadata in disclosure`);
+        details.querySelector("summary").click();
+        check(details.open && details.querySelector(".answer-details-content").getBoundingClientRect().height > 0,
+          `${mode} completed metadata opens visibly`);
+        const originalCopySend = send;
+        const copyCommands = [];
+        try {
+          send = (command) => copyCommands.push(command);
+          document.querySelector("#messages .copy-message").click();
+          check(copyCommands.length === 1 && copyCommands[0].type === "copy" && copyCommands[0].text === completeText,
+            `${mode} copy includes the complete response`);
+        } finally { send = originalCopySend; }
+      }
+    }
+    // 使用回報中的單行全文，跨越串流、REST 完成與歷史重繪，確認資料不是被移除。
+    const inlineText = structuredFixture.inline_text;
+    const inlineReply = structuredFixture.inline_message;
+    const compact = document.createElement("div");
+    compact.innerHTML = LMUI.renderAssistantReply(inlineText);
+    check(compact.querySelector("details")?.textContent.includes("100%"), "single-line numbered English headings are recognized");
+    compact.querySelector("details").remove();
+    check(compact.textContent.includes("系統回應正常") && compact.textContent.includes("已確認可接收輸入"),
+      "single-line key points stay outside the disclosure");
+    for (const finalMessage of [inlineReply, structuredFixture.changed_message]) {
+      replyFixture.messages = [];
+      replyFixture.work.tasks = [{ id: "inline-task", conversation_id: replyFixture.active_id,
+        state: "running", active: true, mode: "stream", partial: inlineText }];
+      LMUI.receive(replyFixture);
+      check(document.querySelector("#live-task details")?.textContent.includes("100%"), "inline stream retains confidence");
+      replyFixture.work.tasks = [];
+      // 序列化再還原，模擬歷史資料經訊息橋重新載入。
+      replyFixture.messages = JSON.parse(JSON.stringify([finalMessage]));
+      LMUI.receive(replyFixture);
+      const disclosure = document.querySelector("#messages details");
+      check(disclosure && !disclosure.open && disclosure.textContent.includes("100%") &&
+        disclosure.textContent.includes("未涉及任何實際的文件分析"), "body-only completion retains streamed metadata");
+      disclosure.querySelector("summary").click();
+      check(disclosure.open && disclosure.querySelector(".answer-details-content").getBoundingClientRect().height > 0,
+        "retained metadata opens into a visible block");
+      const originalCopySend = send;
+      const commands = [];
+      try {
+        send = (command) => commands.push(command);
+        document.querySelector("#messages .copy-message").click();
+        check(commands[0]?.text.includes("系統回應正常") && commands[0]?.text.includes("100%") &&
+          commands[0]?.text.includes("未涉及任何實際的文件分析"), "copy retains all inline reply sections");
+      } finally { send = originalCopySend; }
+      replyFixture.messages.push({ role: "user", content: "下一題" });
+      LMUI.receive(replyFixture);
+      check(document.querySelector("#messages details").open, "retained original stays expanded after redraw");
+    }
+    LMUI.receive(fixture);
+    check(document.querySelector(".attachment-help").hidden, "attachment help hidden while validation remains active");
+    check(document.querySelector(".topbar").getBoundingClientRect().height <= 50, "compact app header");
+
+    const originalSend = send;
+    const navigationCommands = [];
+    try {
+      send = (command) => navigationCommands.push(command);
+      LMUI.showView("chat");
+      navigationCommands.length = 0;
+      LMUI.showView("tasks");
+      LMUI.showView("tasks");
+      check(navigationCommands.length === 0, "entering or redrawing tasks does not clear");
+      LMUI.showView("notifications");
+      LMUI.showView("notifications");
+      check(navigationCommands.length === 1 && navigationCommands[0].command.action === "clear_completed", "leaving tasks clears completed cards once");
+      LMUI.showView("chat");
+      check(navigationCommands.length === 2 && navigationCommands[1].type === "notifications_left", "leaving notifications requests mark all read once");
+      document.getElementById("dark-mode").checked = true;
+      document.getElementById("dark-mode").dispatchEvent(new Event("change"));
+      check(navigationCommands[2].dark_mode === true, "dark preference sent for persistence");
+    } finally { send = originalSend; }
+    fixture.config.dark_mode = true;
+    LMUI.receive(fixture);
+    check(getComputedStyle(document.body).backgroundColor === "rgb(29, 37, 48)", "dark mode uses grey blue instead of black");
+    // 前面的附件測試已清空任務，這裡建立獨立的工具串流案例。
+    fixture.work.tasks = [{ id: "tool-task", conversation_id: fixture.active_id,
+      title: "工具測試", mode: "stream", state: "running", active: true, partial: "" }];
+    fixture.work.tasks[0].tool_status = { tool_name: "search_session_documents", status: "started" };
+    LMUI.receive(fixture);
+    check(document.querySelector("#live-task .tool-status")?.textContent === "search_session_documents · started", "tool status visible before first answer delta");
+    fixture.work.tasks[0].tool_status.status = "completed";
+    LMUI.receive(fixture);
+    check(document.querySelector("#live-task .tool-status")?.textContent.endsWith("completed"), "tool completion redraws without text delta");
+    fixture.messages.push({role: "assistant", content: "這是斷線前已收到的內容", incomplete: true});
+    LMUI.receive(fixture);
+    check(document.querySelector(".incomplete-warning")?.textContent.includes("回覆中斷") && document.getElementById("messages").textContent.includes("這是斷線前已收到的內容"), "interrupted answer and warning remain together");
+    fixture.config.dark_mode = false;
+    LMUI.receive(fixture);
+    // 使用者偏好：真正呼叫與日常使用相同的 DOM 事件處理器，不發出網路請求。
+    const behaviorSend = send;
+    const behaviorCommands = [];
+    try {
+      send = command => behaviorCommands.push(command);
+      fixture.work.tasks = [];
+      fixture.work.pending = false;
+      fixture.can_send = true;
+      fixture.config.enter_sends = true;
+      fixture.config.hotkey_enabled = false;
+      fixture.config.quick_actions_fast = false;
+      fixture.config.sidebar_collapsed = false;
+      fixture.conversations = [
+        {id:"recent",title:"近期",updated_at:100,pinned:false},
+        {id:"pinned",title:"重要",updated_at:1,pinned:true},
+      ];
+      LMUI.receive(fixture);
+      check(document.querySelector("#history-list button")?.dataset.id === "pinned", "pinned conversation precedes newer ordinary conversation");
+      check(document.querySelectorAll(".topbar-actions button").length === 2 &&
+        document.getElementById("show-notifications").closest(".topbar-actions") &&
+        document.getElementById("show-tasks").closest(".topbar-actions") &&
+        document.getElementById("new-chat").closest(".section-caption"), "compact navigation places tools and new chat correctly");
+      const logo = document.querySelector("img.brand-mark");
+      check(logo.complete && logo.naturalWidth > 0 && logo.getAttribute("src") === "app.ico", "brand loads embedded application cat icon");
+      const rowAction = action => document.querySelector(`[data-history-action="${action}"][data-id="recent"]`);
+      rowAction("rename").focus();
+      check(getComputedStyle(rowAction("rename").parentElement).opacity === "1", "keyboard focus reveals conversation actions");
+      rowAction("rename").click();
+      check(document.getElementById("rename-title").value === "近期", "rename opens clicked row rather than active conversation");
+      document.getElementById("rename-title").value = "重新命名";
+      document.getElementById("rename-save").click();
+      check(behaviorCommands.at(-1).type === "rename_chat" && behaviorCommands.at(-1).id === "recent", "rename targets row id");
+      rowAction("pin").click();
+      check(behaviorCommands.at(-1).type === "pin_chat" && behaviorCommands.at(-1).id === "recent" && behaviorCommands.at(-1).pinned, "pin targets row id");
+      rowAction("delete").click();
+      document.getElementById("confirm-ok").click();
+      check(behaviorCommands.at(-1).type === "delete_chat" && behaviorCommands.at(-1).id === "recent" &&
+        !behaviorCommands.some(c => c.type === "select_chat"), "row actions never switch conversations and delete targets confirmed row");
+      fixture.config.sidebar_collapsed = true;
+      LMUI.receive(fixture);
+      check(document.getElementById("new-chat").getBoundingClientRect().width > 0, "collapsed sidebar retains new chat access");
+      fixture.config.sidebar_collapsed = false;
+      LMUI.receive(fixture);
+      check(document.getElementById("hotkey-hint").hidden, "disabled hotkey hint hidden");
+      check(document.getElementById("compose-enter-hint").textContent === "Shift+Enter 換行，Enter 送出" &&
+        document.getElementById("enter-hint").textContent === document.getElementById("compose-enter-hint").textContent &&
+        document.getElementById("send").title === "送出（Enter）", "enter send hints follow applied preference");
+      const prompt = document.getElementById("prompt");
+      prompt.value = "中文測試";
+      prompt.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter", isComposing:true, bubbles:true, cancelable:true}));
+      prompt.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter", shiftKey:true, bubbles:true, cancelable:true}));
+      check(!behaviorCommands.some(c=>c.type === "chat"), "IME confirmation and Shift Enter never send");
+      prompt.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter", bubbles:true, cancelable:true}));
+      await approveFastWarningIfPresent();
+      check(behaviorCommands.filter(c=>c.type === "chat").length === 1, "plain Enter sends when enabled");
+      fixture.config.enter_sends = false;
+      fixture.config.hotkey_enabled = true;
+      fixture.config.hotkey = "Ctrl+Shift+F9";
+      LMUI.receive(fixture);
+      check(document.getElementById("compose-enter-hint").textContent === "Enter 換行，Ctrl+Enter 送出" &&
+        document.getElementById("send").title === "送出（Ctrl+Enter）", "newline hints follow applied preference");
+      check(!document.getElementById("hotkey-hint").hidden &&
+        document.getElementById("hotkey-hint").textContent === "Ctrl+Shift+F9 選字帶入", "custom capture hotkey hint follows applied preference");
+      prompt.value = "換行模式";
+      prompt.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter", bubbles:true, cancelable:true}));
+      check(behaviorCommands.filter(c=>c.type === "chat").length === 1, "plain Enter preserves newline mode");
+      prompt.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter",ctrlKey:true,bubbles:true,cancelable:true}));
+      await approveFastWarningIfPresent();
+      check(behaviorCommands.filter(c=>c.type === "chat").length === 2, "Ctrl Enter sends in newline mode");
+      check(!document.getElementById("execution-sync"), "old synchronous reply control removed");
+      check(document.getElementById("execution-stream").textContent === "一般", "stream label is general");
+      BehaviorUI.modelNotice("本次已自動切換為快速模型");
+      check(!document.getElementById("toast").hidden, "automatic model notice shown");
+      await new Promise(resolve => setTimeout(resolve,3100));
+      check(document.getElementById("toast").hidden, "automatic model notice uses shared three-second toast");
+    } finally { send = behaviorSend; }
+    // VNC 只測試本機頁面命令；攔截傳送，不讀取真實機台檔、不啟動 Viewer。
+    const vncSend = send;
+    const vncCommands = [];
+    try {
+      send = value => vncCommands.push(value);
+      fixture.config.vnc_enabled = false;
+      LMUI.receive(fixture);
+      check(document.getElementById("show-vnc").hidden, "VNC entry hidden by default");
+      document.getElementById("show-vnc").click();
+      check(vncCommands.length === 0, "disabled VNC does not load files");
+      document.getElementById("vnc-enabled").checked = true;
+      document.getElementById("vnc-enabled").dispatchEvent(new Event("change"));
+      check(vncCommands.at(-1).type === "behavior" && vncCommands.at(-1).vnc_enabled, "VNC opt-in sent for persistence");
+      fixture.config.vnc_enabled = true;
+      fixture.vnc = { loaded: true, revision: 3, searching: false, status: "測試資料",
+        viewer_path: "C:\\UltraVNC\\vncviewer.exe", machines_path: "C:\\LM_AI\\machines.json",
+        options: { fullscreen: false, viewonly: false, autoscaling: true },
+        groups: [{ name: "測試分類", machines: [
+          { index: 0, name: "機台10<script>", ip: "192.0.2.10", has_password: true },
+          { index: 1, name: "備用機", ip: "192.0.2.2", has_password: false },
+        ] }] };
+      LMUI.receive(fixture);
+      check(!document.getElementById("show-vnc").hidden, "VNC entry visible after opt-in");
+      document.getElementById("show-vnc").click();
+      check(!document.getElementById("vnc-view").hidden && document.getElementById("chat-view").hidden, "VNC has independent page");
+      const machineButtons = document.querySelectorAll(".vnc-machine");
+      check(machineButtons.length === 2 && machineButtons[0].textContent.includes("機台10<script>") && !document.querySelector("#vnc-machines script"), "VNC keeps file order and treats names as text");
+      machineButtons[0].click();
+      const connection = vncCommands.at(-1).command;
+      check(connection.action === "connect" && connection.group === "測試分類" && connection.index === 0 && connection.revision === 3 && !("password" in connection) && !("ip" in connection), "VNC connection refers only to native machine snapshot");
+      document.getElementById("vnc-viewonly").checked = true;
+      document.getElementById("vnc-viewonly").dispatchEvent(new Event("change"));
+      check(vncCommands.at(-1).command.viewonly && vncCommands.at(-1).command.autoscaling, "VNC options sent independently of chat");
+      document.getElementById("vnc-manage").click();
+      const rowButtons = document.querySelectorAll("#vnc-manager-rows .vnc-machine-row button");
+      check(rowButtons[1].disabled && !rowButtons[2].disabled, "VNC manual move respects group boundaries");
+      rowButtons[2].click();
+      check(vncCommands.at(-1).command.action === "move_machine" && vncCommands.at(-1).command.direction === "down", "VNC manual order command");
+      rowButtons[0].click();
+      check(document.getElementById("vnc-password").value === "", "existing VNC password never filled into editor");
+      document.getElementById("vnc-name").value = "改名保留位置";
+      document.getElementById("vnc-machine-form").dispatchEvent(new Event("submit", { cancelable: true }));
+      const edit = vncCommands.at(-1).command;
+      check(edit.action === "save_machine" && edit.original.index === 0 && edit.password === null, "VNC edit retains original slot and password");
+      document.getElementById("vnc-clear-password").checked = true;
+      document.getElementById("vnc-machine-form").dispatchEvent(new Event("submit", { cancelable: true }));
+      check(vncCommands.at(-1).command.password === "", "VNC password clear is explicit");
+      const groupSelection = document.querySelector(".vnc-category-select");
+      groupSelection.click();
+      check(document.querySelectorAll(".vnc-machine-row input:checked").length === 2, "VNC category selects all machines");
+      document.getElementById("vnc-groups-up").click();
+      check(vncCommands.at(-1).command.operation === "groups_up" && vncCommands.at(-1).command.selection.groups[0] === "測試分類", "VNC batch category order command");
+      document.querySelector(".vnc-machine-row input").click();
+      document.getElementById("vnc-batch-down").click();
+      check(vncCommands.at(-1).command.selection.machines.length === 1 && !vncCommands.at(-1).command.selection.groups.length, "VNC partial selection moves only selected machines");
+      const originalConfirm = window.confirm;
+      try {
+        window.confirm = () => true;
+        document.getElementById("vnc-batch-delete").click();
+        check(vncCommands.at(-1).command.operation === "delete", "VNC batch delete requires confirmation");
+      } finally { window.confirm = originalConfirm; }
+      document.getElementById("vnc-manager-close").click();
+
+      fixture.vnc.sync_settings = { root:"http://example.invalid/root", home:"?p=map", login:"login.php", logout:"logout.php",
+        endpoints:["api/one", "api/two", ...Array(8).fill("")], username:"saved-user", has_password:true };
+      fixture.vnc.settings_revision = 1;
+      const beforeSyncRender = vncCommands.length;
+      LMUI.receive(fixture);
+      check(vncCommands.length === beforeSyncRender, "VNC rendering does not auto synchronize");
+      check(document.querySelectorAll("#vnc-sync-endpoints input").length === 10 && document.getElementById("vnc-sync-user").value === "saved-user" &&
+        document.getElementById("vnc-sync-password").value === "", "VNC remembers account and offers ten APIs without exposing saved password");
+      document.getElementById("vnc-sync-password").value = "test-sync-password";
+      document.getElementById("vnc-sync-start").click();
+      check(vncCommands.at(-1).command.start && vncCommands.at(-1).command.settings.password === "test-sync-password" &&
+        document.getElementById("vnc-sync-password").value === "", "VNC manual sync sends password once and clears input");
+      fixture.vnc.syncing = true;
+      LMUI.receive(fixture);
+      check(document.getElementById("vnc-sync-start").disabled && !document.getElementById("vnc-sync-cancel").disabled, "VNC duplicate sync disabled with cancellation available");
+      fixture.vnc.syncing = false;
+      fixture.vnc.preview = { id:"preview-1", machines:[
+        {group:"選擇分類",name:"無IP<script>",ip:""}, {group:"選擇分類",name:"正常機台",ip:"192.0.2.5"},
+        {group:"捨棄分類",name:"不要匯入",ip:"192.0.2.6"}] };
+      LMUI.receive(fixture);
+      check(!document.getElementById("vnc-import-preview").hidden && document.querySelectorAll(".vnc-import-machine").length === 3 &&
+        !document.querySelector("#vnc-import-groups script") && document.getElementById("vnc-import-apply").disabled, "VNC staged import includes blank IP and requires selection");
+      document.querySelector(".vnc-import-category").click();
+      document.getElementById("vnc-import-apply").click();
+      check(JSON.stringify(vncCommands.at(-1).command.indices) === "[0,1]" && vncCommands.at(-1).command.preview_id === "preview-1", "VNC imports selected category only");
+      document.getElementById("vnc-import-discard").click();
+      check(vncCommands.at(-1).command.action === "discard_import", "VNC can discard staged import");
+      fixture.vnc.session_open = true;
+      fixture.vnc.preview = { id:"preview-2", machines:[
+        {group:"A01",name:"A01-01",ip:"192.0.2.1",comparison:"same"},
+        {group:"A01",name:"A01-02",ip:"192.0.2.2",comparison:"changed"},
+        {group:"A01",name:"A01-AB",ip:"192.0.2.3",comparison:"new"},
+        {group:"B01",name:"B01-01",ip:"",comparison:"same"}] };
+      LMUI.receive(fixture);
+      const equalRow = document.querySelector(".vnc-compare-same");
+      check(equalRow.querySelector("input").disabled && !equalRow.querySelector("input").checked && equalRow.textContent.includes("與現有設定一致"), "VNC identical entries are marked and disabled");
+      check(document.querySelector(".vnc-compare-changed").textContent.includes("與現有設定不相符") && !document.querySelector(".vnc-compare-changed input").disabled, "VNC conflicting IP remains selectable");
+      check(document.querySelectorAll(".vnc-import-category")[1].disabled, "VNC all-identical category cannot be selected");
+      document.querySelector(".vnc-import-category").click();
+      document.getElementById("vnc-import-apply").click();
+      check(JSON.stringify(vncCommands.at(-1).command.indices) === "[1,2]", "VNC category selection skips identical entries");
+      check(document.getElementById("vnc-sync-start").disabled && document.getElementById("vnc-sync-user").disabled, "VNC active session locks login settings");
+      document.getElementById("vnc-import-refresh").click();
+      check(vncCommands.at(-1).command.action === "refresh_import" && vncCommands.at(-1).command.preview_id === "preview-2", "VNC refresh uses current preview session");
+      fixture.vnc.preview.id = "preview-3";
+      LMUI.receive(fixture);
+      check(!document.querySelector(".vnc-compare-changed input").checked && document.getElementById("vnc-import-apply").disabled, "VNC refreshed snapshot resets selection");
+      document.querySelector(".vnc-compare-changed input").click();
+      fixture.vnc.revision += 1;
+      fixture.vnc.preview.machines[1].comparison = "same";
+      LMUI.receive(fixture);
+      check(document.getElementById("vnc-import-apply").disabled && document.querySelectorAll(".vnc-compare-same").length === 3, "VNC local edits recompute comparisons and clear stale selection");
+      fixture.config.vnc_enabled = false;
+      LMUI.receive(fixture);
+      check(document.getElementById("show-vnc").hidden && document.getElementById("vnc-view").hidden && !document.getElementById("vnc-manager-dialog").open, "VNC disabling closes and hides tools");
+      check(!document.getElementById("vnc-manager-rows").children.length, "VNC disabling clears machine editor");
+      check(document.getElementById("vnc-sync-controls").hidden && document.getElementById("vnc-sync-user").value === "" &&
+        document.getElementById("vnc-import-preview").hidden, "VNC disabling hides synchronization and clears credentials in UI");
+    } finally { send = vncSend; }
+    // 0.8.16：專案與一般對話分區，更新入口只在有新版時出現。
+    const savedConversations = fixture.conversations;
+    fixture.projects = {items:[{id:"project-test",name:"測試專案",root:"C:\\測試",import_count:0}],running:false,status:""};
+    fixture.conversations = [...savedConversations, {id:"project-chat",project_id:"project-test",title:"專案標題",updated_at:1}];
+    fixture.update_available = true;
+    LMUI.receive(fixture);
+    check(!$("update-shortcut").hidden, "update arrow appears for available release");
+    check($("project-list").textContent.includes("專案標題"), "project conversation appears inside project");
+    check(!$("history-list").textContent.includes("專案標題"), "project conversation excluded from recent list");
+    check(!!($("show-vnc").compareDocumentPosition($("project-list")) & Node.DOCUMENT_POSITION_FOLLOWING), "projects follow VNC");
+    check(!!($("project-list").compareDocumentPosition($("history-list")) & Node.DOCUMENT_POSITION_FOLLOWING), "projects precede recent history");
+    const savedActive = fixture.active_id, savedMessages = fixture.messages, savedNotifications = fixture.notifications;
+    const savedSend = send, retryCommands = [];
+    try {
+      send = command => retryCommands.push(command);
+      fixture.active_id = "project-chat";
+      fixture.projects.running = false;
+      LMUI.receive(fixture);
+      check(!$("weekly-start").hidden && !$("project-outlook-start").hidden && !$("project-image-start") && document.querySelector('[data-action="translate"]').hidden, "project keeps weekly/Outlook and has no image quick action");
+      $("weekly-start").click();
+      check($("weekly-info-dialog").open, "weekly introduction opens before creating folders");
+      $("weekly-info-ok").click();
+      const weeklyRequest = retryCommands.at(-1).command;
+      check(weeklyRequest.action === "weekly_prepare", "weekly confirmation prepares folder without starting model");
+      WeeklyUI.receive({type:"weekly_ready", conversation:fixture.active_id, request_id:weeklyRequest.request_id,
+        path:"F:\\下載\\週報 <img src=x>", start:"2026-10-05", end:"2026-10-06"});
+      await frame();
+      check($("weekly-input-dialog").open && !$("weekly-folder").querySelector("img"), "weekly folder path is inert text");
+      $("weekly-notes").value = "請改做 W40";
+      const weeklyCount = retryCommands.length;
+      $("weekly-send").click();
+      check($("weekly-confirm-dialog").open && retryCommands.length === weeklyCount, "send still waits for reference confirmation");
+      $("weekly-confirm-no").click();
+      await frame();
+      check($("weekly-input-dialog").open && $("weekly-notes").value === "請改做 W40", "No keeps second dialog and notes");
+      $("weekly-send").click();
+      $("weekly-confirm-yes").click();
+      const weeklySent = retryCommands.at(-1).command;
+      check(weeklySent.action === "weekly_submit" && weeklySent.confirmed && weeklySent.notes === "請改做 W40", "Yes submits original notes and confirmation");
+      const afterWeekly = retryCommands.length;
+      $("weekly-confirm-yes").click();
+      check(retryCommands.length === afterWeekly, "weekly double-click cannot submit twice");
+      WeeklyUI.receive({type:"weekly_submit_ack", conversation:fixture.active_id, request_id:weeklyRequest.request_id, ok:true});
+      await frame();
+      check(!$("weekly-input-dialog").open && !$("weekly-confirm-dialog").open, "weekly accepted submission closes wizard");
+      check($("project-outlook-start").title.includes("處理"), "Outlook hover explains purpose");
+      check(!$("project-quick-image") && !$("project-quick-path") && !$("project-quick-choose"), "image wizard controls removed");
+      {
+        const kind = "outlook";
+        $("project-outlook-start").click();
+        const quick = retryCommands.at(-1).command;
+        check(quick.action === "quick_prepare" && quick.kind === kind, "quick action only prepares native-bound dialog");
+        const ready = {type:"project_quick_ready", conversation:fixture.active_id, request_id:quick.request_id, kind, start:"2026-10-05", end:"2026-10-06"};
+        ProjectQuickUI.receive({...ready, request_id:"stale"});
+        check(!$("project-quick-dialog").open, "stale quick response ignored");
+        ProjectQuickUI.receive(ready); await frame();
+        check($("project-quick-dialog").open && $("project-quick-from").value === "2026-10-05", "quick dialog uses native dates");
+        $("project-quick-notes").value = "保留我的要求";
+        $("project-quick-send").click();
+        const sent = retryCommands.at(-1).command;
+        check(sent.action === "quick_submit" && sent.notes === "保留我的要求", "quick submit retains notes");
+        const count = retryCommands.length;
+        $("project-quick-send").click();
+        check(retryCommands.length === count, "quick double submit blocked");
+        ProjectQuickUI.receive({type:"project_quick_ack", conversation:fixture.active_id, request_id:quick.request_id, ok:false});
+        check(!$("project-quick-send").disabled && $("project-quick-notes").value === "保留我的要求", "failed submission keeps editable notes");
+        ProjectQuickUI.receive({type:"project_quick_ack", conversation:fixture.active_id, request_id:quick.request_id, ok:true}); await frame();
+        check(!$("project-quick-dialog").open, "accepted quick submission closes dialog");
+      }
+
+      fixture.messages = [{role:"user",content:"請修訂",request_id:"request-one"}];
+      fixture.retry = {user_index:0,message_count:1,request_id:"request-one",enabled:false};
+      fixture.projects.running = true; fixture.projects.running_id = "run-one";
+      fixture.projects.running_conversation = "project-chat";
+      fixture.projects.activity = ["讀取檔案清單：完成", "建立副本…"];
+      LMUI.receive(fixture); LMUI.showView("chat");
+      check(!$("project-context").hidden && $("project-context").textContent === "C:\\測試", "project path moved below title");
+      check(!document.getElementById("project-diagnostics-live") && $("settings-panel-2").hidden, "diagnostics hidden in advanced tab");
+      // 歷史選擇現在保留；測試使用者明確選取執行中任務，不要求介面搶走選擇。
+      $("project-diagnostics-run").value = "run-one";
+      check($("project-diagnostics-run").value === "run-one" && !$("project-diagnostics-open").disabled, "advanced diagnostics can select running task");
+      $("project-diagnostics-open").click();
+      check($("project-diagnostics-dialog").open && retryCommands.at(-1)?.command?.run_id === "run-one", "advanced diagnostics opens selected local log");
+      $("project-diagnostics-close").click(); await frame();
+      check(!$("project-compose-controls").hidden && $("project-send-mode").value==="next_turn","main composer defaults to next-turn supplement");
+      $("prompt").value="只看 Z01-CY，<script>不是 HTML</script>";
+      $("send").click();
+      await approveFastWarningIfPresent();
+      const composed=retryCommands.at(-1)?.command;
+      check(composed?.action==="compose" && composed.run_id==="run-one" && composed.mode==="next_turn","composer binds active run");
+      check(!!$("prompt").value,"composer keeps text until native acknowledgement");
+      ProjectComposer.receive({type:"project_compose_ack",conversation:fixture.active_id,run_id:"run-one",request_id:composed.request_id,ok:true});
+      check(!$("prompt").value,"composer clears only after acknowledgement");
+      fixture.projects.supplements=[{id:"instruction-one",text:"<script>原文</script>",status:"pending"}];
+      LMUI.receive(fixture);
+      check(!$("project-supplement-list").querySelector("script") && $("project-supplement-list").textContent.includes("<script>"),"supplement text never interpreted as HTML");
+      [...$("project-supplement-list").querySelectorAll("button")].find(b=>b.textContent==="撤回").click();
+      check(retryCommands.at(-1)?.command?.action==="withdraw_supplement","pending supplement can be withdrawn");
+      fixture.projects.supplements=[];
+      check(!$("project-activity").open && $("project-activity").querySelector("summary").textContent === "建立副本…", "activity collapsed with latest step");
+      $("project-activity").open = true;
+      const projectToast = toast, notices = [], projectTasks = fixture.work.tasks;
+      try {
+        toast = message => notices.push(message);
+        fixture.projects.status = "等待 AI 回覆（第 2 輪）";
+        fixture.work.tasks = [{id:"run-one",conversation_id:"project-chat",title:"專案工作",project:true,active:true,state:"running"}];
+        fixture.projects.activity.push("編輯文字：完成"); LMUI.receive(fixture);
+        check(notices.length === 0, "internal project steps do not create toast notifications");
+        check($("task-list").querySelectorAll(".task-card").length === 1, "project has one visible running task");
+        const controls = [...$("task-list").querySelectorAll("button")];
+        check(!controls.some(b => ["取消任務","停止追蹤","移除任務"].includes(b.textContent)), "project does not expose server child task actions");
+        controls.find(b => b.textContent === "停止專案任務").click();
+        check(retryCommands.pop()?.command?.action === "stop", "project card stops the project runner");
+      } finally { toast = projectToast; fixture.work.tasks = projectTasks; }
+      LMUI.receive(fixture);
+      check($("project-activity").open && $("project-activity").querySelectorAll("li").length === 3, "progress preserves expanded history");
+      // 真正建立可捲動的清單，核對追加與120筆輪替都不搶走正在閱讀的列。
+      const scrollFixture = document.createElement("details");
+      scrollFixture.open = true;
+      scrollFixture.style.cssText = "position:fixed;left:0;top:0;width:400px;z-index:99999";
+      document.body.append(scrollFixture);
+      try {
+        const rows = Array.from({length:120}, (_, i) => `紀錄 ${i}：` + "測試閱讀位置與保留內容。".repeat(8));
+        renderProjectActivity(scrollFixture, rows.slice(0, 100)); await frame();
+        const list = scrollFixture.querySelector("ol"), first = list.firstElementChild;
+        list.scrollTop = 800;
+        const top = list.scrollTop;
+        renderProjectActivity(scrollFixture, rows.slice(0, 101)); await frame();
+        check(list === scrollFixture.querySelector("ol") && list.firstElementChild === first && Math.abs(list.scrollTop-top)<2, "activity append keeps DOM and middle scroll position");
+        list.scrollTop = list.scrollHeight;
+        renderProjectActivity(scrollFixture, rows); await frame();
+        check(list.scrollHeight-list.clientHeight-list.scrollTop<2, "activity at bottom follows newly appended rows");
+        list.scrollTop = 1500;
+        const anchor = [...list.children].find(li => li.getBoundingClientRect().bottom > list.getBoundingClientRect().top);
+        const before = anchor.getBoundingClientRect().top - list.getBoundingClientRect().top;
+        renderProjectActivity(scrollFixture, [...rows, "新增第121筆"]); await frame();
+        const after = anchor.getBoundingClientRect().top - list.getBoundingClientRect().top;
+        check(anchor.isConnected && Math.abs(after-before)<2, `rolling activity retains visible row: before=${before}, after=${after}`);
+        const narration = node("div"); scrollFixture.append(narration);
+        const note = PROJECT_NOTE_PREFIX + "目前工作與已完成的重點。\n".repeat(100);
+        renderProjectNarration(narration, [note]); await frame();
+        const noteText = narration.querySelector(".project-progress-note-text");
+        noteText.scrollTop = 120;
+        renderProjectNarration(narration, [note, "新的工具紀錄"]);
+        check(narration.querySelector(".project-progress-note-text") === noteText && noteText.scrollTop === 120, "tool updates do not recreate the unchanged progress note");
+        renderProjectNarration(narration, [note + "新進度"]); await frame();
+        check(narration.querySelector(".project-progress-note-text").scrollTop === 120, "updated progress note preserves its reading position");
+      } finally { scrollFixture.remove(); }
+      check(document.querySelector(".retry-message").disabled, "retry disabled while running");
+      fixture.projects.running = false;
+      fixture.messages.push({role:"assistant",content:"本次未完成",project_activity:[...fixture.projects.activity]});
+      fixture.retry = {...fixture.retry,message_count:2,enabled:true}; LMUI.receive(fixture);
+      check($("project-activity").hidden && document.querySelector("#messages .project-activity summary").textContent === "查看工具紀錄與進度筆記", "finished activity kept with reply");
+      const button = document.querySelector(".retry-message");button.click();button.click();
+      await approveFastWarningIfPresent();
+      check(retryCommands.filter(command => command.type === "retry_chat").length === 1 && retryCommands.at(-1).request_id === "request-one" && retryCommands.at(-1).message_count === 2, "retry button binds original request and suppresses double click");
+      LMUI.receive(fixture);check(!document.querySelector(".retry-message").disabled, "rejected retry can be used again after state refresh");
+      fixture.messages[1].project_paused = true; fixture.messages[1].request_id = "paused-run";
+      LMUI.receive(fixture);
+      const resume = document.querySelector(".resume-project");
+      check(resume && !resume.disabled && !document.querySelector(".retry-message"), "paused task offers continue instead of restart");
+      resume.click(); resume.click();
+      await approveFastWarningIfPresent();
+      check(retryCommands.filter(c => c.command?.action === "resume").length === 1 && retryCommands.at(-1).command.run_id === "paused-run", "continue binds checkpoint and suppresses duplicate clicks");
+      fixture.messages[1].project_paused = false;
+      fixture.messages[1].content = "成果：\n\n`_AI_Output/20260929_153000/測試 報告.txt`\n\n[另存](_AI_Output/20260929_153000/report.xlsx)\n\n_AI_Output/20260929_153000/plain.txt";
+      LMUI.receive(fixture);
+      const artifactLinks = document.querySelectorAll("#messages .project-artifact");
+      check(artifactLinks.length === 3 && artifactLinks[0].textContent.endsWith("測試 報告.txt"), "artifact paths render as readable links");
+      artifactLinks[0].click();
+      check(retryCommands.at(-1).type === "project" && retryCommands.at(-1).command.action === "reveal" && retryCommands.at(-1).command.conversation === "project-chat", "artifact clicks request native Explorer selection");
+      fixture.notifications = [{id:"long",source:"ai",title:"長通知",summary:"中".repeat(60)+"👨‍👩‍👧‍👦",created_at:new Date().toISOString()}];
+      LMUI.receive(fixture);
+      check(document.querySelector(".notification-card p").textContent === "中".repeat(50)+"…" && fixture.notifications[0].summary.length > 60, "notification preview truncates without changing source");
+      check(notificationPreview("👨‍👩‍👧‍👦".repeat(51)) === "👨‍👩‍👧‍👦".repeat(50)+"…", "notification preview preserves emoji graphemes");
+      document.querySelector(".project-heading .icon-button").click();
+      $("project-settings-import").click();await frame();
+      check($("project-import-path").readOnly && $("project-import-text").placeholder && parseFloat(getComputedStyle($("project-import-text")).borderTopWidth)>0, "import picker and visible paste field");
+      $("project-import-dialog").close();await frame();
+      document.querySelector(".project-heading .icon-button").click();$("project-remove-open").click();await frame();
+      check($("project-remove-dialog").open && !retryCommands.some(command=>command.command?.action === "remove"), "removal waits for conversation choice");
+      $("project-remove-move").click();await frame();
+      check(retryCommands.at(-1).command.delete_chats === false, "move conversations selected explicitly");
+      fixture.projects.running=true; fixture.projects.running_id="review-run";
+      fixture.projects.running_conversation=fixture.active_id;
+      fixture.projects.chart_review={request_id:"review-1",review:{title:"含 NG 的趨勢",converted:1,blanks:1,groups:[{column:"F",category:"文字",count:1,samples:["F3：<NG>"],x_axis:false,choices:["gap","skip","zero"]}]}};
+      LMUI.receive(fixture); await frame();
+      const review=document.getElementById("chart-review-dialog");
+      check(review.open && review.querySelector("select").value==="skip","chart review defaults to skip");
+      check(review.textContent.includes("F3：<NG>"),"chart review treats samples as text");
+      const examples=review.querySelectorAll(".chart-example");
+      check(examples.length===3 && review.textContent.includes("並非您的資料"),"chart review shows three clearly labelled hypothetical examples");
+      const gapExample=review.querySelector('[data-choice="gap"]'), skipExample=review.querySelector('[data-choice="skip"]'), zeroExample=review.querySelector('[data-choice="zero"]');
+      check(gapExample.querySelectorAll("circle").length===4 && (gapExample.querySelector("path").getAttribute("d").match(/M/g)||[]).length===2,"gap example leaves two separate line segments");
+      check(skipExample.querySelectorAll("circle").length===4 && !skipExample.querySelector('[data-x="3"]') && skipExample.querySelector('[data-x="4"]').getAttribute("cx")===zeroExample.querySelector('[data-x="4"]').getAttribute("cx"),"skip example connects without shifting remaining X positions");
+      check(zeroExample.querySelectorAll("circle").length===5 && zeroExample.querySelector('[data-x="3"]').getAttribute("data-y")==="0","zero example adds a real plotted zero");
+      review.querySelector("select").value="skip";review.querySelector("button.primary").click();
+      check(retryCommands.at(-1).command.action==="chart_choice" && retryCommands.at(-1).command.choices[0]==="skip","chart review submits user choice with identity");
+      fixture.projects.chart_review=null;LMUI.receive(fixture);await frame();check(!review.open,"chart review closes after native acknowledgement");
+      fixture.projects.chart_review={request_id:"review-x",review:{title:"X 無效",converted:0,blanks:0,groups:[{column:"A",category:"文字",count:1,samples:["A3：NG"],x_axis:true,choices:["skip"]}]}};
+      LMUI.receive(fixture);await frame();
+      check(!review.querySelector(".chart-review-examples") && review.textContent.includes("忽略整列"),"invalid X does not show misleading single-point Y examples");
+      fixture.projects.chart_review=null;LMUI.receive(fixture);await frame();
+      fixture.projects.chart_review={request_id:"review-2",review:{title:"暫停",converted:0,blanks:0,groups:[]}};
+      LMUI.receive(fixture);await frame();review.dispatchEvent(new Event("cancel",{cancelable:true}));
+      check(retryCommands.at(-1).command.choices===null,"Escape pauses instead of guessing data policy");
+      fixture.projects.chart_review=null;fixture.projects.running=false;LMUI.receive(fixture);
+      fixture.projects.running=true;fixture.projects.running_id="mail-run";
+      fixture.projects.outlook_consent={request_id:"consent-1"};
+      const beforeConsent=retryCommands.length;
+      LMUI.receive(fixture);await frame();
+      const mailConsent=$("project-outlook-consent");
+      check(mailConsent.open && retryCommands.length===beforeConsent,"Outlook waits for explicit consent without automatic command");
+      $("project-outlook-deny").click();
+      check(retryCommands.at(-1).command.allow===false && retryCommands.at(-1).command.run_id==="mail-run","Outlook refusal binds current run");
+      fixture.projects.outlook_consent=null;LMUI.receive(fixture);await frame();
+      check(!mailConsent.open,"Outlook consent closes after native acknowledgement");
+      fixture.projects.outlook_consent={request_id:"consent-2",folders:[{id:"root",parent:null,name:"信箱",depth:0,selected:true},{id:"private",parent:"root",name:"私人 <img src=x>",depth:1,selected:true},{id:"child",parent:"private",name:"子層",depth:2,selected:true},{id:"work",parent:"root",name:"工作",depth:1,selected:true}]};LMUI.receive(fixture);await frame();
+      const privateBox=mailConsent.querySelector('[data-folder-id="private"]');privateBox.checked=false;privateBox.dispatchEvent(new Event("change"));
+      check(!mailConsent.querySelector('[data-folder-id="child"]').checked,"Outlook folder exclusion includes descendants");
+      check(!mailConsent.querySelector("img") && mailConsent.textContent.includes("私人 <img src=x>"),"Outlook folder names remain inert text");
+      $("project-outlook-allow").click();
+      check(JSON.stringify(retryCommands.at(-1).command.selected)===JSON.stringify(["root","work"]),"Only selected folder ids leave the local picker");
+      check(retryCommands.at(-1).command.allow===true && retryCommands.at(-1).command.request_id==="consent-2" && retryCommands.at(-1).command.conversation===fixture.active_id,"Outlook approval includes conversation and pending request identity");
+      fixture.projects.outlook_consent=null;fixture.projects.running=false;LMUI.receive(fixture);
+      fixture.projects.running=true;fixture.projects.file_busy={request_id:"file-wait-1",message:"<source.xlsx> 正在使用中"};
+      LMUI.receive(fixture);await frame();
+      const fileBusy=$("project-file-busy");
+      check(fileBusy.open && fileBusy.textContent.includes("<source.xlsx>"),"file lock prompt preserves filename as inert text");
+      $("project-file-retry").click();
+      check(retryCommands.at(-1).command.action==="file_ready" && retryCommands.at(-1).command.retry===true,"file retry resumes current local read");
+      fixture.projects.file_busy=null;LMUI.receive(fixture);await frame();check(!fileBusy.open,"file prompt closes after acknowledgment");
+      fixture.projects.file_busy={request_id:"file-wait-2",message:"仍在使用中"};LMUI.receive(fixture);await frame();
+      fileBusy.dispatchEvent(new Event("cancel",{cancelable:true}));
+      check(retryCommands.at(-1).command.retry===false,"file Escape keeps progress instead of retrying automatically");
+      fixture.projects.file_busy=null;fixture.projects.running=false;LMUI.receive(fixture);
+      fixture.projects.running=true;
+      fixture.projects.cad_connect={request_id:"cad-connect-1",prompt:{partial:false,selected:{description:"<iCAD>",year:2008,progid:"Icad.Application.1"},message:"請開啟 CAD"}};
+      LMUI.receive(fixture);await frame();
+      const cadDialog=$("project-cad-connect");
+      check(cadDialog.open && cadDialog.textContent.includes("<iCAD>"),"CAD prompt renders selected product as inert text");
+      cadDialog.querySelector("button").click();
+      check(retryCommands.at(-1).command.action==="cad_ready" && retryCommands.at(-1).command.choice==="launch","CAD launch requires local user action");
+      fixture.projects.cad_connect=null;LMUI.receive(fixture);await frame();
+      fixture.projects.cad_connect={request_id:"cad-connect-2",prompt:{partial:true,selected:{},message:"連線中斷"}};
+      LMUI.receive(fixture);await frame();
+      check(cadDialog.querySelectorAll("button").length===2 && cadDialog.textContent.includes("另建新副本"),"partial CAD never offers resume on unknown document");
+      cadDialog.dispatchEvent(new Event("cancel",{cancelable:true}));
+      check(retryCommands.at(-1).command.choice==="cancel","CAD Escape cancels instead of retrying");
+      fixture.projects.cad_connect={request_id:"cad-confirm-1",prompt:{confirm_document:true,document:{name:"<Drawing1>",full_name:""},message:"不儲存"}};
+      LMUI.receive(fixture);await frame();
+      check(cadDialog.open && cadDialog.textContent.includes("<Drawing1>") && cadDialog.querySelectorAll("button").length===2,"active CAD confirmation shows exact document as text");
+      cadDialog.querySelector("button").click();
+      check(retryCommands.at(-1).command.choice==="confirm","active CAD write requires local confirmation");
+      fixture.projects.cad_connect=null;fixture.projects.running=false;LMUI.receive(fixture);
+      const options=ChartUI.option({kind:"line",title:"t",source:"s",x_label:"X",y_label:"Y",x:["001","002","003","004"],series:[{name:"a",values:[1,null,null,4],skip_indices:[1]},{name:"b",values:[1,2,3,4]}]});
+      check(JSON.stringify(options.series[0].data)===JSON.stringify([[0,1],[2,null],[3,4]]),"skip keeps original X and genuine blank breaks");
+      check(options.series[1].data.length===4 && !options.series[0].connectNulls,"other series and blank policy preserved");
+      toast("三秒提示"); await new Promise(resolve=>setTimeout(resolve,3100));
+      check($("toast").hidden, "toast expires after three seconds");
+    } finally {
+      send = savedSend; fixture.active_id = savedActive; fixture.messages = savedMessages;
+      fixture.notifications = savedNotifications; delete fixture.retry;
+    }
+    fixture.update_available = false; fixture.projects = {items:[]}; fixture.conversations = savedConversations;
+    LMUI.receive(fixture);
+    check($("update-shortcut").hidden, "update arrow hidden without newer release");
+    fixture.update_required = true;
+    fixture.update_busy = true;
+    LMUI.receive(fixture);
+    check(document.getElementById("required-update-dialog").open, "mandatory update blocks UI");
+    check(document.getElementById("required-update-download").disabled, "duplicate download is disabled");
+    const escapeUpdate = new Event("cancel", {cancelable:true});
+    document.getElementById("required-update-dialog").dispatchEvent(escapeUpdate);
+    check(escapeUpdate.defaultPrevented, "Escape cannot dismiss mandatory update");
+    fixture.update_busy = false;
+    fixture.update_ready = true;
+    LMUI.receive(fixture);
+    check(document.getElementById("required-update-download").textContent === "安裝並重新啟動 LM_AI", "downloaded update retains recovery action");
+    fixture.update_kind = "exe";
+    LMUI.receive(fixture);
+    check(document.getElementById("required-update-download").textContent === "開啟下載資料夾", "portable update offers manual replacement");
+    check(document.getElementById("required-update-dialog").open, "portable download does not unlock mandatory update");
+    // 共用外部點擊規則：依真正排版後的邊界送出按下與放開事件。
+    function dismissOutside(dialog) {
+      const box = dialog.getBoundingClientRect();
+      const position = { bubbles: true, clientX: box.left - 8, clientY: box.top - 8, button: 0 };
+      dialog.dispatchEvent(new PointerEvent("pointerdown", position));
+      dialog.dispatchEvent(new MouseEvent("click", position));
+    }
+    dismissOutside(document.getElementById("required-update-dialog"));
+    LMUI.receive(fixture);
+    check(!document.getElementById("required-update-dialog").open && state.update_required,
+      "update backdrop closes prompt without clearing version restriction or reopening on push");
+    fixture.update_kind = "nsis";
+    fixture.update_required = false;
+    LMUI.receive(fixture);
+    check(!document.getElementById("required-update-dialog").open, "supported version has no update gate");
+    for (const dialog of document.querySelectorAll("dialog")) {
+      dialog.showModal();
+      dismissOutside(dialog);
+      check(!dialog.open, `${dialog.id} supports backdrop dismissal`);
+    }
+    let confirmed = false;
+    confirmAction = () => { confirmed = true; };
+    document.getElementById("confirm-dialog").showModal();
+    dismissOutside(document.getElementById("confirm-dialog"));
+    document.getElementById("confirm-ok").click();
+    check(!confirmed && confirmAction === null, "backdrop cancels pending confirmation");
+    await frame();
+    fixture.logged_in = false;
+    fixture.can_send = false;
+    fixture.config.vnc_enabled = true;
+    fixture.update_required = true;
+    LMUI.receive(fixture);
+    check(!document.getElementById("login-panel").hidden &&
+      document.getElementById("login-entry").textContent === "登入" &&
+      !document.getElementById("login-entry").disabled, "standalone login remains available before authentication");
+    check(!document.querySelector("dialog[open]"), "unauthenticated update gate cannot cover login");
+    const loginIds = new Set(["login-entry", "login-entry-cancel", "login-entry-reopen"]);
+    check([...document.querySelectorAll("button,input,select,textarea")]
+      .every(element => loginIds.has(element.id) || element.disabled), "all non-login controls are disabled");
+    const dynamicButton = document.createElement("button");
+    document.body.append(dynamicButton);
+    await frame();
+    check(dynamicButton.disabled, "new controls inherit authentication lock");
+    fixture.busy = "login";
+    fixture.login_code = "TEST-CODE";
+    LMUI.receive(fixture);
+    check(document.getElementById("login-entry").disabled &&
+      !document.getElementById("login-entry-cancel").hidden &&
+      !document.getElementById("login-entry-reopen").hidden, "pending login keeps cancel and reopen available");
+    fixture.busy = "none";
+    fixture.login_code = "";
+    fixture.logged_in = true;
+    fixture.update_required = false;
+    LMUI.receive(fixture);
+    check(document.getElementById("login-panel").hidden && !dynamicButton.disabled,
+      "authenticated UI hides login panel and restores controls");
+    dynamicButton.remove();
+    window.chrome?.webview?.postMessage({
+      type: "self_test_result",
+      ok: true,
+      detail: checks.join(", "),
+    });
+    window.selfTestResult = { ok: true, checks };
+  } catch (error) {
+    window.selfTestResult = { ok: false, detail: error.stack || String(error) };
+    window.chrome?.webview?.postMessage({
+      type: "self_test_result",
+      ok: false,
+      detail: error.stack || String(error),
+    });
+  }
+};

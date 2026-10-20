@@ -1,0 +1,29 @@
+* text=auto
+*.rs text eol=lf
+*.py text eol=lf
+assets/python-runtime-manifest.json -text
+assets/cad-runtime-manifest.json -text
+*.md text eol=lf
+*.toml text eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bin binary
+*.blob binary
+
+
+# Preserve upstream license text, including its original trailing spaces.
+ui/vendor/pdf.NOTICES.txt -whitespace
+
+# Preserve the pinned upstream ECharts bytes and published SHA256 across checkouts.
+ui/vendor/echarts.min.js text eol=lf
+ui/vendor/ECHARTS-LICENSE.txt text eol=lf
+ui/vendor/ECHARTS-NOTICE.txt text eol=lf
+*.lsp text eol=lf
+
+# Keep the verified upstream Mermaid bundle byte-stable.
+ui/vendor/mermaid.min.js text eol=lf -whitespace
+ui/vendor/MERMAID-LICENSE.txt text eol=lf
+ui/vendor/MERMAID-NOTICES.txt -whitespace
+
+# Unmodified offline font binaries and their upstream license notices.
+ui/fonts/*.txt text eol=lf -whitespace

@@ -1,0 +1,104 @@
+/* 教學畫面獨立於正式專案；所有選擇器限定在此 dialog 內。 */
+.project-tutorial {
+  width: min(1180px, calc(100vw - 32px));
+  height: min(780px, calc(100dvh - 32px));
+  max-width: none;
+  max-height: none;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+  color: var(--ink);
+  overflow: auto;
+}
+.project-tutorial[open] { display: flex; flex-direction: column; gap: 18px; }
+.project-tutorial::backdrop { background: #10212bcc; }
+.project-tutorial .practice-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: 0 0 auto; }
+.project-tutorial h2 { margin: 8px 0 0; font-size: 23px; }
+.project-tutorial h3 { font-size: 20px; margin: 0 0 16px; }
+.project-tutorial h4 { margin: 0 0 12px; }
+.project-tutorial p { line-height: 1.75; }
+.project-tutorial button { cursor: pointer; white-space: normal; }
+.project-tutorial button:disabled { cursor: default; }
+.project-tutorial button:focus-visible, .project-tutorial input:focus-visible, .project-tutorial textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.project-tutorial .practice-badge { display: inline-block; font-size: 12px; font-weight: 600; color: var(--accent); background: var(--surface); padding: 5px 10px; border-radius: 20px; }
+.project-tutorial .practice-layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 22px; flex: 1; min-height: 0; }
+.project-tutorial .practice-stage { position: relative; overflow: auto; min-height: 320px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); isolation: isolate; }
+.project-tutorial .practice-screen { display: grid; grid-template-columns: 165px minmax(0, 1fr); min-height: 100%; }
+.project-tutorial .practice-sidebar { padding: 22px 14px; background: var(--surface); border-right: 1px solid var(--line); min-width: 0; }
+.project-tutorial .practice-sidebar button { width: 100%; margin-bottom: 12px; text-align: left; padding: 10px; }
+.project-tutorial .practice-brand { display: block; margin-bottom: 38px; font-size: 22px; }
+.project-tutorial .practice-main { min-width: 0; padding: 24px; }
+.project-tutorial .practice-path { font-size: 12px; overflow-wrap: anywhere; color: var(--muted); }
+.project-tutorial .practice-project-form, .project-tutorial .practice-picker,
+.project-tutorial .practice-preview, .project-tutorial .practice-context,
+.project-tutorial .practice-reply, .project-tutorial .practice-result { margin: 18px 0; padding: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.project-tutorial .practice-field, .project-tutorial .practice-composer { display: grid; gap: 12px; margin-bottom: 22px; }
+.project-tutorial input, .project-tutorial textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--panel); font: inherit; }
+.project-tutorial textarea { resize: vertical; min-height: 140px; max-height: 260px; }
+.project-tutorial .practice-files { padding: 16px; margin: 18px 0; border: 1px solid var(--line); border-radius: 10px; }
+.project-tutorial .practice-file-row { display: block; width: 100%; text-align: left; padding: 12px; margin: 6px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+.project-tutorial pre { margin-bottom: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.7; }
+.project-tutorial .practice-spotlight { position: absolute; z-index: 4; pointer-events: none; border: 3px solid var(--accent); border-radius: 10px; box-sizing: border-box; box-shadow: 0 0 0 5000px #0b1929b8; }
+.project-tutorial .practice-current { scroll-margin: 18px; }
+.project-tutorial .practice-coach { min-width: 0; overflow-y: auto; padding: 8px 4px; }
+.project-tutorial .practice-step-count { display: block; color: var(--accent); font-weight: 600; margin-bottom: 18px; }
+.project-tutorial .practice-action-hint { background: var(--surface); border-left: 3px solid var(--accent); padding: 14px; border-radius: 0 8px 8px 0; }
+.project-tutorial .practice-coach-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 24px 0 14px; }
+.project-tutorial .practice-coach > button { margin: 0 8px 12px 0; }
+.project-tutorial .practice-source { color: var(--accent); }
+.project-tutorial.practice-menu-mode { height: auto; max-height: calc(100dvh - 32px); }
+.project-tutorial .practice-intro { margin: 0; max-width: 750px; }
+.project-tutorial .practice-topics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.project-tutorial .practice-topic { display: block; min-width: 0; text-align: left; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 22px; }
+.project-tutorial .practice-topic:hover { background: var(--hover); border-color: var(--accent); }
+.project-tutorial .practice-topic h3 { margin: 18px 0 10px; }
+.project-tutorial .practice-topic-number { color: var(--accent); font-size: 24px; }
+.project-tutorial .practice-topic-status { display: block; margin-top: 20px; color: var(--accent); font-size: 13px; }
+.project-tutorial .practice-menu-filter { display: grid; gap: 10px; }
+.project-tutorial.practice-menu-mode .practice-header { position: sticky; top: -22px; z-index: 6; background: var(--panel); padding: 8px 0; }
+.project-tutorial .practice-group-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.project-tutorial .practice-group-buttons button[aria-pressed="true"] { color: var(--on-accent); background: var(--strong-accent); }
+.project-tutorial .practice-group-heading { margin-top: 24px; }
+.project-tutorial .practice-nav-item { padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.project-tutorial .practice-scene { margin: 18px 0; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow-wrap: anywhere; }
+.project-tutorial .practice-scene > button { margin-top: 14px; }
+.project-tutorial .practice-table-scroll { overflow: auto; }
+.project-tutorial .practice-scene table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.project-tutorial .practice-scene th, .project-tutorial .practice-scene td { text-align: left; padding: 9px 7px; border-bottom: 1px solid var(--line); }
+.project-tutorial .practice-check-field input { width: 22px; height: 22px; accent-color: var(--accent); }
+.project-tutorial .practice-field select { width: 100%; padding: 12px; }
+.project-tutorial .practice-vector { display: block; width: 100%; height: auto; max-height: 250px; stroke: none; fill: none; }
+.project-tutorial .practice-bar { fill: var(--accent); }
+.project-tutorial .practice-vector-line { stroke: var(--muted); stroke-width: 1; }
+.project-tutorial .practice-vector-text { fill: var(--ink); font-size: 11px; }
+.project-tutorial .practice-cad-text { fill: var(--ink); font-size: 7px; }
+.project-tutorial .practice-geometry { stroke: var(--accent); stroke-width: 1; fill: none; }
+.project-tutorial .practice-reference { stroke: #c16b44; stroke-width: 1.5; stroke-dasharray: 5 3; }
+.project-tutorial .practice-chart-note { padding: 8px; background: #f4df9670; color: var(--ink); }
+.project-tutorial .practice-flow { display: grid; justify-items: center; gap: 5px; }
+.project-tutorial .practice-flow-node { border: 1px solid var(--accent); padding: 9px 16px; border-radius: 8px; text-align: center; min-width: 100px; }
+.project-tutorial .practice-flow-arrow { color: var(--muted); }
+.project-tutorial .practice-diff-before { color: #a43838; background: #edb6b630; padding: 10px; white-space: pre-wrap; }
+.project-tutorial .practice-diff-after { color: #236346; background: #a5d9b630; padding: 10px; white-space: pre-wrap; }
+:root[data-theme="dark"] .project-tutorial .practice-diff-before { color: #ffc0c0; }
+:root[data-theme="dark"] .project-tutorial .practice-diff-after { color: #b5e6c4; }
+.project-tutorial .practice-sample-answer { padding-left: 12px; border-left: 3px solid var(--accent); }
+@media (max-width: 850px) {
+  .project-tutorial { padding: 16px; }
+  .project-tutorial .practice-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(240px, 1fr) minmax(190px, .7fr); gap: 14px; }
+  .project-tutorial .practice-coach { border-top: 1px solid var(--line); padding: 14px 4px; }
+  .project-tutorial .practice-coach h3 { margin-bottom: 8px; }
+  .project-tutorial .practice-coach p { margin: 8px 0; }
+  .project-tutorial .practice-coach-actions { margin: 14px 0; }
+  .project-tutorial .practice-topics { grid-template-columns: minmax(0, 1fr); }
+  .project-tutorial .practice-topic { padding: 16px; }
+  .project-tutorial .practice-topic h3 { margin-top: 8px; }
+  .project-tutorial .practice-topic-status { margin-top: 8px; }
+}
+@media (max-width: 520px) {
+  .project-tutorial .practice-screen { grid-template-columns: 110px minmax(0, 1fr); }
+  .project-tutorial .practice-main { padding: 16px; }
+  .project-tutorial .practice-sidebar { padding: 16px 8px; }
+  .project-tutorial h2 { font-size: 18px; }
+}

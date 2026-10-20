@@ -1,0 +1,552 @@
+[
+  {
+    "id": "projects.practice.create",
+    "revision": 1,
+    "group": "專案操作",
+    "context": "project",
+    "title": "建立專案",
+    "intro": "練習命名、選擇範例資料夾與開始專案對話。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.practice.files",
+    "revision": 1,
+    "group": "專案操作",
+    "context": "project",
+    "title": "認識檔案清單",
+    "intro": "從 README、資料夾與主要程式認識來源範圍。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.practice.request",
+    "revision": 1,
+    "group": "專案操作",
+    "context": "project",
+    "title": "提出讀檔要求",
+    "intro": "用範例要求練習指定來源、閱讀深度與交付內容。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "chat.basics",
+    "revision": 2,
+    "group": "一般對話",
+    "context": "chat",
+    "title": "第一次提問與追問",
+    "intro": "輸入需求、送出，再試著追問。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "chat.attachments",
+    "revision": 2,
+    "group": "一般對話",
+    "context": "chat",
+    "title": "加入附件並核對狀態",
+    "intro": "練習選檔、處理狀態與指定閱讀重點。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "chat.translate",
+    "revision": 1,
+    "group": "一般對話",
+    "context": "chat",
+    "title": "快速動作：翻譯",
+    "intro": "練習準備內容並使用翻譯。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "chat.summarize",
+    "revision": 1,
+    "group": "一般對話",
+    "context": "chat",
+    "title": "快速動作：摘要",
+    "intro": "練習準備內容並使用摘要。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "chat.polish",
+    "revision": 1,
+    "group": "一般對話",
+    "context": "chat",
+    "title": "快速動作：潤飾",
+    "intro": "練習準備內容並使用潤飾。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "chat.explain",
+    "revision": 2,
+    "group": "一般對話",
+    "context": "chat",
+    "title": "快速動作：解釋",
+    "intro": "練習準備內容並使用解釋。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "chat.models",
+    "revision": 1,
+    "group": "一般對話",
+    "context": "chat",
+    "title": "模型與背景處理",
+    "intro": "選擇模型、辨識快速模型提醒與背景任務。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "chat.history",
+    "revision": 1,
+    "group": "一般對話",
+    "context": "chat",
+    "title": "對話保存與整理",
+    "intro": "找回歷史、改名、置頂與移除的界線。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "settings.account",
+    "revision": 1,
+    "group": "設定與通知",
+    "context": "settings",
+    "title": "登入、登出與更新",
+    "intro": "認識登入門檻、版本提示與重新啟動。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "settings.basics",
+    "revision": 2,
+    "group": "設定與通知",
+    "context": "settings",
+    "title": "外觀、字型與視窗",
+    "intro": "練習介面比例、字型、深色模式與縮小行為。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "settings.shortcuts",
+    "revision": 1,
+    "group": "設定與通知",
+    "context": "settings",
+    "title": "快捷鍵與輸入習慣",
+    "intro": "錄製入口、選取文字、Enter 與快速動作偏好。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "settings.palette",
+    "revision": 1,
+    "group": "設定與通知",
+    "context": "settings",
+    "title": "圖表預設配色",
+    "intro": "選擇系列色票並理解既有圖表的差異。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "settings.notifications",
+    "revision": 1,
+    "group": "設定與通知",
+    "context": "settings",
+    "title": "通知與等待確認",
+    "intro": "從提醒回到任務，區分通知和實際同意。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "settings.diagnostics",
+    "revision": 1,
+    "group": "設定與通知",
+    "context": "settings",
+    "title": "查看用量與錯誤診斷",
+    "intro": "選取執行紀錄，查看簡短用量與完整估算。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "settings.tutorials",
+    "revision": 1,
+    "group": "設定與通知",
+    "context": "settings",
+    "title": "重看教學與更新日誌",
+    "intro": "找回跳過的主題，不必重設所有完成紀錄。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.start",
+    "revision": 2,
+    "group": "專案操作",
+    "context": "project",
+    "title": "專案設定與匯入文字",
+    "intro": "修改名稱、補充可讀文字與理解移除選項。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.read",
+    "revision": 2,
+    "group": "專案操作",
+    "context": "project",
+    "title": "搜尋文件與來源",
+    "intro": "用檔名、關鍵字與行號定位需要的內容。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.control",
+    "revision": 2,
+    "group": "專案操作",
+    "context": "project",
+    "title": "任務進行中補充要求",
+    "intro": "選擇補充的時機，理解何時開始新任務。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.resume",
+    "revision": 1,
+    "group": "專案操作",
+    "context": "project",
+    "title": "停止、暫停與繼續",
+    "intro": "辨識取消、保存進度與連線重試。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "tasks.center",
+    "revision": 1,
+    "group": "專案操作",
+    "context": "project",
+    "title": "查看工作任務與進度",
+    "intro": "辨識進行、待確認、失敗與完成。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.confirm",
+    "revision": 1,
+    "group": "專案操作",
+    "context": "project",
+    "title": "回答偏好與檔案等待",
+    "intro": "練習非阻塞偏好、關檔重試與明確確認。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.outputs",
+    "revision": 2,
+    "group": "成果與重用",
+    "context": "project",
+    "title": "找成果與版本狀態",
+    "intro": "查看跨對話產出、來源變更與打包。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.diff",
+    "revision": 1,
+    "group": "成果與重用",
+    "context": "project",
+    "title": "查看文件修改比較",
+    "intro": "辨識新增、刪除與比較基準。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.methods",
+    "revision": 1,
+    "group": "成果與重用",
+    "context": "project",
+    "title": "重用分析方法",
+    "intro": "帶入過去的分析思路，再核對新來源。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.workflows",
+    "revision": 1,
+    "group": "成果與重用",
+    "context": "project",
+    "title": "重跑工作流程",
+    "intro": "替換範本參數，逐步查看執行結果。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.office",
+    "revision": 1,
+    "group": "資料分析與報告",
+    "context": "project",
+    "title": "文件與 Office 工作副本",
+    "intro": "明確指定修改位置，核對副本與交付狀態。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.analysis",
+    "revision": 2,
+    "group": "資料分析與報告",
+    "context": "project",
+    "title": "分析 Excel、CSV 與 LOG",
+    "intro": "指定欄位與條件，核對資料筆數及結果。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.coverage",
+    "revision": 1,
+    "group": "資料分析與報告",
+    "context": "project",
+    "title": "核對處理完成情況",
+    "intro": "分清已讀、失敗、排除與未處理範圍。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.log.timeline",
+    "revision": 1,
+    "group": "資料分析與報告",
+    "context": "project",
+    "title": "LOG 事件時間表",
+    "intro": "篩選機台與事件，再回看原始證據。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.reportbindings",
+    "revision": 1,
+    "group": "資料分析與報告",
+    "context": "project",
+    "title": "計算數值綁定報告",
+    "intro": "讓 Word、Excel 與圖表共用同一計算來源。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.python",
+    "revision": 1,
+    "group": "資料分析與報告",
+    "context": "project",
+    "title": "修改 Python 副本與驗證",
+    "intro": "區分語法檢查、測試及原始檔案。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.charts",
+    "revision": 2,
+    "group": "圖表與流程圖",
+    "context": "project",
+    "title": "產生與編輯圖表",
+    "intro": "設定比較目的、標題與系列，再核對結果。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.chart.axes",
+    "revision": 1,
+    "group": "圖表與流程圖",
+    "context": "project",
+    "title": "座標、顏色與參考線",
+    "intro": "調整範圍、單位與閾值提示。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.chart.layout",
+    "revision": 1,
+    "group": "圖表與流程圖",
+    "context": "project",
+    "title": "圖表排版與新增文字",
+    "intro": "認識拖曳、鍵盤微調與完成／取消。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.chart.export",
+    "revision": 1,
+    "group": "圖表與流程圖",
+    "context": "project",
+    "title": "圖表匯出與請 AI 修改",
+    "intro": "保留舊版本，重新匯出修改後圖片。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.chart.text",
+    "revision": 1,
+    "group": "圖表與流程圖",
+    "context": "project",
+    "title": "圖中文字與格式",
+    "intro": "雙擊文字、設定樣式，再核對新版圖表。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.diagrams",
+    "revision": 1,
+    "group": "圖表與流程圖",
+    "context": "project",
+    "title": "畫流程圖與查看原始碼",
+    "intro": "從描述或檔案畫總覽，練習縮放與原始碼入口。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.diagrams.sources",
+    "revision": 1,
+    "group": "圖表與流程圖",
+    "context": "project",
+    "title": "流程圖來源與詳細圖",
+    "intro": "點節點找依據，辨識歷史版本與描述節點。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.diagrams.edit",
+    "revision": 1,
+    "group": "圖表與流程圖",
+    "context": "project",
+    "title": "修改與匯出流程圖",
+    "intro": "從圖形帶入草稿，保留舊圖與選擇格式。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "mail.single",
+    "revision": 1,
+    "group": "郵件與週報",
+    "context": "project",
+    "title": "單封 Outlook 郵件預覽",
+    "intro": "先確認寄件者、主旨與是否包含內文。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "mail.scope",
+    "revision": 1,
+    "group": "郵件與週報",
+    "context": "project",
+    "title": "選擇 Outlook 資料夾範圍",
+    "intro": "只授權需要的資料夾，認識範圍變更。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.mail",
+    "revision": 2,
+    "group": "郵件與週報",
+    "context": "project",
+    "title": "多封郵件整理",
+    "intro": "日期、勾選與自動補內文的差異。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "mail.weekly",
+    "revision": 1,
+    "group": "郵件與週報",
+    "context": "project",
+    "title": "生成週報",
+    "intro": "準備參考資料、日期範圍與最後確認。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "vnc.connect",
+    "revision": 1,
+    "group": "VNC 快速連線",
+    "context": "project",
+    "title": "選機台與連線模式",
+    "intro": "選擇分類、機台及唯讀監看選項。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "vnc.manage",
+    "revision": 1,
+    "group": "VNC 快速連線",
+    "context": "project",
+    "title": "機台管理與排序",
+    "intro": "新增、編輯、保留密碼與調整分類。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "vnc.import",
+    "revision": 1,
+    "group": "VNC 快速連線",
+    "context": "project",
+    "title": "匯入與匯出 VNC JSON",
+    "intro": "先預覽，再決定加入或覆蓋。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "vnc.sync",
+    "revision": 1,
+    "group": "VNC 快速連線",
+    "context": "project",
+    "title": "從網站更新機台清單",
+    "intro": "登入來源網站、比較差異並挑選匯入。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.cad.new",
+    "revision": 2,
+    "group": "CAD",
+    "context": "project",
+    "title": "建立新 CAD 圖面",
+    "intro": "說明尺寸、版本、確認與檢查成果。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.cad.edit",
+    "revision": 2,
+    "group": "CAD",
+    "context": "project",
+    "title": "修改目前圖面或 DWG 副本",
+    "intro": "先決定保存方式，再辨識目標與確認。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.cad.excel",
+    "revision": 2,
+    "group": "CAD",
+    "context": "project",
+    "title": "Excel 座標轉 CAD",
+    "intro": "指定欄位、單位與轉換計畫，不手抄座標。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.cad.compare",
+    "revision": 1,
+    "group": "CAD",
+    "context": "project",
+    "title": "CAD 修改比較與標註核對",
+    "intro": "看懂新增、刪除、幾何差異與未驗證關聯。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "projects.cad.advanced",
+    "revision": 1,
+    "group": "CAD",
+    "context": "project",
+    "title": "目標定位、圖層與進階修改",
+    "intro": "先辨識目標，再要求支援的二維操作。",
+    "interactive": true,
+    "steps": []
+  }
+]

@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>LM_AI</title>
+    <link rel="stylesheet" href="vendor/katex.min.css" />
+    <link rel="stylesheet" href="vendor/highlight.css" />
+    <link rel="stylesheet" href="vendor/texmath.css" />
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="project-tutorial.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside id="sidebar" aria-label="主要選單">
+        <div class="brand-row">
+          <img class="brand-mark" src="app.ico" alt="" />
+          <strong class="nav-label">LM_AI</strong
+          ><button
+            id="collapse"
+            class="icon-button"
+            title="收合側欄"
+            aria-label="收合側欄"
+            data-icon="panel"
+          ></button>
+        </div>
+        <button id="show-outlook" class="nav-button" title="Outlook 助理">
+          <span data-icon="mail"></span
+          ><span class="nav-label">Outlook 助理</span>
+        </button>
+        <button id="show-vnc" class="nav-button" title="VNC 快速連線" hidden>
+          <span data-icon="monitor"></span><span class="nav-label">VNC 快速連線</span>
+        </button>
+        <section class="project-section" aria-label="專案">
+          <div class="section-caption"><button id="collapse-projects" class="section-toggle nav-label" aria-controls="project-list" aria-expanded="true">▾ 專案</button><button id="new-project" class="text-button" title="新增專案"><span data-icon="plus"></span><span class="nav-label">新增專案</span></button></div>
+          <div id="project-list" class="nav-label"></div>
+        </section>
+        <div class="history-section">
+          <div class="section-caption">
+            <button id="collapse-recent" class="section-toggle nav-label" aria-controls="history-list" aria-expanded="true">▾ 最近對話</button>
+            <button id="new-chat" class="text-button" title="新對話" aria-label="新對話">
+              <span data-icon="plus"></span><span class="nav-label">新對話</span>
+            </button>
+          </div>
+          <div id="history-list" class="nav-label" aria-label="本機對話"></div>
+        </div>
+        <div class="sidebar-bottom">
+          <span id="account-dot" class="account-dot"></span
+          ><span id="account-label" class="nav-label">尚未登入</span
+          ><button id="update-shortcut" class="icon-button update-shortcut" title="下載並安裝更新" aria-label="下載並安裝更新" hidden>↓</button><button
+            id="settings-button"
+            class="icon-button"
+            title="設定"
+            aria-label="設定"
+            data-icon="settings"
+          ></button>
+        </div>
+      </aside>
+      <main>
+        <header class="topbar">
+          <div>
+            <h1 id="page-title">新對話</h1>
+          </div>
+          <div class="topbar-actions">
+            <span id="save-label" class="subtle">本機保存</span>
+            <button id="show-notifications" class="icon-button" title="通知" aria-label="通知">
+              <span data-icon="bell"></span><span id="unread-badge" class="badge" hidden>0</span>
+            </button>
+            <button id="show-tasks" class="icon-button" title="工作任務" aria-label="工作任務">
+              <span data-icon="list"></span><span id="task-count" class="badge" hidden></span>
+            </button>
+          </div>
+        </header>
+        <button id="project-context" class="project-context project-folder-link" type="button" hidden></button>
+        <section id="login-panel" class="login-panel" aria-label="登入公司服務">
+          <p>尚未登入時無法使用其他功能</p>
+          <div class="button-row">
+            <button id="login-entry" class="primary-button">登入</button>
+            <button id="login-entry-cancel" class="secondary-button" hidden>取消登入</button>
+            <button id="login-entry-reopen" class="secondary-button" hidden>重開登入頁</button>
+          </div>
+          <p id="login-entry-code" class="subtle" aria-live="polite"></p>
+        </section>
+        <section id="chat-view" class="view">
+          <div id="transcript" tabindex="0" aria-label="聊天內容">
+            <div id="messages"></div>
+            <div id="project-charts" class="project-charts" hidden></div>
+            <div id="project-narration" hidden></div>
+            <div id="project-analysis" hidden></div>
+                <details id="project-activity" class="project-activity" aria-label="專案執行歷程" hidden></details>
+            <div
+              id="live-task"
+              class="live-task"
+              aria-live="polite"
+              hidden
+            ></div>
+          </div>
+          <button id="jump-bottom" class="jump-button" hidden>
+            <span data-icon="arrow-down"></span>查看最新回覆
+          </button>
+            <div class="compose-area">
+              <details id="project-supplements" hidden>
+                <summary>本次任務的補充指示</summary>
+                <div id="project-supplement-list"></div>
+              </details>
+              <div class="quick-actions">
+              <button id="project-stop" hidden>停止專案任務</button>
+              <button id="weekly-start" hidden>生成週報</button>
+                <button id="project-methods" hidden>重用分析方法</button>
+                <button id="project-artifacts" hidden>成果與流程</button>
+              <button id="project-outlook-start" hidden title="查看您選擇的 Outlook 信件，整理需要您處理、回覆或追蹤的事項。">Outlook 助理</button>
+              <button data-action="translate">
+                <span data-icon="languages"></span>翻譯</button
+              ><button data-action="summarize">
+                <span data-icon="list"></span>摘要</button
+              ><button data-action="polish">
+                <span data-icon="sparkles"></span>潤飾
+              </button>
+              <button data-action="explain" title="解釋論文、專有名詞或程式碼"><span data-icon="list"></span>解釋</button>
+            </div>
+            <div id="attachment-list" class="attachment-list"></div>
+            <div id="project-queued-message" class="project-queued-message" hidden></div>
+            <div class="composer">
+              <div id="project-compose-controls" class="project-compose-controls" hidden>
+                <label for="project-send-mode">本次傳送方式</label>
+                <select id="project-send-mode">
+                  <option value="next_turn">下一輪加入提示（預設）</option>
+                  <option value="interrupt">停止目前任務並傳送，開始新任務</option>
+                  <option value="after_task">任務完成後傳送，開始新任務</option>
+                </select>
+                <button id="project-edit-cancel" class="text-button" hidden>取消修改補充</button>
+                <span id="project-compose-hint"></span>
+              </div>
+              <textarea
+                id="prompt"
+                aria-label="輸入訊息"
+                placeholder="輸入訊息，或用快捷鍵帶入選取文字…"
+                rows="2"
+                maxlength="16000"
+                spellcheck="false"
+              ></textarea>
+              <div class="composer-bottom">
+                <button
+                  id="add-attachment"
+                  class="icon-button"
+                  title="加入附件或在輸入框貼上圖片"
+                  aria-label="加入附件"
+                  data-icon="paperclip"
+                  disabled
+                ></button>
+                <input id="attachment-input" type="file" multiple hidden />
+                <div class="model-picker">
+                  <button
+                    id="model-button"
+                    class="model-button"
+                    aria-haspopup="listbox"
+                    aria-expanded="false"
+                  >
+                    <span class="model-dot"></span
+                    ><span id="model-label">取得模型中</span
+                    ><span data-icon="chevron-down"></span>
+                  </button>
+                  <div
+                    id="model-menu"
+                    role="listbox"
+                    aria-label="選擇模型"
+                    hidden
+                  ></div>
+                </div>
+                <button
+                  id="send"
+                  class="send-button"
+                  title="送出"
+                  aria-label="送出"
+                  data-icon="arrow-up"
+                  disabled
+                ></button>
+              </div>
+            </div>
+            <div class="execution-controls">
+              <div class="execution-switch" aria-label="執行模式">
+                <button id="execution-stream" hidden>一般</button>
+                <button id="execution-background" hidden>背景處理</button>
+              </div>
+              <div class="compose-hint" aria-label="輸入快捷鍵">
+                <span id="compose-enter-hint"></span>
+                <span id="hotkey-hint" hidden></span>
+              </div>
+              <p id="work-status" class="subtle work-hint" role="status"></p>
+            </div>
+            <details class="attachment-help" hidden>
+              <summary>附件規則</summary>
+              <p id="attachment-rules"></p>
+              <p>
+                檔案上傳到公司網站處理。圖片可直接貼到輸入框；轉檔完成後再送出訊息。
+              </p>
+            </details>
+          </div>
+        </section>
+        <section id="vnc-view" class="view secondary-view" hidden>
+          <div class="section-heading">
+            <div><h2>VNC 快速連線</h2><p>選擇機台，以本機安裝的 UltraVNC Viewer 開啟連線。</p></div>
+            <div class="button-row"><button id="vnc-json-import" class="secondary-button" disabled>匯入 JSON</button><button id="vnc-json-export" class="secondary-button" disabled>匯出 JSON</button><button id="vnc-sync-open" class="secondary-button" disabled>從網站更新</button><button id="vnc-manage" class="secondary-button" disabled>機台管理</button></div>
+          </div>
+          <fieldset class="vnc-options">
+            <legend>連線選項</legend>
+            <label class="check-row"><input id="vnc-fullscreen" type="checkbox" disabled />全螢幕模式</label>
+            <label class="check-row"><input id="vnc-viewonly" type="checkbox" disabled />監看模式（唯讀）</label>
+            <label class="check-row"><input id="vnc-autoscaling" type="checkbox" disabled />自動縮放</label>
+          </fieldset>
+          <div class="button-row">
+            <button id="vnc-choose-viewer" class="secondary-button" disabled>指定 VNC</button>
+            <button id="vnc-search-viewer" class="secondary-button" disabled>重新搜尋</button>
+            <button id="vnc-reload" class="secondary-button">重新讀取設定</button>
+          </div>
+          <p class="subtle vnc-path">UltraVNC：<span id="vnc-viewer-path">尚未指定</span></p>
+          <p class="subtle vnc-path">機台設定：<span id="vnc-machines-path">LM_AI.exe 同一資料夾的 machines.json</span></p>
+          <p id="vnc-status" role="status">正在讀取設定…</p>
+          <div id="vnc-groups" class="vnc-groups" role="group" aria-label="機台分類"></div>
+          <div id="vnc-machines" class="vnc-machines"></div>
+        </section>
+        <section id="tasks-view" class="view secondary-view" hidden>
+          <div class="section-heading">
+            <div>
+              <h2>工作任務</h2>
+              <p>關閉視窗後由伺服器繼續執行，重新開啟會恢復查詢。</p>
+            </div>
+            <button id="refresh-tasks" class="secondary-button">
+              重新整理
+            </button>
+          </div>
+          <div id="task-list"></div>
+        </section>
+        <section id="notifications-view" class="view secondary-view" hidden>
+          <div class="section-heading">
+            <div>
+              <h2>通知中心</h2>
+              <p id="notification-status">登入後同步網站通知</p>
+            </div>
+            <button id="refresh-notifications" class="secondary-button">
+              <span data-icon="refresh"></span>重新整理
+            </button>
+          </div>
+          <div class="button-row">
+            <button id="read-all-events" class="secondary-button">
+              全部已讀</button
+            ><button id="clear-all-events" class="secondary-button">
+              全部刪除
+            </button>
+          </div>
+          <div id="notification-list"></div>
+        </section>
+        <section id="outlook-view" class="view secondary-view" hidden>
+          <div class="section-heading">
+            <div>
+              <h2>Outlook 助理</h2>
+              <p>讀取你選定的郵件，確認資料後再交給 AI。</p>
+            </div>
+            <button id="read-mail" class="secondary-button">
+              <span data-icon="mail"></span>讀取選定郵件
+            </button>
+          </div>
+          <div class="info-card">
+            <span data-icon="shield"></span>
+            <div>
+              本功能只讀取信件，不會有其他變更。 若您同意自動補充內文，會自動匯出可能重要的信件全文，傳送給AI自動分析。
+            </div>
+          </div>
+          <section class="mail-batch-panel">
+            <h3>多封郵件整理</h3>
+            <p class="subtle">
+              本週從週一開始計算，只能取得最新的50封郵件。 僅讀取標題、寄件者、收件者，不會傳遞內文給AI。
+            </p>
+            <label for="batch-scope">日期查詢範圍</label>
+            <select id="batch-scope">
+              <option value="current_folder" selected>Outlook 目前資料夾及子資料夾</option>
+              <option value="inbox">預設收件匣及子資料夾</option>
+            </select>
+            <p class="subtle">
+              請先在 Outlook 選取要查詢的資料夾，再按日期按鈕；查詢包含該資料夾及其子資料夾。
+            </p>
+            <div class="button-row">
+              <button id="batch-selected" class="secondary-button">
+                讀取目前選取（可多封）
+              </button>
+            </div>
+            <div class="mail-presets">
+              <span>所有郵件</span
+              ><button data-mail-period="today" data-unread="false">今天</button
+              ><button data-mail-period="three_days" data-unread="false">
+                三天內</button
+              ><button data-mail-period="week" data-unread="false">本週</button>
+            </div>
+            <div class="mail-presets">
+              <span>只限未讀</span
+              ><button data-mail-period="today" data-unread="true">今天</button
+              ><button data-mail-period="three_days" data-unread="true">
+                三天內</button
+              ><button data-mail-period="week" data-unread="true">本週</button>
+            </div>
+            <p id="batch-status" role="status"></p>
+            <div class="button-row">
+              <button id="batch-select-all" class="text-button">
+                全選／全不選</button
+              ><span id="batch-selected-count"></span>
+            </div>
+            <div id="batch-mail-list"></div>
+            <label class="check-row"
+              ><input id="batch-auto-export" type="checkbox" checked aria-describedby="batch-quality-status" />允許 AI 從本次送出的郵件，挑選可能重要的信件後，自動要求詳細內文並自動送出。 (至多20封)</label
+            >
+            <p id="batch-quality-status" class="subtle" role="status" hidden></p>
+            <div class="button-row">
+              <button id="batch-analyze" class="primary-button">
+                確認範圍並分析</button
+              ><button id="batch-stop" class="secondary-button" disabled>
+                停止郵件流程</button
+              ><button id="batch-open" class="secondary-button" disabled>
+                開啟分析對話
+              </button>
+            </div>
+          </section>
+          <h3>單封手動預覽</h3>
+          <div id="mail-preview" class="mail-preview">
+            <div class="empty-small">
+              先在 Outlook 選取一封郵件，再按「讀取選定郵件」。
+            </div>
+          </div>
+          <div id="mail-actions" hidden>
+            <label class="check-row"
+              ><input
+                id="include-body"
+                type="checkbox"
+              />另外讀取並包含郵件內文（不含附件）</label
+            ><button id="analyze-mail" class="primary-button">
+              <span data-icon="sparkles"></span>確認資料並分析
+            </button>
+            <p class="subtle">分析結果會另開一個對話，並保存於本機。</p>
+          </div>
+        </section>
+      </main>
+    </div>
+    <dialog id="settings-dialog" aria-labelledby="settings-title">
+      <div class="dialog-heading">
+        <div>
+          <span class="eyebrow">PREFERENCES</span>
+          <h2 id="settings-title">設定</h2>
+        </div>
+        <button
+          class="icon-button close-dialog"
+          aria-label="關閉設定"
+          data-icon="x"
+        ></button>
+      </div>
+      <div class="settings-tabs" role="tablist" aria-label="設定分類">
+<button type="button" id="settings-tab-0" role="tab" aria-controls="settings-panel-0" aria-selected="true" tabindex="0">一般</button>
+<button type="button" id="settings-tab-1" role="tab" aria-controls="settings-panel-1" aria-selected="false" tabindex="-1">操作</button>
+<button type="button" id="settings-tab-2" role="tab" aria-controls="settings-panel-2" aria-selected="false" tabindex="-1">進階</button>
+<button type="button" id="settings-tab-3" role="tab" aria-controls="settings-panel-3" aria-selected="false" tabindex="-1">教學與更新日誌</button>
+</div><div class="settings-content">
+<div id="settings-panel-0" class="settings-panel" role="tabpanel" aria-labelledby="settings-tab-0"><section>
+          <h3>帳號</h3>
+          <p id="settings-account">尚未登入</p>
+          <div class="button-row">
+            <button id="logout" class="secondary-button">登出</button>
+          </div>
+        </section>
+<section>
+          <h3>圖表預設顏色</h3>
+          <p class="subtle">依系列順序使用色票，散佈點、折線及長條共用。已套用自訂設定的圖表保留原配色；選好後按儲存。</p>
+          <div id="chart-palette" class="chart-palette"></div>
+          <div class="button-row"><button id="chart-palette-save" type="button">儲存配色</button><button id="chart-palette-reset" type="button">還原預設色票</button></div>
+</section>
+<section>
+          <h3>外觀</h3>
+          <label class="check-row"><input id="dark-mode" type="checkbox" />深色模式</label>
+          <p class="subtle">使用柔和的深灰藍背景，設定會保留。</p>
+          <div class="display-settings">
+            <div><label for="font-size">文字大小 <output id="font-value">14 px</output></label>
+              <input id="font-size" type="range" min="12" max="20" step="1" value="14" /></div>
+            <div><label for="interface-scale">介面大小</label>
+              <select id="interface-scale"><option value="75">75%</option><option value="90">90%</option><option value="100" selected>100%</option><option value="110">110%</option><option value="125">125%</option><option value="150">150%</option><option value="175">175%</option><option value="200">200%</option></select></div>
+            <div class="font-setting"><label for="ui-font">介面字體</label>
+              <select id="ui-font"><option value="microsoft_jhenghei">微軟正黑體（Windows 系統）</option><option value="huninn">jf 粉圓體</option><option value="wenkai_tc" selected>霞鶩文楷體（繁中，非等寬）</option><option value="wenkai_mono_tc">霞鶩文楷體（繁中，等寬）</option></select>
+              <button id="font-licenses-open" class="text-button" type="button">字型授權</button></div>
+          </div>
+          <p class="subtle">介面大小同時縮放文字、按鈕與排版，僅由此處設定。字體選擇會保留；程式碼區使用等寬字體。</p>
+        </section>
+<section>
+          <h3>視窗行為</h3>
+          <label class="check-row"><input id="minimize-to-taskbar" type="checkbox" checked />縮小時保留在 Windows 工作列</label>
+          <p class="subtle">取消勾選後，縮小會收到系統托盤。按 X 一律收到托盤；如需離開，請在托盤圖示按右鍵 → 離開。</p>
+        </section>
+<section>
+          <h3>通知</h3>
+          <label class="check-row"
+            ><input
+              id="notification-popups"
+              type="checkbox"
+              checked
+            />新通知與等待確認時顯示 Windows 提示</label
+          >
+          <p class="subtle">
+            程式在背景時，專案詢問、CAD修改確認及檔案等待也會提醒；點通知可返回。Windows可能依通知設定或勿擾模式隱藏彈出提示，工作列仍會提示。
+          </p>
+        </section>
+<section>
+          <h3>版本與服務</h3>
+          <p>Largan, Inc. · 公司 AI 助理 · Dev: 1230783</p>
+          <p class="subtle">Copyright © 2026 Largan, Inc. All rights reserved.</p>
+          <p id="update-status" class="subtle" role="status"></p>
+          <p id="version-label">LM_AI</p>
+          <div class="button-row">
+            <button id="refresh" class="secondary-button">
+              <span data-icon="refresh"></span>重新整理服務</button
+            ><button id="download" class="secondary-button">
+              <span data-icon="download"></span>下載更新
+            </button>
+          </div>
+        </section></div>
+<div id="settings-panel-1" class="settings-panel" role="tabpanel" aria-labelledby="settings-tab-1" hidden><section>
+          <h3>選取文字快捷鍵</h3>
+          <div class="input-row">
+            <input
+              id="hotkey"
+              aria-label="快捷鍵"
+              value="Win+Esc"
+              readonly
+              title="點此後直接按下想使用的組合鍵"
+              spellcheck="false"
+            /><button id="record-hotkey" class="secondary-button">錄製</button>
+            <button id="cancel-hotkey" class="secondary-button" hidden>
+              取消
+            </button>
+            <button id="save-hotkey" class="secondary-button">套用</button>
+          </div>
+          <p class="subtle" id="hotkey-record-status" aria-live="polite">
+            點輸入框或「錄製」，直接按 Win+Esc 等組合，再按套用。
+          </p>
+          <p class="subtle">
+            支援 Win、Ctrl、Alt、Shift
+            搭配字母、數字、功能鍵與控制鍵。系統占用的組合會提示；只帶入草稿，不自動送出。
+          </p>
+        </section>
+<section>
+          <h3>使用習慣</h3>
+          <label class="check-row"><input id="hotkey-enabled" type="checkbox" />啟用選取文字快捷鍵</label>
+          <p class="subtle">只在按下指定快捷鍵時複製選字並填入草稿，不監聽一般輸入、不自動送出。</p>
+          <label class="check-row"><input id="selection-icon" type="checkbox" />選取文字時顯示 AI 圖示</label>
+          <p class="subtle">在支援的程式中偵測選取範圍與位置；點擊圖示才擷取文字，不會因選取而上傳內容。</p>
+          <fieldset><legend>Enter 行為</legend>
+            <label class="option-row"><input type="radio" name="enter-behavior" id="enter-newline" /><span>換行</span></label>
+            <label class="option-row"><input type="radio" name="enter-behavior" id="enter-send" /><span>送出</span></label>
+          </fieldset>
+          <p id="enter-hint" class="subtle"></p>
+          <fieldset><legend>快捷操作的模型</legend>
+            <label class="option-row"><input type="radio" name="quick-model" id="quick-fast" /><span>簡單任務自動使用快速模型</span></label>
+            <label class="option-row"><input type="radio" name="quick-model" id="quick-current" /><span>維持目前選擇的模型</span></label>
+          </fieldset>
+          <p id="quick-model-hint" class="subtle"></p>
+          <label class="check-row"><input id="always-new-chat" type="checkbox" />永遠開啟新對話</label>
+          <p class="subtle">啟動或從托盤、捷徑叫出時開啟新對話，保留原草稿與背景任務；點擊指定對話或任務不受影響。</p>
+
+        </section></div>
+<div id="settings-panel-2" class="settings-panel" role="tabpanel" aria-labelledby="settings-tab-2" hidden><section><h3>VNC</h3>          <label class="check-row"><input id="vnc-enabled" type="checkbox" />啟用 VNC 快速連線功能</label>
+          <p class="subtle">啟用後顯示側欄入口。機台設定沿用 LM_AI.exe 同一資料夾的 machines.json 與 user_config.json。</p></section>
+<section>
+          <h3>本機資料</h3>
+          <p class="subtle">
+            對話在此 Windows
+            使用者下加密保存。登出會保留歷史；開啟舊對話後，只有再按送出才會傳給目前登入的帳號。滑鼠移至最近對話的標題，可編輯標題、置頂或刪除對話。
+            伺服器端仍會儲存已送出的對話、附件及任務資料；刪除本機資料或移除任務卡片不會刪除伺服器端的紀錄。
+          </p>
+        </section>
+<section id="advanced-settings">
+          <h3>診斷</h3>
+          <label class="check-row"><input type="checkbox" id="debug-mode">DEBUG：保存專案逐輪 JSON（新任務生效）</label>
+          <p class="subtle">完整 JSON 與不含正文的用量統計分開查看、複製。</p>
+          <label for="project-diagnostics-run">目前對話的執行紀錄</label>
+          <select id="project-diagnostics-run" size="4" aria-label="選擇對話請求或專案任務"></select>
+          <button id="project-diagnostics-open" class="secondary-button">查看執行紀錄</button>
+          <h4>輸出錯誤資訊</h4>
+          <p class="subtle">輸出可攜式 JSON，包含近期錯誤碼、時間、操作階段、版本與技術代碼；不附加對話、郵件或文件內容。檔案由你自行交給維護者。</p>
+          <label class="check-row"><input type="checkbox" id="diagnostics-include-details">附加原始錯誤文字（可能包含檔名、路徑或服務回覆）</label>
+          <button id="diagnostics-export" class="secondary-button">匯出錯誤診斷檔</button>
+          <p id="diagnostics-export-status" class="subtle" role="status"></p>
+        </section></div>
+<div id="settings-panel-3" class="settings-panel" role="tabpanel" aria-labelledby="settings-tab-3" hidden>
+  <section><h3>使用教學</h3><p class="subtle">依功能分類選擇假資料互動練習，不呼叫 AI，也不改動正式資料。已看過或跳過的教學都能隨時重看。</p>
+    <button id="project-tutorial-menu" type="button" class="primary-button">選擇互動教學</button>
+    <div id="tutorial-catalog" class="tutorial-catalog"></div>
+    <p id="onboarding-storage-status" class="subtle" role="status"></p>
+  </section>
+  <section><div class="tutorial-section-heading"><h3>更新日誌</h3><button id="updates-replay" type="button" class="secondary-button">重看更新日誌</button></div>
+    <p class="subtle">查看目前版本的更新內容。</p>
+  </section>
+</div>
+</div>
+    </dialog>
+    <dialog id="required-update-dialog" aria-labelledby="required-update-title">
+      <h2 id="required-update-title">必須更新 LM_AI</h2>
+      <p>目前版本已停止支援。安裝更新完成前，功能暫時停用。</p>
+      <p id="required-update-status" role="status"></p>
+      <div class="button-row right">
+        <button id="required-update-exit">退出程式</button>
+        <button id="required-update-refresh">重新檢查</button>
+        <button id="required-update-download" class="primary-button">下載更新</button>
+      </div>
+    </dialog>
+    <dialog id="confirm-dialog">
+      <h2 id="confirm-title">確認操作</h2>
+      <p id="confirm-message"></p>
+      <div class="button-row right">
+        <button id="confirm-cancel" class="secondary-button">取消</button
+        ><button id="confirm-ok" class="primary-button">確認</button>
+      </div>
+    </dialog>
+    <dialog id="rename-dialog">
+      <h2>編輯對話標題</h2>
+      <input id="rename-title" maxlength="100" aria-label="對話標題" />
+      <div class="button-row right"><button id="rename-cancel">取消</button><button id="rename-save">儲存</button></div>
+    </dialog>
+    <dialog id="vnc-manager-dialog" aria-labelledby="vnc-manager-title">
+      <div class="section-heading"><h2 id="vnc-manager-title">機台管理</h2><button id="vnc-manager-close" class="secondary-button">關閉</button></div>
+      <p class="subtle">編輯機台保留原位置；可用上移、下移自行排列，順序會直接儲存。</p>
+      <div class="button-row vnc-batch-actions">
+        <span id="vnc-selection-count">尚未選取</span>
+        <button id="vnc-batch-up" class="secondary-button" disabled>機台上移</button>
+        <button id="vnc-batch-down" class="secondary-button" disabled>機台下移</button>
+        <button id="vnc-groups-up" class="secondary-button" disabled>分類上移</button>
+        <button id="vnc-groups-down" class="secondary-button" disabled>分類下移</button>
+        <button id="vnc-batch-delete" class="secondary-button" disabled>刪除已選項目</button>
+      </div>
+      <p class="subtle">分類勾選框可全選該類機台。機台上／下移調整類內順序；分類上／下移調整整個頁籤順序。</p>
+      <div class="vnc-manager-layout">
+        <div class="vnc-manager-list"><table>
+          <thead><tr><th>選取</th><th>分類</th><th>機台名稱</th><th>IP / Server</th><th>密碼</th><th>操作</th></tr></thead>
+          <tbody id="vnc-manager-rows"></tbody>
+        </table></div>
+        <form id="vnc-machine-form" class="vnc-editor">
+          <label for="vnc-group">頁籤 / 分類</label><input id="vnc-group" list="vnc-group-names" maxlength="256" required />
+          <datalist id="vnc-group-names"></datalist>
+          <label for="vnc-name">機台名稱</label><input id="vnc-name" maxlength="256" required />
+          <label for="vnc-ip">IP / Server</label><input id="vnc-ip" maxlength="512" placeholder="可留空，連線前請補上位址" />
+          <label for="vnc-password">密碼</label><input id="vnc-password" type="password" maxlength="1024" autocomplete="new-password" />
+          <label class="check-row"><input id="vnc-clear-password" type="checkbox" />清除已存密碼</label>
+          <p class="subtle">編輯時密碼留空會保留原值。設定檔維持原工具的明文密碼格式。</p>
+          <button id="vnc-save-machine" type="submit" class="primary-button">新增 / 儲存</button>
+          <button id="vnc-new-machine" type="button" class="secondary-button">清空欄位（新增）</button>
+          <button id="vnc-delete-machine" type="button" class="secondary-button" disabled>刪除選取機台</button>
+        </form>
+      </div>
+      <p id="vnc-manager-status" role="status"></p>
+    </dialog>
+    <dialog id="vnc-sync-dialog" aria-labelledby="vnc-sync-title">
+      <div class="dialog-heading"><h2 id="vnc-sync-title">從網站更新機台清單</h2><button id="vnc-sync-close" class="secondary-button">關閉</button></div>
+          <fieldset id="vnc-sync-controls" class="vnc-sync-controls">
+            <legend>從網站更新機台清單</legend>
+            <div class="vnc-login-fields">
+              <label>帳號<input id="vnc-sync-user" autocomplete="username" maxlength="256" /></label>
+              <label>密碼<input id="vnc-sync-password" type="password" autocomplete="off" maxlength="1024" placeholder="輸入網站登入密碼" /></label>
+            </div>
+            <label class="check-row"><input id="vnc-sync-clear-password" type="checkbox" />清除已記住的登入密碼</label>
+            <p class="subtle">記住登入資料；僅在按「更新機台清單」時登入，匯入或捨棄清單後登出。密碼留空會沿用已存值。</p>
+            <details><summary>詳細設定：網站根目錄與連結</summary>
+              <div class="vnc-sync-paths">
+                <label>網站根目錄<input id="vnc-sync-root" maxlength="2048" /></label>
+                <label>首頁連結<input id="vnc-sync-home" maxlength="2048" /></label>
+                <label>登入連結<input id="vnc-sync-login" maxlength="2048" /></label>
+                <label>登出連結<input id="vnc-sync-logout" maxlength="2048" /></label>
+                <p class="subtle">連結填相對路徑，可包含查詢參數。空白的機台 API 欄位不會送出請求。</p>
+                <div id="vnc-sync-endpoints"></div>
+              </div>
+            </details>
+            <div class="button-row">
+              <button id="vnc-sync-save" class="secondary-button">儲存登入與連結設定</button>
+              <button id="vnc-sync-start" class="primary-button">更新機台清單</button>
+              <button id="vnc-sync-cancel" class="secondary-button" hidden>停止取得清單</button>
+            </div>
+          </fieldset>
+      <p id="vnc-sync-status" role="status"></p>
+          <section id="vnc-import-preview" class="vnc-sync-controls" hidden>
+            <h3>選擇要匯入的分類與機台</h3>
+            <p class="subtle">勾選整個分類，或只勾選需要的機台。未勾選項目會捨棄，不會刪除已儲存的機台。</p>
+            <div class="button-row"><button id="vnc-import-refresh" class="secondary-button">再次取得更新清單</button></div>
+            <div id="vnc-import-groups"></div>
+            <div class="button-row"><button id="vnc-import-apply" class="primary-button" disabled>匯入已選項目</button><button id="vnc-import-discard" class="secondary-button">捨棄本次清單</button></div>
+          </section>
+    </dialog>
+    <dialog id="project-dialog" aria-labelledby="project-dialog-title">
+      <h2 id="project-dialog-title">新增專案</h2>
+      <p>選擇資料夾，讓 AI 協助閱讀、整理與產生成果。執行時會將所需內容送至 AI 服務，請確認資料適合提供使用。</p>
+      <details class="project-file-types"><summary>支援的檔案與功能</summary>
+        <ul><li>文件：Word、Excel、PowerPoint、文字型 PDF、Outlook MSG。</li>
+          <li>文字與程式：依內容及編碼讀取，文字副本可編輯，包括 TXT、MD、PY、BAT、CMD、PS1 等。</li>
+          <li>圖片：JPG、PNG、BMP、TIFF、GIF；由任務需要決定讀取。</li>
+          <li>資料與圖形：LOG 分析、圖表、Mermaid 流程圖、有限的二維 CAD 操作。</li>
+          <li>未知副檔名也會列出；是否可讀取，以實際內容與可用工具為準。</li></ul>
+      </details>
+      <div class="project-name-field"><label for="project-name">專案名稱</label><input id="project-name" maxlength="60" autocomplete="off" placeholder="輸入專案名稱" /></div>
+      <button id="project-default-folder" class="secondary-button" type="button">建立專案資料夾</button>
+      <div class="dialog-actions"><button id="project-cancel">取消</button><button id="project-create" class="primary-button">選擇資料夾並建立</button></div>
+    </dialog>
+    <dialog id="project-default-dialog" aria-labelledby="project-default-title">
+      <h2 id="project-default-title">建立本機專案資料夾</h2>
+      <p>在目前使用者的個人資料夾內，建立 LM_AI_Projects／LM_AI專案資料夾_YYYYMMDD。同一天重複建立會加上序號，既有資料保留。</p>
+      <div class="dialog-actions"><button id="project-default-cancel">取消</button><button id="project-default-profile" class="primary-button">建立</button></div>
+    </dialog>
+    <dialog id="project-quick-dialog" class="weekly-dialog" aria-labelledby="project-quick-title">
+      <h2 id="project-quick-title">專案快速操作</h2>
+      <section id="project-quick-outlook">
+        <p>查看您選擇的 Outlook 信件，整理需要處理、回覆或追蹤的事項、明確期限與郵件依據。</p>
+        <p class="weekly-warning">讀取前仍會讓您勾選資料夾；所選信件的必要內容會送至目前 AI 服務分析。</p>
+        <div class="weekly-dates"><label>開始日期<input id="project-quick-from" type="date" /></label><label>結束日期<input id="project-quick-to" type="date" /></label></div>
+        <p>預設本週一至今天，補充中明確指定的日期優先。不寄信、不修改信件。</p>
+      </section>
+      <label>要提醒 AI 的內容（選填）<textarea id="project-quick-notes" maxlength="1000" rows="5"></textarea></label>
+      <div class="dialog-actions"><button id="project-quick-cancel">取消</button><button id="project-quick-send" class="primary-button">送出</button></div>
+    </dialog>
+    <dialog id="weekly-info-dialog" class="weekly-dialog" aria-labelledby="weekly-info-title">
+      <h2 id="weekly-info-title">生成週報使用說明</h2>
+      <ol>
+        <li><strong class="weekly-warning">此功能會讀取您的 Outlook 信件</strong>，包括收件匣、子資料夾與寄件備份（已寄出的郵件），整理重點後放入週報。讀取前會再次讓您選擇資料夾，可在此時<strong class="weekly-warning">取消勾選</strong>不重要或具有隱私的資料夾；<strong class="weekly-warning">被取消勾選的資料夾內容將不會送出</strong>。此設定不撤回先前已送出的資料，也不移除允許信件中已有的引用文字。</li>
+        <li>程式會在專案內建立「週報生成使用資料_YYYYMMDD_HHMMSS」。<strong class="weekly-warning">請在此資料夾中放入您認為重要、要放入週報的參考資料</strong>，例如 Office、文字檔、PDF 或 JPG／JPEG／PNG 圖片。AI 會依任務需要選擇圖片閱讀；快速模型不支援圖片。<strong class="weekly-warning">文件內嵌圖片與掃描型 PDF 仍不在圖片閱讀範圍。</strong></li>
+        <li>按確定後建立資料夾並開啟補充視窗，可說明資料用途，例如「PDF 是論文，請重點整理後放入週報」或「Excel 是工作日誌，請搭配信件整理本週工作」。補充內容可以留白。</li>
+        <li>依資料量與 AI 處理速度，生成過程可能超過 2 小時，請耐心等候。最後送出並確認參考資料後才會開始。</li>
+      </ol>
+      <div class="dialog-actions"><button id="weekly-info-cancel">取消</button><button id="weekly-info-ok" class="primary-button">確定</button></div>
+    </dialog>
+    <dialog id="weekly-input-dialog" class="weekly-dialog" aria-labelledby="weekly-input-title">
+      <h2 id="weekly-input-title">準備週報參考資料</h2>
+      <p>請先將上週週報與其他參考資料放入下方資料夾，再送出要求。</p>
+      <button id="weekly-folder" class="text-button" title="開啟素材資料夾"></button>
+      <div class="weekly-dates"><label>開始日期<input id="weekly-from" type="date" /></label><label>結束日期<input id="weekly-to" type="date" /></label></div>
+      <p>預設本週一至今天。補充中若明確指定上週、W40 或其他日期，將優先依該要求處理。</p>
+      <label>要提醒 AI 的內容（選填）<textarea id="weekly-notes" maxlength="12000" rows="7" placeholder="例如：PDF 是論文，請重點整理後放入週報。&#10;Excel 是工作日誌，請搭配信件整理本週工作。"></textarea></label>
+      <div class="dialog-actions"><button id="weekly-input-cancel">取消</button><button id="weekly-send" class="primary-button">送出週報生成要求</button></div>
+    </dialog>
+    <dialog id="weekly-confirm-dialog" aria-labelledby="weekly-confirm-title">
+      <h2 id="weekly-confirm-title" class="weekly-warning">請確認是否已在資料夾中放入參考資料？</h2>
+      <p>建議至少要放上週週報，以免 AI 沒有格式可以參考。</p>
+      <p>例如：上週週報（參考格式）、各類您所需要的資料……等等。</p>
+      <div class="dialog-actions"><button id="weekly-confirm-no">否，返回準備</button><button id="weekly-confirm-yes" class="primary-button">是，開始生成</button></div>
+    </dialog>
+    <dialog id="project-settings-dialog" aria-labelledby="project-settings-title">
+      <div class="dialog-heading"><h2 id="project-settings-title">專案設定</h2><button id="project-settings-close">關閉</button></div>
+      <label>專案名稱<input id="project-edit-name" maxlength="60" autocomplete="off" /></label>
+      <div class="dialog-actions"><button id="project-rename-save" class="primary-button">儲存名稱</button></div>
+      <div class="project-settings-actions">
+        <button id="project-settings-import" class="secondary-button">匯入文字</button>
+        <button id="project-clear-imports" class="secondary-button" hidden>清除匯入文字</button>
+        <button id="project-remove-open" class="secondary-button">移除專案</button>
+      </div>
+    </dialog>
+    <dialog id="project-remove-dialog" aria-labelledby="project-remove-title">
+      <h2 id="project-remove-title">移除專案</h2>
+      <p id="project-remove-message"></p><p>原始檔案與已產生的檔案都會保留。</p>
+      <div class="dialog-actions">
+        <button id="project-remove-cancel">取消</button>
+        <button id="project-remove-delete" class="secondary-button">一併刪除對話</button>
+        <button id="project-remove-move" class="primary-button">移到一般對話</button>
+      </div>
+    </dialog>
+    <dialog id="project-import-dialog" aria-labelledby="project-import-title">
+      <h2 id="project-import-title">匯入文字</h2>
+      <label for="project-import-path">檔案</label>
+      <div class="project-file-picker"><input id="project-import-path" readonly placeholder="選擇專案內的 TXT 或 MD 檔案" /><button id="project-import-choose" class="secondary-button">選擇檔案</button></div>
+      <label for="project-import-text">文件全文</label>
+      <textarea id="project-import-text" rows="12" placeholder="複製文件全文後，貼在這裡…"></textarea>
+      <div class="dialog-actions"><button id="project-import-cancel">取消</button><button id="project-import-save" class="primary-button" disabled>匯入</button></div>
+    </dialog>
+    <dialog id="project-diagnostics-dialog" aria-labelledby="project-diagnostics-title">
+      <div class="dialog-heading"><h2 id="project-diagnostics-title">本機執行紀錄</h2><button id="project-diagnostics-close">關閉</button></div>
+      <p>JSON／執行紀錄（含對話內容，每次顯示一輪）</p>
+      <div class="diagnostics-navigation"><label>回合 <select id="project-diagnostics-round"></select></label>
+      <button id="project-diagnostics-prev" class="secondary-button">上一輪</button><button id="project-diagnostics-next" class="secondary-button">下一輪</button><button id="project-diagnostics-latest" class="secondary-button">查看最新</button></div>
+      <textarea id="project-diagnostics-text" readonly rows="20" aria-label="AI 回覆與工具結果"></textarea>
+      <div class="dialog-actions"><button id="project-diagnostics-refresh">重新讀取</button><button id="project-diagnostics-copy">複製 JSON／紀錄</button></div>
+      <p>用量統計（不含對話、檔名或工具參數，可單獨複製）</p>
+      <p>簡短用量（僅實際 tokens；缺少回傳時顯示未取得）</p>
+      <textarea id="project-token-short-text" readonly rows="8" aria-label="簡短實際用量"></textarea>
+      <button id="project-token-short-copy">複製簡短用量</button>
+      <details><summary>完整用量與估算區塊</summary>
+      <textarea id="project-token-text" readonly rows="12" aria-label="用量統計"></textarea>
+      <button id="project-token-copy">只複製用量統計</button>
+      </details>
+    </dialog>
+    <dialog id="project-artifact-dialog" aria-labelledby="project-artifact-title">
+      <div class="dialog-heading"><h2 id="project-artifact-title">成果與工作流程</h2><button id="project-artifact-close">關閉</button></div>
+      <p>本專案所有對話的已交付成果。重新整理會核對版本；來源有變更時提醒更新，不自動重做。</p>
+      <div class="dialog-actions"><button id="project-artifact-refresh">重新整理</button><button id="project-artifact-more">下一頁</button><button id="project-artifact-export">打包勾選成果</button></div>
+      <p id="project-artifact-status" role="status"></p>
+      <div id="project-artifact-list"></div>
+      <h3>可重跑工作流程</h3><p>選取後填入草稿，確認新資料與參數後送出。每一步仍會重新核對權限與結果。</p>
+      <div id="project-workflow-list"></div>
+    </dialog>
+    <dialog id="diagram-source-dialog" aria-labelledby="diagram-source-title">
+      <div class="dialog-heading"><h2 id="diagram-source-title">節點檔案依據</h2><button id="diagram-source-close">關閉</button></div>
+      <p id="diagram-source-location"></p><p id="diagram-source-notice" role="status"></p>
+      <textarea id="diagram-source-text" readonly rows="20" aria-label="唯讀來源預覽"></textarea>
+    </dialog>
+    <div id="toast" role="status" aria-live="polite" popover="manual" hidden></div>
+    <script src="vendor/markdown-it.min.js"></script>
+    <script src="vendor/footnote.min.js"></script>
+    <script src="vendor/task-lists.min.js"></script>
+    <script src="vendor/katex.min.js"></script>
+    <script src="vendor/texmath.js"></script>
+    <script src="vendor/highlight.min.js"></script>
+    <script src="vendor/languages/rust.min.js"></script>
+    <script src="vendor/languages/powershell.min.js"></script>
+    <script src="vendor/languages/latex.min.js"></script>
+    <script src="vendor/purify.min.js"></script>
+    <script src="icons.js"></script>
+    <script src="self-test.js"></script>
+    <script src="vendor/echarts.min.js"></script>
+    <script src="chart-transform.js"></script>
+    <script src="chart-appearance.js"></script>
+    <script src="chart-layout.js"></script>
+    <script src="chart-text.js"></script>
+    <script src="chart-editor.js"></script>
+    <script src="charts.js"></script>
+    <script src="vendor/mermaid.min.js"></script>
+    <script src="diagrams.js"></script>
+    <script src="analysis.js"></script>
+    <script src="review.js"></script>
+    <script src="review-self-test.js"></script>
+    <script src="reply-tables.js"></script>
+    <script src="fonts/licenses.js"></script>
+    <script src="app.js"></script>
+    <script src="work.js"></script>
+    <script src="mail.js"></script>
+    <script src="behavior.js"></script>
+    <script src="vnc.js"></script>
+    <script src="vnc-sync.js"></script>
+    <script src="chart-review-examples.js"></script>
+    <script src="projects.js"></script>
+    <script src="artifacts.js"></script>
+    <script src="settings.js"></script>
+    <script src="tutorial-lessons.js"></script>
+    <script src="project-tutorial.js"></script>
+    <script src="onboarding.js"></script>
+    <script src="weekly.js"></script>
+    <script src="project-quick.js"></script>
+    <script src="project-composer.js"></script>
+    <script src="dialogs.js"></script>
+    <script src="auth-gate.js"></script>
+  </body>
+</html>

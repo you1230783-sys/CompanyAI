@@ -1,0 +1,56 @@
+{
+  "contract_version": "desktop-agent-v1",
+  "principal_id": "principal_demo",
+  "model": "quality",
+  "capability_revision": "quality_cfg_001",
+  "execution_modes": [
+    "background"
+  ],
+  "input_content_types": [
+    "text"
+  ],
+  "tool_types": [
+    "function"
+  ],
+  "native_tool_calls": true,
+  "strict_tool_arguments": true,
+  "tool_choice_modes": [
+    "auto",
+    "none",
+    "required",
+    "function"
+  ],
+  "parallel_tool_calls": false,
+  "response_formats": [
+    "text",
+    "json_schema"
+  ],
+  "strict_response_schema": true,
+  "schema_profiles": [
+    "lmai-json-schema-v1"
+  ],
+  "optional_request_fields": [
+    "max_completion_tokens"
+  ],
+  "extensions": [],
+  "limits": {
+    "request_bytes": 2097152,
+    "response_bytes": 2097152,
+    "messages": 512,
+    "message_content_bytes": 262144,
+    "tools": 128,
+    "tools_bytes": 524288,
+    "tool_arguments_bytes": 262144,
+    "tool_calls_per_message": 1,
+    "schema_depth": 32,
+    "metadata_bytes": 4096,
+    "max_completion_tokens": 8192,
+    "context_window_tokens": 32768
+  },
+  "default_max_completion_tokens": 4096,
+  "retention": {
+    "result_days": 30,
+    "idempotency": "account_lifetime"
+  },
+  "notification_policy": "desktop_only"
+}

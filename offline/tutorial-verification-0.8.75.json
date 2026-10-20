@@ -1,0 +1,49 @@
+{
+  "version": "0.8.75",
+  "recorded_at": "2026-10-21T00:14:31.738087+08:00",
+  "result": "PASS_BASIC_AND_TUTORIALS_AND_NSIS_PACKAGING",
+  "artifacts": [
+    {
+      "name": "LM_AI.exe",
+      "sha256": "0a1e102ff4a032d11a661b7c9063cdc30d6d3c1cbdfcd3a98b0251efa1d503dc",
+      "bytes": 58615296
+    },
+    {
+      "name": "LM_AI_Setup.exe",
+      "sha256": "b214c7fa9723a22758f1496a9728d309006f3ff999b0860e2b114e3169ff85fa",
+      "bytes": 46813158
+    }
+  ],
+  "msvc": "14.29.30133",
+  "compiler_report": [
+    "v142.c",
+    "Verified _MSC_FULL_VER=192930159 x64"
+  ],
+  "empty_cargo_cache": true,
+  "lock_vendor_frozen": true,
+  "rust_test_groups": 18,
+  "rust_tests_passed": 107,
+  "browser_tutorials": {
+    "result": "PASS",
+    "topics": 55,
+    "native_commands_added": 0,
+    "draft_unchanged": true
+  },
+  "settings_browser_regression": "PASS",
+  "native_webview_self_check": "PASS",
+  "cad_synthetic_contracts_and_runtime": "PASS",
+  "real_cad_drawing_tested": false,
+  "real_office_tested": false,
+  "company_service_tested": false,
+  "model_calls_in_tutorials": false,
+  "installer_packaged": true,
+  "signed_package_verified_by_native_updater": true,
+  "installer_installation_lifecycle_tested": false,
+  "full_validation_completed": false,
+  "limitations": [
+    "Only basic native validation and related tutorial/browser regression were run in this release.",
+    "Tutorial output is fixed simulation; it does not prove model, Office, Outlook, VNC or CAD task success.",
+    "Full Office/CAD/model and installer lifecycle results from 0.8.74 remain historical, not rerun.",
+    "55 topics were exercised automatically; not every scene/theme/scale was visually inspected."
+  ]
+}

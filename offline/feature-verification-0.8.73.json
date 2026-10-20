@@ -1,0 +1,685 @@
+{
+  "version": "0.8.73",
+  "result": "PASS_FULL_LOCAL_FUNCTIONS_WITH_MODEL_CONTENT_AND_MANUAL_LIMITATIONS",
+  "release_ready": true,
+  "recorded_at": "2026-10-19T23:10:10.058000+08:00",
+  "artifacts": {
+    "dist/LM_AI.exe": {
+      "bytes": 57409024,
+      "sha256": "5648e143634daaf61974a980bfe7a080f61c3c1fa98919a2e65360bbe1799b64"
+    },
+    "dist/LM_AI_Setup.exe": {
+      "bytes": 46618647,
+      "sha256": "80396172b65f97104514de25a87b92c9787152534c21f998134a89b59d006ae7"
+    }
+  },
+  "runtime_sha256": "4ff7453eb569f48a547b9b007389fee66a02548a35f7b825e1191d596fc0f6fc",
+  "build": {
+    "finished_at": "2026-10-19T22:27:34.5091369+08:00",
+    "msvc": "14.29.30133",
+    "compiler_report": [
+      "v142.c",
+      "Verified _MSC_FULL_VER=192930159 x64"
+    ],
+    "empty_cargo_cache": true,
+    "frozen": true,
+    "vendor": true,
+    "rust_library_tests": 410,
+    "cad_contracts": 99,
+    "full_local_automated": true,
+    "real_office": true,
+    "real_vnc": true,
+    "installer_lifecycle": true
+  },
+  "model": {
+    "service": "local Strata",
+    "name": "qwen3.8-flash-next-q2_0",
+    "reasoning_effort": "low",
+    "max_output_tokens": 20000,
+    "source_files_verified": 337,
+    "cases": [
+      {
+        "submitted": 3,
+        "exit": 0,
+        "total": 3,
+        "report": "FINISHED_REQUIRES_REVIEW",
+        "case": "mermaid"
+      },
+      {
+        "submitted": 2,
+        "exit": 0,
+        "total": 2,
+        "report": "FINISHED_REQUIRES_REVIEW",
+        "case": "cad2008"
+      },
+      {
+        "submitted": 2,
+        "exit": 0,
+        "total": 2,
+        "report": "FINISHED_REQUIRES_REVIEW",
+        "case": "cad2022"
+      },
+      {
+        "case": "analysis",
+        "exit": null,
+        "report": "FINISHED_REQUIRES_REVIEW",
+        "submitted": 1,
+        "total": 1,
+        "retry_after_fixture_initialization": true,
+        "prior_attempts": [
+          {
+            "submitted": 1,
+            "exit": 1,
+            "total": 1,
+            "report": "STOPPED",
+            "case": "analysis"
+          }
+        ],
+        "exit_capture": "not_retained_by_windows_powershell_wrapper",
+        "completion_evidence": "UTF-8 native scenario report; error=null; artifacts independently reviewed",
+        "observer_issue": "Windows PowerShell 5 decoded UTF-8 JSON as ANSI after the native task completed. Wrapper exit 0 was observed; child exit code was not retained."
+      }
+    ],
+    "raw_model_arguments_unmodified": true,
+    "fixture_environment_correction": {
+      "original_analysis_result": "STOPPED",
+      "original_attempt_retained": true,
+      "cause": "Private frozen model driver staged Python files without the normal installer runtime initialization.",
+      "initialization_result": "PASS_FROZEN_FIXTURE_PYTHON_INITIALIZATION",
+      "initialized_at": "2026-10-19T22:50:11.0127404+08:00",
+      "selected_retry_started_at": "2026-10-19T22:51:12.0644400+08:00",
+      "same_original_scenario_sha256": "ed409da790caa97c6dcbd14afed3b7f1a3e50606cc3158f90ba33236e53a24d3",
+      "scope": "Only the synthetic analysis case was rerun after canonical runtime initialization; original failed inputs and outcomes were preserved. Production installer and full native tests had already initialized and verified Python."
+    },
+    "metrics": [
+      {
+        "case": "mermaid",
+        "model_rounds": 35,
+        "prompt_tokens_including_cached": 388603,
+        "completion_tokens": 16932,
+        "model_elapsed_seconds": 672.982,
+        "output_limit_rounds": 0,
+        "tool_calls": {
+          "list_files": 1,
+          "run_batch": 7,
+          "load_skill": 5,
+          "create_mermaid": 4,
+          "export_mermaid": 6,
+          "finish": 3,
+          "create_working_copy": 1,
+          "read_file": 5,
+          "edit_text": 3,
+          "save_copy": 1
+        },
+        "repeated_identical_cad_query_arguments": 0,
+        "failed_tool_operations_deduplicated": 4,
+        "failure_categories": {
+          "batch_argument_envelope": 1,
+          "mermaid_syntax": 1,
+          "text_edit_source_mismatch": 1,
+          "wrong_task_copy": 1
+        }
+      },
+      {
+        "case": "cad2008",
+        "model_rounds": 42,
+        "prompt_tokens_including_cached": 847583,
+        "completion_tokens": 42829,
+        "model_elapsed_seconds": 1450.348,
+        "output_limit_rounds": 0,
+        "tool_calls": {
+          "load_skill": 2,
+          "compact_context": 1,
+          "cad_plan_start": 2,
+          "cad_plan_part": 2,
+          "cad_plan_commit": 1,
+          "finish": 2,
+          "cad_snapshot": 7,
+          "cad_query": 15,
+          "cad_edit": 10
+        },
+        "repeated_identical_cad_query_arguments": 0,
+        "failed_tool_operations_deduplicated": 4,
+        "failure_categories": {
+          "unsupported_version_label": 1,
+          "fillet_pick_at_intersection": 1,
+          "ambiguous_pick": 1,
+          "missing_source_snapshot": 1
+        }
+      },
+      {
+        "case": "cad2022",
+        "model_rounds": 42,
+        "prompt_tokens_including_cached": 861844,
+        "completion_tokens": 46145,
+        "model_elapsed_seconds": 1353.605,
+        "output_limit_rounds": 0,
+        "tool_calls": {
+          "load_skill": 2,
+          "compact_context": 1,
+          "cad_plan_start": 1,
+          "cad_plan_part": 1,
+          "cad_plan_commit": 1,
+          "finish": 2,
+          "cad_snapshot": 7,
+          "cad_query": 17,
+          "cad_edit": 10
+        },
+        "repeated_identical_cad_query_arguments": 0,
+        "failed_tool_operations_deduplicated": 3,
+        "failure_categories": {
+          "missing_source_snapshot": 2,
+          "ambiguous_pick": 1
+        }
+      },
+      {
+        "case": "analysis_uninitialized_fixture",
+        "model_rounds": 18,
+        "prompt_tokens_including_cached": 175968,
+        "completion_tokens": 6412,
+        "model_elapsed_seconds": 221.244,
+        "output_limit_rounds": 0,
+        "tool_calls": {
+          "list_files": 1,
+          "read_file": 6,
+          "load_skill": 1,
+          "run_python": 10
+        },
+        "repeated_identical_cad_query_arguments": 0,
+        "failed_tool_operations_deduplicated": 9,
+        "failure_categories": {
+          "csv_encoding_argument": 3,
+          "test_fixture_runtime_not_initialized": 6
+        }
+      },
+      {
+        "case": "analysis",
+        "model_rounds": 45,
+        "prompt_tokens_including_cached": 516811,
+        "completion_tokens": 25649,
+        "model_elapsed_seconds": 799.838,
+        "output_limit_rounds": 0,
+        "tool_calls": {
+          "list_files": 3,
+          "read_file": 9,
+          "load_skill": 3,
+          "run_python": 13,
+          "read_skill_guide": 4,
+          "read_work_log": 2,
+          "create_chart": 1,
+          "export_chart_png": 1,
+          "create_working_copy": 1,
+          "office_batch": 5,
+          "save_copy": 1,
+          "analyze_image": 1,
+          "finish": 1
+        },
+        "repeated_identical_cad_query_arguments": 0,
+        "failed_tool_operations_deduplicated": 15,
+        "failure_categories": {
+          "csv_encoding_argument": 1,
+          "python_output_filename_or_format": 7,
+          "python_numeric_conversion": 1,
+          "python_direct_file_read": 1,
+          "nonexistent_file_path": 1,
+          "directory_instead_of_file": 1,
+          "excel_format_applied_to_word": 1,
+          "word_image_size": 1,
+          "unknown_work_log_operation": 1
+        }
+      }
+    ]
+  },
+  "mermaid": {
+    "result": "PASS_SOURCE_REVISIONS_EXPORTS_AND_SHARED_FOLDER",
+    "rounds": 3,
+    "formats": {
+      ".mmd": 3,
+      ".png": 3,
+      ".svg": 3,
+      ".ini": 1
+    },
+    "originals_unchanged": true,
+    "based_on_verified": true,
+    "shared_output_directory": true,
+    "final_round_outputs": [
+      {
+        "mmd": {
+          "path": "_AI_Output/對話_cf05b0539e5c92fd55fd4a6cdf676098ec0f8600ac39e1ff4dd6fada69c7d4cc/process流程圖.mmd",
+          "sha256": "c9ab264a18bc11d8010a2aa4a0b5045a841ea1e78612d2e798b0072fb29e15b1",
+          "verified": true
+        },
+        "png": {
+          "path": "_AI_Output/對話_cf05b0539e5c92fd55fd4a6cdf676098ec0f8600ac39e1ff4dd6fada69c7d4cc/process流程圖.png",
+          "sha256": "d520b73fc31396acad2eda35e4bf2b06a1b05e2a86489deba190b73272aff765",
+          "verified": true
+        },
+        "svg": {
+          "path": "_AI_Output/對話_cf05b0539e5c92fd55fd4a6cdf676098ec0f8600ac39e1ff4dd6fada69c7d4cc/process流程圖.svg",
+          "sha256": "0d15d8ac84bd5a39a02f33b66310ec4c7cac899633c350086d3a2e219aa94060",
+          "verified": true
+        }
+      },
+      {
+        "mmd": {
+          "path": "_AI_Output/對話_cf05b0539e5c92fd55fd4a6cdf676098ec0f8600ac39e1ff4dd6fada69c7d4cc/process流程圖_v2.mmd",
+          "sha256": "0a4f36a2f452c27e1b153d574c9a35b82bf9a4904c17ed43dfe49e99ca7d98a1",
+          "verified": true
+        },
+        "png": {
+          "path": "_AI_Output/對話_cf05b0539e5c92fd55fd4a6cdf676098ec0f8600ac39e1ff4dd6fada69c7d4cc/process流程圖_v2.png",
+          "sha256": "642a0ac2870e5da33ce5ddac73e5d5de1f0fa8b3cca6bb50a60a092ad2715014",
+          "verified": true
+        },
+        "svg": {
+          "path": "_AI_Output/對話_cf05b0539e5c92fd55fd4a6cdf676098ec0f8600ac39e1ff4dd6fada69c7d4cc/process流程圖_v2.svg",
+          "sha256": "f488c9665db54c007277510bbd70902d35876b496dbd5fa6bd87bda64891ddac",
+          "verified": true
+        }
+      },
+      {
+        "mmd": {
+          "path": "_AI_Output/對話_cf05b0539e5c92fd55fd4a6cdf676098ec0f8600ac39e1ff4dd6fada69c7d4cc/process流程圖_v3.mmd",
+          "sha256": "ed592e6b7317be1ee8245335bb6ebd8c4488ef05a0474dcba0eff6b4f58a8486",
+          "verified": true
+        },
+        "png": {
+          "path": "_AI_Output/對話_cf05b0539e5c92fd55fd4a6cdf676098ec0f8600ac39e1ff4dd6fada69c7d4cc/process流程圖_v3.png",
+          "sha256": "25b913101b2396f794d2bd1652ba39812856ef3d41cdddd7a4e59820e888f183",
+          "verified": true
+        },
+        "svg": {
+          "path": "_AI_Output/對話_cf05b0539e5c92fd55fd4a6cdf676098ec0f8600ac39e1ff4dd6fada69c7d4cc/process流程圖_v3.svg",
+          "sha256": "7ede970043176c3e7cebd3d197a21c3fc0e3e6dfc921c1963ccebf403f5bf89c",
+          "verified": true
+        }
+      }
+    ],
+    "original_model_source_unmodified": true,
+    "numbered_source_references_verified": true,
+    "program_source_not_executed": true,
+    "ini_exact_single_change": true,
+    "visual_review": "PASS_REVIEWED_ALL_EXPORTED_PNGS",
+    "visual_observations": [
+      "三張實際匯出 PNG 已以原始解析度逐張目視：中文字、節點、箭頭及分支標籤可辨識，未見裁切。",
+      "原圖門檻10，第二圖僅修改分支顯示與最多3次說明；第三圖顯示config_copy.ini及門檻12，retries仍為2。",
+      "HTML未串接及TimeoutError預留路徑以明文及虛線區分；本輪模型以中文比較詞表示，未用本輪PNG冒稱驗證字面>=。"
+    ],
+    "semantic_review": "PASS_SOURCE_REFERENCES_BRANCHES_AND_REQUESTED_LITERAL_DIFFS",
+    "semantic_scope_note": "圖形對照合成程式的負值、門檻及重試分支，第二與第三輪皆逐字核對只改指定標籤。第三圖是以設定副本為來源的示意情境；原main.py仍讀config.ini，未宣稱已修改程式載入路徑。保留原始模型文字及其語言風格，不代表任意專案的分析正確性保證。"
+  },
+  "cad": [
+    {
+      "case": "cad2008",
+      "version": "Icad.Application.1",
+      "result": "PASS_REQUESTED_GEOMETRY_NATIVE_READBACK",
+      "files": [
+        {
+          "path": "_AI_Output/對話_6881e34f81c725b9547cd43360c8de5351c0c6ddfc2d61408be54670192ae18d/幾何修改基礎.dwg",
+          "sha256": "831e3b0d30064dca72d6604d960f318f17071982f65757496738e76c49931644"
+        },
+        {
+          "path": "_AI_Output/對話_6881e34f81c725b9547cd43360c8de5351c0c6ddfc2d61408be54670192ae18d/幾何修改基礎_受控副本.dwg",
+          "sha256": "e8d7f337d4f64b3f81f0aa885c8c7cd8f046874349a0e3e99754ed5496423189"
+        },
+        {
+          "path": "_AI_Output/對話_6881e34f81c725b9547cd43360c8de5351c0c6ddfc2d61408be54670192ae18d/幾何修改基礎_受控副本_2.dwg",
+          "sha256": "e8d7f337d4f64b3f81f0aa885c8c7cd8f046874349a0e3e99754ed5496423189"
+        },
+        {
+          "path": "_AI_Output/對話_6881e34f81c725b9547cd43360c8de5351c0c6ddfc2d61408be54670192ae18d/幾何修改基礎_受控副本_3.dwg",
+          "sha256": "e8d7f337d4f64b3f81f0aa885c8c7cd8f046874349a0e3e99754ed5496423189"
+        },
+        {
+          "path": "_AI_Output/對話_6881e34f81c725b9547cd43360c8de5351c0c6ddfc2d61408be54670192ae18d/幾何修改基礎_受控副本_4.dwg",
+          "sha256": "d23b0614ff88d141191b591ef87607ba76b817686ac3ec91a82f43023246d2cc"
+        },
+        {
+          "path": "_AI_Output/對話_6881e34f81c725b9547cd43360c8de5351c0c6ddfc2d61408be54670192ae18d/幾何修改基礎_受控副本_5.dwg",
+          "sha256": "869942b66b9581946ac0df61a9d36b9f34f8b5076af0099db5f51bca67344102"
+        },
+        {
+          "path": "_AI_Output/對話_6881e34f81c725b9547cd43360c8de5351c0c6ddfc2d61408be54670192ae18d/幾何修改基礎_受控副本_6.dwg",
+          "sha256": "fd34288d20a9b7c5d961c1d4e71643653ca77222c36b92c0a3b99d5fb85a395f"
+        },
+        {
+          "path": "_AI_Output/對話_6881e34f81c725b9547cd43360c8de5351c0c6ddfc2d61408be54670192ae18d/幾何修改基礎_受控副本_7.dwg",
+          "sha256": "4c6e51a3910bf40bb97b086b406823afc594ff7d143dd8ed206069eace644e80"
+        },
+        {
+          "path": "_AI_Output/對話_6881e34f81c725b9547cd43360c8de5351c0c6ddfc2d61408be54670192ae18d/幾何修改基礎_受控副本_8.dwg",
+          "sha256": "8c3e22ac33fc64ebc0664b3d58b1b361b395a095e26eb7285aaabd2a1109017d"
+        }
+      ],
+      "original_creation_sha256_verified": true,
+      "actual_native_executors": [
+        "Icad.Application.1"
+      ],
+      "readback_bytes_unchanged": true,
+      "total_entities": 21,
+      "geometry_counts": {
+        "line": 4,
+        "arc": 1,
+        "circle": 8,
+        "polyline": 2
+      },
+      "requested_lines_verified": true,
+      "requested_arc_verified": true,
+      "requested_circles_verified": true,
+      "actual_closed_polyline_bounds": [
+        [
+          220.0,
+          100.0,
+          260.0,
+          140.0
+        ],
+        [
+          260.0,
+          0.0,
+          300.0,
+          40.0
+        ]
+      ],
+      "original_unchanged": true,
+      "final_geometry_entities": 15,
+      "shared_output_directory": true,
+      "visual_review": false
+    },
+    {
+      "case": "cad2022",
+      "version": "GStarCAD.Application.22",
+      "result": "PASS_REQUESTED_GEOMETRY_NATIVE_READBACK",
+      "files": [
+        {
+          "path": "_AI_Output/對話_46eda58292d1e75edae743cbb0f28688899126468c41768c37f49b2712d94816/幾何修改基礎.dwg",
+          "sha256": "18e111de3dbba31a8081032366f26811acbfa8d7e2cc62291be01f6beed8723e"
+        },
+        {
+          "path": "_AI_Output/對話_46eda58292d1e75edae743cbb0f28688899126468c41768c37f49b2712d94816/幾何修改基礎_受控副本.dwg",
+          "sha256": "16f3ab31fd0dfc5ff777b14fc8ae31ec6cb9db04615a17ddd6ed891ddfbc604a"
+        },
+        {
+          "path": "_AI_Output/對話_46eda58292d1e75edae743cbb0f28688899126468c41768c37f49b2712d94816/幾何修改基礎_受控副本_2.dwg",
+          "sha256": "16f3ab31fd0dfc5ff777b14fc8ae31ec6cb9db04615a17ddd6ed891ddfbc604a"
+        },
+        {
+          "path": "_AI_Output/對話_46eda58292d1e75edae743cbb0f28688899126468c41768c37f49b2712d94816/幾何修改基礎_受控副本_3.dwg",
+          "sha256": "03c19ceef45e3d60fa52c25745a07c2a0b8731e84ebf98415d9cadc01c9e6cea"
+        },
+        {
+          "path": "_AI_Output/對話_46eda58292d1e75edae743cbb0f28688899126468c41768c37f49b2712d94816/幾何修改基礎_受控副本_4.dwg",
+          "sha256": "ab6980f95879e9bb0e1bab0afbd0ec8c596cee3806d9f8bc2a5c4451acdedf42"
+        },
+        {
+          "path": "_AI_Output/對話_46eda58292d1e75edae743cbb0f28688899126468c41768c37f49b2712d94816/幾何修改基礎_受控副本_5.dwg",
+          "sha256": "799c5c224b4f4900069b386d7d04dffeea0c0a525ec54fc67b0425cf589b402b"
+        },
+        {
+          "path": "_AI_Output/對話_46eda58292d1e75edae743cbb0f28688899126468c41768c37f49b2712d94816/幾何修改基礎_受控副本_6.dwg",
+          "sha256": "afeb314dcc445f02c713d98618200709479174e3e5512240a88f9813a4adda8c"
+        },
+        {
+          "path": "_AI_Output/對話_46eda58292d1e75edae743cbb0f28688899126468c41768c37f49b2712d94816/幾何修改基礎_受控副本_7.dwg",
+          "sha256": "762f69449c9ec53230f305df5b7d152eecb89a8866cd9cf72692f4e894a36412"
+        }
+      ],
+      "original_creation_sha256_verified": true,
+      "actual_native_executors": [
+        "GStarCAD.Application.22"
+      ],
+      "readback_bytes_unchanged": true,
+      "total_entities": 21,
+      "geometry_counts": {
+        "line": 4,
+        "arc": 1,
+        "circle": 8,
+        "polyline": 2
+      },
+      "requested_lines_verified": true,
+      "requested_arc_verified": true,
+      "requested_circles_verified": true,
+      "actual_closed_polyline_bounds": [
+        [
+          220,
+          100,
+          260,
+          140
+        ],
+        [
+          260,
+          0,
+          300,
+          40
+        ]
+      ],
+      "original_unchanged": true,
+      "final_geometry_entities": 15,
+      "shared_output_directory": true,
+      "visual_review": false
+    }
+  ],
+  "analysis": {
+    "version": "0.8.73",
+    "result": "PASS_CSV_PNG_WORD_AND_SHARED_FOLDER",
+    "original_unchanged": true,
+    "source_rows": 4,
+    "expected": {
+      "A": {
+        "count": 2,
+        "mean": 11
+      },
+      "B": {
+        "count": 2,
+        "mean": 22
+      }
+    },
+    "word_embedded_images": 1,
+    "embedded_png_exact_match": false,
+    "embedded_image_sha256": [
+      "17834b66f95d61c0605e34ccaf98b82ba3b1b994e447b072953ed56fed113fc6"
+    ],
+    "embedded_image_visual_review": "PASS_REVIEWED_WORD_IMAGE_CHART_MATCH",
+    "shared_output_directory": true,
+    "files": [
+      {
+        "path": "_AI_Output/對話_05942820cd449b0ed8c0a46eb05028464ce040e999999718924fb2ad6bff2c54/station_summary.csv",
+        "bytes": 713,
+        "sha256": "9055da6c09eccece87944047f77d4368d84c9aa604f2cf8ef8d3c3c8f4bd5608"
+      },
+      {
+        "path": "_AI_Output/對話_05942820cd449b0ed8c0a46eb05028464ce040e999999718924fb2ad6bff2c54/station_mean_bar.png",
+        "bytes": 56184,
+        "sha256": "991700df01abd2829914d386235582ffbb7ae0de77018f80f86bf0f5fafb0264"
+      },
+      {
+        "path": "_AI_Output/對話_05942820cd449b0ed8c0a46eb05028464ce040e999999718924fb2ad6bff2c54/station_report.docx",
+        "bytes": 33998,
+        "sha256": "1060029c0cbf54df5fdc0257bc90f5f6e65e66541bd47163319d93360183a6bd"
+      }
+    ],
+    "visual_review": "PASS_REVIEWED_PNG",
+    "visual_observations": [
+      "已以原始解析度目視實際PNG；中文標題、來源、圖例、A/B分類及平均值座標軸清楚，未見裁切或缺字。",
+      "長條高度分別對應A=11與B=22；來源註記為合成資料，沒有正式品質判定。",
+      "已另外目視Word中實際內嵌的image1.png；Office縮小／重新編碼後圖形、標籤、來源及11/22長條內容一致，沒有把不相同的位元組宣稱完全相同。"
+    ],
+    "semantic_review": "ISSUES_EXTRA_WORD_STATISTICS",
+    "required_word_counts_and_means_verified": true,
+    "word_table_matches_raw_model_arguments": true,
+    "content_issues": [
+      {
+        "station": "A",
+        "field": "min",
+        "actual": 6.0,
+        "expected": 10.0
+      },
+      {
+        "station": "A",
+        "field": "max",
+        "actual": 16.0,
+        "expected": 12.0
+      },
+      {
+        "station": "A",
+        "field": "std",
+        "actual": 5.0,
+        "expected": 1.4142
+      },
+      {
+        "station": "B",
+        "field": "min",
+        "actual": 17.0,
+        "expected": 20.0
+      },
+      {
+        "station": "B",
+        "field": "max",
+        "actual": 27.0,
+        "expected": 24.0
+      },
+      {
+        "station": "B",
+        "field": "std",
+        "actual": 5.0,
+        "expected": 2.8284
+      },
+      {
+        "station": "全部",
+        "field": "min",
+        "actual": 6.0,
+        "expected": 10.0
+      },
+      {
+        "station": "全部",
+        "field": "max",
+        "actual": 27.0,
+        "expected": 24.0
+      },
+      {
+        "station": "全部",
+        "field": "std",
+        "actual": 8.6,
+        "expected": 6.6081
+      }
+    ],
+    "semantic_scope_note": "CSV的筆數、平均值、min/max/std及PNG正確；Word筆數與平均值正確，但模型額外填入的min/max/std與CSV不符。Word表格與實際模型參數逐字相同，不是程式把正確數字改錯。內容未列為通過，原模型與文件均保留。"
+  },
+  "fixed_native_broker": [
+    {
+      "version": "Icad.Application.1",
+      "result": "PASS_STRICT_FIXED_BROKER_GEOMETRY_AND_SAVED_COPIES",
+      "entities": 15,
+      "geometry_tolerance": 1e-07,
+      "successful_writes": 3,
+      "source_sha256": "fdbaf4af920fe3ad88bf0ecffeee9354ad71ca441a5f6a77162c7f2e2d6a4918",
+      "original_unchanged": true,
+      "shared_output_directory": true,
+      "version_aliases_verified": true
+    },
+    {
+      "version": "GStarCAD.Application.22",
+      "result": "PASS_STRICT_FIXED_BROKER_GEOMETRY_AND_SAVED_COPIES",
+      "entities": 15,
+      "geometry_tolerance": 1e-07,
+      "successful_writes": 3,
+      "source_sha256": "383e3a6ee97c8a357a29bf200d42938a9cbd4b36e3e832519a6766c980cac94f",
+      "original_unchanged": true,
+      "shared_output_directory": true,
+      "version_aliases_verified": true
+    }
+  ],
+  "fixed_native_python_revision": {
+    "result": "PASS_NATIVE_FILE_PYTHON_REVISION_BRIDGE",
+    "unchanged_file_accepted": true,
+    "changed_file_rejected": true,
+    "exe_sha256": "5648e143634daaf61974a980bfe7a080f61c3c1fa98919a2e65360bbe1799b64"
+  },
+  "manual_desktop": {
+    "version": "0.8.73.0",
+    "not_verified": [
+      "OS balloon delivery/click",
+      "Manual VNC import/export dialogs",
+      "CAD drafting layout by manual native-window inspection"
+    ],
+    "app_approval": "granted",
+    "checks": [
+      "Final EXE settings opened; default WenKai TC proportional, all four font choices observed.",
+      "Switched to Huninn and observed real layout/font change; restored default.",
+      "Applied 110% interface zoom with visible size/layout change; restored 100%.",
+      "Minimize-to-taskbar default checked.",
+      "New-project collapsed/expanded lists and label/input/create-folder spacing visually checked.",
+      "Created synthetic external project using actual Windows folder picker.",
+      "Clicked folder shortcut and observed new Explorer window with correct synthetic folder title.",
+      "Submitted separate synthetic Mermaid visual request through actual GUI, using completed R5 bridge to keep R6 scenario metrics separate.",
+      "Actual Strata GUI created a three-node Chinese Mermaid card and saved MMD in the external synthetic project.",
+      "Card labels readable at intrinsic100%; zoom125% visibly enlarged nodes/text.",
+      "Fullscreen displayed explicit return-to-conversation Esc control; return click restored conversation and normal button.",
+      "Reentered fullscreen and Escape restored conversation with normal button."
+    ],
+    "recorded_at": "2026-10-19T21:50:14.5062055+08:00",
+    "result": "PASS_PARTIAL_MANUAL_DESKTOP_SETTINGS_AND_PROJECT_MODAL",
+    "exe_sha256": "5648e143634daaf61974a980bfe7a080f61c3c1fa98919a2e65360bbe1799b64",
+    "user_data_accessed": false
+  },
+  "native_geometry_and_one_undo_verified": true,
+  "native_fixture_provenance": {
+    "scope": "direct native Python/COM runtime fixture; final EXE CAD broker tested separately by final Strata cases",
+    "runtime_sha256": "4ff7453eb569f48a547b9b007389fee66a02548a35f7b825e1191d596fc0f6fc",
+    "unchanged_runtime_sources_verified": true
+  },
+  "settings": {
+    "default_minimize_in_taskbar": true,
+    "unchecked_minimize_in_tray": true,
+    "close_in_tray": true,
+    "native_window_messages_tested": true,
+    "source_ui_checks": [
+      "old preferences default to minimize in taskbar",
+      "unchecked window preference sends explicit false",
+      "saved unchecked window preference is rendered",
+      "project folder command uses native project id, not an arbitrary path",
+      "bundled font loads offline: LM Huninn",
+      "bundled font loads offline: LM WenKai TC",
+      "bundled font loads offline: LM WenKai Mono TC",
+      "Mermaid comparison fixture renders",
+      "Mermaid preserves comparison label: value >= 10",
+      "Mermaid preserves comparison label: x > 5",
+      "Mermaid preserves comparison label: value <= 20",
+      "Mermaid preserves comparison label: score >= 80",
+      "Mermaid preserves comparison label: angle < 30",
+      "SVG sanitizer preserves operators and removes active/external content",
+      "Ctrl wheel browser scaling is prevented",
+      "support types start collapsed",
+      "new project label, input and folder button have separate space",
+      "VNC JSON preview offers add and rename summary",
+      "VNC stale preview cannot be committed",
+      "diagram renders at readable intrinsic size",
+      "actual fullscreen entry changes button to explicit return",
+      "actual fullscreen return restores the normal button"
+    ],
+    "bundled_font_files": [
+      "jf-openhuninn-2.1.ttf",
+      "LXGWWenKaiTC-Medium.ttf",
+      "LXGWWenKaiMonoTC-Medium.ttf"
+    ]
+  },
+  "limitations": [
+    "Final EXE desktop settings/font/scale, project creation/folder shortcut and Mermaid zoom/fullscreen-return/Escape manually checked after approval; other manual desktop interactions remain outside this partial acceptance.",
+    "Windows balloon delivery and notification click acceptance not manually verified.",
+    "No provisioned SMB share; no real company authentication, Outlook account or encrypted company-file acceptance.",
+    "Mermaid third graph uses requested alternate INI as an illustrative configuration scenario; unchanged original main.py still loads config.ini.",
+    "CAD geometry data checks do not approve drafting layout, machining or construction.",
+    "Local model supplied incorrect extra min/max/std values in Word despite correct CSV, chart, counts and means; saved table matches raw model arguments. Analysis content was not approved.",
+    "The private Windows PowerShell 5 retry observer misdecoded UTF-8 JSON after the native analysis completed. The original observer failure is retained; child exit is explicitly unknown, with completion verified by native result and independent artifact review."
+  ],
+  "prior_attempts": [
+    "R1 full and NSIS passed an earlier binary; later Mermaid handoff issue required a new candidate.",
+    "R2 stopped after confirmed comparison-symbol renderer defect; duplicate same-source exports also diagnosed.",
+    "R3 stopped after CAD report rename masked native validation error; old 2022 model also chose a 64-line curve instead of native circle.",
+    "R4 full and NSIS passed binary81f8, but actual CAD save temp rename was blocked by the redundant source-directory pin. Both CAD/analysis model cases remained incomplete. CAD used invalid layer input; the analysis file hash was correct but incompatible with the Python prefix representation, subsequently fixed in R6. Original inputs and failures were retained.",
+    "R5 full and NSIS passed binary02994. Mermaid and 2022 CAD completed; 2008 model used a year at a ProgID-only copy entry and analysis repeated an exact bare file hash rejected by the Python prefix check. R6 unifies installed-year resolution, returns actual snapshot selection and accepts identical bare/prefixed hashes; original failures were not relabelled as passes."
+  ],
+  "full_validation_completed": true,
+  "installer_lifecycle_tested": true,
+  "company_service_acceptance_tested": false,
+  "manual_native_desktop_acceptance_tested": false
+}

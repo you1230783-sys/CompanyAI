@@ -1,0 +1,590 @@
+﻿{
+    "generated_at":  "2026-09-18T16:40:51.4225258+08:00",
+    "rust":  "1.98.1",
+    "target":  "x86_64-pc-windows-msvc",
+    "msvc":  "14.29.30133",
+    "windows_sdk":  "10.0.19041.0",
+    "prerequisite":  "Installed MSVC v142 (14.29), Windows SDK 10.0.19041.0 and WebView2 Runtime (offline installer included)",
+    "files":  [
+                  {
+                      "path":  "src/attachments.rs",
+                      "sha256":  "807a6e5e2f7c7aec8bcdc8a6c8bd00a2c607f36706d5c434e559efd7a29d3d06"
+                  },
+                  {
+                      "path":  "src/auth.rs",
+                      "sha256":  "030561b09b0b64a0401a0b2bf0e71a91cb36044fbea230b726c120a094f1540a"
+                  },
+                  {
+                      "path":  "src/config.rs",
+                      "sha256":  "1beede1db994cf2022e49fd829e5b226247d522733673c2ddb5d345771392728"
+                  },
+                  {
+                      "path":  "src/demo.rs",
+                      "sha256":  "0bd7d3713c04584b87fd09263bd3119cbc1143ee55130665fa37d7715200ba9b"
+                  },
+                  {
+                      "path":  "src/deployment.rs",
+                      "sha256":  "108707c1b90d3fb8ebe8b8e61ed8ef67459b2a932f52fe0644c43f3c5ff02712"
+                  },
+                  {
+                      "path":  "src/embedded_json.rs",
+                      "sha256":  "d6e7cc787bc5f20a1002e7b02c6e3e90a86a3b31744e7da321df6ecf584b1778"
+                  },
+                  {
+                      "path":  "src/history.rs",
+                      "sha256":  "6e67814d2795a3989de5d328dca9fcbefc6891def208481ddc3e1f3ca1cdf93d"
+                  },
+                  {
+                      "path":  "src/hotkey.rs",
+                      "sha256":  "ac8d27353e1a2dc83b0ed561f86b907b69798d0e36b197f156b5bcb3710c578d"
+                  },
+                  {
+                      "path":  "src/jobs.rs",
+                      "sha256":  "7f71de0ee42ea2b92104c109e6b698d4808250683f95a8ab7e04ce731936a4aa"
+                  },
+                  {
+                      "path":  "src/lib.rs",
+                      "sha256":  "7903a09cc48fc9b14dbe40b5a49b7894695f941e6b3a5a8ea4436bc0ddc0bbfd"
+                  },
+                  {
+                      "path":  "src/main.rs",
+                      "sha256":  "c80621a386623aba95d2124d6e33b7a40ffe735b4200bd4b9b13daba266e1446"
+                  },
+                  {
+                      "path":  "src/notifications.rs",
+                      "sha256":  "f643dcd8ce17258d17110d1dcbd70be1cde5dbc5db6ee76e4a4d7e133dd2cf64"
+                  },
+                  {
+                      "path":  "src/outlook.rs",
+                      "sha256":  "256d3cc4bc9da63ed2d97e8536977d11248fea5d725d2fcfe0f1e9bdf0fce4f5"
+                  },
+                  {
+                      "path":  "src/protocol.rs",
+                      "sha256":  "593d8a56ff2124c02e2c8c78e200d64f6eff054ac9b1a6275c4031b5e1bf7f5b"
+                  },
+                  {
+                      "path":  "src/selection.rs",
+                      "sha256":  "ac133ae8ab24e62369f5eaec049c344619464f67a13240e19a12f469e3518d30"
+                  },
+                  {
+                      "path":  "src/selection_popup.rs",
+                      "sha256":  "a510c685d5f0b6ec2ad44ddf2566befdcd968e29c407109691ec702e542e6423"
+                  },
+                  {
+                      "path":  "src/service.rs",
+                      "sha256":  "0b9e019772b90b957747532cdf2f55a5803ae21af26f9d1c78508af78318415d"
+                  },
+                  {
+                      "path":  "src/single_instance.rs",
+                      "sha256":  "e25d80582ada1a3c2cb5f3bf02d32dd89179ec8b0a3f03526f7d81202f0edf8e"
+                  },
+                  {
+                      "path":  "src/site_notifications.rs",
+                      "sha256":  "7471273910cb18a70f4919c2f5c1b72191aee9cca18f9625c6c1d6bf3ffd0b1d"
+                  },
+                  {
+                      "path":  "src/storage.rs",
+                      "sha256":  "dcf4c6788f9277b7a81db4696d8a3db9d457d1152ff37e9c5bf39446e1e25908"
+                  },
+                  {
+                      "path":  "src/transport.rs",
+                      "sha256":  "421f2ea4d4571c151b66b0453a23b0a7a138a882b35bc2935fdea4c4eaad4f9e"
+                  },
+                  {
+                      "path":  "src/ui.rs",
+                      "sha256":  "0102018d20cbadb7d48de6c630dffafc201c02628da2bd941f82cd87dc75c68c"
+                  },
+                  {
+                      "path":  "src/webview.rs",
+                      "sha256":  "34fee1535a97012805f3ad4a52df10bacd36d086ea5355b3890846c68f4f0025"
+                  },
+                  {
+                      "path":  "src/demo/work.rs",
+                      "sha256":  "ca83738f2d3d82e72c731854bccd93f2218ddfe2b4b5a17395329c26e3fef414"
+                  },
+                  {
+                      "path":  "src/demo/work/tests.rs",
+                      "sha256":  "f042c762a8b5f2e6e603559c527428c10e8215ad4c2f66785f620d5a56e6b3d6"
+                  },
+                  {
+                      "path":  "src/outlook/batch.rs",
+                      "sha256":  "50f0255afd0d464e71511aff97ebe5f4bdd34aadaee589f9ee54924e7396c6d4"
+                  },
+                  {
+                      "path":  "src/outlook/skill.md",
+                      "sha256":  "e927388a95953faafaf49283bc53a7b9421b263695eb31f926a2bcbfd8b23fa6"
+                  },
+                  {
+                      "path":  "src/outlook/batch/query.rs",
+                      "sha256":  "3f703bf2e47a224a83ce38486702193f8d0e4b8a0836b8634a83c26301926a4f"
+                  },
+                  {
+                      "path":  "src/outlook/batch/query_tests.rs",
+                      "sha256":  "d97bedb0e047a2cf93de7cb2041d22094a4cbc4292a8f5c8f9633d46a09c22e7"
+                  },
+                  {
+                      "path":  "src/site_notifications/http_tests.rs",
+                      "sha256":  "ae99676f221e06dc4a1f4b0b9a9d18a940a8ea8bea1d778ff8a4872d60fb6f1f"
+                  },
+                  {
+                      "path":  "src/ui/mail_batch.rs",
+                      "sha256":  "95918a9f3b79a2b164ebf7c7cc717fb1f321cfed90e7aac9dd7d7056575a2493"
+                  },
+                  {
+                      "path":  "src/ui/site.rs",
+                      "sha256":  "986c17b606e91371a32441d5a2bb72845c8bfd85ed7d9cc2215ade8d5f569684"
+                  },
+                  {
+                      "path":  "src/ui/work.rs",
+                      "sha256":  "9398092d9485556e01c65bf20eb81f87bb2a34d99c46525117fee4b7e5211a24"
+                  },
+                  {
+                      "path":  "ui/app.js",
+                      "sha256":  "ac7dd9c86e90191327ea1eb5a7e608c312556d15ed658c2027d78b724cbbcebf"
+                  },
+                  {
+                      "path":  "ui/behavior.js",
+                      "sha256":  "2e50e87b4a99da0761bb37955eb71a5c89c73659842dd02107b8039fcdbe9cac"
+                  },
+                  {
+                      "path":  "ui/icons.js",
+                      "sha256":  "8b1184cb58a2df9cc41ac128b33470ed048871dbda6e25df3c6f457d8152b6f2"
+                  },
+                  {
+                      "path":  "ui/index.html",
+                      "sha256":  "0f3bb1f5b27b71a13592a6a852a29ba43c22ed960098cb4707e9265089d80cca"
+                  },
+                  {
+                      "path":  "ui/mail.js",
+                      "sha256":  "d2790d1dc17700b105451905ea54fa5c645fb3a9a4a9772d6b3fc5c98cd3a5be"
+                  },
+                  {
+                      "path":  "ui/self-test.js",
+                      "sha256":  "a287383146f00986f549ce1b301ea1e8ccf0e429381084c8ffd020046de0434b"
+                  },
+                  {
+                      "path":  "ui/style.css",
+                      "sha256":  "bd96cc0d58ff73ddb7afa301c0c0f26cca59314a915a83e63a864e755ea9b3d8"
+                  },
+                  {
+                      "path":  "ui/work.js",
+                      "sha256":  "59751f098f15df4c84c1434e5e27d57781edfdfbdcedeeb62b3c5924c66ad3f4"
+                  },
+                  {
+                      "path":  "ui/vendor/dompurify.LICENSE",
+                      "sha256":  "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+                  },
+                  {
+                      "path":  "ui/vendor/footnote.LICENSE",
+                      "sha256":  "81d61236a5f25294b2dad0c866d4ad6a40b865148b28df9a71f49ba771a6c54b"
+                  },
+                  {
+                      "path":  "ui/vendor/footnote.min.js",
+                      "sha256":  "d6fee58a3b56c5742fa18f3e01f1d317cc99975683ebd39c9195cb2aff0c2e42"
+                  },
+                  {
+                      "path":  "ui/vendor/highlight.css",
+                      "sha256":  "3a9a5def8b9c311e5ae43abde85c63133185eed4f0d9f67fea4b00a8308cf066"
+                  },
+                  {
+                      "path":  "ui/vendor/highlight.LICENSE",
+                      "sha256":  "6c081431591d9df696c82dc598fe1423765b8a299b200ed00b281afd0f64c490"
+                  },
+                  {
+                      "path":  "ui/vendor/highlight.min.js",
+                      "sha256":  "8ab71eb09c51f501e5e25157d9cff100e46cc29bcbfc744d0b746d451fca7f53"
+                  },
+                  {
+                      "path":  "ui/vendor/katex.LICENSE",
+                      "sha256":  "766ccc1f306c885aa45542a9846bbd0a505b27a0374f146778171c2254ce18e3"
+                  },
+                  {
+                      "path":  "ui/vendor/katex.min.css",
+                      "sha256":  "50d9c78e03da144a021001b7de679133355179bcb06fd11e9e309223056a03dd"
+                  },
+                  {
+                      "path":  "ui/vendor/katex.min.js",
+                      "sha256":  "10a91b479cd927446ceb60409fb0d72b5d0d05eaf446c9e52fafd64058c84540"
+                  },
+                  {
+                      "path":  "ui/vendor/markdown-it.LICENSE",
+                      "sha256":  "792c48c5a849a15fdf9e37e8bcf9e6d1dd13b32b46c642a748a0a46a9919d473"
+                  },
+                  {
+                      "path":  "ui/vendor/markdown-it.min.js",
+                      "sha256":  "635972b985228e8af9f0143647c68616b7a3bb09f6946e7e4a52e43dcf5e7be5"
+                  },
+                  {
+                      "path":  "ui/vendor/packages.json",
+                      "sha256":  "705d70d03b6a0324e176d1683c6c7dd5146f75baba091da54766a900dd07c4d4"
+                  },
+                  {
+                      "path":  "ui/vendor/purify.min.js",
+                      "sha256":  "f263b05369e050fa175d4ecb9c9358eb4253602d510297adfb31df48b2f1c4d5"
+                  },
+                  {
+                      "path":  "ui/vendor/task-lists.LICENSE",
+                      "sha256":  "e7cefb44454d371c9eddb390fb829d34fc6ffa79e63776873c34f8413bf3268b"
+                  },
+                  {
+                      "path":  "ui/vendor/task-lists.min.js",
+                      "sha256":  "4f3b23f41bb3787957da2602fbccc4df0d017928c1fce62583159e096b832a81"
+                  },
+                  {
+                      "path":  "ui/vendor/texmath.css",
+                      "sha256":  "8ebf5b7b292aaa20b9bd5141290f2295734e5e4ed17873145161dc5aa53c9baf"
+                  },
+                  {
+                      "path":  "ui/vendor/texmath.js",
+                      "sha256":  "926e075a1745e1019813b8418b90183feea0c7b3782c85dceb4f246da999edc6"
+                  },
+                  {
+                      "path":  "ui/vendor/texmath.LICENSE",
+                      "sha256":  "655a4d5721dabe668d3ef640d5587d44534d370e7dc256d4f33740278dc710d5"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_AMS-Regular.woff2",
+                      "sha256":  "0cdd387c9590a1a9f9794560022dbb59654a7d86f187aa0c81495ad42d3a7308"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_Caligraphic-Bold.woff2",
+                      "sha256":  "de7701e42cf1f4cf0b766c03fb27977207eee2f4fd5d76fa82188406da43ea4c"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_Caligraphic-Regular.woff2",
+                      "sha256":  "5d53e70ad607c2352162dec9e0923fb54ecdafaccbf604cd8dcf7d00facb989b"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_Fraktur-Bold.woff2",
+                      "sha256":  "74444efd593c005e3f4573b44524704c0af0a937fe911cca9e94068d0d140d3f"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_Fraktur-Regular.woff2",
+                      "sha256":  "51814d270d06ff0255dba0799994fa4d8c84d11f09951d47595f4abb1f3602dc"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_Main-Bold.woff2",
+                      "sha256":  "0f60d1b897938ec918c8ce073092411baf9438f6739465693ff18b0f9d20b021"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_Main-BoldItalic.woff2",
+                      "sha256":  "99cd42a3c072d918f2f44984a807cf7aa16e13545fd0875fc07c6c65f99e715b"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_Main-Italic.woff2",
+                      "sha256":  "97479ca6cce906abc961ecac96faa5f9ca2e61b8e7670d475826bcdee9a7c267"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_Main-Regular.woff2",
+                      "sha256":  "c2342cd8b869e01752a9321dc17213fc40d4d04c79688c1d43f2cf316abd7866"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_Math-BoldItalic.woff2",
+                      "sha256":  "dc47344dbb6cb5b655c8460d561f4df5f501b90c804ad3c6cec65fe322351ab1"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_Math-Italic.woff2",
+                      "sha256":  "7af58c5ec8f132a2ddde9027c6d7814decce4d3b822a11192a42a20e2e973264"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_SansSerif-Bold.woff2",
+                      "sha256":  "e99ae51144bf1232efcc1bfe5add36262c6866b0faab24fa75740e1b98577a62"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_SansSerif-Italic.woff2",
+                      "sha256":  "00b26ac825e2095056396e0553b8ac26d3f8ad158c3826e28b4c45b385c4714a"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_SansSerif-Regular.woff2",
+                      "sha256":  "68e8c73ef42afd3ccec58bf0fba302cce448938e7fc020a5e31f8a952eee1342"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_Script-Regular.woff2",
+                      "sha256":  "036d4e95149b69ff9bcc0cd55771efeb25ffa3947293e69acd78d5ac328c684b"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_Size1-Regular.woff2",
+                      "sha256":  "6b47c40166b6dbe21a5dfca7718413f2147fd2399be1ba605d8ad39cedf25dfe"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_Size2-Regular.woff2",
+                      "sha256":  "d04c54219f9eaec6d4d4fd42dfb28785975a4794d6b2fc71e566b9cd6db842dd"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_Size3-Regular.woff2",
+                      "sha256":  "73d591271b1604960cb10bb90fee021670af7297017e0e98480b332d11f51995"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_Size4-Regular.woff2",
+                      "sha256":  "a4af7d414440a1c1790825cfb700cf9cf43b0f2c4b04f0ebc523011ad9853ec0"
+                  },
+                  {
+                      "path":  "ui/vendor/fonts/KaTeX_Typewriter-Regular.woff2",
+                      "sha256":  "71d517d67827787cfabdf186914cc3358eda539e37931941f2b2fd4a21f68c0b"
+                  },
+                  {
+                      "path":  "ui/vendor/languages/bash.min.js",
+                      "sha256":  "fdd88a4d38bc32bde836a5149f04ff88a09f74ae818a3dfa756e3f6e8931f4e3"
+                  },
+                  {
+                      "path":  "ui/vendor/languages/cpp.min.js",
+                      "sha256":  "cea97c1be97cb8a68ed499075ab7dd39bfa3ccee43130267eada6696b7334da8"
+                  },
+                  {
+                      "path":  "ui/vendor/languages/csharp.min.js",
+                      "sha256":  "dae11de841c15b9dc06d05306216754ed89a51f0885b234fb9bd478f465d0c9c"
+                  },
+                  {
+                      "path":  "ui/vendor/languages/javascript.min.js",
+                      "sha256":  "94778400b0703aa4a67ddc9a263cce6abac02bb30cd71e733c865684bfa0b6fa"
+                  },
+                  {
+                      "path":  "ui/vendor/languages/json.min.js",
+                      "sha256":  "a98beb4d49349f91cc6af39ef0f358d6707454b97380f367b31cf034e031fffa"
+                  },
+                  {
+                      "path":  "ui/vendor/languages/latex.min.js",
+                      "sha256":  "12c8743607535b327bcebd954b0228cf39b7844704123319a7fb594a7db94ce7"
+                  },
+                  {
+                      "path":  "ui/vendor/languages/markdown.min.js",
+                      "sha256":  "a38ceaa84d1d4ff46a3a69bb992beed808dbc9a2f384d1e63c13ec85147a3597"
+                  },
+                  {
+                      "path":  "ui/vendor/languages/powershell.min.js",
+                      "sha256":  "fc298b3e0db362e531e6d58988b7a78f83da19df6b5d74db75bc961b2bfbfd3d"
+                  },
+                  {
+                      "path":  "ui/vendor/languages/python.min.js",
+                      "sha256":  "37f9c9e600b797a156dbba2914dea3a5ff7b04678e973080ee0fe2b093b11061"
+                  },
+                  {
+                      "path":  "ui/vendor/languages/rust.min.js",
+                      "sha256":  "a37e2cc8794bbc0851b5c39c2803b0fe1d1526d9230afb6acbfd5f5bc0a7c27a"
+                  },
+                  {
+                      "path":  "ui/vendor/languages/sql.min.js",
+                      "sha256":  "bae9e447435e7820fcbc8ffde82715e526a35e50137da3d469f8c258291f4463"
+                  },
+                  {
+                      "path":  "ui/vendor/languages/typescript.min.js",
+                      "sha256":  "fb2773436976b3d6b3f3de2933790445e5112e9060dfabe743e4d2c82603300c"
+                  },
+                  {
+                      "path":  "ui/vendor/languages/xml.min.js",
+                      "sha256":  "f1dc53af47f2ca9b47045aedaa591b21817306a241dcd97d499d946f35181aa9"
+                  },
+                  {
+                      "path":  "ui/vendor/languages/yaml.min.js",
+                      "sha256":  "99dd6bd8c1745c9ffc2c157687f2ef0218b4537b2a99d630baf7b40cb72b50a0"
+                  },
+                  {
+                      "path":  "installer/LM_AI.nsi",
+                      "sha256":  "7301aa72ed98be51fc235e4b6e23791c70b1a85500773a4760280172c4ced4ce"
+                  },
+                  {
+                      "path":  "installer/nsis-3.12.zip",
+                      "sha256":  "56581f90db321581c5381193d796fffcf2d24b2f8fed2160a6c6a3baa67f2c4f"
+                  },
+                  {
+                      "path":  "installer/test_payload.cpp",
+                      "sha256":  "9bf00db4204d9b62ec93fd7de437614569918c064b7920eddd5acf1c48cee1b0"
+                  },
+                  {
+                      "path":  "assets/app.ico",
+                      "sha256":  "9816d7f95158d54fd90dae9db77bbf975cb66636b5082ffe4306887b5c7116cf"
+                  },
+                  {
+                      "path":  "assets/app.png",
+                      "sha256":  "673a6f0f7fb0f5546d98bfe84fde422c559499c69c7ab8ac3f3385ed1c8536eb"
+                  },
+                  {
+                      "path":  "assets/README.md",
+                      "sha256":  "1a85db85fd2f0cb375759e162439c98c13df7bbd4e97f4ceb6fdfdf1f6049921"
+                  },
+                  {
+                      "path":  "assets/update-public-key.blob",
+                      "sha256":  "31efa839b979e542f6d4bc3ef31ccbd7280b0f9ed366aa3fd99182085e210037"
+                  },
+                  {
+                      "path":  "assets/update-signature-test.bin",
+                      "sha256":  "ab75473cb4705f4538bcf04ddd67134d84111fd1ffbf38ef703c0e51dcb0e15c"
+                  },
+                  {
+                      "path":  "examples/browser_smoke.rs",
+                      "sha256":  "2106f0394580313eb94a09a59306b8dccf1d3b8c5828c851f83ff0cae771ebe1"
+                  },
+                  {
+                      "path":  "examples/hotkey_probe.rs",
+                      "sha256":  "e043a3c964c1893a6ca29370a99b8557c74e3cec2af021219ca28b377a3c8091"
+                  },
+                  {
+                      "path":  "scripts/Build-Installer.ps1",
+                      "sha256":  "5b0d8d7ffbd23476d7e794938fa87a616e16272cf5fc19ec968279681b5c4795"
+                  },
+                  {
+                      "path":  "scripts/Build.ps1",
+                      "sha256":  "062901c1170bc5f204cac4881c5dad9a79e752ab664f5fea43d50bb1b7a6f2c7"
+                  },
+                  {
+                      "path":  "scripts/Configure-VSCode.ps1",
+                      "sha256":  "3bf39530e31560038192ad1e7b6a384209d2fcd61b1951a114890bec7ab3278e"
+                  },
+                  {
+                      "path":  "scripts/Convert-AppIcon.ps1",
+                      "sha256":  "e6dfd3892d091ccf35ae59768240eba2fac0021b5b65654435ca71cca889db84"
+                  },
+                  {
+                      "path":  "scripts/Enter-DevShell.ps1",
+                      "sha256":  "a1a89014df12bd4c3f6a06bd6675c667577ed52ac083e05e8ac612133a462986"
+                  },
+                  {
+                      "path":  "scripts/Install-Rust.ps1",
+                      "sha256":  "e34323f8889ae61e91d011eb9a033bf424b985e26deb56d571f768ad77285303"
+                  },
+                  {
+                      "path":  "scripts/Prepare-Delivery.ps1",
+                      "sha256":  "aef581de9085a9d092631ac4abc607619e190cf17a3c4a0e9f504a0db61b852f"
+                  },
+                  {
+                      "path":  "scripts/Test-Installer.ps1",
+                      "sha256":  "4a820670310065aea5c8ed6a003140cf924fe8211f03f892afb5ecc1c5995c94"
+                  },
+                  {
+                      "path":  "scripts/Update-Signing.ps1",
+                      "sha256":  "af795610952021e8663a426af8ce7e50e8342ba0b3b16277dc2e1da23c4b11ee"
+                  },
+                  {
+                      "path":  "scripts/vs-env.cmd",
+                      "sha256":  "85b6dd72597553ae6f27eafe6526a1807687117eaa555a941cce9dbd4232547b"
+                  },
+                  {
+                      "path":  "docs/BACKEND_ROADMAP.md",
+                      "sha256":  "2de3bcad614bbc918aa7ec158f10247f5124fc6bcbbb688f8c814b4027113932"
+                  },
+                  {
+                      "path":  "docs/DESKTOP_0_5_CONTRACT.md",
+                      "sha256":  "f7d8934e7095186ffed48ed4f5a9362fdf351d702ad685ab0a09fe27e49adaac"
+                  },
+                  {
+                      "path":  "docs/DESKTOP_0_6_CONTRACT.md",
+                      "sha256":  "96c22ea1c7fb2788081ab89076f6f2a88de6cdd39f270b044d087295834c1aa1"
+                  },
+                  {
+                      "path":  "docs/DESKTOP_0_7_CONTRACT.md",
+                      "sha256":  "e1c96bb557738a9dc7e923f50ff9fb38c099dc77f921d80374b557cd32f018f4"
+                  },
+                  {
+                      "path":  "docs/HOTKEY_0_4_1.md",
+                      "sha256":  "2c0644a64b55fc01afca3ce475b69065c20c7a7fe0f3346b4199d6b0e7d21ef9"
+                  },
+                  {
+                      "path":  "docs/NOTIFICATIONS_AND_OUTLOOK.md",
+                      "sha256":  "78568361d73e1a91295b693fde670c2c3cf87acdaf43813e2d1d612de5a7fa6b"
+                  },
+                  {
+                      "path":  "docs/OFFLINE_AND_GIT.md",
+                      "sha256":  "2bad3a279def3efdf3c01dfd37ddac37eb8a97a33fa44e3c6c9c955fde996274"
+                  },
+                  {
+                      "path":  "docs/OUTLOOK_SEARCH.md",
+                      "sha256":  "bc7f6988f9aacae3a3e6a96368d183e437faa2eeac5bd49053b4c77dc55e4659"
+                  },
+                  {
+                      "path":  "docs/UI_AND_STREAMING.md",
+                      "sha256":  "d48d179ed35f3b99805cdba0b9186df682b504fd25330e6ac5ea28fa89aaa181"
+                  },
+                  {
+                      "path":  "docs/UPDATE_0_8_CONTRACT.md",
+                      "sha256":  "146f617c4536ed9b8bfa12621c1bc9d454aa11c829d44c35de6ae74c72faa44c"
+                  },
+                  {
+                      "path":  "docs/VALIDATION_0_3.md",
+                      "sha256":  "32590c8070067ed449da0b13dc55db8f3940e2020a991b944db42b14154973dd"
+                  },
+                  {
+                      "path":  "docs/VALIDATION_0_4.md",
+                      "sha256":  "a927c2577ce7754c93c75d9c26c6027557f3333587e65b2e99180f7724c96a56"
+                  },
+                  {
+                      "path":  "docs/VALIDATION_0_5.md",
+                      "sha256":  "73987d4ade639846edee611c719ac5c59f30758deef23063e0d97578b6ad5a35"
+                  },
+                  {
+                      "path":  "docs/VALIDATION_0_6.md",
+                      "sha256":  "0821931c788e882b050919154fa4b563d82f2eea66d718180ad709da277867ef"
+                  },
+                  {
+                      "path":  "docs/VALIDATION_0_7.md",
+                      "sha256":  "0406d78e84753b538f10b1e1098cd6ec98b23ea59cc9e581aa1dedcf95667ccf"
+                  },
+                  {
+                      "path":  "docs/VALIDATION_0_8.md",
+                      "sha256":  "a8744150b0ed179d3db2a2bd2716375cdcc7db5add6021b81c2a75f3b37e410e"
+                  },
+                  {
+                      "path":  "docs/WEB_INTEGRATION.md",
+                      "sha256":  "31421bf7189986cc9ed4b88fe9c1d97633276780d0c8c06b4e02118f166fb948"
+                  },
+                  {
+                      "path":  ".cargo/config.toml",
+                      "sha256":  "eb00d847621074aee7f68d040b43384ee920fb8eacad564198c2a7635534bdfb"
+                  },
+                  {
+                      "path":  "dist/CompanyAI.exe",
+                      "sha256":  "aa6cce87c4e698c10f92bbc94c2e1af52a54b802372cec69356c8983abc845d8"
+                  },
+                  {
+                      "path":  "dist/LM_AI.exe",
+                      "sha256":  "aa6cce87c4e698c10f92bbc94c2e1af52a54b802372cec69356c8983abc845d8"
+                  },
+                  {
+                      "path":  "dist/LM_AI_Setup.exe",
+                      "sha256":  "809ad0036684a2b863e426bdbfe476cee10a019ef67df173d64f3ef33f781526"
+                  },
+                  {
+                      "path":  "dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe",
+                      "sha256":  "ebebc5ec130378ff1ab513f3917be791a9cf84f849e970b1695ff01801a9d348"
+                  },
+                  {
+                      "path":  "dist/update-manifest.json",
+                      "sha256":  "414c03d76f15d9768f870b624606511eb8ec40b0d784254feabc6e7884dc7660"
+                  },
+                  {
+                      "path":  "dist/WEBVIEW2-OFFLINE.md",
+                      "sha256":  "89b5c56dbf664ec26f2f65f3c1c00cd0802ff3171d3181f025aa9a45e52c8e67"
+                  },
+                  {
+                      "path":  "build.rs",
+                      "sha256":  "63a8ca43f533fc158d99f0abe32658714fc90c03e20cf4d7cdbf1f355c47508e"
+                  },
+                  {
+                      "path":  "Cargo.toml",
+                      "sha256":  "123c6ce2b8de73526726eace0afc8a78143f23f7a18604e43421d72769c6b19f"
+                  },
+                  {
+                      "path":  "Cargo.lock",
+                      "sha256":  "a680e97752dfc03d5f3f8eccab5547f9458798260f404d9ad5e632b03d278b14"
+                  },
+                  {
+                      "path":  "rust-toolchain.toml",
+                      "sha256":  "aee16c3e09fbade14ab5474dca5a4f44640cb919f59f26937ed9e8a1d13b7408"
+                  },
+                  {
+                      "path":  "README.md",
+                      "sha256":  "9a655f1e9e05acb5d99eafebc16faa38895d866d3652323e14b10a61418b08b8"
+                  },
+                  {
+                      "path":  "AGENTS.md",
+                      "sha256":  "a015fe9c8f53d9c40c6af40f544dfdb1a56e8df712ef59527b51113288a4af48"
+                  },
+                  {
+                      "path":  ".gitignore",
+                      "sha256":  "83766094018234bdabae0bb81d562d4e662dd00264ba85861bf09b72ea1a8575"
+                  },
+                  {
+                      "path":  ".gitattributes",
+                      "sha256":  "4213e115b01ea66726605e4c84fed1fb3d7b2afd1b9044fdc71003b28ac80d72"
+                  }
+              ]
+}

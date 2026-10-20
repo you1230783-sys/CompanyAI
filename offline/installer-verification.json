@@ -1,0 +1,13 @@
+{
+  "result": "PASS_PACKAGING_ONLY",
+  "version": "0.8.75.0",
+  "recorded_at": "2026-10-21T00:14:31.738087+08:00",
+  "setup_sha256": "b214c7fa9723a22758f1496a9728d309006f3ff999b0860e2b114e3169ff85fa",
+  "setup_bytes": 46813158,
+  "msvc": "14.29.30133",
+  "native_signed_manifest_verified": true,
+  "installation_lifecycle_tested": false,
+  "company_service_tested": false,
+  "scope": "NSIS packaging and native signed package validation; no installation/update/uninstall lifecycle rerun.",
+  "previous_full_verification": "installer-verification-0.8.74.json"
+}

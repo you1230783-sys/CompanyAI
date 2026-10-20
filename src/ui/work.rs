@@ -1,0 +1,1442 @@
+//! 主視窗的附件／任務控制器。只有 UI 執行緒修改狀態與保存檔案；網路執行緒只回傳事件。
+use super::*;
+use crate::{
+    attachments::{self, Attachment, AttachmentStatus, Incoming},
+    jobs::{self, Capabilities, Task, TaskStatus, WorkStore},
+};
+use serde_json::Value;
+use std::collections::HashSet;
+
+#[path = "work_smoke.rs"]
+mod smoke;
+
+#[derive(Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(super) enum WorkCommand {
+    FileBegin {
+        name: String,
+        size: u64,
+        mime_type: String,
+    },
+    FileChunk {
+        id: String,
+        offset: u64,
+        data: String,
+    },
+    FileFinish {
+        id: String,
+    },
+    FileAbort {
+        id: String,
+    },
+    RemoveAttachment {
+        id: String,
+    },
+    RetryUpload {
+        id: String,
+    },
+    Mode {
+        mode: String,
+    },
+    CancelTask {
+        id: String,
+    },
+    StopTask {
+        id: String,
+    },
+    RemoveTask {
+        id: String,
+    },
+    RetryTask {
+        id: String,
+    },
+    Refresh,
+    ClearCompleted,
+}
+pub(super) enum WorkEvent {
+    Capabilities(String, AppResult<Capabilities>),
+    Reserved(String, AppResult<(String, AttachmentStatus)>),
+    Uploaded(String, AppResult<AttachmentStatus>),
+    Attachment(String, AppResult<AttachmentStatus>),
+    Progress(String, u64),
+    Update(String, jobs::StreamUpdate),
+    Submitted(String, Result<(), jobs::submission::SubmitFailure>),
+    /// 取消或 Outlook 提交的回覆沿用原處理；只有 TaskPoll 的 GET 才累計查詢失敗。
+    Polled(String, AppResult<TaskStatus>),
+    TaskPoll {
+        id: String,
+        remote_id: Option<String>,
+        result: Result<TaskStatus, jobs::polling::PollFailure>,
+        models_healthy: bool,
+    },
+    PollFinished,
+}
+pub(super) struct WorkRuntime {
+    pub caps: Option<Capabilities>,
+    pub capability_model: String,
+    pub store: WorkStore,
+    pub incoming: Option<Incoming>,
+    pub mode: String,
+    pub status: String,
+    pub uploads: HashSet<String>,
+    pub streams: HashSet<String>,
+    pub cancellations: std::collections::HashMap<String, Arc<AtomicBool>>,
+    pub polling: bool,
+    pub last_poll: Instant,
+    pub poll_delay: u64,
+    pub capability_loading: bool,
+    pub storage_error: bool,
+    pub task_balloon: bool,
+    /// 收到托盤的操作提示只還原視窗，不導向舊任務或通知。
+    pub tray_restore_only: bool,
+    /// 僅在本次執行保存最新工具進度，不寫入對話或加密任務檔。
+    pub tool_status: std::collections::HashMap<String, jobs::ToolStatus>,
+    /// 依本機 request ID 分開計數，成功或改用另一查詢 ID 時歸零。
+    poll_failures: std::collections::HashMap<String, jobs::polling::PollFailures>,
+}
+impl Default for WorkRuntime {
+    fn default() -> Self {
+        Self {
+            caps: None,
+            capability_model: String::new(),
+            store: WorkStore::default(),
+            incoming: None,
+            mode: "stream".into(),
+            status: "正在確認一般／背景聊天能力".into(),
+            uploads: HashSet::new(),
+            streams: HashSet::new(),
+            cancellations: Default::default(),
+            polling: false,
+            last_poll: Instant::now(),
+            poll_delay: 5,
+            capability_loading: false,
+            storage_error: false,
+            task_balloon: false,
+            tray_restore_only: false,
+            tool_status: Default::default(),
+            poll_failures: Default::default(),
+        }
+    }
+}
+impl App {
+    pub(super) fn work_state(&self) -> Value {
+        let attachments:Vec<_>=self.work.store.drafts(self.active_id.as_deref()).iter().map(|a|json!({
+            "id":a.id,"name":a.name,"size":a.size,"state":if a.state=="ready"&&a.token().is_none(){"expired"}else{&a.state},
+            "message":a.message,"uploaded_bytes":a.uploaded_bytes,
+            "progress":a.remote.as_ref().and_then(|r|r.progress),"queue_position":a.remote.as_ref().and_then(|r|r.queue_position)
+        })).collect();
+        let mut tasks:Vec<_>=self.work.store.tasks.iter().rev().filter(|t| !t.title_generation).map(|t|json!({
+            "id":t.request_id,"conversation_id":t.conversation_id,"title":t.title,"mode":t.mode,"tool_events":t.tool_events,"created_at":t.created_at,
+            "state":if t.applied && !t.remote.as_ref().is_some_and(TaskStatus::terminal){"stopped"}else{t.remote.as_ref().map(|r|r.state.as_str()).unwrap_or("submitting")},"active":t.active(),"message":t.message,
+            "progress":t.remote.as_ref().and_then(|r|r.progress),"queue_position":t.remote.as_ref().and_then(|r|r.queue_position),
+            "partial":if Some(&t.conversation_id)==self.active_id.as_ref(){t.partial.as_str()}else{""},
+            "can_retry":t.active()&&t.remote.is_none()&&!self.work.streams.contains(&t.request_id),
+            "tool_status":if t.active(){self.work.tool_status.get(&t.request_id)}else{None}
+        })).collect();
+        if let Some(task) = self.project_task() {
+            tasks.push(task);
+        }
+        // 身分代號、附件 Token 與完整請求不傳入 WebView2。
+        json!({"attachments":attachments,"tasks":tasks,"rules":self.work.caps.as_ref().filter(|_|self.work.capability_model == self.config.model && !self.work.capability_loading).map(|c|&c.attachments),
+            "modes":self.work.caps.as_ref().map(|c|&c.execution_modes),"mode":self.work.mode,"status":self.work.status,
+            "draft_error":self.check_draft_files().err(),
+            "pending":self.work.store.pending(self.active_id.as_deref()),"transferring":self.work.incoming.is_some()})
+    }
+    pub(super) fn work_save(&mut self) -> AppResult<()> {
+        if self.work.storage_error {
+            return Err("任務紀錄無法保存，請重新啟動後檢查；不會送出新工作。".into());
+        }
+        if let Err(e) = self.work.store.save(&self.root, &self.config) {
+            self.work.storage_error = true;
+            return Err(e);
+        }
+        Ok(())
+    }
+    fn preserve_partial_reply(&mut self, task: &Task) -> AppResult<()> {
+        let mut archive = self.archive.clone();
+        if jobs::retain_partial(&mut archive, task)? {
+            history::save(&self.root, &archive)?;
+            self.archive = archive;
+            if self.active_id.as_ref() == Some(&task.conversation_id) {
+                if let Some(conversation) = self
+                    .archive
+                    .conversations
+                    .iter()
+                    .find(|c| c.id == task.conversation_id)
+                {
+                    self.messages = conversation.messages.clone();
+                }
+            }
+        }
+        Ok(())
+    }
+    /// 先保存已收到的文字及停止狀態，再解除本機等待；本函式不發網路請求。
+    fn persist_stopped_task(&mut self, id: &str, remove: bool, message: &str) -> AppResult<Task> {
+        let task = self
+            .work
+            .store
+            .tasks
+            .iter()
+            .find(|t| t.request_id == id)
+            .cloned()
+            .ok_or("找不到任務。")?;
+        let mut next = self.work.store.clone();
+        self.preserve_partial_reply(&task)?;
+        if remove {
+            next.tasks.retain(|t| t.request_id != id);
+        } else if let Some(saved) = next.tasks.iter_mut().find(|t| t.request_id == id) {
+            saved.stop_tracking();
+            saved.message = message.into();
+        }
+        next.save(&self.root, &self.config)?;
+        self.work.store = next;
+        if let Some(cancel) = self.work.cancellations.remove(id) {
+            cancel.store(true, Ordering::Relaxed);
+        }
+        self.work.streams.remove(id);
+        self.work.tool_status.remove(id);
+        self.work.poll_failures.remove(id);
+        Ok(task)
+    }
+    /// 手動停止另外嘗試取消；自動停止只保存本機狀態，避免多送一次失敗查詢。
+    fn stop_local_task(&mut self, id: &str, remove: bool) -> AppResult<()> {
+        let task =
+            self.persist_stopped_task(id, remove, "已停止本機追蹤；不保證伺服器工作已取消。")?;
+        if task.active() {
+            if let Some(session) = self.session.clone() {
+                let config = self.config.clone();
+                thread::spawn(move || {
+                    // 回應遺失時先用原 request_id 找回；失敗不影響本機移除。
+                    if let Ok(remote) = jobs::task_status(&config, &session, &task) {
+                        if !remote.terminal() {
+                            let _: AppResult<TaskStatus> = jobs::post(
+                                &config,
+                                &session,
+                                &format!("{}/tasks/{}/cancel", jobs::PREFIX, remote.task_id),
+                                &json!({}),
+                            );
+                        }
+                    }
+                });
+            }
+        }
+        self.status = "已停止本機追蹤；伺服器取消會另行嘗試，對話內容保留。".into();
+        Ok(())
+    }
+    fn check_draft_files(&self) -> AppResult<()> {
+        let files = self.work.store.drafts(self.active_id.as_deref());
+        if files.is_empty() {
+            return Ok(());
+        }
+        // Outlook 自動分析使用獨立的品質模型能力，提示也應與實際送出的模型一致。
+        let cap = if self.mail_flow.phase == "uploading"
+            && self.mail_flow.conversation == self.active_id
+        {
+            self.mail_flow.analysis_caps.as_ref()
+        } else {
+            if self.work.capability_model != self.config.model {
+                return Err("正在確認目前模型可用的附件格式。".into());
+            }
+            self.work.caps.as_ref()
+        }
+        .ok_or("請重新整理網站能力後再送出附件。")?;
+        let mut total = 0;
+        for (index, file) in files.iter().enumerate() {
+            cap.attachments.check(&file.name, file.size, index, total)?;
+            total += file.size;
+            if file.token().is_none() {
+                return Err("附件尚未就緒或已到期；請查看附件狀態，完成處理後再送出。".into());
+            }
+        }
+        Ok(())
+    }
+    pub(super) fn work_ready(&self) -> bool {
+        if self.mail_flow.phase != "idle"
+            && self.mail_flow.conversation == self.active_id
+            && self.active_id.is_some()
+        {
+            return false;
+        }
+        self.work
+            .caps
+            .as_ref()
+            .is_some_and(|c| c.supports(&self.work.mode))
+            && matches!(self.work.mode.as_str(), "stream" | "background")
+            && !self.work.capability_loading
+            && !self.work.storage_error
+            && self.work.incoming.is_none()
+            && !self.work.store.pending(self.active_id.as_deref())
+            && self.check_draft_files().is_ok()
+    }
+    fn ensure_local_conversation(&mut self) -> AppResult<String> {
+        if self.active_id.is_none() {
+            self.save_history()?;
+        }
+        self.active_id.clone().ok_or("無法建立本機對話。".into())
+    }
+    pub(super) fn refresh_work_capabilities(&mut self) {
+        if self.smoke || self.work.capability_loading || !self.logged_in() {
+            return;
+        }
+        self.work.capability_loading = true;
+        let (config, session, tx, generation) = (
+            self.config.clone(),
+            self.session.clone(),
+            self.tx.clone(),
+            self.generation,
+        );
+        if let Some(session) = session {
+            thread::spawn(move || {
+                let _ = tx.send(Event::Work(
+                    generation,
+                    WorkEvent::Capabilities(
+                        config.model.clone(),
+                        jobs::capabilities(&config, &session),
+                    ),
+                ));
+            });
+        }
+    }
+    pub(super) fn work_command(&mut self, command: WorkCommand) -> AppResult<()> {
+        match command {
+            WorkCommand::FileBegin {
+                name,
+                size,
+                mime_type,
+            } => {
+                let result = (|| {
+                    if self
+                        .active_id
+                        .as_deref()
+                        .and_then(|id| self.projects.store.project_for(id))
+                        .is_some()
+                    {
+                        return Err(
+                            "專案文件請放入授權資料夾，或使用匯入文字；此處不提供網站附件。".into(),
+                        );
+                    }
+                    if (self.mail_flow.phase != "idle"
+                        && self.mail_flow.conversation == self.active_id)
+                        || self.work.capability_loading
+                        || self.work.capability_model != self.config.model
+                        || !self.logged_in()
+                        || self.versions.blocked()
+                        || self.busy != "none"
+                        || self.work.incoming.is_some()
+                        || self.work.store.pending(self.active_id.as_deref())
+                    {
+                        return Err("目前無法加入附件，請先完成操作或新增對話。".into());
+                    }
+                    let cap = self.work.caps.as_ref().ok_or("網站尚未提供附件能力。")?;
+                    let files = self.work.store.drafts(self.active_id.as_deref());
+                    cap.attachments.check(
+                        &name,
+                        size,
+                        files.len(),
+                        files.iter().map(|a| a.size).sum(),
+                    )?;
+                    if mime_type.len() > 100 || mime_type.chars().any(char::is_control) {
+                        return Err("附件類型不正確。".into());
+                    }
+                    let local = self.ensure_local_conversation()?;
+                    let id = jobs::new_id()?;
+                    let incoming = Incoming::new(&self.root, id.clone(), size)?;
+                    self.work.store.attachments.push(Attachment {
+                        id: id.clone(),
+                        conversation_id: local,
+                        name,
+                        size,
+                        mime_type,
+                        remote: None,
+                        state: "reading".into(),
+                        message: String::new(),
+                        sent: false,
+                        removed: false,
+                        uploaded_bytes: 0,
+                    });
+                    self.work_save()?;
+                    self.work.incoming = Some(incoming);
+                    Ok(id)
+                })();
+                match result {
+                    Ok(id) => self
+                        .view
+                        .post(&json!({"type":"file_ack","id":id,"offset":0}))?,
+                    Err(e) => {
+                        self.view.post(&json!({"type":"file_error","message":e}))?;
+                        return Err(e);
+                    }
+                }
+            }
+            WorkCommand::FileChunk { id, offset, data } => {
+                let result = self
+                    .work
+                    .incoming
+                    .as_mut()
+                    .filter(|i| i.id == id)
+                    .ok_or("找不到接收中的附件。".to_string())
+                    .and_then(|i| {
+                        i.append(offset, &data)?;
+                        Ok(i.received)
+                    });
+                match result {
+                    Ok(offset) => self
+                        .view
+                        .post(&json!({"type":"file_ack","id":id,"offset":offset}))?,
+                    Err(e) => {
+                        self.view.post(&json!({"type":"file_error","message":e}))?;
+                        return Err(e);
+                    }
+                }
+            }
+            WorkCommand::FileFinish { id } => {
+                let result = (|| {
+                    if self.work.incoming.as_ref().is_none_or(|i| i.id != id) {
+                        return Err("找不到接收中的附件。".into());
+                    }
+                    self.work
+                        .incoming
+                        .take()
+                        .ok_or("附件接收已結束。")?
+                        .finish()?;
+                    let file = self
+                        .work
+                        .store
+                        .attachments
+                        .iter_mut()
+                        .find(|a| a.id == id)
+                        .ok_or("找不到附件。")?;
+                    file.state = "upload_pending".into();
+                    self.work_save()
+                })();
+                match result {
+                    Ok(()) => self
+                        .view
+                        .post(&json!({"type":"file_ack","id":id,"finished":true}))?,
+                    Err(e) => {
+                        self.view.post(&json!({"type":"file_error","message":e}))?;
+                        return Err(e);
+                    }
+                }
+            }
+            WorkCommand::FileAbort { id } => {
+                if self.work.incoming.as_ref().is_some_and(|i| i.id == id) {
+                    self.work.incoming = None;
+                }
+                if let Some(a) = self
+                    .work
+                    .store
+                    .attachments
+                    .iter_mut()
+                    .find(|a| a.id == id && a.state == "reading")
+                {
+                    a.state = "failed".into();
+                    a.message = "附件接收中止，請移除後重新選取。".into();
+                }
+                self.work_save()?;
+            }
+            WorkCommand::RemoveAttachment { id } => {
+                if self.work.incoming.as_ref().is_some_and(|i| i.id == id) {
+                    return Err("請等檔案接收完成。".into());
+                }
+                let a = self
+                    .work
+                    .store
+                    .attachments
+                    .iter_mut()
+                    .find(|a| a.id == id && !a.sent)
+                    .ok_or("找不到草稿附件。")?;
+                a.removed = true;
+                let remote = a.remote.clone();
+                self.work_save()?;
+                if !self.work.uploads.contains(&id) {
+                    let _ = std::fs::remove_file(attachments::spool_path(&self.root, &id)?);
+                }
+                if let (Some(remote), Some(session)) = (remote, self.session.clone()) {
+                    let config = self.config.clone();
+                    thread::spawn(move || {
+                        let _: AppResult<Value> = jobs::post(
+                            &config,
+                            &session,
+                            &format!("{}/attachments/{}/cancel", jobs::PREFIX, remote.job_id),
+                            &json!({}),
+                        );
+                    });
+                }
+            }
+            WorkCommand::RetryUpload { id } => {
+                if !self.logged_in() || self.versions.blocked() || self.work.uploads.contains(&id) {
+                    return Err("目前無法重試附件。".into());
+                }
+                let a = self
+                    .work
+                    .store
+                    .attachments
+                    .iter_mut()
+                    .find(|a| a.id == id && !a.sent && !a.removed)
+                    .ok_or("找不到附件。")?;
+                attachments::SpoolReader::open(&self.root, &id)?;
+                a.state = "upload_pending".into();
+                a.message.clear();
+                self.work_save()?;
+            }
+            WorkCommand::Mode { mode } => {
+                if matches!(mode.as_str(), "stream" | "background")
+                    && self.work.caps.as_ref().is_some_and(|c| c.supports(&mode))
+                {
+                    self.work.mode = mode;
+                }
+            }
+            WorkCommand::CancelTask { id } => {
+                let task = self
+                    .work
+                    .store
+                    .tasks
+                    .iter()
+                    .find(|t| t.request_id == id && t.active())
+                    .ok_or("找不到進行中的工作。")?;
+                let remote = task
+                    .remote
+                    .as_ref()
+                    .ok_or("尚未確認伺服器是否接受工作，請先重新整理。")?;
+                let path = format!("{}/tasks/{}/cancel", jobs::PREFIX, remote.task_id);
+                let (config, session, tx, generation) = (
+                    self.config.clone(),
+                    self.session.clone().ok_or("請先登入。")?,
+                    self.tx.clone(),
+                    self.generation,
+                );
+                thread::spawn(move || {
+                    let result = jobs::post(&config, &session, &path, &json!({}));
+                    let _ = tx.send(Event::Work(generation, WorkEvent::Polled(id, result)));
+                });
+            }
+            WorkCommand::StopTask { id } => self.stop_local_task(&id, false)?,
+            WorkCommand::RemoveTask { id } => self.stop_local_task(&id, true)?,
+            WorkCommand::RetryTask { id } => {
+                if self.versions.blocked() {
+                    return Err("請先更新版本。".into());
+                }
+                let task = self
+                    .work
+                    .store
+                    .tasks
+                    .iter()
+                    .find(|t| t.request_id == id && t.active() && t.remote.is_none())
+                    .ok_or("這個工作不可重試送出。")?
+                    .clone();
+                if !self.work.streams.contains(&id) {
+                    self.submit_work(task)?;
+                }
+            }
+            WorkCommand::Refresh => {
+                self.refresh_work_capabilities();
+                self.poll_work(true);
+            }
+            WorkCommand::ClearCompleted => {
+                // 先保存再套用，磁碟失敗時保留原卡片；不呼叫 server 刪除或取消 API。
+                if self.work.storage_error {
+                    return Err("任務紀錄無法保存，暫不自動清除。".into());
+                }
+                let mut next = self.work.store.clone();
+                if next.remove_completed() > 0 {
+                    next.save(&self.root, &self.config)?;
+                    self.work.store = next;
+                }
+            }
+        }
+        Ok(())
+    }
+    pub(super) fn begin_work_chat(
+        &mut self,
+        messages: Vec<Message>,
+        action: &str,
+    ) -> AppResult<()> {
+        let local = self.ensure_local_conversation()?;
+        let request_id = jobs::new_id()?;
+        let files = self.work.store.drafts(Some(&local));
+        let tokens: Vec<String> = files
+            .iter()
+            .map(|a| {
+                a.token()
+                    .map(str::to_owned)
+                    .ok_or("附件尚未就緒或已到期。".to_string())
+            })
+            .collect::<AppResult<_>>()?;
+        let names: Vec<_> = files.iter().map(|a| a.name.clone()).collect();
+        let attachment_ids = files.iter().map(|a| a.id.clone()).collect();
+        let mut messages = messages;
+        let last = messages.last_mut().ok_or("缺少使用者訊息。")?;
+        last.request_id = Some(request_id.clone());
+        last.attachments = names;
+        // 尚無 server conversation 時，送出執行緒先用相同 local ID 建立／取得；重試仍固定 ID。
+        let use_fast = self.config.quick_actions_fast
+            && matches!(action, "translate" | "summarize" | "polish" | "explain");
+        let model = if use_fast {
+            "fast"
+        } else {
+            self.config.model.as_str()
+        };
+        if !self
+            .models
+            .as_ref()
+            .is_some_and(|c| c.models.iter().any(|m| m.id == model))
+        {
+            return Err("目前帳號沒有快速模型權限；請改選維持目前模型。".into());
+        }
+        messages
+            .last_mut()
+            .ok_or("缺少使用者訊息。")?
+            .retry_settings = Some(crate::protocol::RetrySettings {
+            model: model.into(),
+            mode: self.work.mode.clone(),
+            skills: action != "mail",
+            attachment_ids,
+            quick_action: matches!(action, "translate" | "summarize" | "polish" | "explain"),
+        });
+        let mut request = jobs::current_chat_request(
+            model,
+            &messages,
+            &local,
+            &request_id,
+            &self.work.mode,
+            tokens,
+        )?;
+        jobs::set_skills(&mut request, action != "mail");
+        if self.work.store.tasks.iter().filter(|t| t.active()).count() >= 8 {
+            return Err("最多同時追蹤 8 個聊天任務，請先等待部分任務完成。".into());
+        }
+        let task = Task {
+            request_id: request_id.clone(),
+            conversation_id: local.clone(),
+            request,
+            mode: self.work.mode.clone(),
+            title: messages
+                .last()
+                .map(|m| m.content.chars().take(50).collect())
+                .unwrap_or_default(),
+            created_at: crate::unix_now(),
+            remote: None,
+            applied: false,
+            message: "正在送出；關閉後會恢復查詢".into(),
+            mail_analysis: action == "mail",
+            title_generation: false,
+            tool_events: Vec::new(),
+            partial: String::new(),
+            project_retry: Default::default(),
+        };
+        self.messages = messages;
+        self.save_history()?;
+        for a in &mut self.work.store.attachments {
+            if a.conversation_id == local && !a.removed {
+                a.sent = true;
+            }
+        }
+        self.work.store.tasks.push(task.clone());
+        self.work_save()?;
+        self.set_draft(String::new());
+        self.status = "工作已保存，正在交給伺服器；可切換到其他對話".into();
+        self.submit_work(task)?;
+        if use_fast && self.config.model != "fast" {
+            let _ = self
+                .view
+                .post(&json!({"type":"model_notice","text":"本次已自動切換為快速模型"}));
+        }
+        if action != "mail" && self.messages.iter().filter(|m| m.role == "user").count() == 1 {
+            if let Err(e) = self.queue_title(&local) {
+                self.toast(&format!("對話已送出；標題暫用問題摘要：{e}"));
+            }
+        }
+        Ok(())
+    }
+    /// 標題是獨立背景工作，不混入使用者聊天訊息；手動改名永遠優先。
+    pub(super) fn queue_title(&mut self, local: &str) -> AppResult<()> {
+        if self.work.store.tasks.iter().filter(|t| t.active()).count() >= 8 {
+            return Ok(());
+        }
+        if !self
+            .models
+            .as_ref()
+            .is_some_and(|c| c.models.iter().any(|m| m.id == "fast"))
+        {
+            return Ok(());
+        }
+        let question = self
+            .archive
+            .conversations
+            .iter()
+            .find(|conversation| conversation.id == local)
+            .and_then(|conversation| conversation.messages.first())
+            .map(|m| m.content.as_str())
+            .unwrap_or_default();
+        let prompt =
+            format!("請為下列使用者問題產生繁體中文標題，最多 15 個字，只回覆標題：\n{question}");
+        let id = jobs::new_id()?;
+        let mut request = jobs::current_chat_request(
+            "fast",
+            &[Message::user(&prompt)],
+            local,
+            &id,
+            "background",
+            vec![],
+        )?;
+        jobs::set_skills(&mut request, false);
+        if self.projects.store.project_for(local).is_some() {
+            crate::projects::events::register(&self.root, &id)?;
+        }
+        let task = Task {
+            request_id: id,
+            conversation_id: local.into(),
+            request,
+            mode: "background".into(),
+            title: "產生對話標題".into(),
+            created_at: crate::unix_now(),
+            remote: None,
+            applied: false,
+            message: String::new(),
+            mail_analysis: false,
+            title_generation: true,
+            tool_events: Vec::new(),
+            partial: String::new(),
+            project_retry: Default::default(),
+        };
+        self.work.store.tasks.push(task.clone());
+        self.work_save()?;
+        self.submit_work(task)
+    }
+    pub(super) fn submit_work(&mut self, task: Task) -> AppResult<()> {
+        let (config, session, tx, generation) = (
+            self.config.clone(),
+            self.session
+                .clone()
+                .filter(|s| s.valid_for(&self.config))
+                .ok_or("請先登入。")?,
+            self.tx.clone(),
+            self.generation,
+        );
+        self.work.poll_failures.remove(&task.request_id);
+        self.work.streams.insert(task.request_id.clone());
+        let cancel = Arc::new(AtomicBool::new(false));
+        self.work
+            .cancellations
+            .insert(task.request_id.clone(), cancel.clone());
+        let attachment_info: Vec<_> = self
+            .work
+            .store
+            .attachments
+            .iter()
+            .filter(|a| {
+                a.conversation_id == task.conversation_id
+                    && !a.removed
+                    && a.sent
+                    && task.request["attachment_tokens"]
+                        .as_array()
+                        .is_some_and(|tokens| {
+                            a.token().is_some_and(|token| {
+                                tokens.iter().any(|v| v.as_str() == Some(token))
+                            })
+                        })
+            })
+            .map(|a| (a.name.clone(), a.size))
+            .collect();
+        let principal = self.work.store.principal_id.clone();
+        thread::spawn(move || {
+            let id = task.request_id.clone();
+            let mut chat_started = false;
+            let result = (|| -> Result<(), jobs::submission::SubmitFailure> {
+                let mut task = task;
+                // 快捷操作／標題可能使用另一模型，須重新驗證其能力與附件規則。
+                let requested = task.request["model"].as_str().ok_or("缺少模型。")?;
+                if requested != config.model {
+                    let mut model_config = config.clone();
+                    model_config.model = requested.into();
+                    let caps = jobs::capabilities(&model_config, &session)?;
+                    if caps.principal_id != principal {
+                        return Err("模型帳號識別已改變，請重新登入。".into());
+                    }
+                    if !caps.supports(&task.mode) {
+                        return Err("此模型不支援選定的回覆模式。".into());
+                    }
+                    let mut total = 0;
+                    if !task.title_generation {
+                        for (index, (name, size)) in attachment_info.iter().enumerate() {
+                            caps.attachments.check(name, *size, index, total)?;
+                            total += *size;
+                        }
+                    }
+                }
+                let server_conversation = if task.title_generation {
+                    &task.request_id
+                } else {
+                    &task.conversation_id
+                };
+                let remote = jobs::conversation(&config, &session, server_conversation)?;
+                task.request["conversation_id"] = json!(remote);
+                chat_started = true;
+                jobs::submit_tracked(&config, &session, &task, &cancel, |update| {
+                    let _ = tx.send(Event::Work(
+                        generation,
+                        WorkEvent::Update(id.clone(), update),
+                    ));
+                })
+            })()
+            .map_err(|mut failure| {
+                // 建立對話或能力預檢失敗時，聊天 POST 尚未送出，不應查詢不存在的任務。
+                if !chat_started {
+                    failure.rejected = true;
+                }
+                failure
+            });
+            let _ = tx.send(Event::Work(generation, WorkEvent::Submitted(id, result)));
+        });
+        Ok(())
+    }
+    fn start_uploads(&mut self) {
+        if !self.logged_in() || self.versions.blocked() || self.work.storage_error {
+            return;
+        }
+        let available = 2usize.saturating_sub(self.work.uploads.len());
+        let files: Vec<_> = self
+            .work
+            .store
+            .attachments
+            .iter()
+            .filter(|a| {
+                a.state == "upload_pending" && !a.removed && !self.work.uploads.contains(&a.id)
+            })
+            .take(available)
+            .cloned()
+            .collect();
+        for a in files {
+            self.work.uploads.insert(a.id.clone());
+            let (config, session, tx, generation) = (
+                self.config.clone(),
+                self.session.clone(),
+                self.tx.clone(),
+                self.generation,
+            );
+            if let Some(session) = session {
+                thread::spawn(move || {
+                    let result = (|| {
+                        let remote = jobs::conversation(&config, &session, &a.conversation_id)?;
+                        let status = jobs::reserve_attachment(&config, &session, &remote, &a)?;
+                        Ok((remote, status))
+                    })();
+                    let _ = tx.send(Event::Work(generation, WorkEvent::Reserved(a.id, result)));
+                });
+            }
+        }
+    }
+    pub(super) fn poll_work(&mut self, force: bool) {
+        self.start_uploads();
+        if self.smoke
+            || !self.logged_in()
+            || self.work.caps.is_none()
+            || self.work.polling
+            || (!force && self.work.last_poll.elapsed() < Duration::from_secs(self.work.poll_delay))
+        {
+            return;
+        }
+        self.work.polling = true;
+        self.work.last_poll = Instant::now();
+        let tasks: Vec<_> = self
+            .work
+            .store
+            .tasks
+            .iter()
+            // 尚未取得任務 ID 的提交先等 POST 回應；重新啟動或傳輸失聯則查原 ID。
+            .filter(|t| t.can_poll(self.work.streams.contains(&t.request_id)))
+            .cloned()
+            .collect();
+        let files: Vec<_> = self
+            .work
+            .store
+            .attachments
+            .iter()
+            .filter(|a| {
+                !a.removed
+                    && !a.sent
+                    && a.remote.is_some()
+                    && !self.work.uploads.contains(&a.id)
+                    && matches!(a.state.as_str(), "uploaded" | "queued" | "processing")
+            })
+            .cloned()
+            .collect();
+        let (config, session, tx, generation) = (
+            self.config.clone(),
+            self.session.clone(),
+            self.tx.clone(),
+            self.generation,
+        );
+        let poll_failures = self.work.poll_failures.clone();
+        if let Some(session) = session {
+            thread::spawn(move || {
+                // 同一輪多個任務失敗時共用一次模型端點檢查；不用舊模型快取判定健康。
+                let mut models_healthy = None;
+                for task in tasks {
+                    let result = jobs::polling::task_status(&config, &session, &task);
+                    let needs_check = result.as_ref().err().is_some_and(|failure| {
+                        poll_failures
+                            .get(&task.request_id)
+                            .cloned()
+                            .unwrap_or_default()
+                            .needs_service_check(failure)
+                    });
+                    if needs_check && models_healthy.is_none() {
+                        // fetch_models 僅在 HTTP 200 且模型清單有效時成功。
+                        models_healthy =
+                            Some(service::fetch_models(&config, Some(&session)).is_ok());
+                    }
+                    let _ = tx.send(Event::Work(
+                        generation,
+                        WorkEvent::TaskPoll {
+                            id: task.request_id,
+                            remote_id: task.remote.map(|remote| remote.task_id),
+                            result,
+                            models_healthy: needs_check && models_healthy == Some(true),
+                        },
+                    ));
+                }
+                for a in files {
+                    if let Some(remote) = a.remote {
+                        let result = jobs::get(
+                            &config,
+                            &session,
+                            &format!("{}/attachments/{}", jobs::PREFIX, remote.job_id),
+                        );
+                        let _ =
+                            tx.send(Event::Work(generation, WorkEvent::Attachment(a.id, result)));
+                    }
+                }
+                let _ = tx.send(Event::Work(generation, WorkEvent::PollFinished));
+            });
+        }
+    }
+    pub(super) fn work_event(&mut self, event: WorkEvent) -> AppResult<()> {
+        match event {
+            WorkEvent::Capabilities(model, result) => {
+                self.work.capability_loading = false;
+                if model != self.config.model {
+                    self.refresh_work_capabilities();
+                    return Ok(());
+                }
+                match result {
+                    Ok(cap) => {
+                        if self.work.store.principal_id != cap.principal_id {
+                            self.work.store =
+                                WorkStore::load(&self.root, &self.config, &cap.principal_id)?;
+                            self.work.storage_error = false;
+                            self.work.poll_failures.clear();
+                            // 完整接收的附件可重新上傳；未完整接收的只能重新選取。
+                            for a in &mut self.work.store.attachments {
+                                if !a.removed
+                                    && matches!(a.state.as_str(), "uploading" | "upload_pending")
+                                {
+                                    a.state = "upload_pending".into();
+                                }
+                            }
+                        }
+                        if self.work.caps.is_none() || !cap.supports(&self.work.mode) {
+                            self.work.mode = if cap.supports("stream") {
+                                "stream"
+                            } else if cap.supports("background") {
+                                "background"
+                            } else {
+                                "stream"
+                            }
+                            .into();
+                        }
+                        self.work.capability_model = model;
+                        self.work.caps = Some(cap);
+                        self.work.status.clear();
+                        self.work_save()?;
+                        self.finish_tasks()?;
+                        self.poll_work(true);
+                    }
+                    Err(_) => {
+                        if self.work.capability_model != model {
+                            self.work.caps = None;
+                            self.work.mode = "stream".into();
+                        }
+                        self.work.status = "網站聊天能力暫不可用，請重新整理服務。".into();
+                    }
+                }
+            }
+            WorkEvent::Reserved(id, result) => {
+                let (remote, status) = match result {
+                    Ok(v) => v,
+                    Err(e) => {
+                        self.work.uploads.remove(&id);
+                        if let Some(a) = self.work.store.attachments.iter_mut().find(|a| a.id == id)
+                        {
+                            a.state = "failed".into();
+                            a.message = e;
+                        }
+                        self.work_save()?;
+                        return Ok(());
+                    }
+                };
+                let a = self
+                    .work
+                    .store
+                    .attachments
+                    .iter_mut()
+                    .find(|a| a.id == id)
+                    .ok_or("找不到上傳附件。")?;
+                self.work
+                    .store
+                    .conversations
+                    .insert(a.conversation_id.clone(), remote);
+                a.apply(status.clone())?;
+                let size = a.size;
+                let removed = a.removed;
+                if status.state == "awaiting_upload" && !removed {
+                    a.state = "uploading".into();
+                }
+                self.work_save()?;
+                if removed || status.state != "awaiting_upload" {
+                    self.work.uploads.remove(&id);
+                    let _ = std::fs::remove_file(attachments::spool_path(&self.root, &id)?);
+                    if removed {
+                        if let Some(session) = self.session.clone() {
+                            let config = self.config.clone();
+                            thread::spawn(move || {
+                                let _: AppResult<Value> = jobs::post(
+                                    &config,
+                                    &session,
+                                    &format!(
+                                        "{}/attachments/{}/cancel",
+                                        jobs::PREFIX,
+                                        status.job_id
+                                    ),
+                                    &json!({}),
+                                );
+                            });
+                        }
+                    }
+                    return Ok(());
+                }
+                let (config, session, tx, generation, root) = (
+                    self.config.clone(),
+                    self.session.clone().ok_or("請先登入。")?,
+                    self.tx.clone(),
+                    self.generation,
+                    self.root.clone(),
+                );
+                thread::spawn(move || {
+                    let result = (|| {
+                        struct ProgressReader<'a> {
+                            reader: attachments::SpoolReader,
+                            sent: u64,
+                            notify: &'a mut dyn FnMut(u64),
+                        }
+                        impl std::io::Read for ProgressReader<'_> {
+                            fn read(&mut self, b: &mut [u8]) -> std::io::Result<usize> {
+                                let n = self.reader.read(b)?;
+                                self.sent += n as u64;
+                                (self.notify)(self.sent);
+                                Ok(n)
+                            }
+                        }
+                        let mut last = Instant::now();
+                        let mut progress = |sent| {
+                            if last.elapsed() > Duration::from_millis(250) || sent == size {
+                                let _ = tx.send(Event::Work(
+                                    generation,
+                                    WorkEvent::Progress(id.clone(), sent),
+                                ));
+                                last = Instant::now();
+                            }
+                        };
+                        let mut reader = ProgressReader {
+                            reader: attachments::SpoolReader::open(&root, &id)?,
+                            sent: 0,
+                            notify: &mut progress,
+                        };
+                        let response = transport::exchange(
+                            &config.endpoint(&format!(
+                                "{}/attachments/{}/content",
+                                jobs::PREFIX,
+                                status.job_id
+                            ))?,
+                            "PUT",
+                            "application/octet-stream",
+                            transport::Payload {
+                                reader: &mut reader,
+                                length: size as u32,
+                            },
+                            Some(("Authorization", &format!("Bearer {}", session.access_token))),
+                            120_000,
+                            None,
+                        )?;
+                        jobs::decode(response, &session)
+                    })();
+                    let _ = tx.send(Event::Work(generation, WorkEvent::Uploaded(id, result)));
+                });
+            }
+            WorkEvent::Uploaded(id, result) => {
+                self.work.uploads.remove(&id);
+                let a = self
+                    .work
+                    .store
+                    .attachments
+                    .iter_mut()
+                    .find(|a| a.id == id)
+                    .ok_or("找不到附件。")?;
+                match result {
+                    Ok(status) => {
+                        a.apply(status)?;
+                        let _ = std::fs::remove_file(attachments::spool_path(&self.root, &id)?);
+                    }
+                    Err(e) => {
+                        a.message = format!("{e} 可重試相同附件，不會建立另一份工作。");
+                        a.state = "failed".into();
+                    }
+                }
+                self.work_save()?;
+            }
+            WorkEvent::Attachment(id, result) => {
+                if let Some(a) = self
+                    .work
+                    .store
+                    .attachments
+                    .iter_mut()
+                    .find(|a| a.id == id && !a.removed)
+                {
+                    match result {
+                        Ok(status) => {
+                            a.apply(status)?;
+                            self.work.poll_delay = 5;
+                        }
+                        Err(e) => {
+                            a.message = e;
+                            self.work.poll_delay = (self.work.poll_delay * 2).min(30);
+                        }
+                    }
+                    self.work_save()?;
+                }
+            }
+            WorkEvent::Progress(id, bytes) => {
+                if let Some(a) = self.work.store.attachments.iter_mut().find(|a| a.id == id) {
+                    a.uploaded_bytes = bytes;
+                }
+            }
+            WorkEvent::Update(id, update) => {
+                // 停止／移除後，晚到的 SSE 不得復活任務或寫回對話。
+                let Some(task) = self
+                    .work
+                    .store
+                    .tasks
+                    .iter_mut()
+                    .find(|t| t.request_id == id && t.active())
+                else {
+                    return Ok(());
+                };
+                match update {
+                    jobs::StreamUpdate::Status(status) => {
+                        let changed_id = task.remote.as_ref().map(|remote| &remote.task_id)
+                            != Some(&status.task_id);
+                        task.apply_status(*status)?;
+                        if changed_id {
+                            self.work.poll_failures.remove(&id);
+                        }
+                        if task.title_generation
+                            && self
+                                .projects
+                                .store
+                                .project_for(&task.conversation_id)
+                                .is_some()
+                        {
+                            if let Some(remote) = &task.remote {
+                                crate::projects::events::register(&self.root, &remote.task_id)?;
+                            }
+                        }
+                        self.work_save()?;
+                        self.finish_tasks()?;
+                    }
+                    jobs::StreamUpdate::Delta(text) => {
+                        if task.active() && task.partial.len() + text.len() <= 1_048_576 {
+                            task.partial.push_str(&text);
+                        }
+                    }
+                    jobs::StreamUpdate::Started if task.active() => {
+                        task.message = "伺服器已開始處理".into();
+                        self.work.tool_status.remove(&id);
+                    }
+                    jobs::StreamUpdate::Tool(status) if task.active() => {
+                        if task.tool_events.len() == 32 {
+                            task.tool_events.remove(0);
+                        }
+                        task.tool_events.push(status.clone());
+                        self.work.tool_status.insert(id, status);
+                        self.work_save()?;
+                    }
+                    jobs::StreamUpdate::Started | jobs::StreamUpdate::Tool(_) => {}
+                }
+            }
+            WorkEvent::Submitted(id, result) => {
+                self.work.streams.remove(&id);
+                self.work.cancellations.remove(&id);
+                if !self
+                    .work
+                    .store
+                    .tasks
+                    .iter()
+                    .any(|task| task.request_id == id && task.active())
+                {
+                    return Ok(());
+                }
+                if let Err(failure) = &result {
+                    let accepted = self
+                        .work
+                        .store
+                        .tasks
+                        .iter()
+                        .any(|task| task.request_id == id && task.remote.is_some());
+                    if failure.rejected && !accepted {
+                        // 原始 HTTP 狀態／伺服器訊息留在卡片，不能再被後續 404 蓋掉。
+                        let _ = self.friendly_error("chat_submission", &failure.message);
+                        let message = format!("聊天未受理，已停止追蹤。\n{}", failure.message);
+                        let task = self.persist_stopped_task(&id, false, &message)?;
+                        if !task.title_generation {
+                            self.status = message.clone();
+                            self.toast(&message);
+                        }
+                        return Ok(());
+                    }
+                }
+                let result = result
+                    .map_err(|failure| self.friendly_error("chat_submission", &failure.message));
+                if result.is_err() {
+                    if let Some(task) = self
+                        .work
+                        .store
+                        .tasks
+                        .iter_mut()
+                        .find(|t| t.request_id == id && t.title_generation)
+                    {
+                        // 標題是附加功能，失敗不能占用工作上限或阻擋原聊天。
+                        // 已建立的 server 任務保留，不用新的 request ID 自動重送。
+                        task.applied = true;
+                        task.message = "標題暫時無法產生，保留本機問題摘要。".into();
+                        self.work_save()?;
+                        return Ok(());
+                    }
+                }
+                let interrupted = result.is_err();
+                if let Some(task) = self
+                    .work
+                    .store
+                    .tasks
+                    .iter_mut()
+                    .find(|t| t.request_id == id && t.active())
+                {
+                    task.message = match result {
+                        Ok(()) => "正在確認伺服器保存的結果".into(),
+                        Err(e) => format!("AI 異常斷線，後續回覆未收到；已保留收到的內容。{e} 正在查詢伺服器結果。"),
+                    };
+                    self.work_save()?;
+                }
+                if interrupted {
+                    if let Some(task) = self
+                        .work
+                        .store
+                        .tasks
+                        .iter()
+                        .find(|t| t.request_id == id)
+                        .cloned()
+                    {
+                        self.preserve_partial_reply(&task)?;
+                    }
+                }
+                self.poll_work(true);
+            }
+            WorkEvent::TaskPoll {
+                id,
+                remote_id,
+                result,
+                models_healthy,
+            } => {
+                let Some(task) = self
+                    .work
+                    .store
+                    .tasks
+                    .iter()
+                    .find(|task| task.request_id == id && task.active())
+                else {
+                    return Ok(());
+                };
+                // SSE 可能先取得 task ID；舊 by-request 查詢的晚到 404 不算新路由的失敗。
+                if task.remote.as_ref().map(|remote| &remote.task_id) != remote_id.as_ref() {
+                    return Ok(());
+                }
+                match result {
+                    Ok(status) => {
+                        self.work.poll_failures.remove(&id);
+                        self.work_event(WorkEvent::Polled(id, Ok(status)))?;
+                    }
+                    Err(failure) => {
+                        let failures = self.work.poll_failures.entry(id.clone()).or_default();
+                        failures.record(&failure);
+                        if failures.should_stop(models_healthy) {
+                            let message = format!(
+                                "任務狀態連續 3 次查詢回報相同錯誤，模型清單服務正常，已自動停止追蹤。已收到的內容保留；不代表伺服器工作已取消。\n{}",
+                                failure.message
+                            );
+                            self.persist_stopped_task(&id, false, &message)?;
+                            self.status =
+                                "任務查詢持續失敗，已自動停止追蹤；可在工作任務查看原因。".into();
+                        } else {
+                            if let Some(task) = self
+                                .work
+                                .store
+                                .tasks
+                                .iter_mut()
+                                .find(|task| task.request_id == id)
+                            {
+                                task.message = failure.message;
+                            }
+                            self.work.poll_delay = (self.work.poll_delay * 2).min(30);
+                            self.work_save()?;
+                        }
+                    }
+                }
+            }
+            WorkEvent::Polled(id, result) => {
+                if let Some(task) = self
+                    .work
+                    .store
+                    .tasks
+                    .iter_mut()
+                    .find(|t| t.request_id == id && t.active())
+                {
+                    match result {
+                        Ok(status) => {
+                            task.apply_status(status)?;
+                            self.work.poll_failures.remove(&id);
+                            if task.title_generation
+                                && self
+                                    .projects
+                                    .store
+                                    .project_for(&task.conversation_id)
+                                    .is_some()
+                            {
+                                if let Some(remote) = &task.remote {
+                                    crate::projects::events::register(&self.root, &remote.task_id)?;
+                                }
+                            }
+                            self.work.poll_delay = 5;
+                        }
+                        Err(e) => {
+                            task.message = e;
+                            self.work.poll_delay = (self.work.poll_delay * 2).min(30);
+                        }
+                    }
+                    self.work_save()?;
+                    self.finish_tasks()?;
+                }
+            }
+            WorkEvent::PollFinished => self.work.polling = false,
+        }
+        Ok(())
+    }
+    /// 先原子保存歷史，再記錄已套用。若中途當機，以 request_id 避免重複加入回答。
+    fn finish_tasks(&mut self) -> AppResult<()> {
+        let pending: Vec<_> = self
+            .work
+            .store
+            .tasks
+            .iter()
+            .filter(|t| !t.applied && t.remote.as_ref().is_some_and(TaskStatus::terminal))
+            .cloned()
+            .collect();
+        for task in pending {
+            let remote = task.remote.as_ref().ok_or("缺少任務狀態。")?;
+            if remote.state == "completed" {
+                let mut archive = self.archive.clone();
+                if task.title_generation {
+                    let reply = remote.reply_text()?;
+                    if let Some(c) = archive
+                        .conversations
+                        .iter_mut()
+                        .find(|c| c.id == task.conversation_id && !c.title_manual)
+                    {
+                        let title: String = reply
+                            .trim()
+                            .trim_matches('"')
+                            .chars()
+                            .filter(|c| !c.is_control())
+                            .take(15)
+                            .collect();
+                        if !title.is_empty() {
+                            c.title = title;
+                        }
+                    }
+                } else {
+                    jobs::apply_reply(&mut archive, &task)?;
+                }
+                history::save(&self.root, &archive)?;
+                self.archive = archive;
+                if self.active_id.as_ref() == Some(&task.conversation_id) {
+                    if let Some(c) = self
+                        .archive
+                        .conversations
+                        .iter()
+                        .find(|c| c.id == task.conversation_id)
+                    {
+                        self.messages = c.messages.clone();
+                    }
+                }
+            } else if !task.title_generation {
+                self.preserve_partial_reply(&task)?;
+            }
+            let failure = (remote.state == "failed")
+                .then(|| self.friendly_error("chat_task", &remote.error_message));
+            if let Some(saved) = self
+                .work
+                .store
+                .tasks
+                .iter_mut()
+                .find(|t| t.request_id == task.request_id)
+            {
+                if let Some(message) = failure {
+                    saved.message = message;
+                }
+                saved.applied = true;
+                saved.partial.clear();
+                saved.request = json!({});
+            }
+            self.work.tool_status.remove(&task.request_id);
+            self.work.poll_failures.remove(&task.request_id);
+            self.work_save()?;
+            let label = if remote.state == "completed" {
+                "回覆完成"
+            } else if remote.state == "cancelled" {
+                "工作已取消"
+            } else {
+                "工作失敗，請查看任務"
+            };
+            if !task.title_generation && remote.state != "cancelled" && !self.is_foreground() {
+                self.toast(label);
+            }
+            if !task.title_generation
+                && remote.state != "cancelled"
+                && self.config.notification_popups
+                && !self.is_foreground()
+            {
+                self.work.tray_restore_only = false;
+                self.work.task_balloon = true;
+                tray(self.window, NIM_MODIFY, Some(label));
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Drop for WorkRuntime {
+    fn drop(&mut self) {
+        for cancel in self.cancellations.values() {
+            cancel.store(true, Ordering::Relaxed);
+        }
+    }
+}

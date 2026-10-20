@@ -1,0 +1,32 @@
+/target/
+/dist/python/
+/dist/cad-*/
+__pycache__/
+/.tools/
+/offline/downloads/
+/toolchain/
+/vendor/
+/.build/
+/.vscode/settings.json
+*.pdb
+.env
+.env.*
+!*.example
+session.dpapi
+history.dpapi
+notifications.dpapi
+settings.json
+# 與 Python VNC 工具相容的使用者機台檔含連線密碼，不納入版本控制。
+machines.json
+user_config.json
+vnc-sync.dpapi
+jobs-*.dpapi
+/uploads/
+
+site-notifications.dpapi
+/outlook-exports/
+
+/.private/
+
+# 本機Outlook資料夾隱私設定，不納入交付。
+outlook-folders.dpapi

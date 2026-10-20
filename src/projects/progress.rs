@@ -1,0 +1,1451 @@
+//! 程式保存可核對的進度；AI 筆記僅提供摘要，不授予權限、不取代檔案版本。
+use super::agent::Message;
+use super::{text, Tool};
+use crate::AppResult;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::collections::{BTreeMap, BTreeSet};
+mod coverage;
+
+const SOFT_BYTES: usize = 120_000;
+const HARD_BYTES: usize = 240_000;
+const COMPACT_BYTES: usize = HARD_BYTES * 65 / 100;
+
+/// 交接資料有界且必須包含下一步；摘要不改寫使用者授權。
+pub(super) fn validate_handoff(note: &str, superseded: &[String], next: &str) -> AppResult<()> {
+    for (field, value, limit) in [("working_note", note, 2000), ("next_step", next, 500)] {
+        let count = value.chars().count();
+        if value.trim().is_empty() || count > limit {
+            return Err(format!("{field}目前{count}字，需1–{limit}字；本次尚未精簡上下文。請將工作筆記大幅縮成100–300字的有效限制、目前階段與下一步，不只微調幾個字；已保存內容不必全部重抄。"));
+        }
+    }
+    if superseded.len() > 12 {
+        return Err(format!(
+            "superseded目前{}條，上限12條；請合併相同的失效結論。",
+            superseded.len()
+        ));
+    }
+    for (index, value) in superseded.iter().enumerate() {
+        let count = value.chars().count();
+        if value.trim().is_empty() || count > 200 {
+            return Err(format!(
+                "superseded[{index}]目前{count}字，需1–200字；只修正此失效結論後重送。"
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[derive(Default, Serialize, Deserialize)]
+struct Reading {
+    revision: String,
+    total: usize,
+    // 半開區間，合併重疊部分；不能以最大 offset 假裝中間所有段落都已讀取。
+    ranges: Vec<(usize, usize)>,
+    /// 同一文件版本的有效閱讀次數；完整覆蓋全文後歸零。
+    read_count: usize,
+    /// 可選技能每份文件只提示一次，未採用也不追問。
+    note_offered: bool,
+}
+impl Reading {
+    fn add(&mut self, start: usize, end: usize) -> bool {
+        let previous: usize = self.ranges.iter().map(|(a, b)| b - a).sum();
+        if start < end {
+            self.ranges.push((start, end));
+        }
+        self.ranges.sort_unstable();
+        let mut merged: Vec<(usize, usize)> = Vec::new();
+        for &(start, end) in &self.ranges {
+            if let Some(last) = merged.last_mut().filter(|last| start <= last.1) {
+                last.1 = last.1.max(end);
+            } else {
+                merged.push((start, end));
+            }
+        }
+        self.ranges = merged;
+        self.ranges.iter().map(|(a, b)| b - a).sum::<usize>() > previous
+    }
+    fn next(&self) -> usize {
+        self.ranges
+            .first()
+            .filter(|(start, _)| *start == 0)
+            .map(|(_, end)| *end)
+            .unwrap_or(0)
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct Note {
+    text: String,
+    covered: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+pub(super) struct Progress {
+    /// None 為已保存的舊文字協定，新任務必須具有原生能力快照。
+    #[serde(default)]
+    pub agent: Option<super::agent::State>,
+    base: Vec<Message>,
+    #[serde(default)]
+    started_local_date: Option<String>,
+    #[serde(default)]
+    base_task_ids: Vec<Option<String>>,
+    /// 使用者原文獨立保存，精簡工具歷史時不得刪除或交給 AI 改寫。
+    #[serde(default)]
+    instructions: Vec<super::steering::Instruction>,
+    // 一筆為確定解析的操作及真實工具結果；失敗格式另存，不混入成功歷史。
+    history: Vec<(Message, Message)>,
+    #[serde(default)]
+    history_ids: Vec<Option<String>>,
+    #[serde(skip)]
+    pending_history_id: Option<String>,
+    readings: BTreeMap<String, Reading>,
+    operations: Vec<Value>,
+    #[serde(default)]
+    tool_usage: BTreeMap<String, usize>,
+    #[serde(default)]
+    checkpoints: usize,
+    seen_ids: BTreeSet<String>,
+    seen_results: BTreeSet<String>,
+    note: Option<Note>,
+    last_read: Option<String>,
+    compact: bool,
+    #[serde(default)]
+    lean_context: bool,
+    #[serde(default)]
+    recovery_context: bool,
+    #[serde(default)]
+    instruction_review_required: bool,
+    #[serde(default)]
+    superseded: Vec<String>,
+    #[serde(default)]
+    next_step: String,
+    repair: Option<String>,
+    consecutive_repairs: usize,
+    total_repairs: usize,
+    no_progress: usize,
+    #[serde(default)]
+    coverage: coverage::Coverage,
+    #[serde(default)]
+    no_progress_reason: String,
+    /// Python 與其他工具各自累計；穿插另一類操作不會清除本類的失敗。
+    #[serde(default)]
+    python_failures: usize,
+    #[serde(default)]
+    other_failures: usize,
+    /// 最近一次工具失敗的有界事實；讀指南／改筆記不能將真正原因擠出上下文。
+    /// 同類工具後續成功才清除，不恢復任何寫入授權。
+    #[serde(default)]
+    last_tool_failure: Option<Value>,
+    /// 與格式修復分開計數；checkpoint 保留，讀指南不能刷新這項預算。
+    #[serde(default)]
+    output_limit_retries: usize,
+}
+impl Progress {
+    pub fn new(base: Vec<Message>) -> Self {
+        Self {
+            agent: None,
+            base,
+            started_local_date: crate::calendar::today().ok().map(|date| date.to_string()),
+            base_task_ids: vec![],
+            instructions: vec![],
+            history: vec![],
+            history_ids: vec![],
+            pending_history_id: None,
+            readings: BTreeMap::new(),
+            operations: vec![],
+            tool_usage: BTreeMap::new(),
+            checkpoints: 0,
+            seen_ids: BTreeSet::new(),
+            seen_results: BTreeSet::new(),
+            note: None,
+            last_read: None,
+            compact: false,
+            lean_context: false,
+            recovery_context: false,
+            instruction_review_required: false,
+            superseded: vec![],
+            next_step: String::new(),
+            repair: None,
+            consecutive_repairs: 0,
+            total_repairs: 0,
+            no_progress: 0,
+            coverage: coverage::Coverage::default(),
+            no_progress_reason: String::new(),
+            python_failures: 0,
+            other_failures: 0,
+            last_tool_failure: None,
+            output_limit_retries: 0,
+        }
+    }
+    pub fn calendar_context(&self) -> AppResult<String> {
+        crate::calendar::context(self.started_local_date.as_deref())
+    }
+    pub fn task_references(&mut self, ids: Vec<Option<String>>) {
+        self.base_task_ids = ids;
+    }
+    /// 使用者主動續接才重設每段計數；去重紀錄仍由 broker 保留。
+    pub fn add_instructions(&mut self, entries: Vec<super::steering::Instruction>) {
+        for entry in entries {
+            if entry.status != "withdrawn" && !self.instructions.iter().any(|e| e.id == entry.id) {
+                self.instructions.push(entry);
+                self.instruction_review_required = true;
+                self.no_progress = 0;
+                self.repair = None;
+            }
+        }
+    }
+
+    /// 使用者主動續接才重設每段計數；去重紀錄仍由 broker 保留。
+    pub fn resume_segment(&mut self) {
+        self.output_limit_retries = 0;
+        self.total_repairs = 0;
+        self.consecutive_repairs = 0;
+        self.no_progress = 0;
+        self.python_failures = 0;
+        self.other_failures = 0;
+        self.repair = None;
+        self.compact_batch();
+    }
+
+    /// 自動換批只縮短工作上下文，不重設無進展／修復計數，避免無限循環。
+    /// 呼叫前必須先由 broker 保存完整原文，筆記永遠不取代操作去重表。
+    pub fn compact_batch(&mut self) {
+        self.compact_keep(2);
+    }
+
+    /// 呼叫端需先封存 broker 原文；主動整理僅留下本次工具的一對訊息。
+    pub fn compact_now(&mut self) {
+        self.lean_context = true;
+        self.compact_keep(1);
+    }
+    /// 新補充尚未經模型核對，不杜撰新筆記；舊筆記明示需要重新檢查。
+    pub fn compact_for_instruction(&mut self) {
+        self.lean_context = true;
+        self.instruction_review_required = true;
+        self.compact_keep(0);
+    }
+    pub fn handoff(&mut self, note: &str, superseded: &[String], next: &str) {
+        self.note = Some(Note {
+            text: note.trim().into(),
+            covered: self.history.len(),
+        });
+        self.superseded = superseded.to_vec();
+        self.next_step = next.trim().into();
+        self.instruction_review_required = false;
+        self.compact_now();
+    }
+    fn compact_keep(&mut self, keep: usize) {
+        self.checkpoints += 1;
+        self.compact = true;
+        // 完整原始結果仍存在加密 broker 操作簿，可用 read_work_log 分段取回。
+        // 依切換原因留下 0–2 對結果、摘要與程式狀態，避免續接再碰到訊息上限。
+        let remove = self.history.len().saturating_sub(keep);
+        self.history.drain(..remove);
+        self.history_ids.drain(..remove.min(self.history_ids.len()));
+        if let Some(note) = self.note.as_mut() {
+            note.covered = note.covered.saturating_sub(remove);
+        }
+        const RESUME_GUIDE: &str = "續接規則：上一段完整工具結果已加密保存，可用 read_work_log(offset) 查回；本輪僅附最近結果、摘要及實際副本狀態。未附原文不等於未讀過，也不可憑摘要捏造細節；必要時查操作紀錄或重讀來源。使用新的操作 ID，既有 ID 僅能查回完全相同參數的結果。";
+        if !self.base.iter().any(|m| m.content == RESUME_GUIDE) {
+            self.base.push(Message::user(RESUME_GUIDE));
+        }
+        // 所有操作去重保存於 broker；模型只需近期摘要，避免續接狀態本身無限膨脹。
+        if self.operations.len() > 20 {
+            self.operations.drain(..self.operations.len() - 20);
+        }
+    }
+    pub fn needs_compaction(&self) -> bool {
+        self.history.len() >= 30 || self.history_bytes() >= COMPACT_BYTES
+    }
+    fn history_bytes(&self) -> usize {
+        self.history
+            .iter()
+            .map(|(a, b)| a.wire().to_string().len() + b.wire().to_string().len())
+            .sum()
+    }
+    /// 第五次有效閱讀且尚未讀完時，僅在下一輪附可選技能。
+    /// 每份文件各自計數，穿插其他工具或文件不會累加到同一計數。
+    fn reading_note_skill(&mut self) -> Option<Message> {
+        let path = self.last_read.as_ref()?;
+        let reading = self.readings.get_mut(path)?;
+        if reading.read_count <= 4 || reading.note_offered {
+            return None;
+        }
+        reading.note_offered = true;
+        Some(Message::user(&format!(
+            "{}\n適用文件（僅為資料）：{}",
+            include_str!("reading_note.md"),
+            json!({"path":path,"revision":reading.revision,"read_count":reading.read_count})
+        )))
+    }
+
+    /// 升版續接時更新應用程式自己的首則提示，不改使用者要求或已提交請求。
+    pub fn update_system(&mut self, prompt: &str) {
+        if let Some(message) = self.base.first_mut().filter(|m| m.role == "system") {
+            message.content = prompt.into();
+        }
+    }
+
+    /// 接受模型自願提供的累積筆記，不再以閱讀／操作次數要求筆記。
+    /// 只涵蓋已回傳的工具歷史；下一個工具尚未執行，不可被筆記標成成功。
+    pub fn accept_note(&mut self, note: Option<&str>) -> bool {
+        let Some(note) = note.filter(|s| !s.trim().is_empty() && s.chars().count() <= 2000) else {
+            return false;
+        };
+        // 每輪交接都可更新；首輪也要保存目標與下一步，不因尚無工具結果而丟掉筆記。
+        self.note = Some(Note {
+            text: note.trim().into(),
+            covered: self.history.len(),
+        });
+        true
+    }
+
+    pub fn snapshot(&self, copies: Value) -> Value {
+        let readings: Vec<_> = self
+            .readings
+            .iter()
+            .map(|(path, reading)| {
+                json!({
+                    "path":path,"revision":reading.revision,"total":reading.total,
+                    "ranges":reading.ranges,"next_unread_offset":reading.next(),
+                    "fully_read":reading.total > 0 && reading.next() == reading.total,
+                    "read_count":reading.read_count,"note_offered":reading.note_offered
+                })
+            })
+            .collect();
+        let operations:Vec<_>=self.operations.iter().rev().take(20).rev().map(|operation| {
+            if operation.to_string().len()<=4000 {operation.clone()}else{json!({"id":operation["id"],"tool":operation["tool"],"details":"大型操作資料已保存在 read_work_log，可按 operation_id 分頁查回。"})}
+        }).collect();
+        json!({"readings":readings,"copies":copies,"operations":operations,"tool_usage":self.tool_usage,"operations_omitted":self.operations.len().saturating_sub(20),
+            "working_note":{"requirements":"以本次保留的使用者原文及補充為準，不由筆記改寫授權", "model_summary":self.note.as_ref().map(|n| &n.text),"superseded_conclusions":self.superseded,"planned_next_step":self.next_step,"instruction_review_required":self.instruction_review_required,"summary_warning":"模型摘要可能尚未涵蓋最近步驟；instruction_review_required=true 時必須先依最新補充重新核對欄位與結論，不沿用被否定的圖表。完成狀態依 operations、copies 及工具原文核對","checkpoint_count":self.checkpoints,"next_step":"依原始要求、最近結果及摘要待辦繼續；缺少細節時先 read_work_log，不重做已成功修改"},
+            "note":self.note.as_ref().map(|n| &n.text),"note_covers_tools":self.note.as_ref().map(|n| n.covered),
+            "total_repairs":self.total_repairs,"consecutive_repairs":self.consecutive_repairs,
+            "output_limit_retries":self.output_limit_retries,"output_limit_retry_limit":5,
+            "no_progress":self.no_progress,
+            "no_progress_reason":self.no_progress_reason,"outlook_paging":self.coverage.mail_index(),
+            "cad_paging":self.coverage.cad_index(),
+            "tool_failures":{"python":self.python_failures,"python_limit":10,"other":self.other_failures,"other_limit":5}})
+    }
+
+    /// 模型只接收續做所需的狀態投影。完整區間、結果及去重資料仍在 checkpoint。
+    /// 這裡不複製操作正文，避免已封存的長資料又從「狀態摘要」回到每輪請求。
+    fn model_snapshot(&self, copies: Value) -> Value {
+        let readings: Vec<_> = self.readings.iter().rev().take(8).map(|(path, reading)| {
+            json!({"path":path,"revision":reading.revision,"next":reading.next(),"total":reading.total})
+        }).collect();
+        let operations: Vec<_> = self
+            .operations
+            .iter()
+            .rev()
+            .take(3)
+            .map(|op| json!({"id":op["id"],"tool":op["tool"],"ok":op["result"]["ok"],"outcome":super::files::work_log_outcome(&op["result"])}))
+            .collect();
+        json!({"working_note":self.note.as_ref().map(|n| &n.text),
+            "superseded":self.superseded,"next_step":self.next_step,
+            "review_required":self.instruction_review_required,"copies":copies,
+            "recent_operations":operations,"last_tool_failure":self.last_tool_failure,"readings":readings,
+            "output_limit_retries":self.output_limit_retries,"output_limit_retry_limit":5,
+            "outlook_paging":self.coverage.mail_index(),
+            "cad_paging":self.coverage.cad_index(),
+            "tool_failures":{"python":self.python_failures,"other":self.other_failures},"total_repairs":self.total_repairs,
+            "notice":"筆記是上輪操作前的摘要；最新工具結果優先。完整操作可用 read_work_log 查回，不重播已成功修改。"})
+    }
+
+    /// 已辨識工具的執行／參數錯誤共用同一預算；成功只重設同類計數。
+    /// 一般文字格式、未知提交及身分驗證仍走原來的獨立保護。
+    pub fn tool_outcome(&mut self, python: bool, failed: bool) {
+        let count = if python {
+            &mut self.python_failures
+        } else {
+            &mut self.other_failures
+        };
+        *count = if failed { count.saturating_add(1) } else { 0 };
+    }
+
+    pub fn failure_limit(&self) -> Option<&'static str> {
+        if self.python_failures >= 10 {
+            Some("Python 連續 10 次操作失敗，已停止並保留進度")
+        } else if self.other_failures >= 5 {
+            Some("非 Python 工具連續 5 次操作失敗，已停止並保留進度")
+        } else {
+            None
+        }
+    }
+
+    /// 工具名稱已由原生協定確認才可使用。提供修正指引，但不另扣一般格式修復預算。
+    pub fn tool_repair(&mut self, reason: &str) {
+        self.repair = Some(format!("上一則工具要求未通過檢查：{reason}。請依錯誤修正參數或程式後，透過 API 呼叫工具；不要重做已成功的修改。Python 與其他工具的失敗分別計數，請查看 tool_failures 剩餘次數。"));
+    }
+
+    /// 已收到確定的 length 終態且沒有可執行指令，才建立新的推論輪次。
+    /// 不動 broker 的計畫、去重紀錄或寫入權限；第五次續接仍失敗就暫停。
+    pub fn retry_output_limit(&mut self, advertised_budget: Option<u64>) -> AppResult<String> {
+        if self.output_limit_retries >= 5 {
+            return Err(
+                "模型輸出額度耗盡，已自動續接 5 次仍未取得有效進展；已保存進度，請按繼續接續。"
+                    .into(),
+            );
+        }
+        self.output_limit_retries += 1;
+        let budget = advertised_budget.map_or_else(
+            || "本輪輸出額度".to_owned(),
+            |n| format!("本輪輸出額度（服務公告預設 {n} tokens，實際用量以服務紀錄為準）"),
+        );
+        self.repair = Some(format!("上一輪因達到{budget}而被強制中止，沒有執行任何工具。這是自動續接第 {}/5 次。沿用原始需求、確切 CAD 版本、plan_id、最新 plan_revision 與已保存區段，不重建計畫或重送成功操作。只處理下一個最小步驟並立即呼叫工具；CAD 尺寸／引線先拆成每段 1–3 項，不在單輪規劃或輸出整張圖。保持原需求，不以刪減需求或宣稱完成避開額度。", self.output_limit_retries));
+        Ok(format!(
+            "輸出額度已用盡，正在縮小步驟並自動續接（{}/5）",
+            self.output_limit_retries
+        ))
+    }
+
+    /// 只計算真正新增的閱讀區間或工具結果；重播與重讀不會重設恢復上限。
+    pub fn observe(&mut self, id: &str, tool: &Tool, result: &Value) -> bool {
+        self.coverage.recovering = false;
+        self.pending_history_id = Some(id.into());
+        self.last_read = None;
+        if !self.seen_ids.insert(id.into()) {
+            self.no_progress += 1;
+            self.no_progress_reason = "重複使用已執行的操作 ID，僅查回原結果。".into();
+            return false;
+        }
+        if let Tool::RunBatch { tasks } = tool {
+            if let Some(rows) = result["result"]["tasks"]
+                .as_array()
+                .filter(|rows| rows.len() == tasks.len())
+            {
+                let previous = self.no_progress;
+                let mut fresh = false;
+                let mut successful = false;
+                for (task, row) in tasks.iter().zip(rows) {
+                    if let (Ok(request), Some(operation)) =
+                        (task.request(), row["outcome"]["operation_id"].as_str())
+                    {
+                        successful |= row["outcome"]["ok"] == true;
+                        fresh |= self.observe(operation, &request, &row["outcome"]);
+                    }
+                }
+                self.pending_history_id = Some(id.into());
+                // 子項照常記錄真實閱讀與失敗；同一輪批次最多扣一次無進展額度。
+                self.no_progress = if fresh {
+                    0
+                } else {
+                    previous + usize::from(successful)
+                };
+                return fresh;
+            }
+        }
+        self.tool_outcome(
+            matches!(tool, Tool::RunPython { .. } | Tool::TestPython { .. }),
+            result["ok"] == false,
+        );
+        *self.tool_usage.entry(tool.label().into()).or_default() += 1;
+        if result["ok"] == false || result["result"]["status"] == "FAILED" {
+            self.last_tool_failure = Some(json!({"id":id,"tool":tool.label(),
+                "outcome":super::files::work_log_outcome(result),
+                "notice":"此為最近工具失敗原文摘要；模型筆記不能改寫原因，必要時依id查回完整紀錄。"}));
+        } else if result["ok"] == true
+            && self
+                .last_tool_failure
+                .as_ref()
+                .is_some_and(|last| last["tool"] == tool.label())
+        {
+            self.last_tool_failure = None;
+        }
+        let mut metadata = result.clone();
+        if let Some(object) = metadata.get_mut("result").and_then(Value::as_object_mut) {
+            object.remove("text");
+            object.remove("entries");
+            object.remove("positions");
+            object.remove("document");
+            object.remove("blocks_tail");
+            // Excel 分批正文只保留在成對工具歷史，進度摘要不要再複製整批資料。
+            object.remove("rows");
+            object.remove("headers");
+            object.remove("sheets");
+            object.remove("lines");
+            object.remove("matches");
+            object.remove("head");
+            object.remove("tail");
+        }
+        self.operations
+            .push(json!({"id":id,"tool":tool.label(),"result":metadata}));
+        let mut new = false;
+        self.no_progress_reason = "本輪沒有增加已確認的處理範圍。".into();
+        // 使用者拒絕的工具雖正常返回，仍沒有執行；換參數不能製造假進度。
+        if result["ok"] == true
+            && result["result"]["executed"] != false
+            && !matches!(tool, Tool::CompactContext { .. })
+        {
+            let info = &result["result"];
+            if let Tool::ReadFile { path, .. }
+            | Tool::ReadDocumentSection { path, .. }
+            | Tool::ReadCodeSection { path, .. } = tool
+            {
+                let revision = info["revision"].as_str().unwrap_or("");
+                let key = info["path"]
+                    .as_str()
+                    .unwrap_or(path)
+                    .replace('\\', "/")
+                    .to_lowercase();
+                let reading = self.readings.entry(key.clone()).or_default();
+                if reading.revision != revision {
+                    if !reading.revision.is_empty() {
+                        // 來源或工作副本版本改變後，舊語意筆記不再拿來縮減原始證據。
+                        self.note = None;
+                    }
+                    *reading = Reading {
+                        revision: revision.into(),
+                        total: info["total"].as_u64().unwrap_or(0) as usize,
+                        ..Reading::default()
+                    };
+                }
+                new = reading.add(
+                    info["offset"].as_u64().unwrap_or(0) as usize,
+                    info["next_offset"].as_u64().unwrap_or(0) as usize,
+                );
+                self.no_progress_reason = format!(
+                    "{path} 的這段內容已讀過；下一個未讀位置為 {}。",
+                    reading.next()
+                );
+                if reading.next() == reading.total {
+                    // 依區間聯集確認全文已讀，不能僅因讀到最後一段就歸零。
+                    reading.read_count = 0;
+                    reading.note_offered = false;
+                } else if new {
+                    reading.read_count += 1;
+                    self.last_read = Some(key);
+                }
+            } else {
+                (new, self.no_progress_reason) = self.coverage.observe(tool, info);
+            }
+        }
+        if new {
+            self.no_progress = 0;
+            self.consecutive_repairs = 0;
+            if !matches!(
+                tool,
+                Tool::LoadSkill { .. } | Tool::CadInventory {} | Tool::ReadSkillGuide { .. }
+            ) {
+                self.output_limit_retries = 0;
+            }
+        } else if result["ok"] != false && !self.coverage.recovering {
+            // 已知失敗由各類工具的 5／10 次上限管理，不在第 8 次被無進展保護提前攔截。
+            // 相同操作 ID 的重播仍由上方計數，失敗也不會清除既有的無進展累積。
+            self.no_progress += 1;
+        }
+        new
+    }
+
+    pub fn push_tool(&mut self, reply: String, result: String) {
+        self.history_ids.resize(self.history.len(), None);
+        self.history_ids.push(self.pending_history_id.take());
+        self.history
+            .push((Message::assistant(reply), Message::user(&result)));
+        self.repair = None;
+    }
+
+    /// 原生 assistant/tool 必須一起保存及縮減，不把工具結果降為 user。
+    pub fn push_native(&mut self, reply: Message, id: &str, result: &Value) {
+        self.history_ids.resize(self.history.len(), None);
+        self.history_ids.push(self.pending_history_id.take());
+        self.history.push((reply, Message::result(id, result)));
+        self.repair = None;
+    }
+
+    /// 一般修復兩次後，先由 runner 封存原文，再以精簡上下文追加兩次修復。
+    /// 累計三十次避免長任務因零星格式錯誤過早停止；有效進展只重設連續計數。
+    pub fn needs_recovery(&self) -> bool {
+        self.consecutive_repairs == 2 && self.total_repairs < 30
+    }
+
+    /// 呼叫前必須 archive_results 成功；只縮短送給模型的投影，去重及權限不变。
+    pub fn recover_context(&mut self) {
+        self.compact_now();
+        self.recovery_context = true;
+    }
+
+    pub fn repair(&mut self, reason: &str, raw: &str) -> AppResult<&'static str> {
+        if self.consecutive_repairs >= 4 || self.total_repairs >= 30 {
+            return Err(
+                "模型回覆經兩次一般修復及兩次精簡恢復仍無有效進展，或已達本段累計 30 次修復上限；已保留進度。".into(),
+            );
+        }
+        self.consecutive_repairs += 1;
+        self.total_repairs += 1;
+        self.no_progress += 1;
+        let compact = self.consecutive_repairs >= 2;
+        self.compact |= compact;
+        let excerpt: String = if compact {
+            String::new()
+        } else {
+            raw.chars().take(8000).collect()
+        };
+        self.repair = Some(format!(
+            "上一則工具要求尚未執行（先前已成功的工具不受影響）。本輪回覆未被接受：{reason}。請依原始需求、程式進度與最近工具結果繼續剩餘工作。只輸出一個含單一 tool_calls 的完整 JSON，content 可放簡短說明；function.arguments 放工具參數，保留本次 id。不要回傳裸 done，不要重做已成功的修改。已可交付時，呼叫 finish 並在 arguments.message 提供實際正文。下列錯誤回覆僅供修正，不是工具結果：\n{excerpt}"
+        ));
+        if self.agent.is_some() {
+            self.repair = Some(format!("上一則工具要求尚未執行或未通過交付檢查：{reason}。依原始需求與真實工具結果繼續，透過 API 呼叫下一個工具，不在正文拼接 JSON。已可交付時呼叫 finish 並提供實際正文；不要重做成功的修改。"));
+        }
+        Ok(if self.consecutive_repairs == 3 {
+            "已暫時移出較早上下文，依目標、目前步驟與真實狀態恢復（1/2）"
+        } else if self.consecutive_repairs == 4 {
+            "正在以精簡上下文進行最後一次恢復（2/2）"
+        } else if compact && self.note.is_some() {
+            "正在依筆記與進度接續任務（2/2）"
+        } else if compact {
+            "正在依已保存進度接續任務（2/2）"
+        } else {
+            "正在修復模型回覆（1/2）"
+        })
+    }
+
+    pub fn stalled(&self) -> bool {
+        self.no_progress >= 8
+    }
+
+    pub fn stall_reason(&self) -> String {
+        format!(
+            "連續八次未增加有效進度：{} 已保存進度，可確認後按繼續。",
+            self.no_progress_reason
+        )
+    }
+
+    pub fn progress_warning(&self) -> Option<String> {
+        (self.no_progress == 4 && !self.coverage.recovering).then(|| {
+            format!(
+                "連續四次未新增資料或處理範圍：{} 請依已保存的下一頁／未讀位置繼續。",
+                self.no_progress_reason
+            )
+        })
+    }
+
+    pub fn messages(&mut self, copies: Value) -> AppResult<Vec<Message>> {
+        let total: usize = self.base.iter().map(|m| m.content.len()).sum::<usize>()
+            + self
+                .history
+                .iter()
+                .map(|(a, b)| a.wire().to_string().len() + b.wire().to_string().len())
+                .sum::<usize>();
+        self.compact |= total > SOFT_BYTES;
+        // 送出投影保留近期最多三組；完整歷程仍在 checkpoint 及本機操作封存。
+        // 最新工具結果優先於操作前筆記，避免把尚未成功的工作當成完成。
+        let start = if self.compact {
+            self.note
+                .as_ref()
+                .map(|n| n.covered.saturating_sub(2))
+                .unwrap_or(0)
+        } else {
+            0
+        }
+        .max(self.history.len().saturating_sub(3));
+        let mut messages = self.base.clone();
+        if self.recovery_context {
+            // 使用者原文、系統限制與最新補充仍保留；移除較早助理答案的送出投影。
+            // 原文保存在歷史／checkpoint，必要時可依來源查回。
+            messages.retain(|message| message.role != "assistant");
+        }
+        // 較早助理答案可能很大；只在需要時縮減送出投影，原文仍留在歷史與 checkpoint。
+        // 使用者原話及最新補充完全不裁切，避免把任務條件換成模型摘要。
+        let mut base_bytes: usize = messages.iter().map(|m| m.wire().to_string().len()).sum();
+        for (index, message) in messages.iter_mut().enumerate() {
+            if base_bytes <= 60_000 && !self.lean_context {
+                break;
+            }
+            if message.role != "assistant" || message.content.len() <= 2000 {
+                continue;
+            }
+            let original = message.content.len();
+            let excerpt: String = message.content.chars().take(500).collect();
+            let reference = self.base_task_ids.get(index).and_then(Option::as_deref);
+            message.content=format!("較早助理回覆節錄（不是完整結果）：{excerpt}\n原文查回：{}。重要細節請查回，不憑節錄推論。",reference.map(|id|format!("read_task_result(task_id={id:?},field=\"result\",offset=0)")).unwrap_or_else(||"read_task_result；任務索引見專案記憶，若沒有紀錄請向使用者確認".into()));
+            base_bytes = base_bytes.saturating_sub(original) + message.content.len();
+        }
+        let resume = Message::user(&format!("本機續接資料：\n{}", self.model_snapshot(copies)));
+        if self.no_progress >= 4 {
+            messages.push(Message::user(&format!("進度提醒（{}/8）：{} Outlook 請查看上述 outlook_paging 的 next_cursor。可以核對原文，但不要只重讀同頁、改寫筆記或更換操作 ID；請處理未完成範圍，資料足夠時交付。",self.no_progress,self.no_progress_reason)));
+        }
+        let history_start = messages.len();
+        for (reply, result) in &self.history[start..] {
+            messages.push(reply.clone());
+            messages.push(result.clone());
+        }
+        // 變動狀態放在穩定歷史之後，維持工具呼叫與結果相鄰。
+        messages.push(resume);
+        if let Some(repair) = &self.repair {
+            messages.push(Message::user(repair));
+        }
+        if let Some(skill) = self.reading_note_skill() {
+            messages.push(skill);
+        }
+        if self.history_bytes() >= SOFT_BYTES || self.history.len() >= 26 {
+            messages.push(Message::user("即將整理工作上下文。請在本次正常工具的 progress_note 附累積工作筆記（最多 2000 字）：目標與限制、已確認決策、已完成、目前步驟、待辦、失敗原因與來源位置。只記錄已知事實，不記思考過程，不宣稱下一個尚未執行的工具成功。程式另存原始要求、真實狀態及工具紀錄；需要細節可查回。"));
+        }
+        if !self.instructions.is_empty() {
+            let text = self
+                .instructions
+                .iter()
+                .map(|e| e.text.as_str())
+                .collect::<Vec<_>>()
+                .join("\n\n--- 下一則使用者補充 ---\n\n");
+            messages.push(Message::user(&format!(
+                "本次任務的使用者補充指示（依提交順序，持續有效）：\n{text}"
+            )));
+        }
+        let bytes = |messages: &[Message]| {
+            messages
+                .iter()
+                .map(|m| m.wire().to_string().len())
+                .sum::<usize>()
+        };
+        if bytes(&messages) > HARD_BYTES {
+            let mut omitted = Vec::new();
+            let mut removed = 0;
+            // assistant/tool 成對移出這次請求；不刪除 self.history 的原始證據。
+            while bytes(&messages) > SOFT_BYTES && start + removed < self.history.len() {
+                messages.drain(history_start..history_start + 2);
+                if let Some(id) = self
+                    .history_ids
+                    .get(start + removed)
+                    .and_then(Option::as_ref)
+                {
+                    omitted.push(id.clone());
+                }
+                removed += 1;
+            }
+            if removed > 0 {
+                messages.insert(history_start,Message::user(&format!("為控制本輪文字量，{removed} 組工具原文未隨請求重送；完整結果仍保存在本機加密操作簿。可用 read_work_log(operation_id,offset) 查回，operation_id 未知時先以 offset=0 查看索引／原紀錄。被省略不代表未執行，不要重做已成功的修改；需要細節時先查證。可查回的操作：{}",json!(omitted))));
+            }
+        }
+        // 文字預算只觸發整理；真正傳輸限制仍由 API capabilities 核對。
+        Ok(messages)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn output_limit_has_five_retries_and_survives_checkpoint_and_guides() {
+        let mut state = Progress::new(vec![Message::user("保留原始尺寸")]);
+        for n in 1..=5 {
+            assert!(state
+                .retry_output_limit(Some(20_000))
+                .unwrap()
+                .contains(&format!("{n}/5")));
+            state = serde_json::from_value(serde_json::to_value(&state).unwrap()).unwrap();
+            state.observe(
+                &format!("guide{n}"),
+                &Tool::LoadSkill {
+                    id: "cad-new".into(),
+                },
+                &json!({"ok":true,"result":{"text":"guide"}}),
+            );
+        }
+        assert!(state.retry_output_limit(None).is_err());
+        let tool = Tool::CadPlanPart {
+            plan_id: "plan-1".into(),
+            plan_revision: 0,
+            part_id: "dims_a".into(),
+            summary: "一項尺寸".into(),
+            operations: vec![],
+        };
+        assert!(state.observe(
+            "part",
+            &tool,
+            &json!({"ok":true,"result":{"plan_revision":1,"saved":true}})
+        ));
+        assert!(state
+            .retry_output_limit(Some(20_000))
+            .unwrap()
+            .contains("1/5"));
+        assert!(state
+            .messages(Value::Null)
+            .unwrap()
+            .iter()
+            .any(|m| m.content.contains("1–3 項")));
+    }
+    #[test]
+    fn exact_tool_failure_survives_compaction_and_unrelated_success() {
+        let mut state = Progress::new(vec![]);
+        let draw = Tool::CadDraw {
+            name: "rack.dwg".into(),
+            version: "Icad.Application.1".into(),
+            operations: vec![],
+        };
+        state.observe(
+            "bad-plan",
+            &draw,
+            &json!({"ok":false,"error":"收到101項operations，上限100"}),
+        );
+        for index in 0..30 {
+            state.observe(
+                &format!("guide{index}"),
+                &Tool::LoadSkill {
+                    id: "cad-new".into(),
+                },
+                &json!({"ok":true,"result":{"text":"method"}}),
+            );
+        }
+        state.compact_now();
+        let mut saved: Progress =
+            serde_json::from_value(serde_json::to_value(&state).unwrap()).unwrap();
+        let snapshot = saved.model_snapshot(Value::Null);
+        assert_eq!(snapshot["last_tool_failure"]["id"], "bad-plan");
+        assert_eq!(
+            snapshot["last_tool_failure"]["outcome"]["error"],
+            "收到101項operations，上限100"
+        );
+        saved.observe(
+            "good-plan",
+            &draw,
+            &json!({"ok":true,"result":{"status":"DATA_VERIFIED_VISUAL_PENDING"}}),
+        );
+        assert!(saved.model_snapshot(Value::Null)["last_tool_failure"].is_null());
+        let mut old = serde_json::to_value(&saved).unwrap();
+        old.as_object_mut().unwrap().remove("last_tool_failure");
+        assert!(serde_json::from_value::<Progress>(old)
+            .unwrap()
+            .last_tool_failure
+            .is_none());
+    }
+    #[test]
+    fn repeated_batch_counts_one_decision_and_failed_children_do_not_consume_stall_budget() {
+        let mut state = Progress::new(vec![]);
+        let task = |i| super::super::files::batch::Task {
+            task_id: format!("child{i}"),
+            tool: "read_code_section".into(),
+            arguments_json: json!({"path":"copy","first_line":1,"last_line":10}).to_string(),
+        };
+        let tool = Tool::RunBatch {
+            tasks: (0..4).map(task).collect(),
+        };
+        for turn in 0..9 {
+            let rows:Vec<_> = (0..4).map(|i|json!({"outcome":{"operation_id":format!("op{turn}-{i}"),"ok":true,"result":{"revision":"same","offset":0,"next_offset":20,"total":20}}})).collect();
+            let fresh = state.observe(
+                &format!("batch{turn}"),
+                &tool,
+                &json!({"ok":true,"result":{"tasks":rows}}),
+            );
+            assert_eq!(fresh, turn == 0);
+            assert_eq!(state.no_progress, turn);
+        }
+        assert!(state.stalled());
+        state.resume_segment();
+        let rows:Vec<_>=(0..4).map(|i|json!({"outcome":{"operation_id":format!("failed{i}"),"ok":false,"error":"bounds"}})).collect();
+        state.observe(
+            "fail-batch",
+            &tool,
+            &json!({"ok":true,"result":{"tasks":rows}}),
+        );
+        assert_eq!(state.no_progress, 0);
+        assert_eq!(state.other_failures, 4);
+    }
+    #[test]
+    fn outlook_pages_are_progress_and_repeated_pages_warn_then_pause_after_reload() {
+        let mut state = Progress::new(vec![Message::user("整理十頁標題")]);
+        for page in 0..10 {
+            let tool = Tool::OutlookHeaders {
+                folder_id: "f".into(),
+                start_date: "2026-10-01".into(),
+                end_date: "2026-10-07".into(),
+                cursor: Some(format!("s:{page}")),
+            };
+            let result = json!({"ok":true,"operation_id":format!("op{page}"),"result":{
+                "headers":[{"mail_id":format!("m{page}"),"revision":"v1"}],"snapshot_id":"s",
+                "offset":page,"next_offset":page+1,"total_unique":10,"scan_complete":true}});
+            assert!(state.observe(&format!("op{page}"), &tool, &result));
+            state.compact_batch();
+            state = serde_json::from_value(serde_json::to_value(state).unwrap()).unwrap();
+            assert!(!state.stalled());
+        }
+        assert_eq!(
+            state.snapshot(json!([]))["outlook_paging"][0]["headers_seen"],
+            10
+        );
+        for repeat in 1..=8 {
+            let tool = Tool::OutlookHeaders {
+                folder_id: "f".into(),
+                start_date: "2026-10-01".into(),
+                end_date: "2026-10-07".into(),
+                cursor: Some("s:0".into()),
+            };
+            let result = json!({"ok":true,"operation_id":format!("repeat{repeat}"),"result":{
+                "headers":[{"mail_id":"m0","revision":"v1"}],"snapshot_id":"s",
+                "offset":0,"next_offset":1,"total_unique":10,"scan_complete":true}});
+            assert!(!state.observe(&format!("repeat{repeat}"), &tool, &result));
+            assert_eq!(state.stalled(), repeat == 8);
+            if repeat == 4 {
+                assert!(state.progress_warning().unwrap().contains("四次"));
+                assert!(state
+                    .messages(json!([]))
+                    .unwrap()
+                    .iter()
+                    .any(|m| m.content.contains("進度提醒（4/8）")));
+            }
+        }
+        assert!(state.stall_reason().contains("未新增郵件標題"));
+    }
+
+    #[test]
+    fn new_operation_ids_and_rewritten_notes_cannot_manufacture_progress() {
+        let mut state = Progress::new(vec![]);
+        let tool = Tool::ListFiles {
+            path: ".".into(),
+            offset: 0,
+        };
+        assert!(state.observe(
+            "first",
+            &tool,
+            &json!({"ok":true,"operation_id":"first","result":{"entries":["a.txt"]}})
+        ));
+        assert!(!state.observe(
+            "second",
+            &tool,
+            &json!({"ok":true,"operation_id":"second","result":{"entries":["a.txt"]}})
+        ));
+        let note = Tool::CreateNote {
+            scope: "project".into(),
+            title: "changed".into(),
+            body: "changed".into(),
+        };
+        assert!(!state.observe(
+            "note",
+            &note,
+            &json!({"ok":true,"result":{"id":"new-note"}})
+        ));
+        assert_eq!(state.no_progress, 2);
+    }
+    #[test]
+    fn failure_budgets_are_independent_persisted_and_reset_only_on_resume_or_own_success() {
+        let mut state = Progress::new(vec![]);
+        for _ in 0..4 {
+            state.tool_outcome(false, true);
+        }
+        for _ in 0..9 {
+            state.tool_outcome(true, true);
+        }
+        state.tool_repair("missing input");
+        assert!(state.failure_limit().is_none());
+        assert!(!state.stalled());
+        assert_eq!(state.total_repairs, 0);
+        state.compact_batch();
+        let mut saved: Progress =
+            serde_json::from_value(serde_json::to_value(&state).unwrap()).unwrap();
+        saved.tool_outcome(true, false);
+        assert_eq!(saved.other_failures, 4);
+        assert_eq!(saved.python_failures, 0);
+        saved.tool_outcome(false, true);
+        assert!(saved.failure_limit().unwrap().contains("5 次"));
+        saved.resume_segment();
+        for _ in 0..10 {
+            saved.tool_outcome(true, true);
+        }
+        saved.tool_outcome(false, false);
+        assert!(saved.failure_limit().unwrap().contains("10 次"));
+        saved.resume_segment();
+        assert!(saved.failure_limit().is_none());
+        let mut old = serde_json::to_value(&saved).unwrap();
+        old.as_object_mut().unwrap().remove("python_failures");
+        old.as_object_mut().unwrap().remove("other_failures");
+        assert!(serde_json::from_value::<Progress>(old)
+            .unwrap()
+            .failure_limit()
+            .is_none());
+    }
+    #[test]
+    fn python_execution_failures_reach_ten_without_false_progress_or_early_stall() {
+        let mut state = Progress::new(vec![]);
+        let tool: Tool = serde_json::from_value(json!({"tool":"run_python","code":"raise ValueError('test')","inputs":[],"purpose":"test"})).unwrap();
+        state.no_progress = 3;
+        for attempt in 1..=10 {
+            assert!(!state.observe(
+                &format!("python-{attempt}"),
+                &tool,
+                &json!({"ok":false,"error":"test"})
+            ));
+            assert_eq!(state.python_failures, attempt);
+            assert_eq!(state.no_progress, 3);
+            assert!(!state.stalled());
+            assert_eq!(state.failure_limit().is_some(), attempt == 10);
+        }
+        state.observe("python-10", &tool, &json!({"ok":false}));
+        assert_eq!(state.python_failures, 10, "重播不算另一次執行");
+        assert_eq!(state.no_progress, 4, "重播仍受無進展保護");
+        state.observe(
+            "python-success",
+            &tool,
+            &json!({"ok":true,"result":{"summary":"done"}}),
+        );
+        assert_eq!(state.python_failures, 0);
+        assert_eq!(state.no_progress, 0);
+    }
+    #[test]
+    fn explicit_handoff_survives_checkpoint_without_raw_history_or_counter_reset() {
+        let mut state = Progress::new(vec![Message::user("原始要求：保持來源唯讀")]);
+        for i in 0..6 {
+            state.push_tool(format!("tool{i}"), "大量原始資料".repeat(1000));
+        }
+        state.total_repairs = 3;
+        state.no_progress = 5;
+        let request = Tool::CompactContext {
+            working_note: "正確欄位 F；資料集 data.csv 100筆".into(),
+            superseded: vec!["C 欄錯誤".into()],
+            next_step: "由 F 重畫".into(),
+        };
+        state.observe("compact", &request, &json!({"ok":true,"result":{}}));
+        state.push_tool("compact_context".into(), "已封存".into());
+        state.handoff(
+            "正確欄位 F；資料集 data.csv 100筆",
+            &["C 欄錯誤".into()],
+            "由 F 重畫",
+        );
+        let encoded = serde_json::to_vec(&state).unwrap();
+        let mut restored: Progress = serde_json::from_slice(&encoded).unwrap();
+        let messages = restored.messages(json!([])).unwrap();
+        let wire = serde_json::to_string(&messages).unwrap();
+        assert!(!wire.contains("大量原始資料"));
+        assert!(wire.contains("保持來源唯讀"));
+        assert!(wire.contains("C 欄錯誤"));
+        assert_eq!(restored.total_repairs, 3);
+        assert_eq!(restored.no_progress, 6);
+        assert!(restored.seen_ids.contains("compact"));
+        assert!(validate_handoff("", &[], "下一步").is_err());
+    }
+
+    #[test]
+    fn handoff_errors_report_the_exact_field_and_character_count() {
+        let error = validate_handoff(&"中".repeat(2077), &[], "建立流程圖").unwrap_err();
+        assert!(error.contains("working_note目前2077字") && error.contains("100–300字"));
+        assert!(validate_handoff(&"中".repeat(2000), &[], "建立流程圖").is_ok());
+        let error = validate_handoff("已保存閱讀筆記", &[], &"步".repeat(501)).unwrap_err();
+        assert!(error.contains("next_step目前501字"));
+        let error =
+            validate_handoff("已保存閱讀筆記", &["舊".repeat(201)], "建立流程圖").unwrap_err();
+        assert!(error.contains("superseded[0]目前201字"));
+    }
+    #[test]
+    fn correction_retains_verbatim_instruction_and_marks_old_note_for_review() {
+        let mut state = Progress::new(vec![Message::user("原始要求")]);
+        state.push_tool("read".into(), "舊大量數值".repeat(2000));
+        state.accept_note(Some("用 C 欄"));
+        state.add_instructions(vec![super::super::steering::Instruction {
+            local_time: None,
+            id: "i".into(),
+            text: "改用 F，原件唯讀".into(),
+            status: "staged".into(),
+        }]);
+        state.compact_for_instruction();
+        let messages = serde_json::to_string(&state.messages(json!([])).unwrap()).unwrap();
+        assert!(!messages.contains("舊大量數值"));
+        assert!(messages.contains("改用 F，原件唯讀"));
+        assert_eq!(
+            state.snapshot(json!([]))["working_note"]["instruction_review_required"],
+            true
+        );
+    }
+    #[test]
+    fn declined_tools_cannot_keep_a_long_task_alive_by_changing_parameters() {
+        let mut state = Progress::new(vec![Message::user("整理週報")]);
+        for i in 0..8 {
+            assert!(!state.observe(
+                &format!("denied{i}"),
+                &Tool::OutlookFolders {
+                    scope: "local_inbox".into(),
+                    parent_id: Some(format!("folder{i}")),
+                    offset: 0
+                },
+                &json!({"ok":true,"result":{"declined":true,"executed":false}})
+            ));
+        }
+        assert!(state.stalled());
+        state.compact_batch();
+        assert!(state.stalled(), "換批不能清除無進展保護");
+    }
+    #[test]
+    fn automatic_compaction_keeps_notes_requirements_and_safety_counters() {
+        let mut state = Progress::new(vec![Message::user("目標：整理週報；不能修改來源")]);
+        for i in 0..30 {
+            state.push_tool(format!("call{i}"), "證據".repeat(2000));
+        }
+        assert!(state.accept_note(Some("已確認前三十份證據；待辦：核對缺漏並寫週報")));
+        state.total_repairs = 5;
+        state.no_progress = 7;
+        assert!(state.needs_compaction());
+        state.compact_batch();
+        assert_eq!(state.history.len(), 2);
+        assert_eq!(state.total_repairs, 5);
+        assert_eq!(state.no_progress, 7);
+        assert!(state.snapshot(json!([]))["working_note"]["model_summary"]
+            .as_str()
+            .unwrap()
+            .contains("待辦"));
+        assert!(state
+            .messages(json!([]))
+            .unwrap()
+            .iter()
+            .any(|m| m.content.contains("不能修改來源")));
+    }
+    #[test]
+    fn user_supplements_survive_compaction_and_serialized_resume() {
+        let mut progress = Progress::new(vec![Message::user("原始目標：分析 12:25 到 12:33")]);
+        progress.add_instructions(vec![super::super::steering::Instruction {
+            local_time: None,
+            id: "first".into(),
+            text: "只看 Z01-CY，保留原始時間".into(),
+            status: "staged".into(),
+        }]);
+        for i in 0..6 {
+            progress.push_tool(format!("call{i}"), "舊結果".into());
+        }
+        progress.resume_segment();
+        let mut restored: Progress =
+            serde_json::from_slice(&serde_json::to_vec(&progress).unwrap()).unwrap();
+        let messages = restored.messages(json!([])).unwrap();
+        assert!(messages.iter().any(|m| m.content.contains("原始目標")));
+        assert_eq!(
+            messages
+                .iter()
+                .filter(|m| m.content.contains("只看 Z01-CY"))
+                .count(),
+            1
+        );
+    }
+    fn read(offset: usize, revision: &str) -> Value {
+        json!({"ok":true,"result":{"offset":offset,"next_offset":offset+10,"total":100,"revision":revision,"text":"original evidence"}})
+    }
+    #[test]
+    fn explicit_resume_keeps_state_but_bounds_model_history_without_a_note() {
+        let mut state = Progress::new(vec![Message::user("原始要求")]);
+        for i in 0..60 {
+            state.push_tool(format!("call{i}"), format!("evidence{i}"));
+        }
+        state.resume_segment();
+        let messages = state.messages(json!([])).unwrap();
+        assert!(messages.len() < 10);
+        assert!(messages.iter().any(|m| m.content.contains("read_work_log")));
+        assert!(messages.iter().any(|m| m.content == "evidence59"));
+        assert!(messages.iter().any(|m| m.content == "原始要求"));
+    }
+    #[test]
+    fn notes_use_new_ranges_and_invalidate_on_version_change() {
+        let mut state = Progress::new(vec![Message::user("原始要求")]);
+        for (id, offset) in [("a", 20), ("b", 0), ("c", 0), ("d", 10)] {
+            state.observe(
+                id,
+                &Tool::ReadFile {
+                    path: "a.pdf".into(),
+                    offset,
+                },
+                &read(offset, "v1"),
+            );
+        }
+        assert_eq!(state.readings["a.pdf"].read_count, 3);
+        state.push_tool("已執行閱讀".into(), "原文".into());
+        assert_eq!(state.readings["a.pdf"].next(), 30);
+        assert!(state.accept_note(Some("來源 a.pdf v1 已確認部分內容，繼續閱讀。")));
+        assert!(state.accept_note(Some("每輪更新的筆記")));
+        state.observe(
+            "e",
+            &Tool::ReadFile {
+                path: "a.pdf".into(),
+                offset: 50,
+            },
+            &read(50, "v2"),
+        );
+        assert!(state.note.is_none());
+        assert_eq!(state.readings["a.pdf"].next(), 0);
+    }
+    #[test]
+    fn recovery_keeps_original_instructions_and_unsummarized_evidence() {
+        let mut state = Progress::new(vec![
+            Message::user("摘要論文"),
+            Message::user("請保留數字與限制"),
+        ]);
+        for i in 0..6 {
+            state.push_tool(format!("tool{i}"), format!("evidence{i}"));
+        }
+        assert!(state.accept_note(Some("來源及累積重點")));
+        state.push_tool("new tool".into(), "尚未摘要的原文".into());
+        state.repair("empty", "bad first").unwrap();
+        assert!(!state
+            .messages(json!([]))
+            .unwrap()
+            .iter()
+            .any(|m| m.content == "evidence0"));
+        assert_eq!(state.history[0].1.content, "evidence0");
+        state.repair("empty", "bad second").unwrap();
+        let messages = state.messages(json!([])).unwrap();
+        assert_eq!(messages[0].content, "摘要論文");
+        assert_eq!(messages[1].content, "請保留數字與限制");
+        assert!(!messages.iter().any(|m| m.content == "evidence0"));
+        for evidence in ["evidence4", "evidence5", "尚未摘要的原文"] {
+            assert!(messages.iter().any(|m| m.content == evidence));
+        }
+        assert!(state.needs_recovery());
+        state.recover_context();
+        assert!(state.repair("again", "").is_ok());
+        let messages = state.messages(json!([])).unwrap();
+        assert!(!messages.iter().any(|m| m.content == "evidence4"));
+        assert!(messages.iter().any(|m| m.content == "尚未摘要的原文"));
+        assert!(state.repair("last", "").is_ok());
+        assert!(state.repair("stop", "").is_err());
+    }
+    #[test]
+    fn repeated_reads_do_not_earn_unlimited_repairs_or_notes() {
+        let mut state = Progress::new(vec![Message::user("read")]);
+        for i in 0..30 {
+            let mut result = read(i * 10, "v1");
+            result["result"]["total"] = json!(1000);
+            state.repair("empty", "done").unwrap();
+            assert!(state.observe(
+                &format!("r{i}"),
+                &Tool::ReadFile {
+                    path: "a.txt".into(),
+                    offset: i * 10
+                },
+                &result
+            ));
+        }
+        assert!(state.repair("thirty-first", "done").is_err());
+        for i in 0..8 {
+            assert!(!state.observe(
+                &format!("repeat{i}"),
+                &Tool::ReadFile {
+                    path: "a.txt".into(),
+                    offset: 0
+                },
+                &read(0, "v1")
+            ));
+        }
+        assert!(state.stalled());
+        assert_eq!(state.readings["a.txt"].read_count, 30);
+    }
+
+    #[test]
+    fn tools_and_browsing_never_request_notes() {
+        let mut state = Progress::new(vec![Message::user("edit")]);
+        for i in 0..6 {
+            state.observe(
+                &format!("list{i}"),
+                &Tool::ListFiles {
+                    path: format!("folder{i}"),
+                    offset: 0,
+                },
+                &json!({"ok":true,"result":{"entries":[]}}),
+            );
+        }
+        assert!(state.reading_note_skill().is_none());
+        for i in 0..6 {
+            state.observe(
+                &format!("save{i}"),
+                &Tool::SaveCopy {
+                    copy_id: "copy".into(),
+                    revision: format!("v{i}"),
+                },
+                &json!({"ok":true,"result":{"path":format!("copy{i}.txt")}}),
+            );
+        }
+        assert!(state.reading_note_skill().is_none());
+        assert!(!state
+            .messages(json!([]))
+            .unwrap()
+            .iter()
+            .any(|m| m.content.contains("可選技能：長文件閱讀筆記")));
+        assert!(state.reading_note_skill().is_none());
+    }
+
+    fn observe_read(state: &mut Progress, path: &str, offset: usize, total: usize, revision: &str) {
+        let id = format!("{path}_{revision}_{offset}");
+        state.observe(&id, &Tool::ReadFile {path:path.into(),offset},
+            &json!({"ok":true,"result":{"offset":offset,"next_offset":offset+10,"total":total,"revision":revision}}));
+        state.push_tool(id, "原文".into());
+    }
+    fn has_optional_skill(state: &mut Progress) -> bool {
+        state
+            .messages(json!([]))
+            .unwrap()
+            .iter()
+            .any(|m| m.content.starts_with("可選技能：長文件閱讀筆記"))
+    }
+    #[test]
+    fn fifth_incomplete_read_offers_once_and_ignoring_it_does_not_interrupt() {
+        let mut state = Progress::new(vec![Message::user("讀取")]);
+        for offset in [0, 10, 20, 30] {
+            observe_read(&mut state, "paper.pdf", offset, 100, "v1");
+            assert!(!has_optional_skill(&mut state));
+        }
+        observe_read(&mut state, "paper.pdf", 40, 100, "v1");
+        assert!(has_optional_skill(&mut state));
+        assert!(!has_optional_skill(&mut state));
+        for offset in [50, 60, 70, 80, 90] {
+            observe_read(&mut state, "paper.pdf", offset, 100, "v1");
+            assert!(!has_optional_skill(&mut state));
+        }
+        assert_eq!(state.readings["paper.pdf"].read_count, 0);
+        assert!(!state.stalled());
+        assert_eq!(state.total_repairs, 0);
+        assert_eq!(state.history.len(), 10);
+        assert!(state.note.is_none());
+    }
+    #[test]
+    fn files_have_independent_counts_and_finishing_the_fifth_read_needs_no_hint() {
+        let mut state = Progress::new(vec![Message::user("讀取兩份")]);
+        for offset in [0, 10, 20, 30] {
+            observe_read(&mut state, "a.pdf", offset, 50, "v1");
+            observe_read(&mut state, "b.pdf", offset, 60, "v1");
+            assert!(!has_optional_skill(&mut state));
+        }
+        observe_read(&mut state, "a.pdf", 40, 50, "v1");
+        assert!(!has_optional_skill(&mut state));
+        assert_eq!(state.readings["a.pdf"].read_count, 0);
+        assert_eq!(state.readings["b.pdf"].read_count, 4);
+        observe_read(&mut state, "b.pdf", 40, 60, "v1");
+        assert!(has_optional_skill(&mut state));
+        observe_read(&mut state, "b.pdf", 50, 60, "v1");
+        assert_eq!(state.readings["b.pdf"].read_count, 0);
+    }
+    #[test]
+    fn section_reads_share_file_counts_but_replay_failure_and_reread_do_not() {
+        let mut state = Progress::new(vec![]);
+        for offset in [0, 10, 20, 30] {
+            observe_read(&mut state, "Folder/A.PDF", offset, 100, "v1");
+        }
+        let tool = Tool::ReadDocumentSection {
+            path: "folder/a.pdf".into(),
+            revision: "v1".into(),
+            section_id: "s5".into(),
+        };
+        state.observe("failure", &tool, &json!({"ok":false}));
+        assert!(!has_optional_skill(&mut state));
+        state.observe("reread", &tool, &read(0, "v1"));
+        assert!(!has_optional_skill(&mut state));
+        state.observe("section", &tool, &read(40, "v1"));
+        assert!(has_optional_skill(&mut state));
+        state.observe("section", &tool, &read(40, "v1"));
+        assert!(!has_optional_skill(&mut state));
+        assert_eq!(state.readings["folder/a.pdf"].read_count, 5);
+    }
+    #[test]
+    fn reading_the_end_with_gaps_does_not_reset_and_new_versions_start_over() {
+        let mut state = Progress::new(vec![]);
+        for offset in [0, 20, 30, 40, 90] {
+            observe_read(&mut state, "a.txt", offset, 100, "v1");
+        }
+        assert_eq!(state.readings["a.txt"].read_count, 5);
+        assert!(has_optional_skill(&mut state));
+        assert!(state.accept_note(Some("已讀部分，仍有缺段")));
+        observe_read(&mut state, "a.txt", 0, 100, "v2");
+        assert_eq!(state.readings["a.txt"].read_count, 1);
+        assert!(state.note.is_none());
+        assert!(!has_optional_skill(&mut state));
+        for offset in [10, 20, 30, 40] {
+            observe_read(&mut state, "a.txt", offset, 100, "v2");
+        }
+        assert!(has_optional_skill(&mut state));
+    }
+    #[test]
+    fn missing_tool_uses_existing_bounded_repair_without_recording_an_operation() {
+        let mut state = Progress::new(vec![Message::user("保存文件摘要")]);
+        let raw = r#"{"action":"tool","operation_id":"note_001","request":{"summary":"摘要"}}"#;
+        for attempt in 0..5 {
+            let super::super::reply::ParseOutcome::Repair(reason) =
+                super::super::reply::parse(raw).unwrap()
+            else {
+                panic!("缺少工具名稱不得產生可執行操作");
+            };
+            let repaired = state.repair(reason, raw);
+            if attempt < 4 {
+                assert!(repaired.is_ok());
+                let messages = state.messages(json!([])).unwrap();
+                assert!(messages
+                    .last()
+                    .unwrap()
+                    .content
+                    .contains("缺少必要欄位 request.tool"));
+                assert!(state.history.is_empty());
+                assert!(state.operations.is_empty());
+            } else {
+                assert!(repaired.is_err(), "缺欄位也不得無限重試");
+            }
+        }
+    }
+    #[test]
+    fn oversized_results_are_referenced_without_destroying_original_evidence() {
+        let mut state = Progress::new(vec![Message::user("original")]);
+        for _ in 0..5 {
+            state.push_tool("tool".into(), "x".repeat(60_000));
+        }
+        let messages = state.messages(json!([])).unwrap();
+        assert!(messages.iter().any(|m| m.content.contains("read_work_log")));
+        assert!(
+            messages
+                .iter()
+                .map(|m| m.wire().to_string().len())
+                .sum::<usize>()
+                < HARD_BYTES
+        );
+        assert_eq!(state.history.len(), 5);
+    }
+    #[test]
+    fn resume_with_two_large_results_does_not_repeat_the_budget_pause() {
+        let mut state = Progress::new(vec![Message::user("保留原始要求")]);
+        state.add_instructions(vec![super::super::steering::Instruction {
+            local_time: None,
+            id: "new".into(),
+            text: "只看 A01-01".into(),
+            status: "sent".into(),
+        }]);
+        for i in 0..3 {
+            state.push_tool(format!("call{i}"), "中".repeat(80_000));
+        }
+        state.resume_segment();
+        let mut restored: Progress =
+            serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+        for _ in 0..2 {
+            let messages = restored.messages(json!([])).unwrap();
+            assert!(messages.iter().any(|m| m.content == "保留原始要求"));
+            assert!(messages.iter().any(|m| m.content.contains("只看 A01-01")));
+            assert!(
+                messages
+                    .iter()
+                    .map(|m| m.wire().to_string().len())
+                    .sum::<usize>()
+                    < HARD_BYTES
+            );
+        }
+        assert_eq!(restored.history.len(), 2);
+    }
+    #[test]
+    fn prior_final_answers_have_task_references_and_user_requirements_stay_exact() {
+        let mut state = Progress::new(vec![
+            Message::user("要求一"),
+            Message::assistant("答".repeat(80_000)),
+            Message::user("要求二"),
+            Message::assistant("案".repeat(80_000)),
+            Message::user("第三輪請繼續"),
+        ]);
+        state.task_references(vec![
+            None,
+            Some("task-one".into()),
+            None,
+            Some("task-two".into()),
+            None,
+        ]);
+        let messages = state.messages(json!([])).unwrap();
+        for requirement in ["要求一", "要求二", "第三輪請繼續"] {
+            assert!(messages.iter().any(|m| m.content == requirement));
+        }
+        assert!(messages.iter().any(|m| m.content.contains("task-one")));
+        assert!(messages.iter().any(|m| m.content.contains("task-two")));
+        assert_eq!(state.base[1].content.chars().count(), 80_000);
+        let mut impossible = Progress::new(vec![Message::user(&"中".repeat(90_000))]);
+        assert_eq!(
+            impossible.messages(json!([])).unwrap()[0]
+                .content
+                .chars()
+                .count(),
+            90_000
+        );
+    }
+}

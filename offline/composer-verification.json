@@ -1,0 +1,23 @@
+{
+  "cases": [
+    "native supplement persistence and stale run rejection",
+    "durable queue, duplicate rejection and no overlapping worker",
+    "completion starts original conversation, preserves other draft and archives progress separately",
+    "interrupt persists first and starts next worker only after Finished",
+    "queue cancellation does not start a new worker",
+    "manual stop holds queue; account, model and project bindings; manual retry succeeds",
+    "failure and waiting-for-user preserve pending text without starting",
+    "reloaded encrypted history disables automatic start after restart",
+    "history write failure leaves old worker and queue unchanged",
+    "native Outlook folder selection rejects stale identity and unknown or hidden-parent ids",
+    "native weekly folder preparation, confirmation, conversation binding, dated prompt and one-time start",
+    "native Outlook quick action: dates, identity, skill and one-time start",
+    "image quick commands removed; pictures use basic file reading",
+    "native chart customization: original values, stale target rejection, DPAPI persistence and reset"
+  ],
+  "company_service_tested": false,
+  "next_worker": "real runner, cancelled and awaited",
+  "prior_worker_completion": "controlled event",
+  "result": "PASS",
+  "version": "0.8.75"
+}

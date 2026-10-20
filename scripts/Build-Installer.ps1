@@ -1,0 +1,86 @@
+﻿# 開發／離線重建專用，使用者端不攜帶或執行此腳本。
+[CmdletBinding()]
+param()
+$ErrorActionPreference = 'Stop'
+$root = Split-Path $PSScriptRoot -Parent
+$zip = Join-Path $root 'installer\nsis-3.12.zip'
+if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne '56581F90DB321581C5381193D796FFFCF2D24B2F8FED2160A6C6A3BAA67F2C4F') { throw 'NSIS tool archive checksum mismatch.' }
+$tools = Join-Path $root '.build\nsis'
+if (-not (Test-Path (Join-Path $tools 'nsis-3.12\makensis.exe'))) {
+    New-Item -ItemType Directory -Path $tools -Force | Out-Null
+    Expand-Archive -LiteralPath $zip -DestinationPath $tools -Force
+}
+$compiler = Join-Path $tools 'nsis-3.12\makensis.exe'
+& (Join-Path $PSScriptRoot 'Stage-Python.ps1') -ExecutableDirectory (Join-Path $root 'dist')
+& (Join-Path $PSScriptRoot 'Stage-Cad.ps1') -ExecutableDirectory (Join-Path $root 'dist')
+# CAD 以內容指紋命名，更新不覆寫舊版依賴；只移除本版清單中的已知檔案。
+$cadHash = (Get-Content (Join-Path $root 'assets\cad-runtime-sha256.txt') -Raw).Trim()
+$cadName = 'cad-' + $cadHash.Substring(0,16)
+$cadRoot = Join-Path $root ('dist\' + $cadName)
+$cadEntries = Get-ChildItem -LiteralPath $cadRoot -Recurse
+$cadLines = New-Object 'System.Collections.Generic.List[string]'
+$cadLines.Add('!define CAD_DIRECTORY "' + $cadName + '"')
+$cadLines.Add('!macro CadCheckTree')
+$cadLines.Add('  !insertmacro CheckInstallDirectory "$INSTDIR\${CAD_DIRECTORY}"')
+foreach ($entry in $cadEntries | Where-Object { $_.PSIsContainer }) {
+    $relative = $entry.FullName.Substring($cadRoot.Length + 1)
+    $cadLines.Add('  !insertmacro CheckInstallDirectory "$INSTDIR\${CAD_DIRECTORY}\' + $relative + '"')
+}
+$cadLines.Add('!macroend')
+$cadLines.Add('!macro CadRemove')
+$cadLines.Add('  !insertmacro CadCheckTree')
+foreach ($entry in $cadEntries | Where-Object { -not $_.PSIsContainer }) {
+    $relative = $entry.FullName.Substring($cadRoot.Length + 1)
+    $cadLines.Add('  Delete "$INSTDIR\${CAD_DIRECTORY}\' + $relative + '"')
+}
+foreach ($entry in $cadEntries | Where-Object { $_.PSIsContainer } | Sort-Object { $_.FullName.Length } -Descending) {
+    $relative = $entry.FullName.Substring($cadRoot.Length + 1)
+    $cadLines.Add('  RMDir "$INSTDIR\${CAD_DIRECTORY}\' + $relative + '"')
+}
+$cadLines.Add('  RMDir "$INSTDIR\${CAD_DIRECTORY}"')
+$cadLines.Add('!macroend')
+[IO.File]::WriteAllLines((Join-Path $root '.build\cad-files.nsh'), $cadLines, (New-Object Text.UTF8Encoding($false)))
+# 刪除清單由本版 runtime 產生，只移除已知檔案；未知使用者檔案永不遞迴刪除。
+$pythonRoot = Join-Path $root 'dist\python'
+$entries = Get-ChildItem -LiteralPath $pythonRoot -Recurse
+$lines = New-Object 'System.Collections.Generic.List[string]'
+$lines.Add('!macro PythonCheckTree root')
+$lines.Add('  !insertmacro CheckInstallDirectory "${root}"')
+foreach ($entry in $entries | Where-Object { $_.PSIsContainer } | Sort-Object FullName) {
+    $relative = $entry.FullName.Substring($pythonRoot.Length + 1)
+    $lines.Add('  !insertmacro CheckInstallDirectory "${root}\' + $relative + '"')
+}
+$lines.Add('!macroend')
+$lines.Add('!macro PythonRemove root')
+$lines.Add('  !insertmacro PythonCheckTree "${root}"')
+foreach ($entry in $entries | Where-Object { -not $_.PSIsContainer }) {
+    $relative = $entry.FullName.Substring($pythonRoot.Length + 1)
+    $lines.Add('  Delete "${root}\' + $relative + '"')
+}
+foreach ($entry in $entries | Where-Object { $_.PSIsContainer } | Sort-Object { $_.FullName.Length } -Descending) {
+    $relative = $entry.FullName.Substring($pythonRoot.Length + 1)
+    $lines.Add('  RMDir "${root}\' + $relative + '"')
+}
+$lines.Add('  RMDir "${root}"')
+$lines.Add('!macroend')
+[IO.File]::WriteAllLines((Join-Path $root '.build\python-files.nsh'), $lines, (New-Object Text.UTF8Encoding($false)))
+$version = [regex]::Match((Get-Content (Join-Path $root 'Cargo.toml') -Raw), '(?m)^version = "([^"]+)"').Groups[1].Value
+# 精簡 Setup 不再讀取或嵌入 WebView2；獨立 Runtime 由公司另行提供。
+& $compiler /V2 "/DAPP_VERSION=$version" (Join-Path $root 'installer\LM_AI.nsi')
+if ($LASTEXITCODE -ne 0) { throw 'NSIS installer build failed.' }
+# 私鑰不包含在離線包；重建者可以編譯驗證，只有持有原私鑰的發行者能發布更新。
+if (Test-Path (Join-Path $root '.private\update-key.dpapi')) {
+    & (Join-Path $PSScriptRoot 'Update-Signing.ps1') -Kind nsis
+    $verify = New-Object Diagnostics.Process
+    $verify.StartInfo.FileName = Join-Path $root 'dist\LM_AI.exe'
+    $verify.StartInfo.Arguments = '--verify-update-package "' + (Join-Path $root 'dist\update-manifest.json') + '" "' + (Join-Path $root 'dist\LM_AI_Setup.exe') + '"'
+    $verify.StartInfo.UseShellExecute = $false
+    $verify.StartInfo.CreateNoWindow = $true
+    $verify.StartInfo.WindowStyle = 'Hidden'
+    if (-not $verify.Start() -or -not $verify.WaitForExit(60000) -or $verify.ExitCode -ne 0) { throw 'Native updater rejected the generated release manifest/package.' }
+    $verify.Dispose()
+} else {
+    $oldManifest = Join-Path $root 'dist\update-manifest.json'
+    if (Test-Path $oldManifest) { Remove-Item -LiteralPath $oldManifest }
+    Write-Host 'No private update key: installer rebuilt, no publishable update manifest generated.'
+}

@@ -1,0 +1,25 @@
+; 只由測試助手在本次新建空白文件內執行；建立可重現的大型合成資料。
+(defun lm-ai-create-bulk-fixture (/ i x y f)
+  (if (and (= (strcase (getvar "DWGNAME")) (strcase "@@DOCUMENT@@"))
+           (null (ssget "_X" '((67 . 0)))))
+    (progn
+      (setq i 0)
+      (repeat @@COUNT@@
+        (setq x (* (rem i 200) 2.5) y (* (fix (/ i 200)) 2.5))
+        (entmake (list '(0 . "LINE") '(8 . "0") '(62 . 7)
+                       (cons 10 (list x y 0.0))
+                       (cons 11 (list (+ x 0.1234567890123456) (+ y 1.2345678901234567) 0.0))))
+        (setq i (1+ i)))
+      (setq i 0)
+      (repeat 50
+        (entmake (list '(0 . "CIRCLE") '(8 . "0") '(62 . 1)
+                       (cons 10 (list (+ 500.0 (* i 20.0)) 500.0 0.0))
+                       '(40 . 1.23456789012345)))
+        (setq i (1+ i)))
+      (entmake (list '(0 . "TEXT") '(8 . "0") '(62 . 2) '(10 0.0 600.0 0.0)
+                     '(40 . 3.0) '(1 . "批次匯出測試 / BULK READ") '(7 . "STANDARD")))
+      (setq f (open "@@RECEIPT@@" "w"))
+      (write-line "COMPLETE" f)
+      (close f)))
+  (princ))
+(lm-ai-create-bulk-fixture)
