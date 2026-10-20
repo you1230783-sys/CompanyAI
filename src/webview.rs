@@ -33,12 +33,27 @@ impl WebView {
         profile: &Path,
         messages: mpsc::Sender<String>,
     ) -> AppResult<Self> {
-        Self::create_inner(HWND(window), profile, messages).map_err(|e| format!("無法啟動 LM_AI 介面：{e}。若尚未安裝 WebView2，請執行隨附的 MicrosoftEdgeWebView2RuntimeInstallerX64.exe，再重新開啟 LM_AI。"))
+        Self::create_inner(HWND(window), profile, messages, PAGE).map_err(|e| format!("無法啟動 LM_AI 介面：{e}。若尚未安裝 WebView2，請執行隨附的 MicrosoftEdgeWebView2RuntimeInstallerX64.exe，再重新開啟 LM_AI。"))
+    }
+    /// 獨立教學預覽只載入固定內嵌頁；沒有正式 App 接收器或公司連線。
+    pub fn create_tutorial_preview(
+        window: windows_sys::Win32::Foundation::HWND,
+        profile: &Path,
+    ) -> AppResult<Self> {
+        let (messages, _receiver) = mpsc::channel();
+        Self::create_inner(
+            HWND(window),
+            profile,
+            messages,
+            "https://lm-ai.local/tutorial-preview.html",
+        )
+        .map_err(|e| format!("無法啟動教學預覽：{e}"))
     }
     fn create_inner(
         window: HWND,
         profile: &Path,
         messages: mpsc::Sender<String>,
+        page: &'static str,
     ) -> webview2_com::Result<Self> {
         let profile = wide(&profile.to_string_lossy());
         let (tx, rx) = mpsc::channel();
@@ -151,11 +166,11 @@ impl WebView {
                 &mut token,
             )?;
             view.add_NavigationStarting(
-                &NavigationStartingEventHandler::create(Box::new(|_, args| {
+                &NavigationStartingEventHandler::create(Box::new(move |_, args| {
                     if let Some(args) = args {
                         let mut uri = PWSTR::null();
                         args.Uri(&mut uri)?;
-                        if CoTaskMemPWSTR::from(uri).to_string() != PAGE {
+                        if CoTaskMemPWSTR::from(uri).to_string() != page {
                             args.SetCancel(true)?;
                         }
                     }
@@ -199,7 +214,7 @@ impl WebView {
                 } Ok(())
             })), &mut token)?;
             controller.SetIsVisible(true)?;
-            view.Navigate(PCWSTR(wide(PAGE).as_ptr()))?;
+            view.Navigate(PCWSTR(wide(page).as_ptr()))?;
             Ok(Self {
                 controller,
                 view,

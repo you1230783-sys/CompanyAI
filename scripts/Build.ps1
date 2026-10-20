@@ -1,6 +1,7 @@
 [CmdletBinding()]
-param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$BasicValidation, [switch]$TestVnc, [switch]$TestOffice, [switch]$TestCadComparison, [string]$NetworkTestRoot)
+param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$BasicValidation, [switch]$TestVnc, [switch]$TestOffice, [switch]$TestCadComparison, [string]$NetworkTestRoot, [switch]$BuildOnly)
 $ErrorActionPreference = 'Stop'
+if ($BuildOnly -and ($IncludeInstaller -or $ValidateOnly -or $BasicValidation -or $TestVnc -or $TestOffice -or $TestCadComparison -or $NetworkTestRoot)) { throw 'BuildOnly cannot be combined with validation or installer options.' }
 if ($ValidateOnly -and $IncludeInstaller) { throw 'ValidateOnly cannot be combined with IncludeInstaller.' }
 if ($BasicValidation -and ($TestOffice -or $TestCadComparison -or $TestVnc -or $NetworkTestRoot)) { throw 'BasicValidation cannot be combined with full Office, CAD, VNC or network checks.' }
 # 統一載入 v142 與指定 SDK，讓手動執行及未來網頁呼叫使用相同編譯環境。
@@ -54,6 +55,27 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     $compilerReport = & $compiler /nologo /c /WX "/Fo$probeObject" $probeSource
     if ($LASTEXITCODE -ne 0) { throw 'Actual compiler is not a working MSVC v142 x64 toolset.' }
     $compilerReport | ForEach-Object { Write-Host $_ }
+    # 供使用者先看介面的本機候選：沿用 v142 與離線 vendor，但不執行測試、
+    # 不覆寫 dist／驗證報告或簽署清單，也不將單純編譯記成正式驗收。
+    if ($BuildOnly) {
+        & cargo build --workspace --release --frozen
+        if ($LASTEXITCODE -ne 0) { throw 'Local preview build failed.' }
+        $previewExe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\release\company-ai.exe'
+        [ordered]@{
+            recorded_at = (Get-Date -Format o)
+            result = 'BUILD_ONLY'
+            msvc = $env:VCToolsVersion
+            compiler_report = $compilerReport
+            linker = $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER
+            empty_cargo_cache = [bool]$EmptyCargoCache
+            exe = $previewExe
+            exe_sha256 = (Get-FileHash -LiteralPath $previewExe -Algorithm SHA256).Hash.ToLowerInvariant()
+            tests_run = $false
+            installer_built = $false
+        } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $projectRoot '.build\build-only.json') -Encoding UTF8
+        Write-Host "Local application compiled: $previewExe (no tests, release staging or installer)."
+        return
+    }
     # 先檢查格式及常見錯誤；任一步失敗就停止，避免回報過期的編譯結果。
     & cargo fmt --all -- --check
     if ($LASTEXITCODE -ne 0) { throw 'Formatting check failed.' }

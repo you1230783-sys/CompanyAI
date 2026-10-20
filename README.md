@@ -1,9 +1,10 @@
 <!-- 開頭版本公告最多保留最新 3 個版本；歷史文件保留於 docs。 -->
+**0.8.75：全功能假資料互動教學。** 55 個主題、九類功能，支援聚焦提示、逐步操作、分類搜尋與重看；不呼叫 AI 或正式工具。首次可全部跳過，之後從設定重看，也可用不需登入的獨立預覽。[教學清單](docs/TUTORIAL_COVERAGE.md) · [本版驗證範圍](docs/VALIDATION_0_8_75.md)
+
 **0.8.74：累積閱讀筆記與交付核對。** 新增八段唯讀批次、跨壓縮閱讀筆記、簡短實際tokens、計算值綁定Word／Excel、可重跑範本、成果中心與ZIP、圖形來源導覽及CAD修改比較。公開專案已能續作並匯出圖形；部分圖有內容錯誤，Strata多成果報告仍出現重複工作而未完成交付。正式建置與分項結果見[驗證紀錄](docs/VALIDATION_0_8_74.md)。
 
 **0.8.73：介面偏好與專案操作修正。** 新增四字型、介面大小、VNC JSON匯入／匯出與縮小保留工作列選項；未知文字／INI可讀取與另存，同對話共用成果資料夾，修正CAD預檢／報告與Mermaid檢視／改圖。完整本機自動測試、Strata功能情境與NSIS安裝生命週期已完成；本機模型Word額外統計有誤，內容未列為通過，公司服務與通知點擊仍待現場確認。[驗證紀錄](docs/VALIDATION_0_8_73.md)
 
-**0.8.72：專案 Mermaid 與 CAD 擴充。** 可從敘述／程式碼畫圖、複製來源、保存 MMD／SVG／PNG 與跨輪修改；新增原生 CAD 幾何／尺寸／圖層／圖塊及有限 2D 編輯，背景等待確認會通知。本機 Strata 與基本針對性驗證完成，完整驗證延後。[驗證紀錄](docs/VALIDATION_0_8_72.md) · [公司實測提示詞](docs/COMPANY_TEST_PROMPTS_0_8_72.txt)
 
 
 
@@ -12,22 +13,23 @@
 
 CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供日常問答、文件整理、專案副本修訂與 Classic Outlook 郵件分析。
 
-**目前 EXE／NSIS：0.8.74** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
+**目前 EXE／NSIS：0.8.75** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
 
 ## 下載與開始使用
 
-1. [下載 0.8.74 完整 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從系統托盤選「離開」，再以一般權限安裝至 `C:\largan\LM_AI`；Python 會放在旁邊的 `python` 子目錄。驗證範圍請見[本版紀錄](docs/VALIDATION_0_8_74.md)；公司服務與真實 CAD 圖面仍需公司實機確認。
+1. [下載 0.8.75 完整 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從系統托盤選「離開」，再以一般權限安裝至 `C:\largan\LM_AI`；Python 會放在旁邊的 `python` 子目錄。驗證範圍請見[本版紀錄](docs/VALIDATION_0_8_75.md)；公司服務與真實 CAD 圖面仍需公司實機確認。
 2. 開啟程式，按「登入」，在瀏覽器核對短碼並允許授權。
 3. 選擇模型後開始對話；需要讀取或修改資料夾內的文件時，先建立「專案」。
 
 執行需要 WebView2 Runtime，不需安裝 Rust、Node 或 Python。若啟動時提示缺少 WebView2，請依 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md) 處理。正式功能需要公司服務連線與桌面帳號權限。
 
-目前交付的 EXE 與 NSIS 都是 **0.8.74**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
+目前交付的 EXE 與 NSIS 都是 **0.8.75**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
 
 ## 可以做什麼
 
 | 功能 | 用途 |
 | --- | --- |
+| 假資料互動教學 | 55 個主題，分類、搜尋、逐步操作與重看，不呼叫 AI 或正式工具。 |
 | 一般對話與附件 | 問答、翻譯、摘要、潤飾、解釋，支援串流與背景處理。 |
 | 專案文件工作 | 支援本機、映射磁碟及 UNC；預設建立在個人資料夾的 LM_AI_Projects，成果可點擊定位。 |
 | 專案圖片閱讀 | JPG／PNG／BMP／TIFF／GIF 本機轉 JPEG，每任務100張；單張5 MB、可同時比較雙圖合計8 MB，後續保留文字重點；快速模型不支援。 |

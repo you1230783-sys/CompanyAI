@@ -39,6 +39,7 @@ mod onboarding;
 mod projects;
 mod retry;
 mod site;
+mod tutorial_preview;
 mod vnc;
 mod window_behavior;
 mod work;
@@ -48,6 +49,7 @@ const TRAY_MESSAGE: u32 = WM_APP + 4;
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Command {
+    OnboardingWelcomeDismiss,
     OnboardingAck {
         topic: String,
     },
@@ -690,6 +692,7 @@ impl App {
         command.check_access(self.logged_in(), self.versions.blocked(), self.smoke)?;
         match command {
             Command::OnboardingAck { topic } => self.onboarding.acknowledge(&topic)?,
+            Command::OnboardingWelcomeDismiss => self.onboarding.dismiss_practice_welcome()?,
             Command::ExportDiagnostics { include_details } => {
                 self.export_diagnostics(include_details)?
             }
@@ -2090,6 +2093,11 @@ impl Drop for ComApartment {
 /// 自我檢查使用隔離資料夾，實際載入 WebView2 與 Markdown DOM，不連公司服務。
 pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
     run_with_local(demo, smoke, None, None)
+}
+
+/// 手動體驗互動教學，不啟動正式 App、登入流程、模型或外部工具。
+pub fn run_tutorial_preview() -> AppResult<()> {
+    tutorial_preview::run()
 }
 
 /// 本機模型測試保留正式畫面與工具流程，所有個人資料寫入獨立目錄。

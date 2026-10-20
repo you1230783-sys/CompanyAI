@@ -1,3 +1,11 @@
+## 0.8.75 互動教學維護
+
+- `ui/tutorial-lessons.js`：宣告式場景、範例及操作；`ui/project-tutorial.js`：聚焦框、選單與共用呈現器。
+- `assets/tutorials.json`：原生主題與 revision；執行 `node scripts/Sync-TutorialCatalog.js` 同步索引與覆蓋表。
+- `src/ui/onboarding.rs`：個別完成與首次選單旗標；`src/ui/tutorial_preview.rs`：不具正式命令接收器的離線預覽。
+- `scripts/Test-Settings.cjs`：真瀏覽器逐題完成 55 個教學、輸入門檻、焦點、搜尋及不發正式命令／不改真草稿回歸。
+- `Build.ps1 -BuildOnly -EmptyCargoCache` 只編譯本機候選；正式基本交付使用 `-BasicValidation -IncludeInstaller -EmptyCargoCache`，不能把候選編譯或基本驗證記成完整驗收。
+
 ## 0.8.74 維護位置與驗證入口
 
 | 功能 | 主要位置 |

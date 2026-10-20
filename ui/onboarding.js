@@ -17,6 +17,24 @@ window.OnboardingUI = (() => {
   const allowed = () => state.logged_in && !state.update_required && state.onboarding?.enabled;
   const lessons = () => state.onboarding?.tutorials || [];
 
+  function beginPractice(topic, fromSettings = false, group = null) {
+    if (!allowed() || window.ProjectTutorial == null) return;
+    if (fromSettings) $("settings-dialog").close();
+    autoShown = true;
+    // 只保存選單已提供與教學完成旗標；練習內容不進正式專案、對話或草稿。
+    send({type:"onboarding_welcome_dismiss"});
+    window.ProjectTutorial.open({topic, group,
+      completed: lessons().filter(item => item.completed).map(item => item.id),
+      onComplete: id => send({type:"onboarding_ack", topic:id}),
+      onClose: () => {
+        if (fromSettings && allowed()) {
+          $("settings-dialog").showModal(); window.SettingsUI.select(3);
+        }
+      },
+    });
+  }
+  $("project-tutorial-menu").onclick = () => beginPractice(null, true);
+
   function appendText(parent, tag, text, className = "") {
     const node = document.createElement(tag);
     node.textContent = text;
@@ -92,6 +110,7 @@ window.OnboardingUI = (() => {
 
   function beginLessons(items, fromSettings = false) {
     if (!allowed() || !items.length) return;
+    if (items[0].interactive) { beginPractice(items.length === 1 ? items[0].id : null, fromSettings, items[0].group); return; }
     mode = "lesson"; sequence = items; position = 0;
     paintLesson(); show(fromSettings);
   }
@@ -149,14 +168,14 @@ window.OnboardingUI = (() => {
       const section = document.createElement("section"), heading = document.createElement("div");
       section.className = "tutorial-group"; heading.className = "tutorial-section-heading";
       appendText(heading, "h4", group);
-      const all = appendText(heading, "button", "依序閱讀", "secondary-button");
+      const all = appendText(heading, "button", items[0]?.interactive ? "選擇練習" : "依序閱讀", "secondary-button");
       all.type = "button"; all.onclick = () => beginLessons(items, true);
       section.append(heading);
       for (const lesson of items) {
         const button = document.createElement("button");
         button.type = "button"; button.className = "tutorial-topic";
         appendText(button, "span", lesson.title);
-        appendText(button, "span", lesson.completed ? "重看" : "未閱讀", "subtle");
+        appendText(button, "span", lesson.completed ? "重看" : lesson.interactive ? "互動練習" : "未閱讀", "subtle");
         button.onclick = () => beginLessons([lesson], true);
         section.append(button);
       }
@@ -166,17 +185,15 @@ window.OnboardingUI = (() => {
 
   function render() {
     renderCatalog();
-    if (!allowed()) { if (dialog.open) dialog.close(); return; }
-    // 每次啟動最多自動開一組，且僅介紹目前情境；使用者可逐卡繼續或稍後再看。
+    if (!allowed()) { if (dialog.open) dialog.close(); window.ProjectTutorial?.close(); return; }
+    // 首次只提供選單。跳過後不再自動連播舊卡片；所有主題仍可在設定手動重看。
     if (autoShown || timer || state.busy !== "none" || state.onboarding.error) return;
     timer = setTimeout(() => {
       timer = null;
       if (!allowed() || autoShown || state.busy !== "none" || document.querySelector("dialog[open]")) return;
       if (typeof activeView !== "undefined" && activeView !== "chat") return;
-      const conversation = (state.conversations || []).find(item => item.id === state.active_id);
-      const context = conversation?.project_id ? "project" : "chat";
-      const first = lessons().find(lesson => !lesson.completed && lesson.context === context);
-      if (first) beginLessons(lessons().filter(lesson => !lesson.completed && lesson.group === first.group));
+      if (state.onboarding.practice_welcome_pending) { beginPractice(null); return; }
+      autoShown = true;
     }, 300);
   }
   return {render};

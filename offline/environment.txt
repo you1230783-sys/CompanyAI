@@ -1,17 +1,11 @@
-Recorded: 2026-10-20T15:42:15.2178656+08:00
-Host OS: Microsoft Windows NT 10.0.26200.0
-Visual Studio: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools
+Scope: basic validation; full validation pending
 MSVC: 14.29.30133
 Compiler: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\cl.exe
 v142.c
 Verified _MSC_FULL_VER=192930159 x64
-Windows SDK: 10.0.19041.0\
-Target: x86_64-pc-windows-msvc
-CRT: static
-Rust binaries: Y:\Rust\.tools\rustup\toolchains\1.98.1-x86_64-pc-windows-msvc\bin
-Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-fef20ce167c245b9bbb05a1c92fb67fb
-EXE SHA256: 74DC4A9DA455317A75BCC23225AA3FB79B2CF999776EAFF9AE290A88FBE2E584
-
+Linker: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\link.exe
+SDK: 10.0.19041.0\
+Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-34bc8394a9c7400ab006382eaf60d045
 rustc 1.98.1 (48a229cea 2026-09-01)
 binary: rustc
 commit-hash: 48a229ceaefd4985c50990b14116b6d856af0985
@@ -20,7 +14,6 @@ host: x86_64-pc-windows-msvc
 release: 1.98.1
 LLVM version: 22.1.8
 cargo 1.98.1 (797e8a9bc 2026-08-05)
-
 Microsoft (R) COFF/PE Dumper Version 14.29.30159.0
 Copyright (C) Microsoft Corporation.  All rights reserved.
 
@@ -59,8 +52,8 @@ File Type: EXECUTABLE IMAGE
 
         3000 .data
        82000 .pdata
-     2A4A000 .rdata
+     2A63000 .rdata
         9000 .reloc
        3D000 .rsrc
-      CBA000 .text
+      CBC000 .text
         1000 _RDATA

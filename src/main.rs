@@ -4,6 +4,13 @@ use company_ai::{demo::DemoServer, ui, AppResult};
 
 fn main() {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if arguments.as_slice() == ["--tutorial-preview"] {
+        if let Err(error) = ui::run_tutorial_preview() {
+            ui::show_fatal_error(&error);
+            std::process::exit(1);
+        }
+        return;
+    }
     if arguments.first().map(String::as_str) == Some("--local-project-scenario") {
         let result = (|| {
             if arguments.len() != 4 {

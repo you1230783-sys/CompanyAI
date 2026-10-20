@@ -63,7 +63,7 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
       tabs[0].dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}));
       check(!$('settings-panel-3').hidden && $('settings-panel-0').hidden,'End selects the last tutorial tab');
       check($('tutorial-catalog').closest('#settings-panel-3') && $('updates-replay').closest('#settings-panel-3'),'tutorials and release history have their own panel');
-      check(document.querySelectorAll('#tutorial-catalog .tutorial-topic').length===14,'all tutorial topics rendered');
+      check(document.querySelectorAll('#tutorial-catalog .tutorial-topic').length===55,'all 55 interactive tutorial topics rendered');
       check(!$('release-history'),'no duplicate inline release history');
       tabs[3].dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));
       check(!$('settings-panel-2').hidden && $('settings-panel-3').hidden,'ArrowLeft returns to Advanced');
@@ -105,12 +105,68 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
     await evaluate(`$('project-diagnostics-dialog').close();$('settings-dialog').showModal();SettingsUI.select(2);`);
     await capture('advanced-light',1180,'light');await capture('advanced-dark',1180,'dark');await capture('advanced-narrow',520,'light');
     await evaluate(`SettingsUI.select(3);`);await capture('tutorials-narrow',520,'light');
-    await evaluate(`document.querySelector('#tutorial-catalog .tutorial-topic').click();check($('onboarding-dialog').open && !$('settings-dialog').open,'topic replay opens its card');`);
+    await evaluate(`document.querySelector('#tutorial-catalog .tutorial-topic').click();check($('project-tutorial').open && !$('settings-dialog').open,'topic replay opens interactive practice');`);
     await capture('tutorial-card-narrow',520,'light');
-    await evaluate(`$('onboarding-later').click();`);await delay(100);
+    await evaluate(`ProjectTutorial.close();`);await delay(100);
     await evaluate(`check($('settings-dialog').open && !$('settings-panel-3').hidden,'closing replay returns to tutorial settings');$('updates-replay').click();check($('onboarding-title').textContent==='更新日誌','release replay opens history');`);
     await capture('release-history-narrow',520,'light');
     await evaluate(`$('onboarding-done').click();`);await delay(100);
+    // 保留設定頁回歸，並用真正瀏覽器逐題操作教學。完成前不可先記完成，
+    // 模擬輸入／選取必須可繼續；全部過程不能送出正式命令或改動真草稿。
+    const tutorialChecks = await evaluate(`(async () => {
+      $('settings-dialog').close();
+      const originalDraft=$('prompt').value, originalCommands=testCommands.length;
+      const finished=[], pause=()=>new Promise(resolve=>setTimeout(resolve,30));
+      const clickText=(root,text)=>{
+        const target=[...root.querySelectorAll('button')].find(button=>button.textContent===text && !button.disabled);
+        check(target,'enabled tutorial button: '+text);target.click();
+      };
+      const coreSteps={
+        'projects.practice.create':['＋ 新增專案','填入範例名稱','名稱填好了','選擇資料夾並建立','選擇這個範例資料夾','＋ 開始專案對話'],
+        'projects.practice.files':['訂單小工具','▤ README.md','下一步','▸ src','▤ main.cpp'],
+        'projects.practice.request':['下一步','填入範例要求','要求寫好了','送出（教學示範）','下一步']
+      };
+      check(ProjectTutorial.catalog.length===55,'runtime tutorial catalogue contains all 55 topics');
+      for(const topic of ProjectTutorial.catalog){
+        ProjectTutorial.open({topic:topic.id,onComplete:id=>finished.push(id)});
+        await pause();
+        if(topic.scenes){
+          for(const scene of topic.scenes){
+            const stage=$('project-tutorial').querySelector('.practice-stage');
+            check(stage.querySelector('.practice-current'),'scene has spotlight target: '+topic.id);
+            const action=scene.action;
+            if(action.kind==='button')clickText(stage,action.label);
+            else {
+              const group=stage.querySelector('.practice-field'),apply=[...group.querySelectorAll('button')].find(button=>button.textContent==='繼續');
+              check(apply.disabled,'empty action cannot continue: '+topic.id);
+              if(action.kind==='input')clickText(group,'填入範例');
+              else if(action.kind==='select'){
+                const control=group.querySelector('select');control.selectedIndex=1;control.dispatchEvent(new Event('change'));
+                check(document.activeElement===control,'select receives keyboard focus: '+topic.id);
+              } else group.querySelector('input[type=checkbox]').click();
+              check(!apply.disabled,'completed action enables continue: '+topic.id);apply.click();
+            }
+            await pause();
+          }
+        } else for(const label of coreSteps[topic.id]){clickText($('project-tutorial'),label);await pause();}
+        check(!finished.includes(topic.id),'topic not completed before confirmation: '+topic.id);
+        clickText($('project-tutorial'),'完成這個教學');
+        check(finished.includes(topic.id),'topic completion callback: '+topic.id);
+        ProjectTutorial.close();await pause();
+      }
+      check(new Set(finished).size===55,'all topics finish exactly once');
+      check(testCommands.length===originalCommands && $('prompt').value===originalDraft,'practice does not send native commands or change real draft');
+      ProjectTutorial.open();await pause();
+      const search=$('practice-topic-search');search.value='不存在的教學詞';search.dispatchEvent(new Event('input'));
+      check(!document.querySelector('.practice-topic'),'unknown search shows empty state');
+      search.value='CAD';search.dispatchEvent(new Event('input'));
+      check(document.querySelectorAll('.practice-topic').length===5,'search isolates five CAD tutorials');
+      ProjectTutorial.close();await pause();
+      $('settings-dialog').showModal();
+      return {topics:finished.length,native_commands_added:testCommands.length-originalCommands,draft_unchanged:$('prompt').value===originalDraft};
+    })()`);
+    checks.push('all 55 tutorials completed in real browser; input/select/checkbox gates, focus, isolation and search');
+    fs.writeFileSync('.build/tutorials-review.json',JSON.stringify({result:'PASS',...tutorialChecks},null,2));
     await evaluate(`SettingsUI.select(1);`);await capture('operations-narrow',520,'light');
     await evaluate(`SettingsUI.select(0);`);await capture('general-light',1180,'light');
     const chartPng = await evaluate(`(() => {

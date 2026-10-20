@@ -1,3 +1,27 @@
+## 本機交付驗證：0.8.75（2026-10-21）
+
+- `Build.ps1 -EmptyCargoCache -BasicValidation -IncludeInstaller` 已退出 0。v142 14.29.30133、實際 cl192930159 x64、空 Cargo 快取 frozen/vendor、18 組 107 個 Rust 測試、101 個 CAD 合成契約、原生 WebView2／Python runtime／唯讀程式碼核對及 NSIS 簽署封裝通過；未跑完整 Office／CAD／公司模型或安裝生命週期。
+- 真瀏覽器逐題完成 55 個互動教學，輸入門檻、焦點、搜尋、完成回呼與不改真草稿／不發正式命令通過。首次受限環境未產生 DevToolsActivePort 的失敗保留；可啟動桌面程序的環境重跑通過。詳 `docs/VALIDATION_0_8_75.md` 與 `offline/tutorial-verification-0.8.75.json`。
+- EXE SHA256：`0a1e102ff4a032d11a661b7c9063cdc30d6d3c1cbdfcd3a98b0251efa1d503dc`；Setup：`b214c7fa9723a22758f1496a9728d309006f3ff999b0860e2b114e3169ff85fa`。0.8.74 完整報告另存 versioned JSON，不冒充本版重測；Git 交付以 main 提交與遠端 LFS 實際下載核對為準。
+
+## 目前授權：0.8.75 互動教學正式交付（2026-10-21）
+
+- 使用者已確認效果，明確要求進版、編譯、NSIS 打包及推送既有 main。此條取代下方不進版／不打包／不推送限制。
+- 使用 `Build.ps1 -EmptyCargoCache -BasicValidation -IncludeInstaller` 完成 v142 x64 實際編譯器檢查、基本相關測試、原生 WebView2 與封裝簽署核對；教學設定頁逐題操作回歸另以既有 `Test-Settings.cjs` 執行。完整 Office／CAD／公司模型情境與安裝生命週期不冒稱本版重測。
+- 推送範圍為來源、文件、EXE／Setup 與本次更新清單；保留舊驗證文件，明確標記本版範圍。排除 `.build`、`.codex`、`dist/onboarding-state.json`、`icon.png` 與私人資料；不改歷史離線 ZIP，不強制推送。
+
+## 先前授權：全功能教學與快取清理（2026-10-20）
+
+- 使用者已確認三個原型效果可用，要求其餘功能全部加入同形式教學。已擴充 55 個獨立主題；維持假資料與固定回覆，不呼叫 AI 或外部工具。使用 `scripts/Sync-TutorialCatalog.js` 同步 native 索引與 `docs/TUTORIAL_COVERAGE.md`。
+- 延續本機候選界線：v142 x64、空 Cargo 快取 frozen/vendor 編譯，不進版、不打包、不提交或推送。原三個已核可主題旗標保留，舊文字卡轉互動則增加該主題 revision。
+- 使用者明確要求清理 Y:\Rust 不必要資料。已核對絕對路徑並只刪除 CompanyAI 的兩個 debug target 目錄，共 171,605,219,760 bytes；不碰 `.local-ai`、共享工具鏈、vendor、dist、Git、離線包、使用者資料或歷次 `.build` 證據。前後掃描與清理清單在 `.build/disk-audit-*.json`、`cleanup-*.json`，有 37 個無權限目錄未掃描，不能當成全磁碟精確用量。
+
+## 先前授權：專案操作互動教學預覽（2026-10-20）
+
+- 使用者要求先完成「建立專案、認識檔案清單、提出讀檔要求」三個互動教學，全部假資料與固定示範回覆，不呼叫 AI；其他主題等使用者看過效果再決定。
+- 本輪只編譯本機應用程式，使用 `scripts/Build.ps1 -BuildOnly -EmptyCargoCache`，沿用 v142 x64 實際探針與 frozen/vendor。使用者自行試用，不執行額外測試、不進版、不打包、不提交或推送，不覆寫 dist／offline 發行報告與清單。
+- `Preview-ProjectTutorial.cmd` 或候選 EXE 的 `--tutorial-preview` 可開啟不需登入的獨立預覽，沒有正式 App 命令接收端；正式入口在設定教學頁。教學選單與完成旗標分開保存，原教學卡片保留手動重看。詳 `docs/PROJECT_TUTORIAL_PREVIEW.md`；編譯與互動驗收不得混稱。
+
 ## 本機發行驗證：0.8.74（2026-10-20，優先於下方歷史）
 
 - 使用者授權的八項已實作。修正後R3於15:54:46退出0：v142 14.29.30133／cl192930159 x64／link14.29，空Cargo快取frozen/vendor、430 Rust／101 CAD契約、完整原生／Office／雙版CAD及NSIS安裝／更新／重新啟動／失敗回復／修復／移除通過。EXE SHA256為74dc4a9da455317a75bcc23225aa3fb79b2cf999776eaff9ae290a88fbe2e584，Setup為d9acabeb31f8af47acc47ed2128b8d818856a49865d4e484f89be27b87003a56。
