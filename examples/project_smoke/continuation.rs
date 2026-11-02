@@ -192,7 +192,11 @@ fn answer(case: Case, round: usize, body: &Value) -> Option<String> {
                     )
                 }
                 7 => finish("", json!([id])),
-                8 => {
+                8 => tool(
+                    "delivery",
+                    json!({"tool":"update_deliverables","items":[{"id":"recovered-file","description":"恢復副本","kind":"file","target":id,"blocked_reason":null}]}),
+                ),
+                9 => {
                     assert_eq!(copy["saved_revision"], copy["revision"]);
                     assert_eq!(copy["paths"].as_array().unwrap().len(), 1);
                     finish("已完成", json!([id]))
@@ -362,9 +366,9 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
             assert_eq!(
                 rounds,
                 if matches!(case, Case::CleanRecovery) {
-                    10
+                    11
                 } else {
-                    9
+                    10
                 }
             );
             let output = std::fs::read_dir(workspace.join("_AI_Output"))

@@ -3,6 +3,72 @@
     {
       "type": "function",
       "function": {
+        "name": "update_deliverables",
+        "description": "保存檔案或多成果任務的交付清單，增量更新、不刪除舊項目。先用target=null記待辦，建立後綁實際copy_id或成果路徑；保存狀態由桌面決定。條件版本更動須一次核對全部既有項目。無法完成需blocked_reason，結尾明示部分完成。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 20,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "file",
+                      "answer"
+                    ]
+                  },
+                  "target": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "blocked_reason": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "確實無法完成的原因；可完成時null。"
+                  }
+                },
+                "required": [
+                  "id",
+                  "description",
+                  "kind",
+                  "target",
+                  "blocked_reason"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "簡短記錄目標、新進展及下一步。"
+            }
+          },
+          "required": [
+            "items"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
         "name": "list_files",
         "description": "列出專案相對資料夾的所有副檔名（未知格式也列出）；path空字串為根目錄，每頁200項，依next_offset續頁，null代表結束。資料夾只能用list_files，不可用read_file／read_code_section當作列目錄；可在run_batch同時列2–4個獨立子目錄。原檔唯讀；內部／機密／依賴／產物／連結仍排除。清單不代表已讀內容，資料夾變更時重新列出。",
         "parameters": {
@@ -1251,7 +1317,7 @@
       "type": "function",
       "function": {
         "name": "read_work_log",
-        "description": "查本機封存。未指定operation_id：offset按筆數，每頁20筆固定索引；指定ID：offset按字元，每頁6000字。從0重取可更新索引。",
+        "description": "查本機封存。未指定operation_id：offset按筆數，每頁20筆固定索引；指定ID：offset按字元，每頁6000字。從0重取可更新索引。 查詢請使用reference_id或索引提供的op_簡短ID；不用截斷UUID。索引包含檔名，已整理的來源優先回筆記。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -11486,7 +11552,7 @@
       "type": "function",
       "function": {
         "name": "record_reading_notes",
-        "description": "讀完一批後先保存1–8份來源綁定閱讀成果，再讀下一批／壓縮／畫圖。operation_id取reading.pending。摘要要能直接用於使用者要求，不只寫已讀完；關係區分宣告與實作。",
+        "description": "每批讀完文字、Office、PDF或圖片後保存來源筆記。operation_id使用pending提供的簡短ID。summary保留使用者所需的事實、數字與單位、圖軸／尺度／峰位／誤差；relationships寫推論依據與跨來源關係；open_questions列未讀範圍及具體缺項。勿只寫已讀完成。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -11502,7 +11568,7 @@
                   },
                   "summary": {
                     "type": "string",
-                    "maxLength": 1000
+                    "maxLength": 3000
                   },
                   "relationships": {
                     "type": "string",
@@ -11540,7 +11606,7 @@
       "type": "function",
       "function": {
         "name": "read_reading_notes",
-        "description": "按檔案及筆數查累積閱讀成果，每頁8份。精確細節才指定source_operation及具體reason查當時封存原文，offset改為字元；不重新掃來源。",
+        "description": "按檔案及筆數查累積閱讀成果，每頁8份。精確細節才指定source_operation及具體reason查當時封存原文，offset改為字元；不重新掃來源。 source_operation接受op_簡短ID；具體reason查回已保存的原文／圖片辨識，不重新開原檔。圖片原辨識仍缺此細節時，依image_followup最多補辨識同版本一次。",
         "parameters": {
           "type": "object",
           "properties": {

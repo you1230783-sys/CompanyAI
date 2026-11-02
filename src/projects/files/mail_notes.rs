@@ -42,13 +42,14 @@ impl Broker {
                 ..
             }
         );
-        let Some(digest) = digest else {
+        let Some(mut digest) = digest else {
             if required && self.mail_notes.pending.is_some() && !lookup {
                 return Err("請在下一操作附上 mail_note；先保存剛讀完的摘要與待寫草稿。原文不足時用 read_mail_notes(mode=source) 查回。".into());
             }
             return Ok(());
         };
         self.outlook.require_consent()?;
+        digest.source_operation = self.references.resolve(&digest.source_operation)?;
         let (tool, result) = self
             .recorded_operation(&digest.source_operation)?
             .ok_or("郵件摘要來源操作不存在。")?;
@@ -122,7 +123,8 @@ impl Broker {
             if ids.len() != 1 {
                 return Err("source 請在 note_ids 指定一個已讀來源 operation_id（索引內 pages.operation）。".into());
             }
-            return self.mail_source(&ids[0], offset, focus);
+            let operation = self.references.resolve(&ids[0])?;
+            return self.mail_source(&operation, offset, focus);
         }
         let notes: Vec<_> = if ids.is_empty() {
             self.mail_notes.notes.iter().collect()

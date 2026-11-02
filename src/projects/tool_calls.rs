@@ -768,6 +768,7 @@ mod tests {
             ("export_report_values",json!({"name":"計算值.csv","metric_ids":["mean"]})),
             ("save_workflow",json!({"name":"統計報告","steps":[{"step_id":"calc","operation_id":"calc-op","bindings_json":"{}"}]})),
             ("list_workflows",json!({})),
+            ("update_deliverables",json!({"items":[{"id":"report","description":"報告","kind":"file","target":null,"blocked_reason":null}]})),
             ("read_workflow",json!({"workflow_id":"flow","offset":0})),
             ("prepare_workflow",json!({"workflow_id":"flow","parameters_json":"{}"})),
             ("execute_workflow_step",json!({"execution_id":"run","step_index":0})),

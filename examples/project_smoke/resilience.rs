@@ -182,8 +182,8 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
             let bytes = response.to_string();
             write!(stream,"HTTP/1.1 {http} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{bytes}",bytes.len()).map_err(|e|e.to_string())?;
         }
-        // 保存閱讀筆記也須真正成功一次；不能把產品門檻關掉讓舊fixture通過。
-        assert_eq!(note_posts, if matches!(case, 7 | 8) { 0 } else { 1 });
+        // 閱讀筆記與交付清單各需真正保存一次，不能跳過產品門檻。
+        assert_eq!(note_posts, if matches!(case, 7 | 8) { 0 } else { 2 });
         Ok((posts, failures, cancels))
     });
     let session = Session::from_token(
@@ -257,7 +257,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         assert_eq!(failures, 1);
     } else {
         assert!(result?.contains("恢復後完成"));
-        assert_eq!(posts, 7 + failures, "含一次實際保存閱讀筆記的POST");
+        assert_eq!(posts, 8 + failures, "含閱讀筆記與交付清單各一次POST");
         assert_eq!(
             activity
                 .iter()

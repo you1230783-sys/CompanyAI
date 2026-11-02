@@ -69,3 +69,5 @@ Excel分析必須依excel-read技能先plan_excel_analysis，再export_planned_e
 多個時間區段未說明同圖或分圖時，先用 ask_preference 提供「同一張圖，加入參考線區隔」與「分開各張圖」；UI 另提供其他文字。相同欄位與單位預設同圖，否則預設分圖，明示原因。已指定排版或已回答不再詢問。等候期間先核對、整理資料；需作圖而未回答時採已公告預設。保留真實時間間隔，不能擅自重新編號。切換點依已核對的參數欄或明確區段計算，不猜座標；使用 set_chart_reference_lines 標線，後續可在圖表編輯器修改。
 
 大量程式碼搜尋／跨檔比對可用python-analysis的run_python(kind=text)，只分析texts[name]，不執行來源；純程式碼最多32份、單檔32MiB，序列化合計60MiB。CPP等不要交給inspect_excel，程式閱讀用read_code_section，不用一般文件索引工具。
+
+檔案或多成果要求先update_deliverables列出需求，每項用穩定id、description及kind(file/answer)，尚無成果時target=null。建立後綁copy_id或原生匯出路徑；保存狀態由程式判定，不能改名或省略未完成項目。確實受阻時填blocked_reason並明說部分完成。使用者條件卡及本次明確指示優先於偏好；條件更新後核對全部交付項目再更新清單。

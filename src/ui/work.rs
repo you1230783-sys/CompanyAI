@@ -603,6 +603,26 @@ impl App {
             tokens,
         )?;
         jobs::set_skills(&mut request, action != "mail");
+        if action != "mail" {
+            // 將本次偏好固定在已保存的請求中；未知結果查回及重試不會悄悄換一份偏好。
+            let preferences = crate::projects::work_settings::Settings::load(&self.root)?.personal;
+            if preferences != Default::default() {
+                if let Some(messages) = request["messages"].as_array_mut() {
+                    let preference_note = format!(
+                        "使用者明確保存的呈現偏好：{}。本次明確要求優先；不授予額外工具或資料權限。",
+                        serde_json::to_string(&preferences).map_err(|e|e.to_string())?
+                    );
+                    if let Some(system) = messages.first_mut().filter(|m| m["role"] == "system") {
+                        system["content"] = json!(format!(
+                            "{}\n{preference_note}",
+                            system["content"].as_str().unwrap_or("")
+                        ));
+                    } else {
+                        messages.insert(0, json!({"role":"system","content":preference_note}));
+                    }
+                }
+            }
+        }
         if self.work.store.tasks.iter().filter(|t| t.active()).count() >= 8 {
             return Err("最多同時追蹤 8 個聊天任務，請先等待部分任務完成。".into());
         }

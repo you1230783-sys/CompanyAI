@@ -301,7 +301,7 @@ impl Broker {
                     results.push(json!({"task_id":task.task_id,"tool":task.tool,"reused":true,"outcome":result}));
                     continue;
                 }
-                let result = match prepared.and_then(|prepared| {
+                let mut result = match prepared.and_then(|prepared| {
                     crate::projects::runner::check_cancel(cancel)?;
                     match (prepared, request) {
                         (Prepared::Read(mut value), _) => {
@@ -339,6 +339,9 @@ impl Broker {
                         json!({"ok":false,"operation_id":operation,"error":error,"retry_same_operation":false})
                     }
                 };
+                if let Some(identity) = self.semantic_progress(request, &result) {
+                    result["progress_identity"] = json!(identity);
+                }
                 self.remember_result(&operation, request, &result)?;
                 self.analysis.observe(request, &result);
                 self.archive_results()?;

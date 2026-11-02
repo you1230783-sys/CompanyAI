@@ -8,6 +8,7 @@ pub mod code_review;
 pub mod context;
 pub mod datasets;
 mod delegation;
+pub mod deliverables;
 pub mod diagnostics;
 pub mod diagram_sources;
 pub mod diagrams;
@@ -38,6 +39,7 @@ pub mod text;
 pub mod timeline;
 mod tool_calls;
 pub(crate) mod vision;
+pub mod work_settings;
 pub mod workflows;
 
 use crate::{jobs, storage, AppResult};
@@ -62,8 +64,22 @@ pub struct Project {
 pub struct Store {
     pub projects: Vec<Project>,
     pub conversations: BTreeMap<String, String>,
+    /// 純介面偏好；不改變目前對話、專案權限或正在執行的任務。
+    #[serde(default)]
+    pub collapsed: std::collections::BTreeSet<String>,
 }
 impl Store {
+    pub fn set_collapsed(&mut self, id: &str, collapsed: bool) -> AppResult<()> {
+        if !self.projects.iter().any(|project| project.id == id) {
+            return Err("找不到專案。".into());
+        }
+        if collapsed {
+            self.collapsed.insert(id.into());
+        } else {
+            self.collapsed.remove(id);
+        }
+        Ok(())
+    }
     pub fn load(root: &Path) -> AppResult<Self> {
         let path = root.join("projects.dpapi");
         if !path.exists() {
@@ -111,6 +127,10 @@ impl Store {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "tool", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Tool {
+    /// 保存預計交付項目；target 使用實際 copy_id 或已產生的成果路徑。
+    UpdateDeliverables {
+        items: Vec<deliverables::Item>,
+    },
     /// 列出本機 CAD 註冊；不啟動應用程式。
     CadInventory {},
     /// 一次讀完整目前圖面，後續僅查本機快照；refresh 明確重建快照。
@@ -651,6 +671,7 @@ impl Tool {
     /// 使用者可讀的操作名稱，避免將 JSON 或文件全文當進度訊息。
     pub fn label(&self) -> &'static str {
         match self {
+            Self::UpdateDeliverables { .. } => "更新交付清單",
             Self::CadActiveRead { .. } => "讀取 CAD 目前圖面",
             Self::CadSnapshot { .. } => "建立 CAD 本機圖面索引",
             Self::CadQuery { .. } => "查詢 CAD 圖元",
@@ -770,6 +791,22 @@ pub const SKILL: &str = include_str!("projects/skill.md");
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn individual_project_collapse_is_independent_and_old_stores_default_to_expanded() {
+        let mut store:Store=serde_json::from_value(serde_json::json!({"projects":[
+            {"id":"first","name":"第一個","root":"C:/fixture"},
+            {"id":"second","name":"第二個","root":"C:/fixture2"}],"conversations":{"chat":"first"}})).unwrap();
+        assert!(store.collapsed.is_empty());
+        store.set_collapsed("first", true).unwrap();
+        let mut restored: Store =
+            serde_json::from_slice(&serde_json::to_vec(&store).unwrap()).unwrap();
+        assert!(restored.collapsed.contains("first"));
+        assert!(!restored.collapsed.contains("second"));
+        assert_eq!(restored.conversations["chat"], "first");
+        assert!(restored.set_collapsed("unknown", true).is_err());
+        restored.set_collapsed("first", false).unwrap();
+        assert!(restored.collapsed.is_empty());
+    }
     #[test]
     fn unknown_tools_and_ambiguous_fields_are_rejected() {
         assert!(serde_json::from_str::<Decision>(r#"{"action":"tool","operation_id":"1","request":{"tool":"powershell","command":"dir"}}"#).is_err());

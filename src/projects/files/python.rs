@@ -37,6 +37,7 @@ impl Broker {
             return Err("Python 成果超過每次 8 份／任務 30 份限制。".into());
         }
         let code_hash = format!("{:x}", Sha256::digest(code.as_bytes()));
+        let progress_identity = semantic_progress::calculation_identity(&sources, &response);
         // 先完整驗證每份輸出，避免明顯無效的後續檔案造成半批發布。
         let mut tables = Vec::new();
         let mut books = Vec::new();
@@ -117,7 +118,7 @@ impl Broker {
         }
         Ok(
             json!({"purpose":purpose,"summary":response["summary"],"stdout":response["stdout"],"versions":response["versions"],
-            "sources":sources,"code_sha256":code_hash,"artifacts":artifacts,"execution":"本機 AppContainer，無網路，原檔唯讀；衍生資料非原始列的一對一副本。"}),
+            "sources":sources,"code_sha256":code_hash,"artifacts":artifacts,"progress_identity":progress_identity,"execution":"本機 AppContainer，無網路，原檔唯讀；衍生資料非原始列的一對一副本。"}),
         )
     }
 

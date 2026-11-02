@@ -179,7 +179,7 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
                     assert_eq!(envelope["role"], "tool");
                     assert_eq!(
                         envelope["tool_call_id"],
-                        ["read1", "copy1", "edit1", "save1"][step - 1]
+                        ["read1", "copy1", "edit1", "save1", "delivery1"][step - 1]
                     );
                     serde_json::from_str(envelope["content"].as_str().ok_or("工具結果內容缺失。")?)
                         .map_err(|e| e.to_string())?
@@ -211,6 +211,9 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
                             json!({"action":"tool","operation_id":"save1","request":{"tool":"save_copy","copy_id":copy_id,"revision":previous["result"]["revision"]}})
                         }
                         4 => {
+                            json!({"action":"tool","operation_id":"delivery1","request":{"tool":"update_deliverables","items":[{"id":"edited-file","description":"修訂副本","kind":"file","target":copy_id,"blocked_reason":null}]}})
+                        }
+                        5 => {
                             json!({"action":"finish","message":"本機測試已完成修訂。","artifacts":[copy_id],"task_summary":"已完成來源修訂與副本交付；來源保持不變。"})
                         }
                         _ => return Err("不應出現額外模型請求。".into()),
@@ -315,7 +318,7 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
     } else {
         let answer = result?;
         assert_eq!(runner::recover(&root.join("app-data"), &run_id)?, answer);
-        assert_eq!(rounds, if mode == 7 { 6 } else { 5 });
+        assert_eq!(rounds, if mode == 7 { 7 } else { 6 });
         if mode == 1 {
             assert!(activity
                 .iter()

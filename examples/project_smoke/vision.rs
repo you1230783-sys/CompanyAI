@@ -24,7 +24,7 @@ use std::{
 };
 
 pub fn verify(root: &Path) -> AppResult<()> {
-    for case in 0..13 {
+    for case in 0..14 {
         verify_case(root, case)?;
     }
     Ok(())
@@ -63,6 +63,8 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         model: if case == 6 { "fast" } else { "quality" }.into(),
         ..Config::default()
     };
+    let image_path = workspace.join(name);
+    let source_image = std::fs::read(&image_path).unwrap();
     let stopped = Arc::new(AtomicBool::new(false));
     let stop = stopped.clone();
     let resumed = Arc::new(AtomicBool::new(false));
@@ -109,7 +111,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                 let message = if child {
                     children += 1;
                     assert!(
-                        case < 3 || matches!(case, 5 | 7 | 8 | 9 | 10 | 12),
+                        case < 3 || matches!(case, 5 | 7 | 8 | 9 | 10 | 12 | 13),
                         "無效來源與快速模型不得送圖"
                     );
                     if case == 7 {
@@ -166,6 +168,13 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     );
                     child_id = body["client_request_id"].as_str().unwrap().into();
                     json!({"role":"assistant","content":"測試回覆：左紅右藍，未辨識文字。"})
+                } else if let Some(note) = super::native::reading_note_message(&body) {
+                    let tools = body["tools"].as_array().unwrap();
+                    assert!(tools.iter().all(|tool| matches!(
+                        tool["function"]["name"].as_str(),
+                        Some("record_reading_notes" | "read_reading_notes")
+                    )));
+                    note
                 } else {
                     parents += 1;
                     assert!(
@@ -181,15 +190,91 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                             "finish",
                             json!({"message":"圖片測試完成","artifacts":[]}),
                         )
+                    } else if case == 13 {
+                        // 正式HTTP流程：同版改焦點先回筆記，短ID查回封存，再補辨識一次。
+                        match parents {
+                            1 => super::native::call(&body, "list_files", json!({"path":""})),
+                            2 | 3 => super::native::call(
+                                &body,
+                                "analyze_image",
+                                json!({"path":name,
+                                "focus":if parents==2 {"描述顏色"} else {"再看一次顏色"}}),
+                            ),
+                            4 => {
+                                assert_eq!(
+                                    super::native::last_result(&body)["result"]
+                                        ["reused_reading_note"],
+                                    true
+                                );
+                                assert_eq!(children, 1);
+                                super::native::call(
+                                    &body,
+                                    "read_work_log",
+                                    json!({"operation_id":null,"offset":0}),
+                                )
+                            }
+                            5 => {
+                                let context = super::native::reading_context(&body).unwrap();
+                                let id = context["notes"][0]["source"]["operation_id"]
+                                    .as_str()
+                                    .unwrap();
+                                assert!(id.starts_with("op_") && id.len() < 16);
+                                let index = super::native::last_result(&body);
+                                assert!(index["result"]["operations"]
+                                    .as_array()
+                                    .unwrap()
+                                    .iter()
+                                    .any(|row| row["operation_id"] == id && row["path"] == name));
+                                super::native::call(
+                                    &body,
+                                    "read_reading_notes",
+                                    json!({"source_operation":id,
+                                    "reason":"確認左方色塊邊界","offset":0}),
+                                )
+                            }
+                            6 => {
+                                let previous = super::native::last_result(&body);
+                                assert!(previous["result"]["text"]
+                                    .as_str()
+                                    .unwrap()
+                                    .contains("左紅右藍"));
+                                assert_eq!(previous["result"]["snapshot_only"], true);
+                                assert_eq!(
+                                    previous["result"]["image_followup"]["focus"],
+                                    "確認左方色塊邊界"
+                                );
+                                super::native::call(
+                                    &body,
+                                    "analyze_image",
+                                    json!({"path":name,"focus":"確認左方色塊邊界"}),
+                                )
+                            }
+                            _ => {
+                                assert_eq!(children, 2);
+                                super::native::call(
+                                    &body,
+                                    "finish",
+                                    json!({"message":"圖片測試完成","artifacts":[]}),
+                                )
+                            }
+                        }
                     } else if case == 9 {
                         // 正常任務可逐張／逐焦點辨識，額度仍有界；50次雙圖共100張，第51次不得送出。
                         match parents {
                             1 => super::native::call(&body, "list_files", json!({"path":""})),
-                            2..=52 => super::native::call(
-                                &body,
-                                "analyze_image",
-                                json!({"path":name,"compare_path":"second.png","focus":format!("核對第{}個細節", parents-1)}),
-                            ),
+                            2..=52 => {
+                                // 每輪真正變更來源位元組；同版只換焦點的循環另由筆記回歸覆蓋。
+                                let mut changed = source_image.clone();
+                                changed.extend_from_slice(
+                                    format!("fixture-version-{parents}").as_bytes(),
+                                );
+                                std::fs::write(&image_path, changed).unwrap();
+                                super::native::call(
+                                    &body,
+                                    "analyze_image",
+                                    json!({"path":name,"compare_path":"second.png","focus":format!("核對第{}個細節", parents-1)}),
+                                )
+                            }
                             _ => {
                                 let result = super::native::last_result(&body);
                                 assert_eq!(result["ok"], false);
@@ -372,7 +457,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
     assert_eq!(
         children,
         match case {
-            8 => 2,
+            8 | 13 => 2,
             9 => 50,
             10 => 1,
             _ => usize::from(case < 3 || matches!(case, 5 | 7 | 12)),
@@ -381,7 +466,9 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
     );
     assert_eq!(
         parents,
-        if case == 9 {
+        if case == 13 {
+            7
+        } else if case == 9 {
             53
         } else if case == 10 {
             4

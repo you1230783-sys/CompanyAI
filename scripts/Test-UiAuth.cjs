@@ -95,7 +95,8 @@ assert.ok(settings.disabled && !modal.open && !get("login-panel").hidden);
 // 不依賴版面引擎的座標測試：從 HTML 列舉所有對話框，確保沒有漏掉。
 const html = fs.readFileSync(path.join(root, "ui/index.html"), "utf8");
 const dialogIds = [...html.matchAll(/<dialog id="([^"]+)"/g)].map(match => match[1]);
-assert.equal(dialogIds.length, 16);
+assert.equal(dialogIds.length, 18);
+assert.equal(new Set(dialogIds).size, dialogIds.length, "dialog IDs must be unique");
 assert.ok(dialogIds.includes("project-default-dialog"), "local project creation is included");
 for (const id of dialogIds) { if (!elements.has(id)) add(id, "dialog"); }
 vm.runInContext(fs.readFileSync(path.join(root, "ui/vnc.js"), "utf8"), context);

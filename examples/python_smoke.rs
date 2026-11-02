@@ -95,6 +95,27 @@ result = {'total': int(df['值'].sum()), 'seconds': seconds, 'rows': len(df)}
     let first = call(&mut broker, &mut worker, "analyze", request.clone())?;
     assert_eq!(first["summary"], json!({"total":15,"seconds":5.0,"rows":3}));
     assert_eq!(first["versions"]["pandas"], "2.2.3");
+    // 真Python執行：輸出改名與新的XLSX容器時間不算新內容；真值變更必須算。
+    let mut renamed = request.clone();
+    renamed["code"] = json!(request["code"]
+        .as_str()
+        .unwrap()
+        .replace("統計.csv", "統計另存.csv")
+        .replace("分析.xlsx", "分析另存.xlsx"));
+    std::thread::sleep(Duration::from_secs(3));
+    let same_data = call(&mut broker, &mut worker, "semantic-same", renamed.clone())?;
+    assert!(first["progress_identity"].is_string());
+    assert_eq!(first["progress_identity"], same_data["progress_identity"]);
+    renamed["code"] = json!(renamed["code"]
+        .as_str()
+        .unwrap()
+        .replace("errors='raise')", "errors='raise') + 1"));
+    let changed_data = call(&mut broker, &mut worker, "semantic-changed", renamed)?;
+    assert_ne!(
+        first["progress_identity"],
+        changed_data["progress_identity"]
+    );
+    println!("PASS semantic progress: renamed CSV/XLSX with later timestamps reuse content identity; changed values differ.");
     // 真正經過原生快照與 Python 管道，驗證 Big5 不再被 UTF-8 前置檢查擋下。
     let chinese = "08:00:00 拋料當顆辨識序號: 123\r\n";
     let big5 = company_ai::projects::text::encode(
@@ -286,7 +307,7 @@ result = {{'denied': denied}}
     assert!(changed_runtime.unwrap_err().contains("損毀或版本不符"));
     let artifacts = [python_copy];
     let completed = broker.finish(&artifacts)?;
-    assert_eq!(completed.len(), if office { 4 } else { 3 });
+    assert_eq!(completed.len(), if office { 8 } else { 7 });
     assert_eq!(
         std::fs::read_to_string(root.join("input.csv")).map_err(|e| e.to_string())?,
         csv

@@ -59,6 +59,37 @@ impl Broker {
             blocked: false,
         };
         active.template.validate()?;
+        active.template.validate_parameters(&active.parameters)?;
+        // 先核對表單指定的來源存在與版本；每一步仍須沿用原工具的來源／權限檢查。
+        let mut checked_sources = BTreeMap::new();
+        for step in &active.template.steps {
+            for (pointer, reference) in &step.bindings {
+                let Some(parameter) = reference.strip_prefix("param:") else {
+                    continue;
+                };
+                if !["/path", "/source"].contains(&pointer.as_str())
+                    && !(pointer.starts_with("/inputs/") && pointer.ends_with("/path"))
+                {
+                    continue;
+                }
+                let Some(path) = active.parameters.get(parameter).and_then(Value::as_str) else {
+                    continue;
+                };
+                if path.is_empty() || checked_sources.contains_key(path) {
+                    continue;
+                }
+                let relative_path = relative(path)?;
+                if self.project.root.join(&relative_path).is_dir() {
+                    validate_root(&self.project.root.join(relative_path))?;
+                    checked_sources.insert(path.to_owned(), json!({"kind":"directory"}));
+                } else {
+                    checked_sources.insert(
+                        path.to_owned(),
+                        json!({"revision":fingerprint(&self.project,path)?}),
+                    );
+                }
+            }
+        }
         let required: std::collections::BTreeSet<_> = active
             .template
             .steps
@@ -86,7 +117,7 @@ impl Broker {
         let parameters = active.parameters.clone();
         self.workflow = Some(active);
         Ok(
-            json!({"plan":context,"steps":steps,"parameters":parameters,"executed":false,"notice":"完整步驟與程式可用read_workflow分頁檢視；prepare不執行任何步驟。"}),
+            json!({"plan":context,"steps":steps,"parameters":parameters,"checked_sources":checked_sources,"executed":false,"notice":"來源與參數已預檢；實際每步仍重新核對。完整步驟與程式可用read_workflow分頁檢視；prepare不執行任何步驟。"}),
         )
     }
     pub(super) fn execute_workflow_step(

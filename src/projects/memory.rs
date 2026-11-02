@@ -187,9 +187,80 @@ impl Memory {
         if offset > entries.len() {
             return Err("成果清單位置超出範圍。".into());
         }
+        let (selected, runs) = {
+            let tx = self.vault.transaction()?;
+            let selected: BTreeMap<String, String> =
+                tx.read("artifacts", "selected")?.unwrap_or_default();
+            let index: Index = tx.read("project", "index")?.unwrap_or_default();
+            let mut runs = Vec::new();
+            for run in index.runs.iter().rev().take(50) {
+                let delivery: Value = tx.read("deliveries", &run.id)?.unwrap_or(Value::Null);
+                runs.push(json!({"id":run.id,"conversation":run.conversation,"request":short(&run.request,120),"state":run.state,"updated":run.updated,"delivery":delivery}));
+            }
+            (selected, runs)
+        };
         Ok(
-            json!({"artifacts":entries.iter().skip(offset).take(100).map(|e|super::artifacts::status(&self.project,e)).collect::<Vec<_>>(),"total":entries.len(),"offset":offset,"next_offset":(offset+100).min(entries.len()),"workflows":self.list_workflows()?["workflows"]}),
+            json!({"artifacts":entries.iter().skip(offset).take(100).map(|e|super::artifacts::status(&self.project,e)).collect::<Vec<_>>(),
+            "total":entries.len(),"offset":offset,"next_offset":(offset+100).min(entries.len()),
+            "workflows":self.list_workflows()?["workflows"],"selected_versions":selected,
+            "selected_details":selected.iter().map(|(label,id)| {
+                let entry=entries.iter().find(|entry| &entry.id==id);
+                json!({"label":label,"id":id,"path":entry.map(|e| &e.path),"sha256":entry.map(|e| &e.sha256)})
+            }).collect::<Vec<_>>(),"runs":runs,
+            "runs_notice":"最近50個任務；成果清單依頁碼顯示，不以這一頁判定某任務缺檔。"}),
         )
+    }
+    pub fn store_delivery(&self, run: &str, state: &Value) -> AppResult<()> {
+        jobs::validate_id(run)?;
+        self.vault.transaction()?.write("deliveries", run, state)
+    }
+    /// 使用者為「報告」等用途選一個確切版本；同用途下次選擇才會取代先前版本。
+    pub fn select_artifact(&self, id: &str, label: &str) -> AppResult<()> {
+        let label = label.trim();
+        check_text(label, 80)?;
+        if !id.is_empty() {
+            let all = self.artifact_entries()?;
+            let entry = all
+                .iter()
+                .find(|entry| entry.id == id)
+                .ok_or("成果不存在。")?;
+            if super::artifacts::status(&self.project, entry)["artifact_status"] != "verified" {
+                return Err("成果已變更或無法讀取，未設為採用版本。".into());
+            }
+        }
+        let tx = self.vault.transaction()?;
+        let mut selected: BTreeMap<String, String> =
+            tx.read("artifacts", "selected")?.unwrap_or_default();
+        if id.is_empty() {
+            selected.remove(label);
+        } else {
+            selected.insert(label.into(), id.into());
+        }
+        if selected.len() > 100 {
+            return Err("每專案最多100個採用用途。".into());
+        }
+        tx.write("artifacts", "selected", &selected)
+    }
+    /// 按需取得已登記PNG，禁止任意路徑與SVG/HTML。UI以本機Blob顯示，不連線下載。
+    pub fn artifact_preview(&self, id: &str) -> AppResult<Value> {
+        use sha2::{Digest, Sha256};
+        let all = self.artifact_entries()?;
+        let entry = all
+            .iter()
+            .find(|entry| entry.id == id)
+            .ok_or("成果不存在。")?;
+        if !entry.path.to_ascii_lowercase().ends_with(".png") {
+            return Err("縮圖目前支援PNG成果。".into());
+        }
+        let bytes = super::artifacts::bytes(&self.project, &entry.path)?;
+        if bytes.len() > 2 * 1024 * 1024 || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+            return Err("PNG超過2MiB或格式不符，請開啟原檔查看。".into());
+        }
+        if format!("{:x}", Sha256::digest(&bytes)) != entry.sha256 {
+            return Err("圖片已變更，請重新核對版本。".into());
+        }
+        let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+        Ok(json!({"preview_id":id,"path":entry.path,"hex":hex}))
     }
     pub fn export_artifacts(&self, ids: &[String]) -> AppResult<String> {
         let all = self.artifact_entries()?;
@@ -248,7 +319,8 @@ impl Memory {
         let mut items = Vec::new();
         for id in ids {
             let template = self.load_workflow(&id)?;
-            items.push(json!({"id":id,"name":template.name,"created":template.created,"steps":template.steps.len()}));
+            items.push(json!({"id":id,"name":template.name,"created":template.created,"steps":template.steps.len(),
+                "parameters":template.parameters()?,"plan":template.steps.iter().map(|step|json!({"id":step.id,"tool":step.request["tool"],"output_name":step.request.get("name")})).collect::<Vec<_>>() }));
         }
         Ok(json!({"workflows":items}))
     }

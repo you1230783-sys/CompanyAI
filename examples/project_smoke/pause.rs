@@ -101,12 +101,15 @@ pub fn verify(root: &Path) -> AppResult<()> {
                         original_save.clone()
                     }
                     61 => json!({"tool":"save_copy","copy_id":copy_id,"revision":copy["revision"]}),
-                    62 => Value::Null,
+                    62 => {
+                        json!({"tool":"update_deliverables","items":[{"id":"resumed-file","description":"續接副本","kind":"file","target":copy_id,"blocked_reason":null}]})
+                    }
+                    63 => Value::Null,
                     _ => {
                         json!({"tool":"edit_text","copy_id":copy_id,"revision":copy["revision"],"start":0,"expected":"","replacement":"x"})
                     }
                 };
-                let decision = if round == 62 {
+                let decision = if round == 63 {
                     json!({"action":"finish","message":"續接完成","artifacts":[copy_id]})
                 } else {
                     json!({"action":"tool","operation_id":format!("op{}",if round==60 {2} else {round}),"request":request})
@@ -198,7 +201,17 @@ pub fn verify(root: &Path) -> AppResult<()> {
     stop.store(true, Ordering::Relaxed);
     let rounds = server.join().map_err(|_| "暫停測試伺服器失敗。")??;
     result?;
-    assert_eq!(rounds, 63);
+    assert_eq!(rounds, 64);
+    let saved_activity = runner::recover_activity(&root.join("app-data"), "pause_limit")?;
+    assert!(saved_activity.len() > 120, "完整歷程不能只留下最後120筆");
+    assert_eq!(
+        saved_activity
+            .iter()
+            .filter(|event| event.as_str() == "建立新檔案：完成")
+            .count(),
+        1,
+        "續接後仍保留首次建立新檔案的歷程，不能遺失或重播"
+    );
     println!("PASS pause: 60 real tools, DPAPI restart, unsaved copy restoration, saved operation dedup.");
     Ok(())
 }

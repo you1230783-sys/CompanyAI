@@ -32,12 +32,12 @@ pub fn verify(root: &Path) -> AppResult<()> {
     } else {
         0
     };
-    if first > 25 {
-        return Err("原生測試案例需介於 0–25。".into());
+    if first > 27 {
+        return Err("原生測試案例需介於 0–27。".into());
     }
     // Python 從呼叫端 EXE 旁啟動；先依正式規則授予 AppContainer 唯讀權限。
     company_ai::projects::python::prepare_runtime()?;
-    for case in first..=25 {
+    for case in first..=27 {
         verify_case(root, case)?;
     }
     Ok(())
@@ -97,13 +97,15 @@ pub(super) fn last_result(body: &Value) -> Value {
         // 固定參數案例的步驟追蹤以原動作為準；閱讀筆記另由下方契約回合保存。
         .find(|value: &Value| {
             !(value["result"]["saved"].is_u64() && value["result"]["pending"].is_array())
+                && !(value["result"]["items"].is_array()
+                    && value["result"].get("conditions").is_some())
         })
         .unwrap_or(Value::Null)
 }
 
 /// 合成模型也遵守新增的閱讀筆記契約，不關閉產品閘門來讓舊測試通過。
 /// 此固定筆記只核對原生往返，不能用來判定真模型的理解品質。
-fn reading_context(body: &Value) -> Option<Value> {
+pub(super) fn reading_context(body: &Value) -> Option<Value> {
     body["messages"]
         .as_array()?
         .iter()
@@ -117,11 +119,12 @@ pub(super) fn reading_note_message(body: &Value) -> Option<Value> {
     if body["model"] == "fast" {
         return None;
     }
-    let context = reading_context(body)?;
-    let pending = context["pending"].as_array()?;
-    if pending.is_empty() {
-        return None;
+    let context = reading_context(body).unwrap_or(Value::Null);
+    let pending = context["pending"].as_array();
+    if pending.is_none_or(Vec::is_empty) {
+        return delivery_note_message(body);
     }
+    let pending = pending.unwrap();
     let notes: Vec<_> = pending
         .iter()
         .map(|source| {
@@ -131,6 +134,63 @@ pub(super) fn reading_note_message(body: &Value) -> Option<Value> {
         })
         .collect();
     Some(call(body, "record_reading_notes", json!({"notes":notes})))
+}
+
+/// 固定模型依真正工具結果登記成果，仍走正式交付工具與最後的檔案核對。
+/// 額外的契約往返不改動原有案例的中斷／重送步驟編號。
+fn delivery_note_message(body: &Value) -> Option<Value> {
+    if body["model"] == "fast" {
+        return None;
+    }
+    let previous = last_result(body);
+    if previous["ok"] != true {
+        return None;
+    }
+    let result = &previous["result"];
+    let mut targets = Vec::new();
+    if let Some(copy) = result["copy_id"].as_str() {
+        targets.push(copy.to_owned());
+    } else if let Some(path) = result["path"]
+        .as_str()
+        .filter(|p| p.starts_with("_AI_Output/"))
+    {
+        targets.push(path.to_owned());
+    }
+    if let Some(artifacts) = result["artifacts"].as_array() {
+        targets.extend(
+            artifacts
+                .iter()
+                .filter_map(|a| a["path"].as_str().or_else(|| a["dataset"]["path"].as_str()))
+                .filter(|p| p.starts_with("_AI_Output/"))
+                .map(str::to_owned),
+        );
+    }
+    if let Some(path) = result["dataset"]["path"]
+        .as_str()
+        .filter(|p| p.starts_with("_AI_Output/"))
+    {
+        targets.push(path.to_owned());
+    }
+    let plan: Value = body["messages"]
+        .as_array()?
+        .iter()
+        .rev()
+        .filter_map(|m| m["content"].as_str())
+        .find_map(|s| s.strip_prefix("本機交付清單："))
+        .and_then(|s| s.split_once("。優先完成").map(|(json, _)| json))
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or(Value::Null);
+    targets.sort();
+    targets.dedup();
+    let items: Vec<_> = targets.iter().filter(|target| !plan["items"].as_array()
+        .is_some_and(|items| items.iter().any(|i| i["target"] == target.as_str())))
+        .map(|target| json!({"id":format!("fixture-{}", &company_ai::projects::text::revision(target)[..16]),
+            "description":"固定案例工具已建立的成果", "kind":"file", "target":target,"blocked_reason":null})).collect();
+    if items.is_empty() {
+        None
+    } else {
+        Some(call(body, "update_deliverables", json!({"items":items})))
+    }
 }
 
 /// 0 正常；1 非 strict 格式修復；2 原 POST 回覆遺失＋暫停續接；3 截斷不執行；
@@ -212,6 +272,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
     let server_cancel_count = cancel_count.clone();
     let instructions = company_ai::projects::steering::Inbox::open(&root.join("native-app"), &id)?;
     let server_instructions = instructions.clone();
+    let settings_root = root.join("native-app");
     use std::os::windows::fs::OpenOptionsExt;
     let held = if matches!(case, 16 | 17 | 20) {
         Some(
@@ -304,7 +365,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                 if posts == 1 && !saving_notes {
                     assert_eq!(
                         body["tools"].as_array().unwrap().len(),
-                        18,
+                        19,
                         "首次提供基本閱讀、累積筆記、流程步驟、程式搜尋、圖片、技能、並行批次與可選問題"
                     );
                     // 程式碼唯讀工具已移入基本工具；不必先載入 Python 編輯技能。
@@ -549,8 +610,8 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                             assert_eq!(previous["result"]["chart_index"], 1);
                             call(
                                 &body,
-                                "read_work_log",
-                                json!({"operation_id":old_operation,"offset":0}),
+                                "read_reading_notes",
+                                json!({"source_operation":old_operation,"reason":"核對最初文字來源的確切內容","offset":0}),
                             )
                         }
                         9 => {
@@ -607,6 +668,18 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                                 &body,
                                 "read_work_log",
                                 json!({"operation_id":copy,"offset":0}),
+                            )
+                        }
+                        68 => {
+                            assert_eq!(
+                                previous["result"]["reading_note"]["source"]["path"],
+                                "part1.txt"
+                            );
+                            call(
+                                &body,
+                                "read_reading_notes",
+                                json!({"source_operation":copy,
+                                "reason":"核對第一份證據的原始編號", "offset":0}),
                             )
                         }
                         _ => {
@@ -705,12 +778,28 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                             )
                         }
                     }
-                } else if matches!(case, 12 | 13) {
+                } else if matches!(case, 12 | 13 | 26 | 27) {
                     match posts {
                         1 => call(&body, "load_skill", json!({"id":"text-edit"})),
                         2 => {
-                            server_instructions.submit(None, "只看 Device02，先不要產生報告")?;
-                            if case == 12 {
+                            if matches!(case, 26 | 27) {
+                                // 模型仍在回覆時，從獨立持久化條件卡修改需求。
+                                // 這兩例不提供 Inbox，確保 runner 自己讀取條件版本。
+                                let mut settings =
+                                    company_ai::projects::work_settings::Settings::load(
+                                        &settings_root,
+                                    )?;
+                                settings.set_conditions(
+                                    &format!("conversation_native_{case}"),
+                                    0,
+                                    "只看 Device02，先不要產生報告",
+                                )?;
+                                settings.save(&settings_root)?;
+                            } else {
+                                server_instructions
+                                    .submit(None, "只看 Device02，先不要產生報告")?;
+                            }
+                            if matches!(case, 12 | 26) {
                                 call(
                                     &body,
                                     "create_working_copy",
@@ -1082,12 +1171,24 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
             assert!(result?.contains("圖表選擇完成"));
             assert_eq!(posts, 4, "續接只能查回原工具請求，不重送推論");
         }
-        12 | 13 => {
+        12 | 13 | 26 | 27 => {
             assert!(result?.contains("已依補充重新分析"));
             assert_eq!(posts, 3);
             assert!(!workspace.join("_AI_Output").exists());
-            assert_eq!(instructions.entries()?[0].status, "sent");
-            assert!(instructions.submit(None, "最後才送的指示").is_err());
+            if matches!(case, 12 | 13) {
+                assert_eq!(instructions.entries()?[0].status, "sent");
+                assert!(instructions.submit(None, "最後才送的指示").is_err());
+            } else {
+                let settings =
+                    company_ai::projects::work_settings::Settings::load(&root.join("native-app"))?;
+                assert_eq!(
+                    settings
+                        .snapshot(&id, &format!("conversation_{id}"))
+                        .conditions
+                        .revision,
+                    1
+                );
+            }
         }
         14 => {
             assert!(result?.contains("LOG 原生搜尋完成"));
@@ -1112,7 +1213,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         }
         18 | 19 => {
             assert!(result?.contains("跨批次 checkpoint"));
-            assert_eq!(posts, 68, "崩潰續接不能重做已完成的 60 次閱讀或重送 POST");
+            assert_eq!(posts, 69, "崩潰續接不能重做已完成的 60 次閱讀或重送 POST");
             assert!(
                 !runner::paused_available(&root.join("native-app"), &id),
                 "完成後須關閉 checkpoint"

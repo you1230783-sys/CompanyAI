@@ -1,0 +1,98 @@
+{
+  "version": "0.8.76",
+  "result": "AUTOMATED_NONCAD_AND_INSTALLER_PASS_WITH_MODEL_LIMITATIONS",
+  "cad": "Modification and CAD application validation deferred to next version by user.",
+  "model": {
+    "name": "gpt-6-luna",
+    "reasoning_effort": "low",
+    "tested_candidate_version": "0.8.75",
+    "tested_candidate_exe_sha256": "d42cfdaa8e665c98cc76bccc2dae0aa4649a0a5f67ba15e5d8ac6af0bde01388",
+    "rerun_on_release_0_8_76": false,
+    "runtime_logic_changed_since_model_test": false,
+    "overall_acceptance": "NOT_FULLY_ACCEPTED",
+    "cases": {
+      "reading-final-r1": {
+        "result": "WORKFLOW_PASS_CONTENT_FAIL",
+        "model": "gpt-6-luna",
+        "effort": "low",
+        "inference_turns": 11,
+        "parent_turns": 8,
+        "image_inferences": 3,
+        "reread_count": 0,
+        "saved_source_notes": 3,
+        "short_ids": [
+          "op_0002",
+          "op_0004",
+          "op_0006"
+        ],
+        "seconds_sum": 59.216,
+        "content_failure": {
+          "field": "first DRT peak tau",
+          "truth_seconds": 4e-05,
+          "reported_seconds": 4e-06,
+          "origin": "Initial image inference turn-009; copied unchanged to note turn-010 and final turn-011.",
+          "independent_review": "Compared generated source plot coordinates, displayed DRT PNG, and all three response stages."
+        },
+        "passed_content": [
+          "Other two peak positions and all three peak heights within visual tolerance.",
+          "Correct axes, scales, units, and absence of Bode phase curve.",
+          "Mechanism attribution marked unconfirmed."
+        ],
+        "limitations": [
+          "Originals retained. Notes do not independently verify image recognition.",
+          "Synthetic figures only; no original user EIS or company model."
+        ]
+      },
+      "code-r3": {
+        "result": "STOPPED_NOT_ACCEPTED",
+        "reason": "Model repeatedly placed source names in answer-kind deliverable target; native validation stopped after five invalid operations.",
+        "second_request": "Not reached."
+      },
+      "boundaries-r3": {
+        "result": "STOPPED_NOT_ACCEPTED",
+        "reason": "Model repeatedly omitted nested formatting fields and then supplied English edit descriptions instead of the native revision token; native validation rejected and paused.",
+        "missing_file_followup": "Not reached."
+      },
+      "reports-r2": {
+        "result": "STOPPED_NOT_ACCEPTED",
+        "reason": "Model repeated checklist and skill loads without creating requested outputs; native progress guard paused.",
+        "conditions_followup": "Not reached."
+      }
+    },
+    "limitations": [
+      "Synthetic local fixtures, not company service or user original EIS images.",
+      "Original sources retained; notes may preserve initial recognition errors.",
+      "Earlier passing EIS run retained; latest content failure is not overwritten."
+    ]
+  },
+  "ui": {
+    "settings_and_55_tutorials": "PASS",
+    "workbench_checks_passed": 21,
+    "release_notes_narrow_layout": "PASS"
+  },
+  "candidate_validation_document": "docs/VALIDATION_2026_11_02_NONCAD.md",
+  "recorded_at": "2026-11-02T16:02:03.9369545+08:00",
+  "exe_sha256": "6236a49d61d7434c1a033efce6c2527ffc683a991888b1ac99e27a3abfb95d51",
+  "setup_sha256": "d2e7c51e979d327ea10e67f69fce7a2c13d1cb88809dd7a3088a67b688276d5a",
+  "build": {
+    "result": "PASS",
+    "msvc": "14.29.30133",
+    "compiler_report": [
+      "v142.c",
+      "Verified _MSC_FULL_VER=192930159 x64"
+    ],
+    "empty_cargo_cache": true,
+    "frozen_vendor": true,
+    "non_cad_rust_tests": 394,
+    "cad_tests_skipped": 50,
+    "full_non_cad_suite": true,
+    "office": true,
+    "python": true,
+    "loopback_smb": true,
+    "vnc": true,
+    "installer_lifecycle": true,
+    "cad_runtime_package_check_only": true,
+    "company_environment_tested": false,
+    "vnc_screenshots_verified": false
+  }
+}

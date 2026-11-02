@@ -10,12 +10,32 @@ mod diagrams;
 pub(in crate::ui) mod local_scenario;
 mod quick;
 mod weekly;
+mod work_settings;
 
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(super) enum ProjectCommand {
+    SetCollapsed {
+        id: String,
+        collapsed: bool,
+    },
+    ArtifactAction {
+        conversation: String,
+        request_id: Option<String>,
+        id: String,
+        label: Option<String>,
+    },
+    WorkSettings {
+        conversation: String,
+        request_id: Option<String>,
+        expected: Option<String>,
+        personal: Option<projects::work_settings::Preferences>,
+        project: Option<projects::work_settings::Preferences>,
+        conditions: Option<projects::work_settings::Conditions>,
+    },
     ArtifactCenter {
         conversation: String,
+        request_id: Option<String>,
         #[serde(default)]
         offset: usize,
         #[serde(default)]
@@ -202,7 +222,7 @@ pub(super) enum ProjectCommand {
 }
 pub(super) enum ProjectEvent {
     DiagramSource(String, AppResult<String>),
-    ArtifactCenter(String, AppResult<String>),
+    ArtifactCenter(String, Option<String>, AppResult<String>),
     CadReadProgress(String, serde_json::Value),
     CadClosed(String, String),
     CadConnect(String, String, serde_json::Value, mpsc::Sender<String>),
@@ -456,7 +476,7 @@ impl App {
         self.projects.running.as_ref().map(|run| json!({"id":run.id,"conversation_id":run.conversation,"title":"專案工作","mode":"background","state":"running","active":true,"project":true,"created_at":run.started,"message":self.projects.status,"can_retry":false}))
     }
     pub(super) fn project_state(&self) -> serde_json::Value {
-        json!({"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len()})).collect::<Vec<_>>(),
+        json!({"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len(),"collapsed":self.projects.store.collapsed.contains(&p.id)})).collect::<Vec<_>>(),
             "preferences":self.projects.running.as_ref().and_then(|r|r.instructions.questions().ok()),
             "chart_review":self.projects.running.as_ref().and_then(|r|r.pending_chart.as_ref().map(|p|json!({"request_id":p.id,"review":p.review}))),
             "outlook_consent":self.projects.running.as_ref().and_then(|r|r.pending_outlook.as_ref().map(|p|json!({"request_id":p.id,"folders":p.folders}))),
@@ -469,6 +489,20 @@ impl App {
             "running":self.projects.running.is_some(),"running_id":self.projects.running.as_ref().map(|r|&r.id),"activity":self.projects.running.as_ref().map(|r|&r.activity),"charts":self.projects.running.as_ref().map(|r|&r.charts),"analysis":self.projects.running.as_ref().and_then(|r|r.analysis.as_ref()),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
     }
     pub(super) fn project_command(&mut self, command: ProjectCommand) -> AppResult<()> {
+        if let ProjectCommand::SetCollapsed { id, collapsed } = &command {
+            if !self.logged_in() || self.versions.blocked() {
+                return Err("請登入後調整專案顯示。".into());
+            }
+            // 收合只影響側欄，可在任務執行中使用；先保存再更新畫面狀態。
+            let mut store = self.projects.store.clone();
+            store.set_collapsed(id, *collapsed)?;
+            store.save(&self.root)?;
+            self.projects.store = store;
+            return Ok(());
+        }
+        if self.work_settings_command(&command)? {
+            return Ok(());
+        }
         if self.artifact_command(&command)? {
             return Ok(());
         }
@@ -1080,9 +1114,12 @@ impl App {
             | ProjectCommand::Review { .. }
             | ProjectCommand::Methods { .. } => unreachable!("已於上方處理專案審閱"),
             ProjectCommand::AnswerPreference { .. }
+            | ProjectCommand::SetCollapsed { .. }
+            | ProjectCommand::WorkSettings { .. }
             | ProjectCommand::SetDebug { .. }
             | ProjectCommand::Diagnostics { .. }
-            | ProjectCommand::ArtifactCenter { .. } => {
+            | ProjectCommand::ArtifactCenter { .. }
+            | ProjectCommand::ArtifactAction { .. } => {
                 unreachable!("已於上方處理診斷讀取")
             }
             ProjectCommand::ChartChoice { .. }
@@ -1179,6 +1216,7 @@ impl App {
             self.preserve_draft()?;
         }
         store.projects.retain(|project| project.id != id);
+        store.collapsed.remove(id);
         store.conversations.retain(|_, project| project != id);
         store.save(&self.root)?;
         self.projects.store = store;
@@ -1262,6 +1300,11 @@ impl App {
                 Some(id) => id.into(),
                 None => crate::jobs::new_id()?,
             },
+        };
+        let initial_activity = if resume {
+            projects::runner::recover_activity(&self.root, &id)?
+        } else {
+            vec!["準備專案任務…".into()]
         };
         let cancel = Arc::new(AtomicBool::new(false));
         let instructions = projects::steering::Inbox::open(&self.root, &id)?;
@@ -1422,7 +1465,7 @@ impl App {
             pending_chart: None,
             id: id.clone(),
             conversation: conversation.clone(),
-            activity: vec!["準備專案任務…".into()],
+            activity: initial_activity,
             analysis: None,
             charts: vec![],
             started: crate::unix_now(),
@@ -1656,9 +1699,9 @@ impl App {
                     self.view.post(&json!({"type":"project_diagnostics","view_request":view_request,"conversation":conversation,"run_id":id,"text":result.unwrap_or_else(|e|self.friendly_error("diagnostics_read", &e))}))?;
                 }
             }
-            ProjectEvent::ArtifactCenter(conversation, result) => {
+            ProjectEvent::ArtifactCenter(conversation, request_id, result) => {
                 if self.logged_in() && self.active_id.as_deref() == Some(&conversation) {
-                    self.view.post(&json!({"type":"project_artifact_center","conversation":conversation,"ok":result.is_ok(),"text":result.unwrap_or_else(|e|e)}))?;
+                    self.view.post(&json!({"type":"project_artifact_center","conversation":conversation,"request_id":request_id,"ok":result.is_ok(),"text":result.unwrap_or_else(|e|e)}))?;
                 }
             }
             ProjectEvent::DiagramSource(conversation, result) => {
@@ -1707,9 +1750,6 @@ impl App {
             ProjectEvent::Progress(id, text) => {
                 if let Some(run) = self.projects.running.as_mut().filter(|r| r.id == id) {
                     if !run.activity.last().is_some_and(|last| **last == *text) {
-                        if run.activity.len() >= 120 {
-                            run.activity.remove(0);
-                        }
                         run.activity.push(text.clone());
                     }
                     self.projects.status = text.to_string();
@@ -1734,6 +1774,10 @@ impl App {
                     })
                     .unwrap_or_default();
                 let paused = projects::runner::paused_available(&self.root, &id);
+                let final_analysis = projects::runner::recover_analysis(&self.root, &id);
+                let partial = final_analysis
+                    .as_ref()
+                    .is_some_and(|a| a.recovery["state"] == "partial");
                 self.projects.status = if paused {
                     "專案已暫停，可按繼續。"
                 } else if cancelled {
@@ -1743,6 +1787,8 @@ impl App {
                     .is_ok_and(|text| text.starts_with("需要你的補充："))
                 {
                     "等待你的補充。"
+                } else if partial {
+                    "專案任務部分完成，請查看未完成項目。"
                 } else if result.is_ok() {
                     "專案任務已完成。"
                 } else {
@@ -1795,7 +1841,7 @@ impl App {
                 let mut message = Message::assistant(text);
                 message.project_paused = paused;
                 message.project_activity = activity;
-                message.project_analysis = projects::runner::recover_analysis(&self.root, &id);
+                message.project_analysis = final_analysis;
                 message.project_charts = projects::runner::recover_charts(&self.root, &id);
                 message.project_diagrams = projects::runner::recover_diagrams(&self.root, &id);
                 message.request_id = Some(id.clone());

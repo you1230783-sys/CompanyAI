@@ -113,6 +113,9 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
                         json!({"action":"tool","operation_id":"edit","request":{"tool":"edit_text","copy_id":copy_id,"revision":copy["revision"],"start":0,"expected":"","replacement":"保留的未儲存進度"}})
                     }
                     n if n == finish_at => {
+                        json!({"action":"tool","operation_id":"delivery","request":{"tool":"update_deliverables","items":[{"id":"resumed-file","description":"續接副本","kind":"file","target":copy_id,"blocked_reason":null}]}})
+                    }
+                    n if n == finish_at + 1 => {
                         assert_eq!(copy["saved_revision"], text::revision("保留的未儲存進度"));
                         json!({"action":"finish","message":"中斷後續接完成","artifacts":[copy_id]})
                     }
@@ -240,9 +243,9 @@ fn verify_case(root: &Path, case: Case) -> AppResult<()> {
     assert_eq!(
         posts,
         if matches!(case, Case::Malformed) {
-            9
+            10
         } else {
-            4
+            5
         }
     );
     if matches!(case, Case::Deadline | Case::UnknownRequest) {

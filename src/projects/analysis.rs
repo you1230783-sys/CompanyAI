@@ -161,6 +161,12 @@ pub struct Coverage {
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct State {
+    /// 原生交付清單與條件快照；模型摘要不能自行填入已保存狀態。
+    #[serde(default)]
+    pub deliverables: Value,
+    /// 由執行器判定的恢復方式；模型文字不能宣告 checkpoint 可安全續接。
+    #[serde(default)]
+    pub recovery: Value,
     #[serde(default)]
     pub completion: Value,
     /// 命中的原文段落留在本機歷史，與模型的結論分開。

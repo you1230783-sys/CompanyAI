@@ -196,6 +196,7 @@ pub fn context_for(ids: &[String], model: &str) -> AppResult<String> {
         .cloned()
         .collect();
     let mut result = context(&available)?;
+    result.push_str("\n環境能力：技能載入代表工具入口已啟用，不代表所有桌面程式已連線。Word／Excel讀寫使用office-edit／excel-read的原生工具，不依賴python-docx；Python用隨程式提供的pandas、numpy、openpyxl與核可標準模組。缺少套件時先改用相應內建工具，不自行安裝套件、不把Python匯入失敗當作整個應用無法製作Office。工具回報的可編輯物件與版本限制優先；模型能力不合時說明需切換的功能，不自動切換模型。\n");
     if ids.iter().any(|id| id.starts_with("cad-")) && super::vision::input::model_supported(model) {
         result.push_str("\n品質模型圖片輔助：cad_preview(show_user=false)只產生局部JPG；show_user=true交給使用者指認。產生的局部JPG可按需求用analyze_image(path,focus)判讀，並核對快照版本。此為幾何示意，不是CAD截圖；尺寸與修改目標以cad_query精確資料為準。不得從省略圖元的預覽推斷不存在。圖片不會隨預覽自動上傳。\n");
     }
@@ -255,6 +256,7 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
         | "set_work_stage"
         | "run_batch"
         | "record_reading_notes"
+        | "update_deliverables"
         | "read_reading_notes" => true,
         "register_report_values" | "export_report_values" => {
             has("python-analysis") || has("office-edit") || has("dataset-charts")

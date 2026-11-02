@@ -64,7 +64,7 @@ pub(super) fn receive(
             return Ok(Reply::Pending(super::runner::TIME_LIMIT_REASON.into()));
         }
         if task.project_retry.due_at_millis > 0 {
-            let waited = retry::wait(run, task, deadline, &mut notify);
+            let waited = retry::wait(&run.cancel, task, deadline, &mut notify);
             // 等待中的停止也沿用原生取消流程；可能仍在執行的原請求不能被漏掉。
             if run.cancel.load(std::sync::atomic::Ordering::Relaxed) {
                 if let Some(caps) = agent_caps {

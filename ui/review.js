@@ -85,6 +85,12 @@ window.ReviewUI = (() => {
     node.append(make("small",block.label));const text=make("div","","review-text");
     if(kind!=="same")highlight(text,block.text,other?.text||"",removed);else text.textContent=block.text;
     node.append(text);
+    if(!removed && activeData && window.WorkbenchUI) {
+      const edit=make("button","修改此區塊");
+      edit.onclick=()=>window.WorkbenchUI.correct({conversation:owner,kind:"document_block",path:activeData.path,
+        revision:activeData.after_revision,block_id:block.id,line:block.line,block_label:block.label,selected_text:block.text.slice(0,2000)});
+      node.append(edit);
+    }
     if(other&&JSON.stringify(block.format)!==JSON.stringify(other.format)) {
       const detail=make("details");detail.append(make("summary","格式變更"),make("pre",JSON.stringify(block.format,null,2)));node.append(detail);
     }

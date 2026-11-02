@@ -1,8 +1,8 @@
 {
-  "version": "0.8.74.0",
+  "version": "0.8.76.0",
   "result": "PASS",
-  "office_version": "16.0.20430.20182",
-  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\office-test-df15114537c540ff88e04d95f083333a",
+  "office_version": "16.0.20527.20088",
+  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\office-test-a323ed963210402d9b9185a6a6afc5e0",
   "checks": [
     "DOC/DOCX/DOCM/XLS/XLSX/XLSM/XLSB/PPT/PPTX/PPTM COM read/edit/save/reopen",
     "source bytes unchanged",

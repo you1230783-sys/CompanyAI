@@ -1,3 +1,5 @@
+**待發布來源修改（2026-11-02，尚未編譯驗證）：** 新增桌面基本工具 `update_deliverables(items)`，以當輪Schema為準。每項含 `id/description/kind/target/blocked_reason`，`kind=file|answer`；target及blocked_reason可null。檔案狀態由桌面工作副本、成果索引與交付讀回產生，不接受模型填入完成狀態。使用者偏好與條件卡由桌面保存並加入既有請求上下文；條件在等待回覆時改變，桌面會回覆候選操作未執行並要求重新核對。沒有新增網站API、公司資料載入或自動切換模型；沿用現有原生工具轉發及重試契約。詳 [來源交接與驗證安排](IMPLEMENTATION_2026_11_02.md)。
+
 **0.8.55 CAD 對話繪圖測試版：** 新增按需載入的 `cad-drawing` 技能，以及 `cad_inventory`／`cad_draw(name,version,operations)`。沿用 desktop-agent-v1 原生工具轉發，不新增網站路由。工具參數 Schema 由桌面提供，operations 使用非根位置 oneOf（傳送時轉 anyOf）區分固定幾何操作與 ACI 顏色；網站不執行 CAD。模型不得把工具成功誤解為外觀已驗收；結果 `DATA_VERIFIED_VISUAL_PENDING` 表示指定屬性／存檔重開核對通過，仍需人工檢查。DWG 由桌面保存於專案並自動加入成果，不上傳網站轉檔。失敗不自動重播，既有圖面不修改。詳見 [CAD 說明](CAD_DRAWING.md)。
 
 **0.8.54 桌面程式碼唯讀：** 專案基本工具 read_code_section／find_text 可讀新程式與設定格式；工具 Schema 由桌面提供，網站不需增加 API。來源分段有 revision、行號與範圍限制。一般對話的附件白名單／轉檔路由沒有隨此功能放寬。當時 CAD 為獨立人工測試程式，0.8.55 才加入上述模型工具。

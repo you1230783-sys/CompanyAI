@@ -1,6 +1,9 @@
-[CmdletBinding()]
-param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$BasicValidation, [switch]$TestVnc, [switch]$TestOffice, [switch]$TestCadComparison, [string]$NetworkTestRoot, [switch]$BuildOnly)
+﻿[CmdletBinding()]
+param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$BasicValidation, [switch]$TestVnc, [switch]$TestOffice, [switch]$TestCadComparison, [string]$NetworkTestRoot, [switch]$BuildOnly, [switch]$SkipCad)
 $ErrorActionPreference = 'Stop'
+# 明確允許完整非CAD驗證或含安裝包的非CAD發行；不可與局部驗證混用。
+# 安裝包仍保留既有CAD依賴，安裝測試只核對套件，不啟動CAD圖面。
+if ($SkipCad -and ($BasicValidation -or $TestCadComparison -or $BuildOnly -or (-not $ValidateOnly -and -not $IncludeInstaller))) { throw 'SkipCad requires full ValidateOnly or IncludeInstaller; CAD validation remains pending.' }
 if ($BuildOnly -and ($IncludeInstaller -or $ValidateOnly -or $BasicValidation -or $TestVnc -or $TestOffice -or $TestCadComparison -or $NetworkTestRoot)) { throw 'BuildOnly cannot be combined with validation or installer options.' }
 if ($ValidateOnly -and $IncludeInstaller) { throw 'ValidateOnly cannot be combined with IncludeInstaller.' }
 if ($BasicValidation -and ($TestOffice -or $TestCadComparison -or $TestVnc -or $NetworkTestRoot)) { throw 'BasicValidation cannot be combined with full Office, CAD, VNC or network checks.' }
@@ -89,18 +92,21 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
             if ($LASTEXITCODE -ne 0) { throw "Basic contract tests failed: $filter" }
         }
     } else {
-        & cargo test --workspace --frozen
+        if ($SkipCad) { & cargo test --workspace --frozen -- --skip cad }
+        else { & cargo test --workspace --frozen }
         if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
     }
     & cargo build --workspace --release --frozen
     if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
     $exe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\release\company-ai.exe'
-    & (Join-Path $PSScriptRoot 'Stage-Cad.ps1') -ExecutableDirectory (Split-Path $exe -Parent)
-    $cadStage = (Get-Content (Join-Path $projectRoot '.build\cad-runtime-stage.txt') -Raw).Trim()
-    & (Join-Path $cadStage 'runtime\python.exe') -I -B (Join-Path $projectRoot 'tools\test_cad_basic.py')
-    if ($LASTEXITCODE -ne 0) { throw 'CAD basic contract tests failed.' }
-    $cadCheck = Start-Process -FilePath $exe -ArgumentList '--cad-self-check' -PassThru -Wait -WindowStyle Hidden
-    if ($cadCheck.ExitCode -ne 0) { throw 'CAD runtime self-check failed.' }
+    if (-not $SkipCad) {
+        & (Join-Path $PSScriptRoot 'Stage-Cad.ps1') -ExecutableDirectory (Split-Path $exe -Parent)
+        $cadStage = (Get-Content (Join-Path $projectRoot '.build\cad-runtime-stage.txt') -Raw).Trim()
+        & (Join-Path $cadStage 'runtime\python.exe') -I -B (Join-Path $projectRoot 'tools\test_cad_basic.py')
+        if ($LASTEXITCODE -ne 0) { throw 'CAD basic contract tests failed.' }
+        $cadCheck = Start-Process -FilePath $exe -ArgumentList '--cad-self-check' -PassThru -Wait -WindowStyle Hidden
+        if ($cadCheck.ExitCode -ne 0) { throw 'CAD runtime self-check failed.' }
+    } else { Write-Host 'CAD contracts/runtime/native checks skipped by request; not validated.' }
     # 實際發行EXE的匿名管線與EOF退出也必須可用；無效要求不接觸使用者信箱。
     $outlookProbe = New-Object Diagnostics.Process
     $outlookProbe.StartInfo.FileName = $exe
@@ -312,6 +318,23 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     }
     # 僅驗證尚未發行的修改：保留 target 建置結果，不改 dist、offline 驗證記錄或簽署清單。
     if ($ValidateOnly) {
+        $dependencies = & $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER /dump /dependents $exe
+        if ($LASTEXITCODE -ne 0) { throw 'DLL inspection failed.' }
+        [ordered]@{
+            recorded_at = (Get-Date -Format o)
+            scope = if ($SkipCad) { 'non-CAD source validation; CAD pending' } else { 'source validation' }
+            msvc = $env:VCToolsVersion
+            compiler_report = $compilerReport
+            linker = $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER
+            empty_cargo_cache = [bool]$EmptyCargoCache
+            cargo_home = $env:CARGO_HOME
+            exe_sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+            office = [bool]$TestOffice
+            vnc = [bool]$TestVnc
+            cad_skipped = [bool]$SkipCad
+            dependencies = $dependencies
+            model_validation = 'separate; not covered by this script'
+        } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $projectRoot '.build\source-verification.json') -Encoding UTF8
         Write-Host 'Source validation passed; release artifacts and manifests were not updated.'
         return
     }
@@ -362,6 +385,9 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         recorded_at = (Get-Date -Format o)
         version = (Get-Item $exe).VersionInfo.FileVersion
         result = 'PASS'
+        scope = if ($SkipCad) { 'non-CAD release validation; CAD deferred' } else { 'release validation' }
+        cad_skipped = [bool]$SkipCad
+        model_validation = 'separate; automated PASS does not imply model content acceptance'
         msvc = $env:VCToolsVersion
         compiler_report = $compilerReport
         empty_cargo_cache = [bool]$EmptyCargoCache
@@ -373,7 +399,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         chart_transform_checks = @('locked Excel CSV keeps A/Index and D/Mean source roles while deriving Index 1','physical X/Y offset and numbering with horizontal-bar roles','all-series missing-row removal before shared numbering, zero preserved','native HTTP transform_chart and updated chart UI event','DPAPI persistence and original source preservation','PNG cache invalidation when transform changes','WebView2 editor validation, transformed plotting and PNG export','three five-point missing-value examples with unchanged choice submission')
         excel_chart_checks = @('locked source/header/time/X/Y plans, CSV schema and role enforcement','local half-open clock/elapsed filters with explicit scan limits','three actual Excel files with different column orders x five windows, fifteen exact charts','native chart style DPAPI persistence, original data and reset','six chart kinds, user axis ranges, reference lines and colors','native customized PNG callback and verified manual _AI_Output write')
         cargo_home = $env:CARGO_HOME
-        checks = @('weekly wizard prepare/confirm/cancel and conversation binding','online inbox COM fixture','two ordinary repairs plus two compact-context recovery attempts','v142 x64 compiler probe','fmt','Clippy','workspace tests','cargo build --release --frozen','WebView2 DOM self-check','native composer persistence, cancellation, cross-conversation continuation and restart recovery','AppContainer OS file/network isolation','project copy/edit/publish integration','HTTP skills/tool loops with bounded JSON repair and activity history','DPAPI project memory, versioned notes and reserved .lmai boundary','persistent PDF cache, source/profile/hash invalidation','built-in skills, bounded cross-file search and chart dedup','fast model delegation, multi-section summaries, encrypted cache and pause without repost','offline ECharts canvas and data table','desktop-agent-v1 native HTTP roles, capability checks, cancellation and parent/child request recovery','large Excel headers, selected columns, row paging and native chart values','30 approximately 10 MiB LOG files, time and station filters, pagination and source revision checks','in-flight user instructions, stale tool and finish suppression, persistent original instructions','Outlook consent rejection with no mailbox access, fake-source folder/header/body paging and dedup','file lock close/retry and encrypted resume without repost','chart anomaly defaults and per-cell evidence table','24-hour policy with controlled deadlines, automatic multi-batch continuation and checkpoint interruption recovery','bounded context, preserved user requirements, encrypted operation archive and on-demand old results','local LOG/Excel CSV datasets with bounded previews, native charting and source provenance','explicit context handoff and correction compaction without losing user instructions or archived evidence','Outlook folder picker, DPAPI policy and ancestor enforcement, native forged/stale selection rejection','local mail coverage with 1000-message limit, no raw-body tool output, independent 50-message AI limit, branches and gaps')
+        checks = @('weekly wizard prepare/confirm/cancel and conversation binding','online inbox COM fixture','two ordinary repairs plus two compact-context recovery attempts','v142 x64 compiler probe','fmt','Clippy','workspace tests (see cad_skipped)','cargo build --release --frozen','WebView2 DOM self-check','native composer persistence, cancellation, cross-conversation continuation and restart recovery','AppContainer OS file/network isolation','project copy/edit/publish integration','HTTP skills/tool loops with bounded JSON repair and activity history','DPAPI project memory, versioned notes and reserved .lmai boundary','persistent PDF cache, source/profile/hash invalidation','built-in skills, bounded cross-file search and chart dedup','fast model delegation, multi-section summaries, encrypted cache and pause without repost','offline ECharts canvas and data table','desktop-agent-v1 native HTTP roles, capability checks, cancellation and parent/child request recovery','large Excel headers, selected columns, row paging and native chart values','30 approximately 10 MiB LOG files, time and station filters, pagination and source revision checks','in-flight user instructions, stale tool and finish suppression, persistent original instructions','Outlook consent rejection with no mailbox access, fake-source folder/header/body paging and dedup','file lock close/retry and encrypted resume without repost','chart anomaly defaults and per-cell evidence table','24-hour policy with controlled deadlines, automatic multi-batch continuation and checkpoint interruption recovery','bounded context, preserved user requirements, encrypted operation archive and on-demand old results','local LOG/Excel CSV datasets with bounded previews, native charting and source provenance','explicit context handoff and correction compaction without losing user instructions or archived evidence','Outlook folder picker, DPAPI policy and ancestor enforcement, native forged/stale selection rejection','local mail coverage with 1000-message limit, no raw-body tool output, independent 50-message AI limit, branches and gaps')
         exe_sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
         installer_built = [bool]$IncludeInstaller
         real_vnc_tested = [bool]$TestVnc

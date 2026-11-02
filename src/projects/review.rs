@@ -24,7 +24,7 @@ impl Snapshot {
                         let format = block.format.as_u64()
                             .and_then(|i| snapshot.formats.get(i as usize))
                             .unwrap_or(&block.format);
-                        json!({"label":block.label,"text":block.text,"kind":block.kind,"format":format})
+                        json!({"id":block.id,"label":block.label,"text":block.text,"kind":block.kind,"format":format})
                     }).collect();
                     return json!({"blocks":blocks,"structure":snapshot.structure,"scope":snapshot.scope});
                 }
@@ -32,7 +32,7 @@ impl Snapshot {
             if text.is_empty() {
                 return json!({"blocks":[]});
             }
-            json!({"blocks":text.split('\n').enumerate().map(|(i,line)|json!({"label":format!("第 {} 行",i+1),"text":line.trim_end_matches('\r'),"format":null})).collect::<Vec<_>>()})
+            json!({"blocks":text.split('\n').enumerate().map(|(i,line)|json!({"line":i+1,"label":format!("第 {} 行",i+1),"text":line.trim_end_matches('\r'),"format":null})).collect::<Vec<_>>()})
         }
         json!({"name":self.name,"path":self.path,"before_revision":self.before_revision,
             "after_revision":self.after_revision,"before":self.before.as_ref().map(|s|document(s,self.office)),

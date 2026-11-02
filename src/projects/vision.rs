@@ -72,6 +72,13 @@ pub(super) fn analyze(
         .memory()?
         .delegation_read::<State>(&key)?
         .unwrap_or_default();
+    if state.identity.is_null() {
+        if let Some(mut result) = broker.reading.reuse_image(&metadata, focus) {
+            // 僅把來源參照轉成短 ID；原圖仍在本機，這次沒有再次送圖推論。
+            broker.project_reading_references(&mut result);
+            return Ok(Outcome::Complete(result));
+        }
+    }
     // 舊單圖待查只能查原ID；來源雜湊、目的及授權一致才沿用，不重送轉檔後的新圖。
     if images.len() == 1
         && state.identity["profile"] == "project-image-trial-v1"

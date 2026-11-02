@@ -34,9 +34,13 @@ window.AnalysisUI = (() => {
     container.dataset.signature = signature;
     container.dataset.finished = String(finished); container.replaceChildren();
     const coverage = Object.values(state?.coverage || {}), report = state?.report;
-    container.hidden = !coverage.length && !report && !state?.timeline?.length && !state?.sources?.length;
+    container.hidden = !coverage.length && !report && !state?.timeline?.length && !state?.sources?.length && !state?.deliverables?.items?.length && !state?.deliverables?.conditions?.text && !state?.recovery?.state;
     if (container.hidden) return;
     container.classList.add("analysis-panel");
+    window.WorkbenchUI?.delivery(container,state.deliverables);
+    if (state.recovery?.state && state.recovery.state !== "completed") {
+      container.append(el("p", state.recovery.notice, "analysis-attention"));
+    }
     const disclosure = el("details", "", "analysis-disclosure");
     disclosure.open = open;
     disclosure.append(el("summary", finished ? "分析依據與處理範圍" : "分析概況"));

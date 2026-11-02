@@ -21,6 +21,28 @@ ROOT = Path(__file__).resolve().parents[1]
 MODEL = "gpt-6-luna"
 
 
+def turn_input(messages):
+    """保留桌面文字快照，將圖片位元組透過正式 image input 傳入，而非當作 Base64 文字。"""
+    projected = copy.deepcopy(messages)
+    images = []
+    for message in projected:
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for index, part in enumerate(content):
+            if part.get("type") != "image_url":
+                continue
+            image = part["image_url"]
+            url = image["url"]
+            if not url.startswith("data:image/"):
+                raise ValueError("本機驗證只接受桌面已傳入的圖片，不額外下載網址")
+            images.append({"type": "image", "url": url,
+                           "detail": image.get("detail", "high")})
+            content[index] = {"type": "attached_image", "index": len(images)}
+    return [{"type": "text", "text": json.dumps(projected, ensure_ascii=False),
+             "text_elements": []}, *images]
+
+
 class CodexTurn:
     """一個程序只推論一輪，避免 Codex 歷史或自動摘要補回桌面丟失的資訊。"""
 
@@ -30,7 +52,10 @@ class CodexTurn:
         self.trace_path = trace_prefix.with_suffix(".events.jsonl")
         self.stderr = trace_prefix.with_suffix(".stderr.log").open("w", encoding="utf-8")
         self.process = subprocess.Popen(
-            [str(executable), "app-server", "--stdio"], cwd=folder,
+            # 本機 Codex 設定有 node_repl MCP；明確關閉，避免驗證模型看到應用程式
+            # 以外的工具。原有額外工具偵測仍保留，不能把使用其他工具的回合算通過。
+            [str(executable), "app-server", "--stdio", "-c",
+             "mcp_servers.node_repl.enabled=false"], cwd=folder,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.stderr,
             text=True, encoding="utf-8", creationflags=subprocess.CREATE_NO_WINDOW,
         )
@@ -103,8 +128,7 @@ class CodexTurn:
             "config": {"features.shell_tool": False, "features.multi_agent": False,
                        "features.apps": False, "web_search": "disabled", "project_doc_max_bytes": 0}})
         self.call("turn/start", {"threadId": thread["thread"]["id"], "effort": "low",
-            "input": [{"type": "text", "text": json.dumps(messages, ensure_ascii=False),
-                       "text_elements": []}]})
+            "input": turn_input(messages)})
         answer, usage = None, None
         while True:
             event = self.receive()
@@ -124,8 +148,8 @@ class CodexTurn:
             if method == "turn/completed":
                 if params["turn"]["status"] != "completed" or answer is None:
                     raise RuntimeError(str(params["turn"].get("error") or "模型未完成"))
-                if tools:
-                    raise RuntimeError("模型未呼叫桌面工具，只有文字回覆：" + answer[:500])
+                # 原樣交回文字，讓正式桌面的格式修復流程判斷；不能由測試轉接器
+                # 人造永久失敗，也不能代模型補成某個工具呼叫。
                 return {"name": "text", "content": answer}, {}, usage
 
     def close(self):
@@ -184,12 +208,13 @@ class Bridge:
             client = CodexTurn(self.args.codex, self.folder, prefix)
             chosen, arguments, usage = client.infer(request, self.folder)
             message = {"role": "assistant", "content": chosen["content"]}
-            if request.get("tools"):
+            is_tool = chosen["name"] != "text"
+            if is_tool:
                 message["tool_calls"] = [{"id": "call_" + str(sequence), "type": "function", "function": {
                     "name": chosen["name"], "arguments": json.dumps(arguments, ensure_ascii=False)}}]
             completion = {"id": task_id, "object": "chat.completion", "created": int(time.time()),
                 "model": request["model"], "choices": [{"index": 0, "message": message,
-                "finish_reason": "tool_calls" if request.get("tools") else "stop"}]}
+                "finish_reason": "tool_calls" if is_tool else "stop"}]}
             trace = {"model": MODEL, "effort": "low", "elapsed_seconds": round(time.monotonic()-started, 3),
                      "tool": chosen["name"], "arguments": arguments, "codex_usage": usage,
                      "request_bytes": len(json.dumps(request).encode()), "completion": completion}

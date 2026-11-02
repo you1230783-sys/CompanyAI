@@ -107,6 +107,11 @@ pub(super) struct Progress {
     checkpoints: usize,
     seen_ids: BTreeSet<String>,
     seen_results: BTreeSet<String>,
+    /// 指紋由 Broker 的實際內容生成；壓縮不清除，使用者新指示才開啟新比較範圍。
+    #[serde(default)]
+    semantic_results: BTreeMap<String, String>,
+    #[serde(default)]
+    repeated_result: Option<Value>,
     note: Option<Note>,
     last_read: Option<String>,
     compact: bool,
@@ -158,6 +163,8 @@ impl Progress {
             checkpoints: 0,
             seen_ids: BTreeSet::new(),
             seen_results: BTreeSet::new(),
+            semantic_results: BTreeMap::new(),
+            repeated_result: None,
             note: None,
             last_read: None,
             compact: false,
@@ -189,6 +196,8 @@ impl Progress {
         for entry in entries {
             if entry.status != "withdrawn" && !self.instructions.iter().any(|e| e.id == entry.id) {
                 self.instructions.push(entry);
+                self.semantic_results.clear();
+                self.repeated_result = None;
                 self.instruction_review_required = true;
                 self.no_progress = 0;
                 self.repair = None;
@@ -322,7 +331,7 @@ impl Progress {
             "note":self.note.as_ref().map(|n| &n.text),"note_covers_tools":self.note.as_ref().map(|n| n.covered),
             "total_repairs":self.total_repairs,"consecutive_repairs":self.consecutive_repairs,
             "output_limit_retries":self.output_limit_retries,"output_limit_retry_limit":5,
-            "no_progress":self.no_progress,
+            "no_progress":self.no_progress,"repeated_result":self.repeated_result,
             "no_progress_reason":self.no_progress_reason,"outlook_paging":self.coverage.mail_index(),
             "cad_paging":self.coverage.cad_index(),
             "tool_failures":{"python":self.python_failures,"python_limit":10,"other":self.other_failures,"other_limit":5}})
@@ -344,7 +353,7 @@ impl Progress {
         json!({"working_note":self.note.as_ref().map(|n| &n.text),
             "superseded":self.superseded,"next_step":self.next_step,
             "review_required":self.instruction_review_required,"copies":copies,
-            "recent_operations":operations,"last_tool_failure":self.last_tool_failure,"readings":readings,
+            "recent_operations":operations,"last_tool_failure":self.last_tool_failure,"readings":readings,"repeated_result":self.repeated_result,
             "output_limit_retries":self.output_limit_retries,"output_limit_retry_limit":5,
             "outlook_paging":self.coverage.mail_index(),
             "cad_paging":self.coverage.cad_index(),
@@ -518,6 +527,19 @@ impl Progress {
                 }
             } else {
                 (new, self.no_progress_reason) = self.coverage.observe(tool, info);
+            }
+        }
+        if let Some(identity) = result["progress_identity"].as_str() {
+            if let Some(first) = self.semantic_results.get(identity) {
+                new = false;
+                self.no_progress_reason = format!(
+                    "本輪成果內容與已成功操作 {first} 相同；請沿用既有成果並完成尚未交付項目。"
+                );
+                self.repeated_result = Some(json!({"first_operation":first,"latest_operation":id,
+                    "tool":tool.label(),"message":self.no_progress_reason}));
+            } else {
+                self.semantic_results.insert(identity.into(), id.into());
+                self.repeated_result = None;
             }
         }
         if new {
@@ -725,6 +747,44 @@ impl Progress {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn renamed_exports_remain_duplicates_after_checkpoint_and_new_conditions_reset_scope() {
+        let mut state = Progress::new(vec![]);
+        for index in 0..9 {
+            let tool = Tool::ExportChartPng {
+                chart_index: 0,
+                name: format!("chart-{index}.png"),
+            };
+            let result = json!({"ok":true,"progress_identity":"same-data",
+                "result":{"path":format!("_AI_Output/run/chart-{index}.png"),"verified":true}});
+            assert_eq!(
+                state.observe(&format!("operation-{index}"), &tool, &result),
+                index == 0
+            );
+            state.compact_batch();
+            state = serde_json::from_value(serde_json::to_value(&state).unwrap()).unwrap();
+        }
+        assert!(state.stalled());
+        assert_eq!(
+            state.repeated_result.as_ref().unwrap()["first_operation"],
+            "operation-0"
+        );
+        state.add_instructions(vec![super::super::steering::Instruction {
+            id: "explicit-redo".into(),
+            text: "請重新匯出一份".into(),
+            status: "sent".into(),
+            local_time: None,
+        }]);
+        assert!(!state.stalled());
+        assert!(state.observe(
+            "new-operation",
+            &Tool::ExportChartPng {
+                chart_index: 0,
+                name: "new.png".into()
+            },
+            &json!({"ok":true,"progress_identity":"same-data","result":{"path":"new.png"}})
+        ));
+    }
     #[test]
     fn output_limit_has_five_retries_and_survives_checkpoint_and_guides() {
         let mut state = Progress::new(vec![Message::user("保留原始尺寸")]);

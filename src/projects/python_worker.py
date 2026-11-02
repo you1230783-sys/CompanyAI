@@ -7,6 +7,7 @@ import contextlib
 import ctypes
 from ctypes import wintypes
 import io
+import hashlib
 import json
 import struct
 import sys
@@ -114,15 +115,25 @@ def analyze(request):
             raise ValueError("Output/workbook sheet limit exceeded")
         book = openpyxl.Workbook()
         book.remove(book.active)
+        # 進度指紋保留工作表、型別與儲存格值，忽略檔名及ZIP建立時間。
+        # 僅供停滯提示；實體交付仍由Rust依完整位元組雜湊核對。
+        content_hash = hashlib.sha256()
+        def remember(value):
+            content_hash.update(json.dumps(value, ensure_ascii=False, allow_nan=False).encode("utf-8"))
+            content_hash.update(b"\n")
         for title, data in sheets.items():
             df = pd.DataFrame(data)
             if len(df) > 100000 or not 1 <= len(df.columns) <= 32:
                 raise ValueError("Excel limit: 100000 rows / 32 columns")
             sheet = book.create_sheet(str(title))
+            remember(["sheet", sheet.title])
             for row in [[str(c) for c in df.columns]]:
                 sheet.append(row)
+                remember(["header", row])
             for row in df.itertuples(index=False, name=None):
-                sheet.append([scalar(v) for v in row])
+                values = [scalar(v) for v in row]
+                sheet.append(values)
+                remember(["row", values])
             for row in sheet:
                 for cell in row:
                     if isinstance(cell.value, str):
@@ -139,7 +150,8 @@ def analyze(request):
         check = openpyxl.load_workbook(io.BytesIO(buffer.getvalue()), read_only=True)
         names = check.sheetnames
         check.close()
-        outputs.append({"kind": "xlsx", "name": name, "hex": buffer.getvalue().hex(), "sheets": names})
+        outputs.append({"kind": "xlsx", "name": name, "hex": buffer.getvalue().hex(),
+                        "sheets": names, "content_sha256": content_hash.hexdigest()})
 
     scope = {"pd": pd, "np": np, "openpyxl": openpyxl, "io": io,
              "tables": tables, "texts": texts, "metadata": metadata,

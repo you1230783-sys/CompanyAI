@@ -219,7 +219,15 @@ pub fn edit(
         .nth(start)
         .ok_or("修改位置超過文件範圍。")?;
     if !content[begin..].starts_with(expected) {
-        return Err("目標位置的原文不符，未套用修改。".into());
+        // 回報位置而不自動改寫參數。Unicode 字元索引與 edit 的 start 契約一致，
+        // 同片段出現多處時仍由呼叫端選擇，不能默默套用到第一個相符位置。
+        let positions: Vec<_> = content
+            .match_indices(expected)
+            .take(9)
+            .map(|(byte, _)| content[..byte].chars().count())
+            .collect();
+        return Err(format!("目標位置的原文不符，未套用修改。此版本符合expected的start（Unicode字元，從0起算）為 {:?}{}。請核對目標後以正確start重送；沒有相符位置時使用find_text或read_code_section核對精確原文，不猜位置。",
+            &positions[..positions.len().min(8)], if positions.len()>8 {"（還有其他位置，請縮小範圍）"} else {""}));
     }
     let result = format!(
         "{}{}{}",
@@ -234,6 +242,20 @@ pub fn edit(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn failed_edit_reports_unicode_offsets_without_applying_or_choosing_a_match() {
+        let original = "甲😀\r\nlen(values)+1\nlen(values)+1";
+        let version = revision(original);
+        let error = edit(original, &version, 0, "len(values)+1", "len(values)").unwrap_err();
+        assert!(error.contains("[4, 18]"), "{error}");
+        assert_eq!(
+            edit(original, &version, 4, "len(values)+1", "len(values)").unwrap(),
+            "甲😀\r\nlen(values)\nlen(values)+1"
+        );
+        assert_eq!(revision(original), version);
+        let stale = edit(original, "stale", 0, "len(values)+1", "x").unwrap_err();
+        assert!(!stale.contains("[4, 18]"), "舊版本不可給出可套用的位置建議");
+    }
     #[test]
     fn literal_replacement_character_is_preserved_after_strict_decoding() {
         let original = "# A documented replacement character: \u{fffd}\n";

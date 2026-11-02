@@ -26,6 +26,25 @@ pub struct Template {
     pub created: u64,
     pub steps: Vec<Step>,
 }
+
+/// 表單欄位由既存參數插槽推導，不讓 UI 自行組裝工具要求。
+#[derive(Clone, Serialize)]
+pub struct Parameter {
+    pub name: String,
+    pub kind: String,
+    pub example: Value,
+    pub uses: Vec<String>,
+}
+fn value_kind(value: &Value) -> &'static str {
+    match value {
+        Value::String(_) => "string",
+        Value::Number(_) => "number",
+        Value::Bool(_) => "boolean",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+        Value::Null => "json",
+    }
+}
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Active {
     pub execution_id: String,
@@ -62,6 +81,65 @@ pub fn allowed(tool: &str) -> bool {
     )
 }
 impl Template {
+    pub fn parameters(&self) -> AppResult<Vec<Parameter>> {
+        let mut parameters: BTreeMap<String, Parameter> = BTreeMap::new();
+        for step in &self.steps {
+            for (pointer, reference) in &step.bindings {
+                let Some(name) = reference.strip_prefix("param:") else {
+                    continue;
+                };
+                let example = step.request.pointer(pointer).ok_or("插槽目標不存在。")?;
+                let field = parameters.entry(name.into()).or_insert_with(|| Parameter {
+                    name: name.into(),
+                    kind: value_kind(example).into(),
+                    example: example.clone(),
+                    uses: vec![],
+                });
+                if field.kind != value_kind(example) {
+                    return Err(format!("參數{name}在不同步驟的型別不一致。"));
+                }
+                field.uses.push(format!(
+                    "{}：{} {}",
+                    step.id,
+                    step.request["tool"].as_str().unwrap_or(""),
+                    pointer
+                ));
+            }
+        }
+        Ok(parameters.into_values().collect())
+    }
+    /// 開始前驗證所有使用者參數的名稱與型別，避免執行數步後才發現後面的表單輸入錯誤。
+    pub fn validate_parameters(&self, parameters: &BTreeMap<String, Value>) -> AppResult<()> {
+        let fields = self.parameters()?;
+        if fields.len() != parameters.len() {
+            return Err("流程參數有缺漏或包含未使用名稱。".into());
+        }
+        for field in &fields {
+            let value = parameters
+                .get(&field.name)
+                .ok_or_else(|| format!("缺少流程參數：{}", field.name))?;
+            if field.kind != "json" && field.kind != value_kind(value) {
+                return Err(format!("流程參數{}必須是{}。", field.name, field.kind));
+            }
+            if value.as_str().is_some_and(|s| s.trim().is_empty())
+                && field.example.as_str().is_some_and(|s| !s.is_empty())
+            {
+                return Err(format!("流程參數{}不可空白。", field.name));
+            }
+        }
+        for step in &self.steps {
+            let mut request = step.request.clone();
+            for (pointer, reference) in &step.bindings {
+                if let Some(name) = reference.strip_prefix("param:") {
+                    *request.pointer_mut(pointer).ok_or("插槽已失效。")? =
+                        parameters.get(name).ok_or("參數缺漏。")?.clone();
+                }
+            }
+            let _: super::Tool = serde_json::from_value(request)
+                .map_err(|e| format!("步驟{}參數格式無效：{e}", step.id))?;
+        }
+        Ok(())
+    }
     pub fn validate(&self) -> AppResult<()> {
         if self.name.trim().is_empty()
             || self.name.chars().count() > 80
@@ -136,6 +214,7 @@ impl Template {
         if serde_json::to_vec(self).map_err(|e| e.to_string())?.len() > 200_000 {
             return Err("範本超過200KB。".into());
         }
+        self.parameters()?;
         Ok(())
     }
 }
@@ -182,6 +261,35 @@ impl Active {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn parameter_form_checks_names_types_and_unsigned_tool_fields_before_running() {
+        let template = Template {
+            id: "form".into(),
+            name: "讀檔".into(),
+            created: 0,
+            steps: vec![Step {
+                id: "read".into(),
+                request: json!({"tool":"read_file","path":"old.txt","offset":0}),
+                bindings: BTreeMap::from([
+                    ("/path".into(), "param:file".into()),
+                    ("/offset".into(), "param:start".into()),
+                ]),
+            }],
+        };
+        template.validate().unwrap();
+        let mut parameters = BTreeMap::from([
+            ("file".into(), json!("new.txt")),
+            ("start".into(), json!(0)),
+        ]);
+        template.validate_parameters(&parameters).unwrap();
+        parameters.insert("start".into(), json!("0"));
+        assert!(template.validate_parameters(&parameters).is_err());
+        parameters.insert("start".into(), json!(-1));
+        assert!(template.validate_parameters(&parameters).is_err());
+        parameters.insert("start".into(), json!(0));
+        parameters.insert("unused".into(), json!(1));
+        assert!(template.validate_parameters(&parameters).is_err());
+    }
     #[test]
     fn old_copy_ids_and_old_calculation_operations_are_not_runnable_templates() {
         for request in [

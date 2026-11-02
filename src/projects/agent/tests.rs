@@ -119,10 +119,9 @@ fn fast_model_does_not_receive_delegation_and_blank_copy_is_repairable() {
     let prompt = system_prompt_for("fast");
     assert!(!prompt.contains("image-read") && !prompt.contains("analyze_image"));
     assert!(prompt.contains("此模型不支援圖片傳入"));
-    assert_eq!(
-        crate::projects::skills::context_for(&["image-read".into()], "fast").unwrap(),
-        ""
-    );
+    let context = crate::projects::skills::context_for(&["image-read".into()], "fast").unwrap();
+    assert!(!context.contains("analyze_image") && !context.contains("image-read"));
+    assert!(context.contains("環境能力") && context.contains("不自動切換模型"));
     let mut capabilities = caps();
     capabilities.strict_tool_arguments = false;
     let task = task(

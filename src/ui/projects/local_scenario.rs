@@ -11,6 +11,14 @@ pub(in crate::ui) struct Scenario {
     files: std::collections::BTreeMap<String, String>,
     #[serde(default)]
     project_root: Option<PathBuf>,
+    /// 只用於明確啟用的本機情境；經正式桌面命令保存，不直接改模型提示或工具結果。
+    #[serde(default)]
+    personal_preferences: Option<projects::work_settings::Preferences>,
+    #[serde(default)]
+    project_preferences: Option<projects::work_settings::Preferences>,
+    /// 以零起算的提問序號更新條件卡，驗證後續任務確實讀到保存版本。
+    #[serde(default)]
+    conditions: std::collections::BTreeMap<usize, String>,
     #[serde(skip)]
     started: bool,
     #[serde(skip)]
@@ -23,6 +31,19 @@ impl Scenario {
             return Err("情境檔過大。".into());
         }
         let value: Self = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        if let Some(preferences) = &value.personal_preferences {
+            preferences.validate()?;
+        }
+        if let Some(preferences) = &value.project_preferences {
+            preferences.validate()?;
+        }
+        if value
+            .conditions
+            .iter()
+            .any(|(index, text)| *index >= value.requests.len() || text.chars().count() > 4000)
+        {
+            return Err("情境條件卡超過要求序號或4000字限制。".into());
+        }
         if value.requests.is_empty()
             || value.requests.len() > 8
             || value
@@ -142,6 +163,44 @@ impl Scenario {
                     .clone();
                 app.new_project_chat(&project)?;
                 self.started = true;
+            }
+            if self.conditions.contains_key(&self.next)
+                || (self.next == 0
+                    && (self.personal_preferences.is_some() || self.project_preferences.is_some()))
+            {
+                let conversation = app.active_id.clone().ok_or("情境缺少目前對話。")?;
+                let settings = projects::work_settings::Settings::load(&app.root)?;
+                let current = settings.snapshot("", &conversation).conditions;
+                let conditions = self.conditions.get(&self.next).map(|text| {
+                    projects::work_settings::Conditions {
+                        revision: current.revision,
+                        text: text.clone(),
+                    }
+                });
+                app.project_command(ProjectCommand::WorkSettings {
+                    conversation: conversation.clone(),
+                    request_id: Some(format!("scenario-settings-{}", self.next)),
+                    expected: Some(projects::text::revision(
+                        &serde_json::to_string(&settings).map_err(|e| e.to_string())?,
+                    )),
+                    personal: if self.next == 0 {
+                        self.personal_preferences.clone()
+                    } else {
+                        None
+                    },
+                    project: if self.next == 0 {
+                        self.project_preferences.clone()
+                    } else {
+                        None
+                    },
+                    conditions: conditions.clone(),
+                })?;
+                let saved = projects::work_settings::Settings::load(&app.root)?;
+                if conditions.as_ref().is_some_and(|value| {
+                    saved.snapshot("", &conversation).conditions.text != value.text.trim()
+                }) {
+                    return Err("情境條件卡未經正式入口保存，停止測試。".into());
+                }
             }
             let mut messages = app.messages.clone();
             messages.push(Message::user(&self.requests[self.next]));

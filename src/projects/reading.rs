@@ -24,6 +24,9 @@ pub struct Source {
     pub total: usize,
     pub first_line: Option<usize>,
     pub last_line: Option<usize>,
+    /// 圖片保留所有來源雜湊、幀與原始辨識焦點；文字沿用實際字元範圍。
+    #[serde(default)]
+    pub evidence: Value,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -41,6 +44,12 @@ pub struct Notebook {
     /// 最近三頁實際目錄清單的短索引；技能切換後仍保留完整相對路徑，不當成已讀內容。
     #[serde(default)]
     pub directories: Vec<Value>,
+    /// 先查封存辨識後才可做一次同版圖片補辨識；消耗狀態隨 checkpoint 保存。
+    #[serde(default)]
+    image_followups: BTreeMap<String, Option<String>>,
+    /// 同一封存頁只補查一次；後續需把已取得細節補回筆記，不在原文間來回。
+    #[serde(default)]
+    pub(crate) recalled_pages: std::collections::BTreeSet<String>,
 }
 
 /// 精讀例外的同一界線用於交付與保存，避免其中一側誤認成一般重讀。
@@ -55,6 +64,87 @@ fn precision_window(data: &Value) -> bool {
 }
 
 impl Notebook {
+    /// 將實際辨識文字接入同一筆記契約；範圍是辨識文字，並非圖片像素已全部讀懂。
+    pub fn observe_image(&mut self, id: &str, result: &Value) -> AppResult<()> {
+        let data = &result["result"];
+        if result["ok"] != true || data["reused_reading_note"] == true {
+            return Ok(());
+        }
+        let (Some(analysis), Some(images)) = (data["analysis"].as_str(), data["images"].as_array())
+        else {
+            return Ok(());
+        };
+        let Some(path) = images.first().and_then(|image| image["path"].as_str()) else {
+            return Ok(());
+        };
+        let revision = super::text::revision(&json!(images).to_string());
+        let count = analysis.chars().count();
+        let normalized = json!({"ok":true,"result":{"path":path,"revision":revision,
+            "text":analysis,"offset":0,"next_offset":count,"total":count}});
+        // 補辨識即使文字較短也必須重新整理，不能誤認舊文字範圍已涵蓋新內容。
+        if self.pending.contains_key(id) || self.notes.contains_key(id) {
+            return Ok(());
+        }
+        let previous: Vec<_> = self
+            .notes
+            .iter()
+            .filter(|(_, n)| n.source.revision == revision)
+            .map(|(key, _)| key.clone())
+            .collect();
+        let mut next = self.clone();
+        for key in &previous {
+            next.notes.remove(key);
+        }
+        next.observe(id, &normalized)?;
+        if let Some(source) = next.pending.get_mut(id) {
+            source.evidence = json!({"kind":"image","images":images,"focus":data["focus"],
+                "coverage_unit":"辨識文字字元；多頁圖片僅已送出的頁／幀", "previous_notes":
+                previous.iter().filter_map(|key| self.notes.get(key)).collect::<Vec<_>>()});
+        }
+        *self = next;
+        Ok(())
+    }
+
+    /// 已讀圖片預設交付筆記；具體缺項先查封存，最多一次同版原圖補辨識。
+    pub fn reuse_image(&mut self, images: &[Value], focus: &str) -> Option<Value> {
+        if !self.enabled {
+            return None;
+        }
+        let revision = super::text::revision(&json!(images).to_string());
+        let notes: Vec<_> = self
+            .notes
+            .values()
+            .filter(|n| n.source.revision == revision)
+            .collect();
+        if notes.is_empty() {
+            return None;
+        }
+        if self
+            .image_followups
+            .get(&revision)
+            .and_then(Option::as_deref)
+            == Some(focus)
+        {
+            self.image_followups.insert(revision, None);
+            return None;
+        }
+        Some(
+            json!({"ok":true,"result":{"reused_reading_note":true,"images":images,"reading_notes":notes,
+            "guidance":"同版圖片已有筆記，請據此完成分析。具體缺項用read_reading_notes(source_operation,reason)先查已保存辨識；仍不足才用回傳的image_followup補辨識一次。不要只改focus反覆重讀。"}}),
+        )
+    }
+
+    pub fn allow_image_followup(&mut self, id: &str, reason: &str) -> Option<Value> {
+        let source = &self.notes.get(id)?.source;
+        if source.evidence["kind"] != "image" || self.image_followups.contains_key(&source.revision)
+        {
+            return None;
+        }
+        self.image_followups
+            .insert(source.revision.clone(), Some(reason.into()));
+        Some(json!({"images":source.evidence["images"],"focus":reason,
+            "notice":"先核對此次封存原文；原文仍缺少此細節才以相同focus補辨識一次。新結果須與既有筆記合併保存，不能覆蓋掉已確認的數值。"}))
+    }
     pub fn remember_directory(&mut self, path: &str, offset: usize, outcome: &Value) {
         if !self.enabled || outcome["ok"] != true {
             return;
@@ -239,6 +329,7 @@ impl Notebook {
                 total,
                 first_line: number("first_line"),
                 last_line: number("last_line"),
+                evidence: Value::Null,
             },
         );
         Ok(())
@@ -256,7 +347,7 @@ impl Notebook {
                 return Err("同批閱讀筆記來源不可重複。".into());
             }
             for (field, value, limit, required) in [
-                ("summary", &digest.summary, 1000, true),
+                ("summary", &digest.summary, 3000, true),
                 ("relationships", &digest.relationships, 1500, false),
                 ("open_questions", &digest.open_questions, 400, false),
             ] {
@@ -363,7 +454,7 @@ impl Notebook {
         Some(
             json!({"pending":self.pending.values().collect::<Vec<_>>(),"notes":loaded,"omitted":omitted,"omitted_total":omitted_total,
             "directory_index":self.directories,"directory_notice":"這是最近已走訪目錄的精簡快照，不是已讀原文。直接用entries.path選讀README、套件入口或必要模組；切換技能不必重列相同目錄。只有資料夾已變更或需省略／下一頁項目才重新列出。",
-            "notice":"pending非空時先record_reading_notes保存上一批所有成果再讀下一批／整理／畫圖。筆記依來源累積，不由progress_note取代。按使用者要求保存流程、分支、事件、宣告分區與行號；不要把h宣告當成已確認實作。已有足夠成果就create_mermaid，不因原文不在本輪就重讀全文。省略筆記用read_reading_notes(path,offset)分頁查回。"}),
+            "notice":"pending非空時先record_reading_notes保存上一批所有成果再讀下一批／整理／畫圖。筆記依來源累積，不由progress_note取代。按使用者要求保存可直接寫入答覆的事實、數字與單位、圖軸範圍／線性或對數尺度、峰位與估讀誤差、推論依據及未確認事項；程式碼另保存流程／分支／行號，不把宣告當實作。來源及進度由程式提供，不自行宣稱全文件已讀完。已有足夠成果就交付，不因原文不在本輪就重讀。operation_id可直接用op_簡短ID查筆記或read_work_log，不截斷或猜完整ID。省略筆記用read_reading_notes(path,offset)分頁查回。"}),
         )
     }
 }
@@ -371,6 +462,56 @@ impl Notebook {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn image_notes_keep_evidence_and_allow_only_one_focused_followup_after_restore() {
+        let mut notebook = Notebook {
+            enabled: true,
+            ..Notebook::default()
+        };
+        let images = vec![json!({"path":"EIS/Nyquist.png","sha256":"a".repeat(64),"frames":1})];
+        let result = json!({"ok":true,"result":{"images":images,"analysis":"Rs約0.85Ω，圖軸為線性；誤差約0.1Ω。","focus":"解釋阻抗圖"}});
+        notebook.observe_image("first", &result).unwrap();
+        assert_eq!(notebook.pending["first"].evidence["kind"], "image");
+        assert!(notebook.pending["first"].evidence["coverage_unit"]
+            .as_str()
+            .unwrap()
+            .contains("辨識文字"));
+        notebook
+            .accept(&[digest("first", "Rs約0.85Ω；圖面估讀，不是原始數據擬合")])
+            .unwrap();
+        assert_eq!(
+            notebook.reuse_image(&images, "再讀一次").unwrap()["result"]["reused_reading_note"],
+            true
+        );
+        assert!(notebook
+            .allow_image_followup("first", "核對低頻端點與單位")
+            .is_some());
+        let mut restored: Notebook = serde_json::from_value(json!(notebook)).unwrap();
+        assert!(restored
+            .reuse_image(&images, "核對低頻端點與單位")
+            .is_none());
+        assert!(restored
+            .reuse_image(&images, "核對低頻端點與單位")
+            .is_some());
+        assert!(restored.allow_image_followup("first", "另一理由").is_none());
+        let next = json!({"ok":true,"result":{"images":images,"analysis":"端點11.7Ω","focus":"核對低頻端點與單位"}});
+        restored.observe_image("followup", &next).unwrap();
+        assert_eq!(
+            restored.pending["followup"].evidence["previous_notes"][0]["digest"]["summary"],
+            "Rs約0.85Ω；圖面估讀，不是原始數據擬合"
+        );
+        restored
+            .accept(&[digest("followup", "Rs約0.85Ω；端點約11.7Ω，均為估讀")])
+            .unwrap();
+        let changed = vec![json!({"path":"EIS/Nyquist.png","sha256":"b".repeat(64),"frames":1})];
+        assert!(restored.reuse_image(&changed, "新版本").is_none());
+        assert!(restored
+            .reuse_image(
+                &[json!({"path":"other.png","sha256":"a".repeat(64)})],
+                "其他來源"
+            )
+            .is_none());
+    }
     #[test]
     fn directory_paths_survive_handoff_without_becoming_content_notes() {
         let mut notebook = Notebook {

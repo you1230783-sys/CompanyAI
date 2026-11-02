@@ -17,6 +17,7 @@ mod chart_annotations;
 mod chart_preferences;
 mod code_review;
 mod code_sections;
+mod deliverables;
 mod diagram_sources;
 pub mod diagrams;
 mod drafts;
@@ -26,8 +27,10 @@ pub use output::conversation_folder_name;
 use output::{ensure_output_folder, reserve_external_output, shared_output_folder};
 mod python;
 mod python_edit;
+mod references;
 mod report_values;
 mod review;
+mod semantic_progress;
 mod source_code;
 mod workflows;
 
@@ -842,6 +845,10 @@ struct ChartExport {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(super) struct SavedBroker {
     #[serde(default)]
+    delivery_plan: super::deliverables::Plan,
+    #[serde(default)]
+    work_context: Option<super::work_settings::Snapshot>,
+    #[serde(default)]
     comparison_records: BTreeMap<String, Value>,
     #[serde(default)]
     comparison_artifacts: Vec<super::python::Artifact>,
@@ -872,6 +879,8 @@ pub(super) struct SavedBroker {
     archived_results: BTreeMap<String, Value>,
     #[serde(default)]
     work_log_index: Option<Vec<Value>>,
+    #[serde(default)]
+    references: references::References,
     published: Vec<String>,
     txt_context: bool,
     #[serde(default)]
@@ -910,6 +919,8 @@ pub(super) struct SavedBroker {
     cad_previews: BTreeMap<String, Value>,
 }
 pub struct Broker {
+    delivery_plan: super::deliverables::Plan,
+    work_context: Option<super::work_settings::Snapshot>,
     comparison_records: BTreeMap<String, Value>,
     comparison_artifacts: Vec<super::python::Artifact>,
     source_versions: BTreeMap<String, String>,
@@ -945,6 +956,7 @@ pub struct Broker {
     results: BTreeMap<String, (Value, Value)>,
     archived_results: BTreeMap<String, Value>,
     work_log_index: Option<Vec<Value>>,
+    references: references::References,
     published: Vec<String>,
     /// 任務接觸 TXT 後，不允許把內容混入未加密的 MD 成果。
     txt_context: bool,
@@ -981,15 +993,19 @@ impl Broker {
     pub fn enable_reading_notes(&mut self) {
         self.reading.enabled = true;
     }
-    /// 複本編輯與Office沿用原有驗證；此階段筆記僅涵蓋原件程式／文字閱讀。
+    /// 來源筆記涵蓋原件文字、Office、PDF與圖片；副本驗證及郵件仍用各自契約。
     fn observe_reading(&mut self, id: &str, tool: &Tool, result: &Value) -> AppResult<()> {
+        self.references.register(id);
+        if let Tool::AnalyzeImage { .. } = tool {
+            return self.reading.observe_image(id, result);
+        }
         if let Tool::ListFiles { path, offset } = tool {
             self.reading.remember_directory(path, *offset, result);
             return Ok(());
         }
         let path = match tool {
             Tool::ReadCodeSection { path, .. } => path,
-            Tool::ReadFile { path, .. } if plain_text_candidate(Path::new(path)) => path,
+            Tool::ReadFile { path, .. } | Tool::ReadDocumentSection { path, .. } => path,
             _ => return Ok(()),
         };
         if self.code_copy_id(path).is_some() {
@@ -1073,6 +1089,8 @@ impl Broker {
         validate_root(&project.root)?;
         Ok(Self {
             task_id: task,
+            delivery_plan: Default::default(),
+            work_context: None,
             analysis: Default::default(),
             mail_notes: Default::default(),
             mail_draft: None,
@@ -1103,6 +1121,7 @@ impl Broker {
             comparison_records: BTreeMap::new(),
             archived_results: BTreeMap::new(),
             work_log_index: None,
+            references: references::References::default(),
             published: Vec::new(),
             txt_context: false,
             loaded_skills: vec![],
@@ -1135,15 +1154,17 @@ impl Broker {
     pub(super) fn saved(&self) -> AppResult<SavedBroker> {
         // 經序列化建立不含程序資源的快照；授權與執行中的 COM 物件不保存。
         serde_json::from_value(
-            json!({"comparison_records":self.comparison_records,"comparison_artifacts":self.comparison_artifacts,"source_versions":self.source_versions,"workflow":self.workflow,"report_values":self.report_values,"reading":self.reading,"analysis":self.analysis,"mail_notes":self.mail_notes,"mail_draft":self.mail_draft,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
+            json!({"delivery_plan":self.delivery_plan,"work_context":self.work_context,"comparison_records":self.comparison_records,"comparison_artifacts":self.comparison_artifacts,"source_versions":self.source_versions,"workflow":self.workflow,"report_values":self.report_values,"reading":self.reading,"analysis":self.analysis,"mail_notes":self.mail_notes,"mail_draft":self.mail_draft,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
             "cad_design":self.cad_design,"cad_copy_version":self.cad_copy_version,
-            "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"diagrams":self.diagrams,"diagram_sources":self.diagram_sources,"diagram_exports":self.diagram_exports,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts,"cad_artifacts":self.cad_artifacts,"cad_failed":self.cad_failed,"cad_last_result":self.cad_last_result,"cad_attempts":self.cad_attempts,"cad_partial_plans":self.cad_partial_plans,"cad_reads":self.cad_reads,"cad_previews":self.cad_previews}),
+            "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"references":self.references,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"diagrams":self.diagrams,"diagram_sources":self.diagram_sources,"diagram_exports":self.diagram_exports,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts,"cad_artifacts":self.cad_artifacts,"cad_failed":self.cad_failed,"cad_last_result":self.cad_last_result,"cad_attempts":self.cad_attempts,"cad_partial_plans":self.cad_partial_plans,"cad_reads":self.cad_reads,"cad_previews":self.cad_previews}),
         )
         .map_err(|e| e.to_string())
     }
     pub(super) fn restore(&mut self, state: SavedBroker, cancel: &AtomicBool) -> AppResult<()> {
         self.reading = state.reading;
         self.report_values = state.report_values;
+        self.delivery_plan = state.delivery_plan;
+        self.work_context = state.work_context;
         self.workflow = state.workflow;
         self.source_versions = state.source_versions;
         self.comparison_artifacts = state.comparison_artifacts;
@@ -1260,6 +1281,11 @@ impl Broker {
         self.results = state.results;
         self.archived_results = state.archived_results;
         self.work_log_index = state.work_log_index;
+        self.references = state.references;
+        // 舊 checkpoint 首次恢復時補建；新 checkpoint 沿用已保存序號。
+        for id in self.archived_results.keys().chain(self.results.keys()) {
+            self.references.register(id);
+        }
         self.published = state.published;
         self.txt_context = state.txt_context;
         Ok(())
@@ -1337,6 +1363,11 @@ impl Broker {
     }
     pub(super) fn skill_context(&self, model: &str) -> AppResult<String> {
         let mut context = super::skills::context_for(&self.loaded_skills, model)?;
+        if self.loaded_skills.iter().any(|id| id == "office-edit")
+            && !self.copies.values().any(|copy| copy.office.is_some())
+        {
+            context.push_str("\n目前尚未建立Office工作副本。下一步可直接create_working_copy(source=null,name=\"報告.docx\")建立空白Word；Excel用.xlsx，PowerPoint用.pptx。建立成功後會自動提供office_action／office_batch與save_copy。JSON或TXT也用create_working_copy(source=null,name=\"摘要.json\")建立，再以edit_text寫入；不需反覆load_skill或等待新的工具。交付清單只是待辦登記，必須實際建立／編輯／保存檔案。");
+        }
         if self.cad_design.pending() && self.loaded_skills.iter().any(|id| id == "cad-new") {
             context.push_str("\n目前為新圖規劃階段，暫不提供cad_draw及其完整參數；不是缺少CAD能力。必要尺寸未齊先ask_user，條件足夠就compact_context保存短方案，下一輪才提供cad_plan_start分段工具。這一輪不展開全部座標。簡單新圖只需1–2句方案。不要重載技能找繪圖工具。");
         }
@@ -1366,6 +1397,12 @@ impl Broker {
         if let Some(tools) = request["tools"].as_array_mut() {
             tools.retain(|tool| {
                 let name = tool["function"]["name"].as_str().unwrap_or("");
+                if self.reading.enabled
+                    && !self.reading.pending.is_empty()
+                    && !matches!(name, "record_reading_notes" | "read_reading_notes")
+                {
+                    return false;
+                }
                 if !super::skills::enabled(name, &self.loaded_skills) {
                     return false;
                 }
@@ -1840,7 +1877,7 @@ impl Broker {
                 .archive_operation(&json!([request, result]))?;
             self.archived_results.insert(
                 id.clone(),
-                json!({"hash":hash,"tool":request["tool"],"ok":result["ok"]}),
+                json!({"hash":hash,"tool":request["tool"],"ok":result["ok"],"path":request["path"],"compare_path":request["compare_path"]}),
             );
         }
         self.results.clear();
@@ -2105,6 +2142,9 @@ impl Broker {
         self.retain_cad_comparison(id, &mut result)?;
         self.observe_reading(id, tool, &result)?;
         self.observe_source_versions(tool, &result);
+        if let Some(identity) = self.semantic_progress(tool, &result) {
+            result["progress_identity"] = json!(identity);
+        }
         if result["ok"] == true {
             self.retain_diagram_read(tool, &result["result"]);
         }
@@ -2275,6 +2315,7 @@ impl Broker {
                 name,
             } => self.export_cad_comparison(source_operation, name),
             Tool::SaveWorkflow { name, steps } => self.save_workflow(name, steps),
+            Tool::UpdateDeliverables { items } => self.update_deliverables(items),
             Tool::ListWorkflows {} => self.memory()?.list_workflows(),
             Tool::ReadWorkflow {
                 workflow_id,
@@ -2307,14 +2348,24 @@ impl Broker {
             Tool::ExportReportValues { name, metric_ids } => {
                 self.export_values(name, metric_ids, cancel)
             }
-            Tool::RecordReadingNotes { notes } => self.reading.accept(notes),
+            Tool::RecordReadingNotes { notes } => {
+                let mut resolved = notes.clone();
+                for note in &mut resolved {
+                    note.operation_id = self.references.resolve(&note.operation_id)?;
+                }
+                let mut result = self.reading.accept(&resolved)?;
+                self.references.project(&mut result);
+                Ok(result)
+            }
             Tool::ReadReadingNotes {
                 path,
                 offset,
                 source_operation,
                 reason,
             } => {
-                if let Some(id) = source_operation {
+                if let Some(reference) = source_operation {
+                    let resolved = self.references.resolve(reference)?;
+                    let id = &resolved;
                     if reason
                         .as_deref()
                         .is_none_or(|s| s.trim().is_empty() || s.chars().count() > 300)
@@ -2329,20 +2380,37 @@ impl Broker {
                     {
                         return Err("找不到這份筆記的來源操作。".into());
                     }
+                    let recalled_key = format!("{id}:{offset}");
+                    if self.reading.recalled_pages.contains(&recalled_key) {
+                        let mut note = json!(self.reading.notes.get(id));
+                        self.references.project(&mut note);
+                        return Ok(json!({"source_operation":reference,"reading_note":note,
+                            "already_recalled":true,"notice":"此封存頁已補查。請把剛取得的細節更新至record_reading_notes，再完成答覆；不要重複查同頁。"}));
+                    }
                     let (_, result) = self.recorded_operation(id)?.ok_or("閱讀來源封存遺失。")?;
                     let text = result["result"]["text"]
                         .as_str()
+                        .or_else(|| result["result"]["analysis"].as_str())
                         .ok_or("來源沒有可讀原文。")?;
                     let total = text.chars().count();
                     if *offset > total {
                         return Err("原文查閱位置超出範圍。".into());
                     }
                     let part: String = text.chars().skip(*offset).take(6000).collect();
+                    self.reading.recalled_pages.insert(recalled_key);
+                    let followup = self
+                        .reading
+                        .allow_image_followup(id, reason.as_deref().unwrap());
                     Ok(
-                        json!({"source":result["result"]["path"],"revision":result["result"]["revision"],"text":part,"offset":offset,"next_offset":offset+part.chars().count(),"total":total,"reason":reason,"snapshot_only":true}),
+                        json!({"source_operation":reference,"source":result["result"]["path"],
+                        "images":result["result"]["images"],"revision":result["result"]["revision"],
+                        "text":part,"offset":offset,"next_offset":offset+part.chars().count(),"total":total,
+                        "reason":reason,"snapshot_only":true,"image_followup":followup}),
                     )
                 } else {
-                    self.reading.read(path.as_deref(), *offset)
+                    let mut value = self.reading.read(path.as_deref(), *offset)?;
+                    self.references.project(&mut value);
+                    Ok(value)
                 }
             }
             Tool::ReadMailNotes {
@@ -3015,7 +3083,15 @@ impl Broker {
                 operation_id,
                 offset,
             } => {
-                if let Some(id) = operation_id {
+                if let Some(reference) = operation_id {
+                    let resolved = self.references.resolve(reference)?;
+                    let id = &resolved;
+                    if let Some(note) = self.reading.notes.get(id) {
+                        let mut note = json!(note);
+                        self.references.project(&mut note);
+                        return Ok(json!({"operation_id":reference,"reading_note":note,
+                            "notice":"此來源已整理。需要原始辨識／文件原文的具體缺項，改用read_reading_notes(source_operation,reason,offset)；不必重新尋找ID或重讀原檔。"}));
+                    }
                     let (request, result) = self
                         .recorded_operation(id)?
                         .ok_or("找不到此操作的已保存結果。")?;
@@ -3038,14 +3114,14 @@ impl Broker {
                     for (id, (request, result)) in &self.results {
                         index.insert(
                             id.clone(),
-                            json!({"tool":request["tool"],"ok":result["ok"]}),
+                            json!({"tool":request["tool"],"ok":result["ok"],"path":request["path"],"compare_path":request["compare_path"]}),
                         );
                     }
                     self.work_log_index = Some(
                         index
                             .into_iter()
                             .filter(|(_, v)| v["tool"] != "read_work_log")
-                            .map(|(id, v)| json!({"operation_id":id,"tool":v["tool"],"ok":v["ok"]}))
+                            .map(|(id, v)| json!({"operation_id":self.references.alias(&id),"tool":v["tool"],"ok":v["ok"],"path":v["path"],"compare_path":v["compare_path"]}))
                             .collect(),
                     );
                 }
@@ -3056,7 +3132,7 @@ impl Broker {
                 let end = offset.saturating_add(20).min(index.len());
                 Ok(
                     json!({"operations":index[*offset..end],"offset":offset,"next_offset":end,
-                    "total":index.len(),"has_more":end<index.len(),"order":"固定快照，依operation_id排序；非時間順序",
+                    "total":index.len(),"has_more":end<index.len(),"order":"固定快照；非時間順序",
                     "notice":"索引offset是筆數；指定operation_id後offset是原文字元。需要更新索引時從0重取。"}),
                 )
             }
@@ -3089,10 +3165,13 @@ impl Broker {
                 section_id,
             } => {
                 self.txt_context = true;
-                self.memory
+                let mut result = self
+                    .memory
                     .as_mut()
                     .ok_or("未啟用專案記憶。")?
-                    .read_section(path, revision, section_id)
+                    .read_section(path, revision, section_id)?;
+                self.reading.project_saved_read(&mut result);
+                Ok(result)
             }
             Tool::UpdateDocumentNote {
                 path,
@@ -3767,6 +3846,7 @@ impl Broker {
             self.verify_chart_export(export)?;
             paths.push(export.path.clone());
         }
+        self.verify_deliverables(&paths)?;
         Ok(paths)
     }
 }

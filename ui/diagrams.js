@@ -199,10 +199,7 @@ window.DiagramUI = (() => {
       fullscreen.dataset.diagramFullscreen = "true";fullscreen.setAttribute("aria-pressed", "false");
       fullscreen.title = "全畫面時可按返回對話或Esc離開";
       button("請 AI 修改此圖", () => {
-        const prompt = `請修改 Mermaid 圖形「${diagram.name}」（message_index=${context.message_index}，diagram_index=${diagram_index}，revision=${diagram.revision}）。請先用 inspect_mermaid 讀取原始碼，保留其餘內容。修改要求：\n`;
-        // 只填入草稿，保留使用者既有內容，不自動送出。
-        const input = document.getElementById("prompt");
-        if (input) {input.value = input.value ? `${input.value}\n\n${prompt}` : prompt;input.dispatchEvent(new Event("input", {bubbles: true}));input.focus();}
+        window.WorkbenchUI?.correct({...target,kind:"diagram",path:diagram.path,revision:diagram.revision});
       });
       card.append(title, toolbar, viewport, status, details);container.append(card);
       if(sourcesPanel)card.append(sourcesPanel);
@@ -210,6 +207,20 @@ window.DiagramUI = (() => {
         if (!card.isConnected) return;
         plot.innerHTML = displaySvg(svg);
         const root = plot.querySelector("svg");
+        const nodeEdits=document.createElement("details"), nodeEditTitle=document.createElement("summary");
+        nodeEditTitle.textContent="選擇要修改的節點";nodeEdits.append(nodeEditTitle);
+        const nodes=[...root.querySelectorAll("g.node")];
+        for(const group of nodes.slice(0,300)) {
+            const match=group.id.match(/(?:^|-)flowchart-(.+?)-\d+(?:-view-\d+)?$/);
+          if(!match)continue;
+          const nodeId=match[1], edit=document.createElement("button");
+          edit.textContent=`${nodeId}：${(group.textContent||"").slice(0,120)}`;
+          edit.onclick=()=>window.WorkbenchUI?.correct({...target,kind:"diagram_node",path:diagram.path,
+            revision:diagram.revision,node_id:nodeId,source:diagram.node_sources?.find(s=>s.node_id===nodeId)||null});
+          nodeEdits.append(edit);
+        }
+        if(nodes.length>300)nodeEdits.append(document.createTextNode("僅列前300個節點，其餘請以修改此圖指定節點。"));
+        if(nodeEdits.childElementCount>1)card.append(nodeEdits);
         for(const origin of diagram.node_sources||[]){
           // safeSvg會加上圖形命名空間，displaySvg再加view尾碼。
           // 以完整節點ID及數字序號比對兩種形式，避免A誤綁A-1。

@@ -405,12 +405,23 @@ function localTimeNode(value, short=false) {
 }
 
 /** 工具紀錄以純文字呈現；結束後用固定標題，避免長筆記出現在收合列。 */
+const projectActivityPages = new WeakMap();
 function renderProjectActivity(details, events, finished = false) {
-  const history = activityEvents(events).slice(-120);
+  const all = activityEvents(events), pageSize = 120;
+  const firstEvent = JSON.stringify(all[0]);
+  let page = projectActivityPages.get(details);
+  if (!page || page.first !== firstEvent || all.length < page.events.length) {
+    page = {first:firstEvent,start:null,events:[],finished};
+    projectActivityPages.set(details,page);
+  }
+  page.events = all; page.finished = finished;
+  const lastStart = Math.max(0,all.length-pageSize);
+  const start = page.start === null ? lastStart : Math.min(page.start,lastStart);
+  const history = all.slice(start,start+pageSize);
   details.className = "project-activity";
   if (!history.length) { details.hidden = true; details.replaceChildren(); return; }
   details.hidden = false;
-  const latest = history.at(-1);
+  const latest = all.at(-1);
   const label = finished ? "查看工具紀錄與進度筆記"
     : latest.text.startsWith(PROJECT_NOTE_PREFIX) ? "AI 已更新進度筆記" : latest.text;
   let summary = details.querySelector("summary");
@@ -419,6 +430,30 @@ function renderProjectActivity(details, events, finished = false) {
     summary = node("summary"); list = node("ol", "project-activity-history");
     details.append(summary, list);
   }
+  // 完整歷程保留在原生紀錄；DOM一次只建立一頁，查看舊頁時新進度不搶走閱讀位置。
+  let pager = details.querySelector(".project-activity-pages");
+  if (!pager) {
+    pager = node("div","project-activity-pages");
+    const older=node("button","text-button","較早120筆"),newer=node("button","text-button","較新120筆"),latestButton=node("button","text-button","最新紀錄");
+    const count=node("span","project-activity-count");
+    older.type=newer.type=latestButton.type="button";
+    older.dataset.page="older";newer.dataset.page="newer";latestButton.dataset.page="latest";
+    const navigate = direction => {
+      const current=projectActivityPages.get(details),end=Math.max(0,current.events.length-pageSize);
+      const position=current.start === null ? end : current.start;
+      current.start=direction==="latest" ? null : direction==="older" ? Math.max(0,position-pageSize) : Math.min(end,position+pageSize);
+      if(current.start===end)current.start=null;
+      renderProjectActivity(details,current.events,current.finished);
+      list.scrollTop=direction==="latest" ? list.scrollHeight : 0;
+    };
+    older.onclick=()=>navigate("older");newer.onclick=()=>navigate("newer");latestButton.onclick=()=>navigate("latest");
+    pager.append(older,count,newer,latestButton);details.insertBefore(pager,list);
+  }
+  pager.hidden=all.length<=pageSize;
+  pager.querySelector('[data-page="older"]').disabled=start===0;
+  pager.querySelector('[data-page="newer"]').disabled=start===lastStart;
+  pager.querySelector('[data-page="latest"]').disabled=page.start===null;
+  pager.querySelector('.project-activity-count').textContent=`第 ${start+1}–${start+history.length} 筆，共 ${all.length} 筆`;
   summary.textContent = label;
   if(!finished){const time=localTimeNode(latest.at,true);if(time)summary.prepend(time);}
   const previous = [...list.children];
@@ -427,7 +462,7 @@ function renderProjectActivity(details, events, finished = false) {
   const top = list.getBoundingClientRect().top;
   const anchor = previous.find(item => item.getBoundingClientRect().bottom > top);
   const offset = anchor ? anchor.getBoundingClientRect().top - top : 0;
-  // 找出舊尾段與新開頭的重疊；新增紀錄只 append，120筆輪替時仍保留可見的節點。
+  // 找出舊尾段與新開頭的重疊；最新頁輪替時仍保留可見的節點。
   let keep = 0;
   for (let count = Math.min(previous.length, history.length); count > 0; count--) {
     if (previous.slice(-count).every((item, index) => item.dataset.activityEvent === JSON.stringify(history[index]))) {
@@ -659,6 +694,7 @@ function renderMessages() {
       retry.dataset.request = state.retry.request_id || "";
       tools.append(retry);
     }
+    window.WorkbenchUI?.attachReply(tools,message,index,content);
     content.append(tools);
     article.append(avatar, content);
     container.append(article);
@@ -901,6 +937,7 @@ function receive(next) {
   renderHistory();
   window.ProjectUI?.render();
   window.ArtifactUI?.sync();
+  window.WorkbenchUI?.sync();
   window.WeeklyUI?.render();
   window.ProjectQuickUI?.render();
   renderModels();
@@ -1324,6 +1361,7 @@ if (bridge) {
         window.SettingsUI?.receive(event.data);
         window.ProjectUI?.receive(event.data);
         window.ArtifactUI?.receive(event.data);
+        window.WorkbenchUI?.receive(event.data);
         window.ChartUI?.receive(event.data);
         window.DiagramUI?.receive(event.data);
       window.WeeklyUI?.receive(event.data);

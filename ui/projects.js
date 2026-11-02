@@ -443,7 +443,13 @@
     for (const project of projects.items || []) {
       const disabled = !!projects.running || state.busy !== "none" || !!state.work?.incoming;
       const card = node("div", "project-card"), heading = node("div", "project-heading");
-      const title = node("strong", "", project.name); title.title = project.name;
+      const title = node("button", "project-title-toggle"); title.type="button";
+      title.title = `${project.collapsed ? "展開" : "收合"} ${project.name}的對話`;
+      title.setAttribute("aria-expanded",String(!project.collapsed));
+      title.setAttribute("aria-label",title.title);
+      const arrow=node("span","",project.collapsed ? "▸" : "▾");arrow.setAttribute("aria-hidden","true");
+      title.append(arrow,node("strong","",project.name));
+      title.onclick=()=>command({action:"set_collapsed",id:project.id,collapsed:!project.collapsed});
       const newChat = button("＋ 新對話", () => {
         showView("chat"); command({action:"new_chat", id:project.id});
       }, disabled);
@@ -454,7 +460,8 @@
       settings.disabled = disabled; settings.onclick = () => openSettings(project);
       heading.append(title, newChat, settings); card.append(heading);
       const conversations = state.conversations.filter(c => c.project_id === project.id).sort((a,b) => Number(!!b.pinned)-Number(!!a.pinned) || b.updated_at-a.updated_at);
-      for (const c of conversations) {
+      // 僅收合這個專案的對話；新增與設定按鈕不會冒泡觸發收合，也不切換目前對話。
+      for (const c of project.collapsed ? [] : conversations) {
         const row = node("div", "history-row" + (c.id === state.active_id ? " selected" : ""));
         const chat = node("button", "history-item", c.title); chat.dataset.id = c.id; chat.title = c.title;
         row.append(chat);

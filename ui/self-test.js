@@ -1343,6 +1343,14 @@ window.runSelfTest = async (structuredFixture) => {
         renderProjectActivity(scrollFixture, [...rows, "新增第121筆"]); await frame();
         const after = anchor.getBoundingClientRect().top - list.getBoundingClientRect().top;
         check(anchor.isConnected && Math.abs(after-before)<2, `rolling activity retains visible row: before=${before}, after=${after}`);
+        const fullHistory=Array.from({length:350},(_,index)=>`保留紀錄 ${index}`);
+        renderProjectActivity(scrollFixture,fullHistory);await frame();
+        scrollFixture.querySelector('[data-page="older"]').click();scrollFixture.querySelector('[data-page="older"]').click();
+        check(list.firstElementChild.textContent==="保留紀錄 0" && list.children.length===120,"activity paging reaches first saved entry beyond 120 rows");
+        renderProjectActivity(scrollFixture,[...fullHistory,"新進度"]);await frame();
+        check(list.firstElementChild.textContent==="保留紀錄 0","activity updates preserve the selected older page");
+        scrollFixture.querySelector('[data-page="latest"]').click();
+        check(list.lastElementChild.textContent==="新進度","activity returns to latest page");
         const narration = node("div"); scrollFixture.append(narration);
         const note = PROJECT_NOTE_PREFIX + "目前工作與已完成的重點。\n".repeat(100);
         renderProjectNarration(narration, [note]); await frame();

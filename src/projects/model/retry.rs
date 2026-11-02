@@ -89,7 +89,7 @@ pub(super) fn schedule(task: &mut Task, replace: bool, reason: &str) -> bool {
 }
 
 pub(super) fn wait(
-    run: &super::Run,
+    cancel: &std::sync::atomic::AtomicBool,
     task: &Task,
     deadline: Instant,
     notify: &mut impl FnMut(String),
@@ -98,9 +98,10 @@ pub(super) fn wait(
         .project_retry
         .due_at_millis
         .min(now_millis().saturating_add(300_000));
-    let mut shown = u64::MAX;
+    // 每次等待只記一次；取消與期限仍每100ms檢查，不把逐秒倒數灌進歷史。
+    let mut shown = false;
     loop {
-        super::super::runner::check_cancel(&run.cancel)?;
+        super::super::runner::check_cancel(cancel)?;
         if Instant::now() >= deadline {
             return Ok(false);
         }
@@ -109,8 +110,8 @@ pub(super) fn wait(
             return Ok(true);
         }
         let seconds = remaining.div_ceil(1000);
-        if shown != seconds {
-            shown = seconds;
+        if !shown {
+            shown = true;
             notify(format!(
                 "AI 連線恢復：第 {}/5 次，{}，剩餘 {seconds} 秒；可停止等待。",
                 task.project_retry.attempts,
@@ -145,6 +146,37 @@ pub(super) fn replace(task: &mut Task) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn waiting_across_second_boundaries_emits_once_and_remains_cancellable() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let mut task: Task = serde_json::from_value(json!({"request_id":"r","conversation_id":"c",
+            "request":{},"mode":"background","title":"t","created_at":0,"remote":null,"applied":false})).unwrap();
+        task.project_retry.attempts = 2;
+        task.project_retry.due_at_millis = now_millis() + 1100;
+        task.project_retry.replace_failed = true;
+        let cancel = AtomicBool::new(false);
+        let mut messages = Vec::new();
+        assert!(wait(
+            &cancel,
+            &task,
+            Instant::now() + Duration::from_secs(5),
+            &mut |text| messages.push(text)
+        )
+        .unwrap());
+        assert_eq!(messages.len(), 1, "跨秒等待不得重複寫倒數");
+        assert!(messages[0].contains("第 2/5 次"));
+        task.project_retry.due_at_millis = now_millis() + 30_000;
+        let started = Instant::now();
+        let error = wait(
+            &cancel,
+            &task,
+            started + Duration::from_secs(5),
+            &mut |_| cancel.store(true, Ordering::Relaxed),
+        )
+        .unwrap_err();
+        assert!(error.contains("已停止"));
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
     #[test]
     fn retry_schedule_is_bounded_and_unknown_or_permanent_failures_never_replace() {
         assert_eq!(DELAYS, [10, 30, 60, 180, 300]);

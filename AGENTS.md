@@ -1,3 +1,28 @@
+## 最新授權：0.8.76非CAD發行（2026-11-02，取代下方等待CAD限制）
+
+- 使用者明確要求先進版、NSIS打包並上傳既有Git；CAD修改與操作驗證留下一版，不啟動CAD。
+- 本輪0.8.76，使用scripts/Build.ps1 -EmptyCargoCache -SkipCad -IncludeInstaller -TestOffice -TestVnc -NetworkTestRoot <本機SMB測試目錄>；實際v142 x64、空Cargo快取frozen、完整非CAD回歸與NSIS安裝生命週期。SkipCad已允許完整含安裝包的發行，報告明列範圍；安裝包仍驗既有CAD runtime完整性，不操作圖面。
+- Luna low候選實測結果延用並標明EXE版本差異；三圖無重讀但有首次指數誤讀，Office／程式多步任務未完成，不得稱模型全面通過。詳docs/VALIDATION_0_8_76.md及非CAD候選紀錄。
+- 成功後提交來源、文件、EXE／NSIS、簽署更新清單及本輪驗證到既有main，推送origin並核對遠端commit及LFS下載。排除.build、.codex、dist/onboarding-state.json、icon.png與私人資料；保留歷史ZIP。完成停止。
+- 0.8.76正式建置於16:02退出0，394個非CAD Rust、完整原生／Python／Office／SMB／VNC與NSIS生命週期通過；設定55教學／21工作介面重跑通過。EXE SHA256 6236a49d61d7434c1a033efce6c2527ffc683a991888b1ac99e27a3abfb95d51，Setup d2e7c51e979d327ea10e67f69fce7a2c13d1cb88809dd7a3088a67b688276d5a。證據offline/feature-verification-0.8.76.json與docs/VALIDATION_0_8_76.md；Git狀態須以main提交、origin遠端及LFS下載核對，不僅依本段文字假設。
+
+## 目前追加授權與驗證（2026-11-02，優先於下方歷史）
+
+- 使用者同意簡短查詢ID與逐來源閱讀筆記測試，同輪修正重連倒數刷屏、120筆歷程截斷、各專案獨立收合。已修改來源，維持0.8.75，不進版／NSIS／Git提交或推送；CAD仍等待使用者通知。
+- 簡短ID採任務內穩定op_0001對照，checkpoint恢復不重編；原始冪等ID不變。圖片／Office／PDF文字接入Notebook，待摘要僅公告筆記工具；同版圖片先筆記、具體缺項查封存、必要時一次補辨識，原檔保留。
+- 完整非CAD基線R5曾通過，證據另存.build/source-verification-r5.json。追加修改已有394個非CAD Rust測試通過；完整R3停於新測試的錯誤歷程文字斷言，已修正測試並重編確認EXE雜湊不變。2026-11-02 14:50 .build/noncad-20261102-feedback-resume-r1.log完整專案harness重跑及正式Python／Office／SMB／VNC全部通過並退出0；自動化驗證以相同EXE分段完成，報告.build/source-verification-feedback-final.json。新版介面21項及既有UI回歸通過；模型驗收仍未全面通過。前輪測試EXE被占用、舊測試期待read_work_log直接回原文等失敗均保留紀錄。
+- Luna low真模型已完成最新candidate-feedback-r3測試：reading-final-r1三張合成EIS圖11次推論，3次送圖、3份短ID筆記、無重讀；但首次讀圖將DRT峰4×10⁻⁵誤讀4×10⁻⁶，筆記／答覆保留此錯誤，內容不通過。先前reading-r1內容通過亦保留。code-r3、boundaries-r3、reports-r2多步交付均未完成，第二輪需求未開始；不得稱模型全面驗收通過。已補Office新建入口提示、Unicode位置診斷，轉接器停用額外node_repl。所有模型測試服務已結束，無需重啟。
+- 模型案例及獨立核對在.build/noncad-20261102-model/；全部合成資料，不是公司模型、真Outlook信箱或使用者EIS原圖。完整記錄整理於docs/VALIDATION_2026_11_02_NONCAD.md，未完成事項不得拿舊PASS代替。
+
+## 目前授權：九項改善與後續 CAD 合併驗證（2026-11-02）
+
+- 最新指示：先編譯並完整驗證非CAD部分，包含GPT-6 Luna none／low往返；CAD相關驗證全部延後至使用者開啟並通知。此條取代下方「不先編譯」順序限制。維持0.8.75，使用ValidateOnly保留發行產物；進版與NSIS仍待CAD完成後。完整驗證不代表公司帳號／環境已實測。
+- 使用者要求先完成九項程式碼修改，保持 0.8.75，不先編譯、進版、打包或推送。九項範圍及逐項進度見 docs/IMPLEMENTATION_2026_11_02.md。
+- 九項來源已接入，新增原生交付清單、偏好／條件、內容進度指紋、恢復狀態及介面。非CAD驗證進行中：v142 x64編譯、388個Rust測試、工作介面14項及既有GUI回歸、原生案例0–27、恢復／圖片及真Python已分段通過；完整流程與Luna尚未結案。詳docs/VALIDATION_2026_11_02_NONCAD.md，不得把分段通過當成完整驗收。
+- CAD 2008 啟動顯示需要管理員權限；2022 程序啟動但未出現可操作視窗，兩版 COM 均未連線。等待使用者遠端手動開啟並通知後，再完成 CAD 圖塊相關程式碼修改；不得自行把 CAD 不可用當成測試通過。
+- 兩部分完成後一起依 v142 x64、實際 cl/link、空 Cargo 快取 frozen/vendor 編譯與驗證；最後用 GPT-6 Luna 的 none 或 low 思考模式透過正式應用工具往返模擬公司 AI。保留模型原參數、失敗與成果獨立核對，不以合成服務代替真模型。
+- 驗證完成才進版、重新編譯及打包 NSIS，完成後停止等使用者；本輪沒有 Git 提交／推送授權。原 dist、歷史報告及離線包在進版前保留。來源修改不等同建置或驗收完成。
+
 ## 本機交付驗證：0.8.75（2026-10-21）
 
 - `Build.ps1 -EmptyCargoCache -BasicValidation -IncludeInstaller` 已退出 0。v142 14.29.30133、實際 cl192930159 x64、空 Cargo 快取 frozen/vendor、18 組 107 個 Rust 測試、101 個 CAD 合成契約、原生 WebView2／Python runtime／唯讀程式碼核對及 NSIS 簽署封裝通過；未跑完整 Office／CAD／公司模型或安裝生命週期。
