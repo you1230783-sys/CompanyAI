@@ -1,0 +1,46 @@
+{
+  "version": "0.8.79.0",
+  "result": "PASS_NECESSARY_VALIDATION",
+  "recorded_at": "2026-11-03T12:45:43.8979240+08:00",
+  "exe_sha256": "bc0cde24a49f5ec04e73a7904bc48659ae5d3678458474da9b9c80b07105eea5",
+  "setup_sha256": "31bdcc5783f2d735fe5be93db9a0033d46f5182965107f31650429eb2121a836",
+  "setup_bytes": 55123210,
+  "msvc": "14.29.30133",
+  "compiler_report": [
+    "v142.c",
+    "Verified _MSC_FULL_VER=192930159 x64"
+  ],
+  "empty_cargo_cache_files": [
+    ".global-cache",
+    ".package-cache",
+    ".package-cache-mutate",
+    "registry/CACHEDIR.TAG"
+  ],
+  "rust_library_tests": 471,
+  "pet_tarot_reminder_ui_checks": 44,
+  "interactive_tutorials": 57,
+  "dialog_auth_checks": 20,
+  "embedded_ui_matches_final_sources": [
+    "index.html",
+    "style.css",
+    "app.js",
+    "auth-gate.js",
+    "reminders.js",
+    "pet.js"
+  ],
+  "cad_cleanup_unit_cases": 7,
+  "native_windows_notification": "Shell accepted an isolated native tray reminder; display remains subject to Windows notification settings",
+  "native_fonts": "All three bundled TTFs registered privately and GDI selected verified family aliases",
+  "reminder_persistence": "Windows-user DPAPI; due ordering, no repeat after saved delivery, edit/delete, input/capacity/corruption cases passed",
+  "installer_lifecycle": "PASS; verified historical CAD environment removed after success, preserved on failed update or in-use file; unknown data preserved",
+  "full_application_validation": false,
+  "true_model_retested": false,
+  "office_retested": false,
+  "cad_drawing_retested": false,
+  "limits": [
+    "Reminders require the app running; overdue items are submitted after the next start.",
+    "Windows focus/notification settings may suppress display.",
+    "One-shot local reminders only; no system background service or recurring reminders.",
+    "Company service, full workflow and CAD drawing integration were not repeated."
+  ]
+}

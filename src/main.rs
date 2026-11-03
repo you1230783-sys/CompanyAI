@@ -109,6 +109,24 @@ fn main() {
         }
         return;
     }
+    // 安裝器只在提交成功後呼叫；不啟動UI／CAD，也不接受任意清理路徑。
+    if arguments.as_slice() == ["--cleanup-old-cad-runtimes"] {
+        let code = match company_ai::cad::cleanup::obsolete_runtimes() {
+            Ok(report) => {
+                println!("{}", serde_json::json!(&report));
+                if report.kept.is_empty() {
+                    0
+                } else {
+                    2
+                }
+            }
+            Err(error) => {
+                eprintln!("{error}");
+                1
+            }
+        };
+        std::process::exit(code);
+    }
     if arguments.as_slice() == ["--cad-self-check"] {
         if let Err(error) = company_ai::cad::self_check() {
             eprintln!("{error}");

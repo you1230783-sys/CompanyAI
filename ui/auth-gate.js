@@ -45,6 +45,8 @@
     document.addEventListener(type, event => {
       if (state.logged_in) return;
       if (type === "keydown" && event.key === "Tab") return;
+      // 離線功能的form會直接成為submit的target，不一定是input或button。
+      if (event.target.closest?.("[data-offline]")) return;
       const control = event.target.closest?.(controls);
       if (control && (loginButtons.has(control.id) || control.closest("[data-offline]"))) return;
       event.preventDefault();
@@ -56,7 +58,7 @@
   $("login-entry-reopen").onclick = () => send({ type: "reopen_login" });
   window.AuthUI = {
     beforeRender, apply,
-    canSend: command => !!state.logged_in || publicCommands.has(command.type) || command.type === "pet" || (command.type === "tarot" && command.command?.action !== "analyze"),
+    canSend: command => !!state.logged_in || publicCommands.has(command.type) || command.type === "pet" || command.type === "reminder" || (command.type === "tarot" && command.command?.action !== "analyze"),
   };
   apply();
 })();

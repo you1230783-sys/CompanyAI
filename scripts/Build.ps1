@@ -105,6 +105,11 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     if ($LASTEXITCODE -ne 0) { throw 'Clippy failed.' }
     # 測試涵蓋登入兌換、重複登入碼、API Header 與 Windows 憑證加密。
     if ($BasicValidation) {
+        # 本版新增的本機功能與門檻檢查不依賴公司服務，納入必要驗證。
+        foreach ($filter in @('reminders::', 'pet::typography::', 'ui::access::')) {
+            & cargo test --lib $filter --frozen
+            if ($LASTEXITCODE -ne 0) { throw "Local feature tests failed: $filter" }
+        }
         # 本次使用者要求先測聊天／附件相關契約；不把局部測試記成完整驗收。
         foreach ($filter in @('cad::', 'jobs::', 'demo::work::tests::', 'projects::files::source_code::', 'projects::diagrams::', 'projects::files::diagrams::', 'projects::text::', 'projects::skills::', 'projects::memory::', 'ui::onboarding::', 'projects::agent::schema::', 'projects::agent::tests::', 'projects::charts::png::', 'projects::files::cad::', 'projects::files::cad_copy::', 'projects::files::cad_excel::', 'projects::tool_calls::', 'ui::projects::attention::')) {
             & cargo test --lib $filter --frozen

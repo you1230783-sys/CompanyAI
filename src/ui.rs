@@ -38,6 +38,7 @@ mod mail_batch;
 mod onboarding;
 mod pet;
 mod projects;
+mod reminders;
 mod retry;
 mod site;
 mod tarot;
@@ -51,6 +52,9 @@ const TRAY_MESSAGE: u32 = WM_APP + 4;
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Command {
+    Reminder {
+        command: reminders::ReminderCommand,
+    },
     Pet {
         command: pet::PetCommand,
     },
@@ -204,6 +208,7 @@ enum Event {
     AllRead(u64, usize),
 }
 struct App {
+    reminders: reminders::ReminderRuntime,
     pet: crate::pet::Pet,
     tarot: crate::tarot::Round,
     onboarding: onboarding::Onboarding,
@@ -701,6 +706,7 @@ impl App {
     fn command(&mut self, command: Command) -> AppResult<()> {
         command.check_access(self.logged_in(), self.versions.blocked(), self.smoke)?;
         match command {
+            Command::Reminder { command } => self.reminder_command(command)?,
             Command::Pet { command } => self.pet_command(command)?,
             Command::Tarot { command } => self.tarot_command(command)?,
             Command::OnboardingAck { topic } => self.onboarding.acknowledge(&topic)?,
@@ -1611,6 +1617,7 @@ impl App {
     }
     fn tick(&mut self) {
         self.tick_pet();
+        self.tick_reminders();
         let mut changed = false;
         // 先處理到期，再接受 UI 命令或背景結果，不能因本機工作忙碌而繼續使用過期授權。
         if !self.smoke && self.session.is_some() && !self.logged_in() && self.busy != "login" {
@@ -2251,6 +2258,7 @@ fn run_with_local(
         );
         let pet = crate::pet::Pet::new(window, &root, smoke || local.is_some())?;
         let mut app = App {
+            reminders: reminders::ReminderRuntime::load(&root),
             pet,
             tarot: crate::tarot::Round::default(),
             onboarding: onboarding::Onboarding::load(smoke || local.is_some()),

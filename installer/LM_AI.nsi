@@ -280,6 +280,20 @@ Function RemoveNewCad
 FunctionEnd
 
 Function .onInstSuccess
+!ifndef TEST_PAYLOAD
+    ; 只能在整個安裝提交成功後清理；之前的任何失敗仍可使用原CAD環境回復。
+    ; 原生helper核對已知清單、雜湊、連結與占用；不使用萬用字元遞迴刪除。
+    DetailPrint "正在清理不再使用的舊版 CAD 執行環境…"
+    ClearErrors
+    ExecWait '"$INSTDIR\LM_AI.exe" --cleanup-old-cad-runtimes' $0
+    IfErrors cad_cleanup_kept
+    StrCmp $0 0 cad_cleanup_done
+    cad_cleanup_kept:
+    ; 舊目錄含使用者檔案、內容變更或仍被占用時保留，不回復已成功的新版本。
+    DetailPrint "部分舊版 CAD 環境保留原位（使用中、非已知版本或含額外檔案）；可在下次更新重試。"
+    cad_cleanup_done:
+    ClearErrors
+!endif
     System::Call 'kernel32::CloseHandle(p $InstanceLock)'
     StrCpy $InstanceLock 0
     StrCmp $Restart "yes" 0 done

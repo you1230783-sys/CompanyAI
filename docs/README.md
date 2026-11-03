@@ -4,6 +4,8 @@
 
 ## 保留版本與驗證
 
+- [0.8.79：本機提醒、桌寵字型與輸入體驗](VALIDATION_0_8_79.md)
+
 - [0.8.78：桌寵泡泡、塔羅續問與進階功能](VALIDATION_0_8_78.md)
 
 - [0.8.77：桌寵、塔羅、Office、聊天恢復與 CAD](VALIDATION_0_8_77.md)
@@ -37,6 +39,7 @@
 | [通知與 Outlook](NOTIFICATIONS_AND_OUTLOOK.md) | 通知同步及郵件介面 |
 | [Outlook 查詢](OUTLOOK_SEARCH.md) | 日期、範圍與資料欄位 |
 | [VNC](VNC_QUICK_CONNECT.md) | Viewer 與機台設定 |
+| [CAD舊環境清理（待驗證）](CAD_RUNTIME_CLEANUP.md) | 安裝目錄、保留條件與後續測試 |
 | [CAD 能力](CAD_CAPABILITIES.md) | 支援操作與限制 |
 | [CAD 繪圖](CAD_DRAWING.md) | 新圖與原生驗證 |
 | [CAD 快照查詢](CAD_SNAPSHOT_QUERY.md) | 索引、範圍與局部預覽 |

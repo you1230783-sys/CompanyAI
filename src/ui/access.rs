@@ -8,7 +8,7 @@ impl Command {
         update_required: bool,
         smoke: bool,
     ) -> AppResult<()> {
-        let offline = matches!(self, Command::Pet { .. })
+        let offline = matches!(self, Command::Pet { .. } | Command::Reminder { .. })
             || matches!(self, Command::Tarot { command } if !matches!(command, super::tarot::TarotCommand::Analyze { .. }));
         let login_flow = matches!(self, Self::Login | Self::CancelLogin | Self::ReopenLogin);
         let lifecycle = matches!(self, Self::Ready | Self::Exit | Self::SelfTestResult { .. });
@@ -75,6 +75,15 @@ mod tests {
             assert!(command.check_access(false, false, true).is_err());
             assert!(command.check_access(true, false, false).is_ok());
         }
+    }
+
+    #[test]
+    fn local_reminders_remain_available_when_logged_out_or_update_required() {
+        let command = Command::Reminder {
+            command: super::super::reminders::ReminderCommand::State,
+        };
+        assert!(command.check_access(false, false, false).is_ok());
+        assert!(command.check_access(false, true, false).is_ok());
     }
 
     #[test]

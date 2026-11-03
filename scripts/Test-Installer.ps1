@@ -164,6 +164,33 @@ Run-Checked $app '--self-check'
 Run-Checked $app '--python-self-check'
 # 安裝後以正式 EXE 核對 CAD runtime 與管線；只掃描登錄，不啟動或繪圖。
 Run-Checked $app '--cad-self-check'
+# 先要求無舊目錄時回0，避免把舊EXE的未知參數退出碼2誤當成新入口通過。
+Run-Checked $app '--cleanup-old-cad-runtimes'
+# 清理入口只處理過去已知版本；未知cad目錄即使名稱符合格式，也保留使用者檔案。
+$unknownCad = Join-Path $installRoot 'cad-0000000000000000'
+if (Test-Path -LiteralPath $unknownCad) { throw 'Unknown CAD fixture must be new.' }
+New-Item -ItemType Directory -Path $unknownCad | Out-Null
+[IO.File]::WriteAllText((Join-Path $unknownCad 'manifest.json'), '{}')
+[IO.File]::WriteAllText((Join-Path $unknownCad 'user-note.txt'), 'keep unknown CAD data')
+Run-Checked $app '--cleanup-old-cad-runtimes' 2
+if ([IO.File]::ReadAllText((Join-Path $unknownCad 'user-note.txt')) -ne 'keep unknown CAD data') { throw 'Cleanup changed unknown CAD data.' }
+
+# 由Git原始manifest重建已發行的舊環境；失敗更新、占用及成功更新分別驗證。
+$oldFixtureJson = & python (Join-Path $root 'tools\create_old_cad_fixture.py') $installRoot
+if ($LASTEXITCODE -ne 0) { throw 'Could not reconstruct a verified historical CAD runtime.' }
+$oldFixture = $oldFixtureJson | ConvertFrom-Json
+$oldCad = $oldFixture.directory
+if ([IO.Path]::GetDirectoryName($oldCad) -cne $installRoot -or [IO.Path]::GetFileName($oldCad) -cnotmatch '^cad-[0-9a-f]{16}$') { throw 'Invalid historical CAD test path.' }
+$oldManifest = Join-Path $oldCad 'manifest.json'
+$oldLock = [IO.File]::Open($app, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+try { Run-Checked (Join-Path $work 'real-setup.exe') '/S' 1 } finally { $oldLock.Dispose() }
+if ((Get-FileHash -LiteralPath $oldManifest).Hash -ine $oldFixture.sha256) { throw 'Failed update removed old CAD environment.' }
+$oldLock = [IO.File]::Open((Join-Path $oldCad 'worker.py'), [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+try { Run-Checked (Join-Path $work 'real-setup.exe') '/S' } finally { $oldLock.Dispose() }
+if ((Get-ChildItem -LiteralPath $oldCad -File -Recurse).Count -ne ($oldFixture.files + 1)) { throw 'In-use old CAD environment was partially deleted.' }
+Run-Checked (Join-Path $work 'real-setup.exe') '/S'
+if (Test-Path -LiteralPath $oldCad) { throw 'Successful update did not remove the verified obsolete CAD environment.' }
+
 # 完整環境必須原地沿用。保留所有檔案的建立時間，並鎖住一個檔案禁止寫入／刪除；
 # 若安裝器仍先搬移或覆蓋 Python，這次更新會失敗，不能只靠相同內容判定「沒有重裝」。
 $pythonRoot = Join-Path $installRoot 'python'
@@ -202,6 +229,10 @@ foreach ($case in $repairCases) {
         if (Test-Path -LiteralPath (Join-Path $installRoot $temporary)) { throw "Python repair left $temporary" }
     }
 }
+# 後續成功更新及修復也不可刪除未知目錄；只移除本測試自行建立的兩個檔案。
+if ([IO.File]::ReadAllText((Join-Path $unknownCad 'user-note.txt')) -ne 'keep unknown CAD data') { throw 'Update removed unknown CAD data.' }
+Remove-Item -LiteralPath (Join-Path $unknownCad 'manifest.json'),(Join-Path $unknownCad 'user-note.txt')
+[IO.Directory]::Delete($unknownCad, $false)
 Run-Checked $uninstaller '/S'
 $deadline = [DateTime]::UtcNow.AddSeconds(60)
 while (((Test-Path $installRoot) -or (Test-Path $key)) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
@@ -280,6 +311,8 @@ Remove-Item -LiteralPath $releaseKeep
     python_folder = 'python'
     python_install_self_check = $true
     cad_install_self_check = $true
+    obsolete_cad_cleanup = 'verified historical runtime removed after success; failed update and in-use runtime preserved; unknown data preserved'
+    obsolete_cad_fixture = $oldFixture
     python_failure_rollback = $true
     python_reused_without_replacement = $true
     python_repair_cases = $repairCases

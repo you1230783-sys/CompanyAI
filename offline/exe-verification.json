@@ -1,8 +1,8 @@
 {
-  "recorded_at": "2026-11-03T10:54:54.9535813+08:00",
-  "version": "0.8.78.0",
+  "recorded_at": "2026-11-03T12:35:02.7107414+08:00",
+  "version": "0.8.79.0",
   "result": "PASS_BASIC",
-  "validation_scope": "focused basic/native plus complete Rust library and separate NSIS lifecycle; no new Office/CAD drawing or true-model run",
+  "validation_scope": "necessary local/native/UI validation and NSIS lifecycle only; full application, true-model, Office and CAD drawing acceptance skipped by user",
   "msvc": "14.29.30133",
   "compiler": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\cl.exe",
   "compiler_report": [
@@ -12,7 +12,7 @@
   "linker": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\link.exe",
   "windows_sdk": "10.0.19041.0\\",
   "empty_cargo_cache": true,
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-4465bf5bd63345d48e28e65a2fad5e8c",
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-782785378735442ca1ab2646ee9c612e",
   "checks": [
     "v142 x64 actual compiler probe",
     "fmt",
@@ -27,8 +27,10 @@
     "read-only source formats, native worker, paging, revision and copy rejection",
     "DLL dependency inspection",
     "NSIS packaging and native signed manifest/package verification",
-    "456 Rust library tests after final version build",
-    "separate Test-Installer.ps1 full lifecycle PASS"
+    "471 Rust library tests",
+    "44 pet/tarot/reminder UI checks",
+    "separate NSIS lifecycle with verified historical CAD cleanup",
+    "embedded UI equals final sources"
   ],
   "task_tracking_cases": [
     "pending POST has no GET; 413 stops, survives DPAPI reload and ignores late events",
@@ -38,7 +40,7 @@
     "changing errors and successful GET reset the consecutive failure count",
     "SSE task ID supersedes late by-request errors without counting them"
   ],
-  "exe_sha256": "243160e18547b127afe5d16affe7c4f3a968dd1efaa83b60f1d309c561904349",
+  "exe_sha256": "bc0cde24a49f5ec04e73a7904bc48659ae5d3678458474da9b9c80b07105eea5",
   "installer_built": true,
   "installer_installation_tested": true,
   "full_validation_completed": false,
@@ -49,6 +51,6 @@
     "Office and SMB integration",
     "company PDF and chat service acceptance"
   ],
-  "installer_sha256": "21159f57d3fc332cbe68fc8acb8f1f42e8e246be3213153a54323dff1fa82f72",
-  "rust_library_tests": 456
+  "installer_sha256": "31bdcc5783f2d735fe5be93db9a0033d46f5182965107f31650429eb2121a836",
+  "rust_library_tests": 471
 }

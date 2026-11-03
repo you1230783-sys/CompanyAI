@@ -1675,3 +1675,24 @@ dialog button.icon-button { padding:6px; }
 
 /* 六種動作預覽共用圖片匯入入口，透明棋盤只存在設定畫面。 */
 .pet-dialog{width:min(880px,94vw);max-height:92vh;padding:24px;border-radius:22px}.pet-images{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:20px 0}.pet-images>div{display:flex;align-items:center;flex-direction:column;gap:7px;padding:12px;border:1px solid #aaa5;border-radius:12px}.pet-images img{width:120px;height:120px;object-fit:contain;background:repeating-conic-gradient(#ddd5 0% 25%,transparent 0% 50%) 50%/16px 16px}.pet-dialog textarea{width:100%;margin-top:12px}.pet-dialog details{margin-top:18px}.pet-dialog [data-message]{min-height:1.5em}@media(max-width:600px){.pet-images{grid-template-columns:repeat(2,minmax(0,1fr))}.pet-dialog{padding:16px}}
+
+/* 對話框中的文字欄位需清楚可見；不改變聊天編輯器與各滑桿的行為。 */
+dialog textarea,
+dialog input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):is([type="text"],[type="email"],[type="search"],[type="datetime-local"],:not([type])) {
+  box-sizing: border-box; border: 2px solid var(--muted); border-radius: 9px;
+  background: var(--surface); color: var(--ink); padding: 12px 14px;
+  min-height: 46px; font: inherit; line-height: 1.6;
+}
+dialog textarea { display: block; width: 100%; min-height: 160px; height: auto; max-height: 55vh; resize: vertical; }
+dialog textarea:focus, dialog input:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
+#pet-generator-dialog textarea { min-height: 260px; }
+.reminders-dialog { width: min(760px, calc(100vw - 40px)); max-height: 88vh; overflow-y: auto; padding: 24px; }
+.reminders-dialog form label { display: grid; gap: 8px; margin: 12px 0; min-width: 0; }
+.reminders-dialog input { width: 100%; }
+.reminder-fields { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+.reminder-list { margin-top: 18px; }
+.reminder-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+.reminder-row > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.reminder-row > div:last-child { display: flex; gap: 8px; flex-shrink: 0; }
+.reminder-row p { color: var(--muted); margin: 6px 0 0; font-size: .9em; }
+@media (max-width: 540px) { .reminder-fields { grid-template-columns: 1fr; gap: 0; } .reminder-row { align-items: flex-start; flex-direction: column; } }

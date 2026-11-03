@@ -1,5 +1,25 @@
 # CompanyAI 專案指引
 
+## 0.8.79必要驗證與封裝完成（2026-11-03）
+
+- R3正式流程退出0；v142 14.29.30133／cl192930159 x64、空Cargo快取frozen、fmt／Clippy、471 Rust、101 CAD契約、原生WebView2基本檢查、44相關UI／57教學／20對話框通過，另行Test-Installer完整生命週期通過。依使用者要求未重跑公司模型、Office或CAD圖面整體驗證。
+- CAD清理另以已載入DLL反例補強預檢，7項Rust案例及實際Git歷史環境的成功清理／失敗回復／占用保留通過。原生字型共用既有內嵌資源。
+- EXE bc0cde24a49f5ec04e73a7904bc48659ae5d3678458474da9b9c80b07105eea5；Setup 31bdcc5783f2d735fe5be93db9a0033d46f5182965107f31650429eb2121a836。證據offline/*-verification-0.8.79.json；Git交付以實際遠端main及.build/git-delivery-0.8.79.json核對為準。
+
+## 最新授權：0.8.79發行（2026-11-03）
+
+- 使用者已授權本機提醒、桌寵通知共用一般字型、對話框文字欄位改善，完成後進版編譯、必要驗證、NSIS與推送Git；此授權取代下方CAD清理的先不編譯指示，將待測清理一起交付。
+- 使用Build.ps1 -EmptyCargoCache -BasicValidation -IncludeInstaller，另核對提醒／字型／清理Rust測試、44項相關UI、登入門檻與Test-Installer.ps1生命週期。跳過Office、CAD實際改圖與真模型整體驗證，不冒稱完整驗收。
+- 提醒以DPAPI保存、單次本機時間、200項上限；未登入可用、縮到托盤仍提醒、完全退出後下次啟動補送。0秒／全透明桌寵泡泡改用Windows。提醒不用AI或新增公司資料技能。
+
+## 本輪：CAD舊執行環境清理（2026-11-03，來源修改）
+
+- 使用者回報C:\largan\LM_AI\cad-*累積，確認為安裝包內的CAD Python環境；目前版必需，舊版原本為回復而保留，不是任務反覆輸出的程式碼。
+- 已授權在安裝成功後清理已知舊版本；最新明確要求先不編譯，等使用者目前測試結果再決定。本輪不進版、編譯、執行原生測試、打包、Git提交／推送或清理真實安裝目錄，維持已發行0.8.78成品。
+- 新增src/cad/cleanup.rs、CLI --cleanup-old-cad-runtimes及NSIS .onInstSuccess掛接；只有新版runtime完整性核對成功，才清理非目前版且manifest雜湊在assets/cad-runtime-history.json中的目錄。歷史19指紋從實際Git發行清單核對產生，工具tools/update_cad_runtime_history.py。
+- 所有候選先鎖住目錄與檔案、核對清單及內容；拒絕連結、占用、唯讀、未知／修改／額外項目，以已驗證handle刪除，不遞迴掃刪cad-*。清理放在成功提交後、重啟前，失敗保留並不回復新版本；manifest最後刪除以支援中斷重試。
+- 已補原生單元案例及NSIS未知目錄保護案例，僅寫入來源尚未執行。已做rustfmt、PowerShell語法及歷史清單來源核對；下次授權建置時必須跑新增Rust測試、Junction／使用中反例及實際已知舊環境更新／失敗回復／移除驗證，不把靜態檢查當成通過。
+
 ## 桌寵插畫追加（本版0.8.78）
 
 - 使用者打包中追加要求精細貓／狗圖畫。已使用內建image_gen生成各一張3×2透明圖集，保存assets/pet-illustrations；Create-PetDefaults.ps1只負責固定分格與縮至256PNG，保留原alpha，不以程式繪製代替AI插畫。

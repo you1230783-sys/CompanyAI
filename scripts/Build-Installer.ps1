@@ -15,6 +15,11 @@ $compiler = Join-Path $tools 'nsis-3.12\makensis.exe'
 & (Join-Path $PSScriptRoot 'Stage-Cad.ps1') -ExecutableDirectory (Join-Path $root 'dist')
 # CAD 以內容指紋命名，更新不覆寫舊版依賴；只移除本版清單中的已知檔案。
 $cadHash = (Get-Content (Join-Path $root 'assets\cad-runtime-sha256.txt') -Raw).Trim()
+# 新版環境也先登記，將來下一版才可將它辨識為可清理的舊版。
+$cadHistory = @(Get-Content -LiteralPath (Join-Path $root 'assets\cad-runtime-history.json') -Raw | ConvertFrom-Json)
+if ($cadHistory -notcontains $cadHash -or @($cadHistory | Where-Object { $_ -cnotmatch '^[0-9a-f]{64}$' }).Count -gt 0) {
+    throw 'CAD history is missing or invalid. Run python tools/update_cad_runtime_history.py before packaging.'
+}
 $cadName = 'cad-' + $cadHash.Substring(0,16)
 $cadRoot = Join-Path $root ('dist\' + $cadName)
 $cadEntries = Get-ChildItem -LiteralPath $cadRoot -Recurse

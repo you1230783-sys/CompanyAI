@@ -18,6 +18,7 @@ pub mod outlook;
 pub mod pet;
 pub mod projects;
 pub mod protocol;
+pub mod reminders;
 pub mod selection;
 pub mod selection_popup;
 pub mod service;

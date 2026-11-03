@@ -1,25 +1,25 @@
 <!-- 開頭版本公告最多保留最新 3 個版本；較早版本依 docs/ARCHIVE_POLICY.md 封存。 -->
+**0.8.79：本機提醒與桌寵文字。** 新增可選桌寵或Windows通知的本機提醒；通知沿用一般字型、加強對話框文字欄位，成功安裝後清理已知舊CAD環境。[本版驗證](docs/VALIDATION_0_8_79.md)
+
 **0.8.78：桌寵泡泡與塔羅續問。** 三款可調泡泡、桌寵即時設定、角色提示詞複製、塔羅延續抽牌及進階功能入口，新增兩項互動教學。[本版驗證](docs/VALIDATION_0_8_78.md)
 
 **0.8.77：桌寵、離線塔羅與工作操作。** 可替換透明PNG桌寵、78張離線塔羅與一般聊天解析、自動重連、Excel自訂公式與Office寫入擴充，以及既有普通圓圖塊修改。[本版驗證與限制](docs/VALIDATION_0_8_77.md)
-
-**0.8.76：專案工作與來源筆記。** 新增交付清單、條件卡、偏好與成果整理；重連不刷屏、完整歷程分頁、各專案獨立收合。來源查詢改短ID，讀完先保存筆記並保留必要查證。CAD延至下一版；Luna讀圖及多步交付仍有未通過案例。[本版驗證與限制](docs/VALIDATION_0_8_76.md)
 
 # LM_AI — Windows 工作助理
 
 CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供日常問答、文件整理、專案副本修訂與 Classic Outlook 郵件分析。
 
-**目前 EXE／NSIS：0.8.78** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
+**目前 EXE／NSIS：0.8.79** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
 
 ## 下載與開始使用
 
-1. [下載 0.8.78 完整 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從系統托盤選「離開」，再以一般權限安裝至 `C:\largan\LM_AI`；Python 會放在旁邊的 `python` 子目錄。驗證範圍請見[本版紀錄](docs/VALIDATION_0_8_78.md)；公司服務與真實 CAD 圖面仍需公司實機確認。
+1. [下載 0.8.79 完整 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從系統托盤選「離開」，再以一般權限安裝至 `C:\largan\LM_AI`；Python 會放在旁邊的 `python` 子目錄。驗證範圍請見[本版紀錄](docs/VALIDATION_0_8_79.md)；公司服務與真實 CAD 圖面仍需公司實機確認。
 2. 開啟程式，按「登入」，在瀏覽器核對短碼並允許授權。
 3. 選擇模型後開始對話；需要讀取或修改資料夾內的文件時，先建立「專案」。
 
 執行需要 WebView2 Runtime，不需安裝 Rust、Node 或 Python。若啟動時提示缺少 WebView2，請依 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md) 處理。正式功能需要公司服務連線與桌面帳號權限。
 
-目前交付的 EXE 與 NSIS 都是 **0.8.78**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史完整離線包已依[封存政策](docs/ARCHIVE_POLICY.md)移出目前目錄；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
+目前交付的 EXE 與 NSIS 都是 **0.8.79**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史完整離線包已依[封存政策](docs/ARCHIVE_POLICY.md)移出目前目錄；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
 
 ## 可以做什麼
 
@@ -27,6 +27,7 @@ CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供�
 | --- | --- |
 | 假資料互動教學 | 57 個主題，分類、搜尋、逐步操作與重看，不呼叫 AI 或正式工具。 |
 | 桌寵通知 | 貓／狗與六種動作，可自行生成並匯入透明 PNG；壓縮後每張小於 500KB。 |
+| 本機提醒事項 | 指定時間與內容，以桌寵或Windows提示；本機加密保存，退出期間到期項目下次啟動補送。 |
 | 離線塔羅 | 78 張牌背自行抽單張／三張，正逆位中文解讀；填問題後送一般聊天解析。 |
 | Excel 自訂公式 | 寫入任意合法 A1 公式並由 Excel 計算讀回，與來源資料分開寫入。 |
 | 一般對話與附件 | 問答、翻譯、摘要、潤飾、解釋，支援串流與背景處理。 |

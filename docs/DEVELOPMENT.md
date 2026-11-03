@@ -43,6 +43,8 @@ CompanyAI 位於 `Y:\Rust\Project\CompanyAI`，是獨立 Cargo workspace。共�
 | Python與程式副本 | `src/projects/python/`、`files/python_edit.rs`、`files/source_code.rs` |
 | Outlook | `src/outlook/`、`src/projects/mail/` |
 | 桌寵／塔羅 | `src/pet/`、`src/ui/pet.rs`、`src/tarot.rs`、`ui/pet.js`、`ui/tarot.js` |
+| 本機提醒 | `src/reminders.rs`（DPAPI與單次排程）、`src/ui/reminders.rs`（計時與通知）、`ui/reminders.js` |
+| CAD舊環境清理 | `src/cad/cleanup.rs`、`assets/cad-runtime-history.json`、`tools/update_cad_runtime_history.py` |
 | 互動教學 | `ui/tutorial-lessons.js`、`ui/project-tutorial.js`、`assets/tutorials.json` |
 | VNC／設定與帳號 | `src/vnc/`、`src/config.rs`、`src/auth.rs`、`src/storage.rs` |
 

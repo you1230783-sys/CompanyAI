@@ -25,6 +25,7 @@ pub(super) enum PetCommand {
 impl App {
     pub(super) fn desktop_notice(&mut self, message: &str) {
         if !self.smoke {
+            self.pet.typography(&self.config);
             self.pet.notify(message);
         }
     }
@@ -91,6 +92,7 @@ impl App {
         result
     }
     pub(super) fn tick_pet(&mut self) {
+        self.pet.typography(&self.config);
         let active = self.work.store.tasks.iter().any(|t| t.active());
         let waiting = self
             .work

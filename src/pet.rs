@@ -2,6 +2,7 @@
 //! 視窗不搶焦點，透明區域由layered window穿透；點擊才通知主視窗。
 mod bubble;
 pub mod png;
+mod typography;
 use crate::{storage, wide, AppResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -73,6 +74,7 @@ impl Settings {
     }
 }
 struct State {
+    typography: typography::Typography,
     owner: HWND,
     settings: Settings,
     images: Vec<png::Image>,
@@ -132,6 +134,7 @@ impl Pet {
             settings.enabled = false;
         }
         let mut state = Box::new(RefCell::new(State {
+            typography: typography::Typography::default(),
             owner,
             settings,
             images: vec![],
@@ -236,6 +239,13 @@ impl Pet {
     }
     pub fn settings(&self) -> Settings {
         self.state.borrow().settings.clone()
+    }
+
+    /// 沿用一般設定的同一組字型、字級與介面比例，不另存一份桌寵文字偏好。
+    pub fn typography(&mut self, config: &crate::config::Config) {
+        if self.state.borrow_mut().typography.update(config) {
+            self.last_draw = Instant::now() - Duration::from_secs(1);
+        }
     }
     pub fn configure(&mut self, settings: Settings) -> AppResult<()> {
         settings.validate()?;
@@ -387,7 +397,7 @@ unsafe fn draw(window: HWND, state: &State) -> AppResult<()> {
             },
         );
         let font = CreateFontW(
-            -scale(16),
+            -scale(state.typography.pixels()),
             0,
             0,
             0,
@@ -400,7 +410,7 @@ unsafe fn draw(window: HWND, state: &State) -> AppResult<()> {
             CLIP_DEFAULT_PRECIS as u32,
             ANTIALIASED_QUALITY as u32,
             DEFAULT_PITCH as u32,
-            wide("Microsoft JhengHei").as_ptr(),
+            wide(state.typography.family()).as_ptr(),
         );
         let old_font = SelectObject(memory, font);
         let text = wide(&format!("{message}\n點一下查看"));
