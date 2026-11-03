@@ -1,38 +1,48 @@
-# 可重製的基本角色：使用程式繪製簡單向量形狀，輸出六種狀態的透明PNG。
-# 使用者匯入圖片不會執行此腳本；執行時只更新專案內ui/pets的內建圖檔。
-$ErrorActionPreference='Stop'
+# 將AI生成的3×2透明角色圖集，切成六個同尺寸PNG；不重新繪製角色。
+# 原始圖集及提示詞保留於assets/pet-illustrations，方便日後重新輸出。
+[CmdletBinding()]
+param([string]$SourceDirectory, [string]$OutputDirectory)
+$ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
-$destination=Join-Path (Split-Path $PSScriptRoot -Parent) 'ui/pets'
-New-Item -ItemType Directory -Path $destination -Force | Out-Null
-foreach($animal in @('cat','dog')) {
- foreach($state in @('idle','thinking','working','waiting','success','error')) {
-  $bitmap=New-Object Drawing.Bitmap 256,256
-  $graphics=[Drawing.Graphics]::FromImage($bitmap)
-  $graphics.SmoothingMode=[Drawing.Drawing2D.SmoothingMode]::AntiAlias
-  $graphics.Clear([Drawing.Color]::Transparent)
-  $body=New-Object Drawing.SolidBrush ([Drawing.ColorTranslator]::FromHtml($(if($animal -eq 'cat'){'#F3C47B'}else{'#BC8967'})))
-  $cream=New-Object Drawing.SolidBrush ([Drawing.ColorTranslator]::FromHtml('#FFF1D8'))
-  $ink=New-Object Drawing.Pen ([Drawing.ColorTranslator]::FromHtml('#4B3835')),6
-  $pink=New-Object Drawing.SolidBrush ([Drawing.ColorTranslator]::FromHtml('#F3A5A0'))
-  try {
-   $graphics.FillEllipse($body,65,110,126,116);$graphics.FillEllipse($cream,90,151,76,66)
-   if($animal -eq 'cat') {
-    $graphics.FillPolygon($body,[Drawing.Point[]]@([Drawing.Point]::new(49,88),[Drawing.Point]::new(53,23),[Drawing.Point]::new(99,56)))
-    $graphics.FillPolygon($body,[Drawing.Point[]]@([Drawing.Point]::new(157,56),[Drawing.Point]::new(203,23),[Drawing.Point]::new(207,88)))
-    $graphics.FillPolygon($pink,[Drawing.Point[]]@([Drawing.Point]::new(61,66),[Drawing.Point]::new(62,39),[Drawing.Point]::new(84,57)))
-    $graphics.FillPolygon($pink,[Drawing.Point[]]@([Drawing.Point]::new(172,57),[Drawing.Point]::new(194,39),[Drawing.Point]::new(195,66)))
-   }else{$graphics.FillEllipse($body,31,46,45,105);$graphics.FillEllipse($body,180,46,45,105)}
-   $graphics.FillEllipse($body,47,44,162,128);$graphics.FillEllipse($cream,85,112,86,47)
-   if($state -in @('success','waiting')){$graphics.DrawArc($ink,83,83,25,18,185,170);$graphics.DrawArc($ink,149,83,25,18,185,170)}
-   else{$graphics.DrawLine($ink,97,90,97,105);$graphics.DrawLine($ink,159,90,159,105)}
-   $graphics.FillEllipse($pink,68,111,21,12);$graphics.FillEllipse($pink,168,111,21,12)
-   $graphics.DrawLine($ink,124,119,132,119);$graphics.DrawArc($ink,114,119,28,22,0,180)
-   $graphics.FillEllipse($body,61,206,58,26);$graphics.FillEllipse($body,138,206,58,26)
-   $armY=if($state -eq 'success'){125}else{167}
-   $graphics.FillEllipse($body,39,$armY,49,29);$graphics.FillEllipse($body,168,$armY,49,29)
-   $symbol=switch($state){'thinking'{'?'} 'working'{'▰'} 'waiting'{'…'} 'success'{'★'} 'error'{'!'} default{''}}
-   if($symbol){$font=New-Object Drawing.Font 'Segoe UI',27,([Drawing.FontStyle]::Bold);try{$graphics.DrawString($symbol,$font,[Drawing.Brushes]::DarkSlateBlue,185,2)}finally{$font.Dispose()}}
-   $bitmap.Save((Join-Path $destination ($animal+'_'+$state+'.png')),[Drawing.Imaging.ImageFormat]::Png)
-  } finally {$graphics.Dispose();$bitmap.Dispose();$body.Dispose();$cream.Dispose();$ink.Dispose();$pink.Dispose()}
- }
+$root = Split-Path $PSScriptRoot -Parent
+if (-not $SourceDirectory) { $SourceDirectory = Join-Path $root 'assets/pet-illustrations' }
+if (-not $OutputDirectory) { $OutputDirectory = Join-Path $root 'ui/pets' }
+New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+$actions = @('idle','thinking','working','waiting','success','error')
+$manifest = [System.Collections.Generic.List[object]]::new()
+foreach ($animal in @('cat','dog')) {
+    $source = Join-Path $SourceDirectory ($animal + '-atlas.png')
+    $atlas = [Drawing.Bitmap]::new($source)
+    try {
+        if ($atlas.Width -ne 1536 -or $atlas.Height -ne 1024) { throw "Expected a 1536x1024 atlas: $source" }
+        for ($index = 0; $index -lt 6; $index++) {
+            $bitmap = [Drawing.Bitmap]::new(256,256,[Drawing.Imaging.PixelFormat]::Format32bppArgb)
+            $graphics = [Drawing.Graphics]::FromImage($bitmap)
+            try {
+                $graphics.CompositingMode = [Drawing.Drawing2D.CompositingMode]::SourceCopy
+                $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+                $graphics.PixelOffsetMode = [Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+                $graphics.Clear([Drawing.Color]::Transparent)
+                # 固定格子與畫布保留基準線及透明邊距，不依動作個別拉伸或裁掉耳尾。
+                $cellX = ($index % 3) * 512
+                $cellY = [math]::Floor($index / 3) * 512
+                $graphics.DrawImage($atlas,[Drawing.Rectangle]::new(0,0,256,256),$cellX,$cellY,512,512,[Drawing.GraphicsUnit]::Pixel)
+                $name = $animal + '_' + $actions[$index] + '.png'
+                $path = Join-Path $OutputDirectory $name
+                $bitmap.Save($path,[Drawing.Imaging.ImageFormat]::Png)
+                $bytes = (Get-Item -LiteralPath $path).Length
+                if ($bytes -ge 500000) { throw "PNG exceeds 500KB: $name" }
+                $transparent = 0; $solid = 0
+                for ($y=0;$y -lt 256;$y++) { for ($x=0;$x -lt 256;$x++) {
+                    $alpha = $bitmap.GetPixel($x,$y).A
+                    if ($alpha -le 8) { $transparent++ }
+                    if ($alpha -ge 240) { $solid++ }
+                } }
+                if ($transparent -lt 5000 -or $solid -lt 5000) { throw "Unexpected alpha silhouette: $name" }
+                $manifest.Add([ordered]@{file=$name;bytes=$bytes;sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant();width=256;height=256;near_transparent_pixels=$transparent;solid_pixels=$solid})
+            } finally { $graphics.Dispose(); $bitmap.Dispose() }
+        }
+    } finally { $atlas.Dispose() }
 }
+$manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $SourceDirectory 'manifest.json') -Encoding utf8
+Write-Output 'Prepared 12 illustrated pet poses; all 256x256, under 500KB with alpha.'

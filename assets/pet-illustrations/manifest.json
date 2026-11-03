@@ -1,0 +1,110 @@
+[
+  {
+    "file": "cat_idle.png",
+    "bytes": 114454,
+    "sha256": "cae6548a713e80752cbbf1be105001a012c2bf007496a32c9f7b507c2962b45e",
+    "width": 256,
+    "height": 256,
+    "near_transparent_pixels": 34676,
+    "solid_pixels": 27754
+  },
+  {
+    "file": "cat_thinking.png",
+    "bytes": 109258,
+    "sha256": "0ae0bd1b329dd8fa1fabe6851abea85106ba71464ff02019c3efe99379e28b4f",
+    "width": 256,
+    "height": 256,
+    "near_transparent_pixels": 36588,
+    "solid_pixels": 26015
+  },
+  {
+    "file": "cat_working.png",
+    "bytes": 108710,
+    "sha256": "33ba8e2b1f9c30aad3c8d7e05383292f39e8a0a0d3ca18c6df46674f0d7e5c8b",
+    "width": 256,
+    "height": 256,
+    "near_transparent_pixels": 36958,
+    "solid_pixels": 25707
+  },
+  {
+    "file": "cat_waiting.png",
+    "bytes": 112059,
+    "sha256": "0de7971187c2db5de8cf4802ff7bafc77a9e87ee6f512c145d889c3167f2e082",
+    "width": 256,
+    "height": 256,
+    "near_transparent_pixels": 35054,
+    "solid_pixels": 27460
+  },
+  {
+    "file": "cat_success.png",
+    "bytes": 117147,
+    "sha256": "8dc2317117381b07cee3c18f5ebf9245d35b558b6165ba2f61eb514d7ce44801",
+    "width": 256,
+    "height": 256,
+    "near_transparent_pixels": 34153,
+    "solid_pixels": 28295
+  },
+  {
+    "file": "cat_error.png",
+    "bytes": 110274,
+    "sha256": "29ff1ee1888126ab99a53290ac02cd800339b4695a47ad2f1d04b295244b8f81",
+    "width": 256,
+    "height": 256,
+    "near_transparent_pixels": 35911,
+    "solid_pixels": 26811
+  },
+  {
+    "file": "dog_idle.png",
+    "bytes": 132696,
+    "sha256": "b49ae016203d55c2f403d182689173297a7c866c983f1b1efc1a5f2adeadd4eb",
+    "width": 256,
+    "height": 256,
+    "near_transparent_pixels": 24593,
+    "solid_pixels": 24779
+  },
+  {
+    "file": "dog_thinking.png",
+    "bytes": 135526,
+    "sha256": "ae0b0201ec050135f89de11f68e13e0e9c5c9c2c8292b37522bdf0a052ea1075",
+    "width": 256,
+    "height": 256,
+    "near_transparent_pixels": 23265,
+    "solid_pixels": 24544
+  },
+  {
+    "file": "dog_working.png",
+    "bytes": 135959,
+    "sha256": "63e6c0015ee970ef78da7d1d69bdedffd1dd6fbf4813928b03a75b6f30cde88f",
+    "width": 256,
+    "height": 256,
+    "near_transparent_pixels": 27342,
+    "solid_pixels": 25770
+  },
+  {
+    "file": "dog_waiting.png",
+    "bytes": 132825,
+    "sha256": "8c6b8b3f62f8e64c506928e8716d393c9aad2d1d03db2b52e9c2fb8d39f911d2",
+    "width": 256,
+    "height": 256,
+    "near_transparent_pixels": 25885,
+    "solid_pixels": 24635
+  },
+  {
+    "file": "dog_success.png",
+    "bytes": 142748,
+    "sha256": "636faa24fe8bdf46182421c2811030f2b22ac50f9394fed7b4a7d24b89e53004",
+    "width": 256,
+    "height": 256,
+    "near_transparent_pixels": 21829,
+    "solid_pixels": 26345
+  },
+  {
+    "file": "dog_error.png",
+    "bytes": 127754,
+    "sha256": "fc53ab9e796d6f2f046bd53bce27d0494efce89282e3ce462089f82dbf076dd9",
+    "width": 256,
+    "height": 256,
+    "near_transparent_pixels": 29314,
+    "solid_pixels": 24639
+  }
+]

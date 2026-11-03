@@ -9,11 +9,18 @@ pub(super) enum PetCommand {
         skin: String,
         size: u16,
         reduced_motion: bool,
+        bubble_style: String,
+        bubble_color: String,
+        bubble_opacity: u8,
+        notice_seconds: u8,
     },
     Import {
         state: String,
     },
     Preview,
+    CopyPrompt {
+        text: String,
+    },
 }
 impl App {
     pub(super) fn desktop_notice(&mut self, message: &str) {
@@ -23,6 +30,7 @@ impl App {
     }
     pub(super) fn pet_command(&mut self, command: PetCommand) -> AppResult<()> {
         let result = (|| {
+            let mut include_images = true;
             match command {
                 PetCommand::State => (),
                 PetCommand::Configure {
@@ -30,12 +38,22 @@ impl App {
                     skin,
                     size,
                     reduced_motion,
+                    bubble_style,
+                    bubble_color,
+                    bubble_opacity,
+                    notice_seconds,
                 } => {
                     let mut settings = self.pet.settings();
+                    // 精細圖檔較大；滑桿調整只回偏好，換角色或匯入時才傳六張預覽。
+                    include_images = settings.skin != skin;
                     settings.enabled = enabled;
                     settings.skin = skin;
                     settings.size = size;
                     settings.reduced_motion = reduced_motion;
+                    settings.bubble_style = bubble_style;
+                    settings.bubble_color = bubble_color;
+                    settings.bubble_opacity = bubble_opacity;
+                    settings.notice_seconds = notice_seconds;
                     self.pet.configure(settings)?;
                 }
                 PetCommand::Import { state } => {
@@ -47,13 +65,25 @@ impl App {
                         self.view.post(&json!({"type":"pet_imported","message":format!("已保留透明度並壓縮為 {:.1} KB，原圖未變更。",bytes as f64/1000.0)}))?;
                     }
                 }
+                PetCommand::CopyPrompt { text } => {
+                    if text.chars().count() > 8000 {
+                        return Err("提示詞請勿超過8000字。".into());
+                    }
+                    selection::copy_text(self.window, &text)?;
+                    self.view
+                        .post(&json!({"type":"pet_imported","message":"提示詞已複製。"}))?;
+                }
                 PetCommand::Preview => {
                     self.work.tray_restore_only = true;
                     self.desktop_notice("這是桌寵通知。點一下可回到主視窗；拖曳角色可移動位置。");
                 }
             }
-            self.view
-                .post(&json!({"type":"pet_state","state":self.pet.state()?}))
+            let state = if include_images {
+                self.pet.state()?
+            } else {
+                json!({"settings": self.pet.settings()})
+            };
+            self.view.post(&json!({"type":"pet_state","state":state}))
         })();
         if let Err(error) = &result {
             let _ = self.view.post(&json!({"type":"pet_error","message":error}));

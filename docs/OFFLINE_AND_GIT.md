@@ -1,6 +1,6 @@
 # 離線交付與 Git
 
-現行版本與下載見[首頁](../README.md)，建置方式見[開發說明](DEVELOPMENT.md)。目前發行EXE與NSIS均為0.8.77；舊完整Rust離線ZIP已移至本機[舊版留存](ARCHIVE_POLICY.md)，不再作為目前下載項目。
+現行版本與下載見[首頁](../README.md)，建置方式見[開發說明](DEVELOPMENT.md)。目前發行EXE與NSIS均為0.8.78；舊完整Rust離線ZIP已移至本機[舊版留存](ARCHIVE_POLICY.md)，不再作為目前下載項目。
 
 ## 現行檔案
 

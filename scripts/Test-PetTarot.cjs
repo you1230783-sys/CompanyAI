@@ -35,8 +35,8 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
       window.testCommands=[];send=command=>testCommands.push(command);
       LMUI.receive({...LMUI.getState(),logged_in:false,busy:'none'});
       check(!$('show-tarot').disabled && !$('show-pet').disabled,'offline entries enabled');
-      TarotUI.open();check(testCommands.at(-1).command.action==='state','opens native local round');
-      const round={id:'test-round',count:3,chosen:[],sent:false};
+      $('show-advanced').click();check($('advanced-dialog').open && !$('sidebar').contains($('show-pet')),'advanced menu frees sidebar rows');$('show-tarot').click();check(testCommands.at(-1).command.action==='state','opens native local round');
+      const round={id:'test-round',count:3,chosen:[],sent:false,history:[],used:[],remaining:78};
       TarotUI.receive({type:'tarot_state',state:round});
       check(document.querySelectorAll('.tarot-back').length===78,'78 separate card backs');
       check(getComputedStyle(document.querySelector('.tarot-back')).backgroundImage.includes('tarot/back.jpg'),'card back image survives shared dialog button styles');
@@ -45,6 +45,7 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
       round.chosen=[{slot:13,name:'愚者',image:'tarot/00.jpg',position:'現況',reversed:false,meaning:'新的開始'},
         {slot:40,name:'寶劍三',image:'tarot/52.jpg',position:'阻礙',reversed:true,meaning:'整理感受'},
         {slot:77,name:'星星',image:'tarot/17.jpg',position:'建議',reversed:false,meaning:'逐步累積信心'}];
+      round.used=[13,40,77];round.remaining=75;
       TarotUI.receive({type:'tarot_state',state:round});
       check([...document.querySelectorAll('.tarot-back')].every(b=>b.disabled),'complete round prevents fourth pick');
       check(document.querySelectorAll('.tarot-face.reversed').length===1 && getComputedStyle(document.querySelector('.tarot-face.reversed')).transform==='matrix(-1, 0, 0, -1, 0, 0)','reversed image rotates 180 degrees without a second asset');
@@ -60,11 +61,30 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
       check(testCommands.at(-1).command.question==='如何安排工作？' && testCommands.at(-1).command.action==='analyze','explicit AI button sends exact question and round');
       TarotUI.receive({type:'tarot_state',state:{...round,sent:true}});
       check(document.querySelector('[data-submit]').disabled,'sent round cannot be submitted again');
+      document.querySelector('[data-continue]').click();
+      check(testCommands.at(-1).command.action==='continue' && testCommands.at(-1).command.id===round.id,'continue uses existing deck');
+      TarotUI.receive({type:'tarot_state',state:{...round,id:'next-round',count:1,chosen:[],sent:false,history:[{number:1,question:'如何安排工作？',chosen:round.chosen}]}});
+      check(document.querySelectorAll('.tarot-back')[13].disabled && document.querySelector('[data-history]').textContent.includes('愚者'),'previous picks disabled and history retained');
+      check(!document.querySelectorAll('.tarot-back')[0].disabled,'unused cards remain available');
       $('tarot-dialog').close();PetUI.open();
       PetUI.receive({type:'pet_state',state:{settings:{enabled:true,skin:'cat',size:120,reduced_motion:false},images:['idle','thinking','working','waiting','success','error'].map(action=>({action,bytes:6000,url:'pets/cat_idle.png'}))}});
       check(document.querySelector('[data-prompt]').value.startsWith('角色名稱／類型：') && document.querySelector('[data-prompt]').value.includes('米奇'),'character first and reminder in AI generation prompt');
       check(document.querySelectorAll('.pet-images img').length===6,'six independently replaceable poses');
       check($('pet-dialog').textContent.includes('只接受 PNG') && $('pet-dialog').textContent.includes('建議先去背') && $('pet-dialog').textContent.includes('500 KB'),'PNG transparency and compression guidance');
+      const petState={settings:{enabled:true,skin:'cat',size:120,reduced_motion:false,bubble_style:'round',bubble_color:'#fff8ed',bubble_opacity:100,notice_seconds:5},images:['idle','thinking','working','waiting','success','error'].map(action=>({action,bytes:6000,url:'pets/cat_idle.png'}))};
+      check(!document.querySelector('[data-save]'),'no apply button');
+      const change=(selector,value)=>{const element=document.querySelector(selector);element.value=value;element.dispatchEvent(new Event('input',{bubbles:true}));};
+      change('[data-size]',160);check(testCommands.at(-1).command.size===160,'size saves immediately');
+      change('[data-seconds]',0);change('[data-style]','thought');change('[data-color]','#112233');change('[data-transparency]',45);
+      PetUI.receive({type:'pet_state',state:petState});
+      check(testCommands.at(-1).command.notice_seconds===0 && testCommands.at(-1).command.bubble_style==='thought' && testCommands.at(-1).command.bubble_color==='#112233' && testCommands.at(-1).command.bubble_opacity===55,'rapid edits coalesce without losing the latest preferences');
+      check(document.querySelector('[data-size]').value==='160','old acknowledgment does not revert current controls');
+      PetUI.receive({type:'pet_state',state:{...petState,settings:{...petState.settings,size:160,notice_seconds:0,bubble_style:'thought',bubble_color:'#112233',bubble_opacity:55}}});
+      PetUI.receive({type:'pet_state',state:{settings:petState.settings}});check(document.querySelectorAll('.pet-images img').length===6,'settings-only reply retains the six image previews');
+      document.querySelector('[data-generator]').click();check($('pet-generator-dialog').open && !document.querySelector('[data-prompt]').readOnly,'editable character prompt in modal');
+      document.querySelector('[data-prompt]').value='角色名稱／類型：一隻貓';document.querySelector('[data-copy]').click();
+      check(testCommands.at(-1).command.action==='copy_prompt' && testCommands.at(-1).command.text==='角色名稱／類型：一隻貓','copy sends the edited prompt');
+      PetUI.receive({type:'pet_state',state:petState});$('pet-generator-dialog').close();
       document.querySelector('.pet-images button').click();
       check(testCommands.at(-1).command.action==='import' && testCommands.at(-1).command.state==='idle','upload targets one pose');
       return checks;
@@ -76,6 +96,20 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
       const picture=await call('Page.captureScreenshot',{format:'png'});
       fs.writeFileSync('.build/pet-ui-'+width+'.png',Buffer.from(picture.data,'base64'));
     }
+    await call('Emulation.setDeviceMetricsOverride',{width:1180,height:850,deviceScaleFactor:1,mobile:false});
+    for(const style of ['round','comic','thought']) {
+      await evaluate(`PetUI.receive({type:'pet_state',state:{settings:{enabled:true,skin:'cat',size:120,reduced_motion:false,bubble_style:'${style}',bubble_color:'#fff8ed',bubble_opacity:100,notice_seconds:5},images:['idle','thinking','working','waiting','success','error'].map(action=>({action,bytes:6000,url:'pets/cat_idle.png'}))}})`);
+      const picture=await call('Page.captureScreenshot',{format:'png'});
+      fs.writeFileSync('.build/pet-bubble-'+style+'.png',Buffer.from(picture.data,'base64'));
+    }
+    for(const animal of ['cat','dog']) {
+      await evaluate(`PetUI.receive({type:'pet_state',state:{settings:{enabled:true,skin:'${animal}',size:120,reduced_motion:false,bubble_style:'round',bubble_color:'#fff8ed',bubble_opacity:100,notice_seconds:5},images:['idle','thinking','working','waiting','success','error'].map(action=>({action,bytes:130000,url:'pets/${animal}_'+action+'.png'}))}})`);
+      const picture=await call('Page.captureScreenshot',{format:'png'});
+      fs.writeFileSync('.build/pet-art-'+animal+'.png',Buffer.from(picture.data,'base64'));
+    }
+    await evaluate(`$('pet-dialog').close();$('show-advanced').click();`);
+    const menuPicture=await call('Page.captureScreenshot',{format:'png'});
+    fs.writeFileSync('.build/advanced-menu.png',Buffer.from(menuPicture.data,'base64'));
     fs.writeFileSync('.build/pet-tarot-ui-verification.json',JSON.stringify({result:'PASS',checks:results},null,2));
     console.log(JSON.stringify({result:'PASS',checks:results}));
   } finally {if(ws)ws.close();edge.kill();}

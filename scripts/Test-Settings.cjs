@@ -63,7 +63,7 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
       tabs[0].dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}));
       check(!$('settings-panel-3').hidden && $('settings-panel-0').hidden,'End selects the last tutorial tab');
       check($('tutorial-catalog').closest('#settings-panel-3') && $('updates-replay').closest('#settings-panel-3'),'tutorials and release history have their own panel');
-      check(document.querySelectorAll('#tutorial-catalog .tutorial-topic').length===55,'all 55 interactive tutorial topics rendered');
+      check(document.querySelectorAll('#tutorial-catalog .tutorial-topic').length===57,'all 57 interactive tutorial topics rendered');
       check(!$('release-history'),'no duplicate inline release history');
       tabs[3].dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));
       check(!$('settings-panel-2').hidden && $('settings-panel-3').hidden,'ArrowLeft returns to Advanced');
@@ -126,7 +126,7 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
         'projects.practice.files':['訂單小工具','▤ README.md','下一步','▸ src','▤ main.cpp'],
         'projects.practice.request':['下一步','填入範例要求','要求寫好了','送出（教學示範）','下一步']
       };
-      check(ProjectTutorial.catalog.length===55,'runtime tutorial catalogue contains all 55 topics');
+      check(ProjectTutorial.catalog.length===57,'runtime tutorial catalogue contains all 57 topics');
       for(const topic of ProjectTutorial.catalog){
         ProjectTutorial.open({topic:topic.id,onComplete:id=>finished.push(id)});
         await pause();
@@ -154,7 +154,7 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
         check(finished.includes(topic.id),'topic completion callback: '+topic.id);
         ProjectTutorial.close();await pause();
       }
-      check(new Set(finished).size===55,'all topics finish exactly once');
+      check(new Set(finished).size===57,'all topics finish exactly once');
       check(testCommands.length===originalCommands && $('prompt').value===originalDraft,'practice does not send native commands or change real draft');
       ProjectTutorial.open();await pause();
       const search=$('practice-topic-search');search.value='不存在的教學詞';search.dispatchEvent(new Event('input'));
@@ -165,7 +165,7 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
       $('settings-dialog').showModal();
       return {topics:finished.length,native_commands_added:testCommands.length-originalCommands,draft_unchanged:$('prompt').value===originalDraft};
     })()`);
-    checks.push('all 55 tutorials completed in real browser; input/select/checkbox gates, focus, isolation and search');
+    checks.push('all 57 tutorials completed in real browser; input/select/checkbox gates, focus, isolation and search');
     fs.writeFileSync('.build/tutorials-review.json',JSON.stringify({result:'PASS',...tutorialChecks},null,2));
     await evaluate(`SettingsUI.select(1);`);await capture('operations-narrow',520,'light');
     await evaluate(`SettingsUI.select(0);`);await capture('general-light',1180,'light');

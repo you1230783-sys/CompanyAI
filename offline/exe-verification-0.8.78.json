@@ -1,0 +1,54 @@
+{
+  "recorded_at": "2026-11-03T10:54:54.9535813+08:00",
+  "version": "0.8.78.0",
+  "result": "PASS_BASIC",
+  "validation_scope": "focused basic/native plus complete Rust library and separate NSIS lifecycle; no new Office/CAD drawing or true-model run",
+  "msvc": "14.29.30133",
+  "compiler": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\cl.exe",
+  "compiler_report": [
+    "v142.c",
+    "Verified _MSC_FULL_VER=192930159 x64"
+  ],
+  "linker": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\link.exe",
+  "windows_sdk": "10.0.19041.0\\",
+  "empty_cargo_cache": true,
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-4465bf5bd63345d48e28e65a2fad5e8c",
+  "checks": [
+    "v142 x64 actual compiler probe",
+    "fmt",
+    "Clippy all targets",
+    "jobs, demo work, source code, text, skills, schema, CAD broker and tool contract tests",
+    "cargo build --release --frozen",
+    "CAD synthetic contracts and native runtime/inventory pipe without drawing",
+    "Outlook helper pipe/EOF without mailbox access",
+    "Python runtime self-check",
+    "WebView2 UI and native composer self-check",
+    "native task rejection, repeated error, DPAPI restore and late event checks",
+    "read-only source formats, native worker, paging, revision and copy rejection",
+    "DLL dependency inspection",
+    "NSIS packaging and native signed manifest/package verification",
+    "456 Rust library tests after final version build",
+    "separate Test-Installer.ps1 full lifecycle PASS"
+  ],
+  "task_tracking_cases": [
+    "pending POST has no GET; 413 stops, survives DPAPI reload and ignores late events",
+    "third identical 404 with healthy models stops; partial answer and stopped state persist",
+    "503 retries original ID despite healthy model list; stops after five persisted waits",
+    "confirmed transient failure schedules replacement; stopping prevents restart",
+    "changing errors and successful GET reset the consecutive failure count",
+    "SSE task ID supersedes late by-request errors without counting them"
+  ],
+  "exe_sha256": "243160e18547b127afe5d16affe7c4f3a968dd1efaa83b60f1d309c561904349",
+  "installer_built": true,
+  "installer_installation_tested": true,
+  "full_validation_completed": false,
+  "company_service_tested": false,
+  "deferred": [
+    "full workspace tests",
+    "project and Python isolation/long-task integration",
+    "Office and SMB integration",
+    "company PDF and chat service acceptance"
+  ],
+  "installer_sha256": "21159f57d3fc332cbe68fc8acb8f1f42e8e246be3213153a54323dff1fa82f72",
+  "rust_library_tests": 456
+}

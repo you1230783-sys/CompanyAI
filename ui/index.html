@@ -29,15 +29,7 @@
             data-icon="panel"
           ></button>
         </div>
-        <button id="show-pet" class="nav-button" data-offline="true" title="桌寵與通知"><span>♧</span><span class="nav-label">桌寵與通知</span></button>
-        <button id="show-tarot" class="nav-button" data-offline="true" title="離線塔羅"><span>✦</span><span class="nav-label">塔羅牌桌</span></button>
-        <button id="show-outlook" class="nav-button" title="Outlook 助理">
-          <span data-icon="mail"></span
-          ><span class="nav-label">Outlook 助理</span>
-        </button>
-        <button id="show-vnc" class="nav-button" title="VNC 快速連線" hidden>
-          <span data-icon="monitor"></span><span class="nav-label">VNC 快速連線</span>
-        </button>
+        <button id="show-advanced" class="nav-button" data-offline="true" title="進階功能" aria-haspopup="dialog"><span>✦</span><span class="nav-label">進階功能</span></button>
         <section class="project-section" aria-label="專案">
           <div class="section-caption"><button id="collapse-projects" class="section-toggle nav-label" aria-controls="project-list" aria-expanded="true">▾ 專案</button><button id="new-project" class="text-button" title="新增專案"><span data-icon="plus"></span><span class="nav-label">新增專案</span></button></div>
           <div id="project-list" class="nav-label"></div>
@@ -708,6 +700,20 @@
       <textarea id="diagram-source-text" readonly rows="20" aria-label="唯讀來源預覽"></textarea>
     </dialog>
     <div id="toast" role="status" aria-live="polite" popover="manual" hidden></div>
+    <dialog id="advanced-dialog" class="advanced-dialog" data-offline="true" aria-labelledby="advanced-title">
+      <div class="tarot-heading"><div><h2 id="advanced-title">進階功能</h2><p>桌寵、塔羅與工作工具集中在這裡。</p></div><button data-advanced-close aria-label="關閉進階功能">✕</button></div>
+      <div class="advanced-grid">        <button id="show-pet" class="nav-button" data-offline="true" title="桌寵與通知"><span>♧</span><span class="nav-label">桌寵與通知</span></button>
+        <button id="show-tarot" class="nav-button" data-offline="true" title="離線塔羅"><span>✦</span><span class="nav-label">塔羅牌桌</span></button>
+        <button id="show-outlook" class="nav-button" title="Outlook 助理">
+          <span data-icon="mail"></span
+          ><span class="nav-label">Outlook 助理</span>
+        </button>
+        <button id="show-vnc" class="nav-button" title="VNC 快速連線" hidden>
+          <span data-icon="monitor"></span><span class="nav-label">VNC 快速連線</span>
+        </button>
+</div>
+      <p class="subtle">桌寵與塔羅可離線使用；Outlook 與 VNC 需先登入，VNC 另依設定啟用。</p>
+    </dialog>
     <script src="vendor/markdown-it.min.js"></script>
     <script src="vendor/footnote.min.js"></script>
     <script src="vendor/task-lists.min.js"></script>

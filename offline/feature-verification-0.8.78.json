@@ -1,0 +1,43 @@
+{
+  "version": "0.8.78.0",
+  "recorded_at": "2026-11-03T11:04:21.0392409+08:00",
+  "result": "PASS_FOCUSED_BUILD_AND_INSTALLER",
+  "exe_sha256": "243160e18547b127afe5d16affe7c4f3a968dd1efaa83b60f1d309c561904349",
+  "setup_sha256": "21159f57d3fc332cbe68fc8acb8f1f42e8e246be3213153a54323dff1fa82f72",
+  "setup_bytes": 55101857,
+  "msvc": "14.29.30133",
+  "empty_cargo_cache_files": [
+    ".global-cache",
+    ".package-cache",
+    ".package-cache-mutate",
+    "registry/CACHEDIR.TAG"
+  ],
+  "rust_library_tests": 456,
+  "cad_contract_tests": 101,
+  "pet_tarot_ui_checks": 28,
+  "interactive_tutorials": 57,
+  "dialog_auth_checks": 20,
+  "pet_artwork": {
+    "generator": "built-in image_gen",
+    "source_atlases": 2,
+    "poses": 12,
+    "width": 256,
+    "height": 256,
+    "max_bytes": 142748,
+    "total_bytes": 1479410,
+    "source_and_output_hashes_checked": true,
+    "alpha_preserved": true
+  },
+  "installer_lifecycle": "PASS",
+  "full_application_integration_retested": false,
+  "true_model_retested": false,
+  "limits": [
+    "No new Office, SMB, VNC or CAD drawing integration run.",
+    "Company environment, model dialogue, pet notification click and drag need field acceptance.",
+    "Tarot deck history lasts for the running application; not persisted across exit."
+  ],
+  "failure_history": [
+    "R1 build stopped before packaging after user requested new artwork; replaced by complete R2.",
+    "Candidate failures and fixes retained in local test logs."
+  ]
+}

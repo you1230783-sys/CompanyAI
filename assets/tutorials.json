@@ -548,5 +548,25 @@
     "intro": "先辨識目標，再要求支援的二維操作。",
     "interactive": true,
     "steps": []
+  },
+  {
+    "id": "settings.pet",
+    "revision": 1,
+    "group": "進階功能",
+    "context": "settings",
+    "title": "桌寵與通知泡泡",
+    "intro": "練習即時調整、通知時間與自訂角色提示詞。",
+    "interactive": true,
+    "steps": []
+  },
+  {
+    "id": "settings.tarot",
+    "revision": 1,
+    "group": "進階功能",
+    "context": "settings",
+    "title": "塔羅抽牌與延續提問",
+    "intro": "練習離線抽牌、看牌義、同牌桌續問與AI解析。",
+    "interactive": true,
+    "steps": []
   }
 ]

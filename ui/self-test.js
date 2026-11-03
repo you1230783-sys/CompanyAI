@@ -1214,7 +1214,8 @@ window.runSelfTest = async (structuredFixture) => {
     check(!$("update-shortcut").hidden, "update arrow appears for available release");
     check($("project-list").textContent.includes("專案標題"), "project conversation appears inside project");
     check(!$("history-list").textContent.includes("專案標題"), "project conversation excluded from recent list");
-    check(!!($("show-vnc").compareDocumentPosition($("project-list")) & Node.DOCUMENT_POSITION_FOLLOWING), "projects follow VNC");
+    check($("advanced-dialog").contains($("show-vnc")) && !$("sidebar").contains($("show-vnc")), "VNC is grouped in advanced functions");
+    check(!!($("show-advanced").compareDocumentPosition($("project-list")) & Node.DOCUMENT_POSITION_FOLLOWING), "projects follow the single advanced entry");
     check(!!($("project-list").compareDocumentPosition($("history-list")) & Node.DOCUMENT_POSITION_FOLLOWING), "projects precede recent history");
     const savedActive = fixture.active_id, savedMessages = fixture.messages, savedNotifications = fixture.notifications;
     const savedSend = send, retryCommands = [];

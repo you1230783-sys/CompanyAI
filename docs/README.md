@@ -4,6 +4,8 @@
 
 ## 保留版本與驗證
 
+- [0.8.78：桌寵泡泡、塔羅續問與進階功能](VALIDATION_0_8_78.md)
+
 - [0.8.77：桌寵、塔羅、Office、聊天恢復與 CAD](VALIDATION_0_8_77.md)
 - [0.8.76：專案工作與來源筆記](VALIDATION_0_8_76.md)
 - [0.8.75：互動教學](VALIDATION_0_8_75.md)
@@ -21,7 +23,7 @@
 | [本機模型驗證](LOCAL_MODEL_VALIDATION.md) | 真模型與原生驗證的判定界線 |
 | [Luna 測試入口](LOCAL_LUNA_TEST.md) | 本機模型轉接與測試方式 |
 | [Python 執行環境](PYTHON_RUNTIME.md) | 固定輸入、隔離與重建 |
-| [互動教學覆蓋](TUTORIAL_COVERAGE.md) | 55 個主題與維護入口 |
+| [互動教學覆蓋](TUTORIAL_COVERAGE.md) | 57 個主題與維護入口 |
 | [教學預覽](PROJECT_TUTORIAL_PREVIEW.md) | 不登入的假資料預覽 |
 
 ## 串接與功能規格

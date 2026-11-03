@@ -1,5 +1,6 @@
 //! 無邊框、逐像素透明的桌寵。僅依本機任務狀態換圖，不自行呼叫AI。
 //! 視窗不搶焦點，透明區域由layered window穿透；點擊才通知主視窗。
+mod bubble;
 pub mod png;
 use crate::{storage, wide, AppResult};
 use serde::{Deserialize, Serialize};
@@ -31,6 +32,12 @@ pub struct Settings {
     pub size: u16,
     pub reduced_motion: bool,
     pub position: Option<[i32; 2]>,
+    pub bubble_style: String,
+    pub bubble_color: String,
+    /// 0為完全透明，100為不透明；只影響泡泡。
+    pub bubble_opacity: u8,
+    /// 0秒表示不顯示通知泡泡，通知中心仍保存通知。
+    pub notice_seconds: u8,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -40,6 +47,10 @@ impl Default for Settings {
             size: 120,
             reduced_motion: false,
             position: None,
+            bubble_style: "round".into(),
+            bubble_color: "#FFF8ED".into(),
+            bubble_opacity: 100,
+            notice_seconds: 5,
         }
     }
 }
@@ -47,8 +58,16 @@ impl Settings {
     fn validate(&self) -> AppResult<()> {
         if !["cat", "dog", "custom"].contains(&self.skin.as_str())
             || !(72..=200).contains(&self.size)
+            || !["round", "comic", "thought"].contains(&self.bubble_style.as_str())
+            || self.bubble_color.len() != 7
+            || !self.bubble_color.starts_with('#')
+            || !self.bubble_color.as_bytes()[1..]
+                .iter()
+                .all(u8::is_ascii_hexdigit)
+            || self.bubble_opacity > 100
+            || self.notice_seconds > 5
         {
-            return Err("桌寵角色或尺寸不正確。".into());
+            return Err("桌寵角色、尺寸或泡泡設定不正確。".into());
         }
         Ok(())
     }
@@ -220,8 +239,21 @@ impl Pet {
     }
     pub fn configure(&mut self, settings: Settings) -> AppResult<()> {
         settings.validate()?;
+        let old = self.settings();
+        let reload = old.skin != settings.skin;
+        if old.notice_seconds != settings.notice_seconds {
+            if let Some((_, deadline)) = &mut self.state.borrow_mut().notice {
+                *deadline =
+                    Instant::now() + Duration::from_secs(u64::from(settings.notice_seconds));
+            }
+        }
+        if settings.notice_seconds == 0 {
+            self.state.borrow_mut().notice = None;
+        }
         self.state.borrow_mut().settings = settings;
-        self.load_images()?;
+        if reload || self.encoded.is_empty() {
+            self.load_images()?;
+        }
         self.save()?;
         self.last_draw = Instant::now() - Duration::from_secs(1);
         self.tick("idle")
@@ -243,6 +275,7 @@ impl Pet {
         let folder = self.root.join("pet-images");
         std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
         storage::atomic_write(&folder.join(format!("{action}.png")), &bytes)?;
+        self.encoded.clear(); // 已是自訂角色時，也必須重載剛匯入的動作。
         let mut settings = self.settings();
         settings.skin = "custom".into();
         self.configure(settings)?;
@@ -260,9 +293,13 @@ impl Pet {
         Ok(json!({"settings":self.settings(),"images":images}))
     }
     pub fn notify(&mut self, message: &str) {
+        let seconds = self.settings().notice_seconds;
+        if seconds == 0 {
+            return;
+        }
         self.state.borrow_mut().notice = Some((
             message.chars().take(180).collect(),
-            Instant::now() + Duration::from_secs(15),
+            Instant::now() + Duration::from_secs(u64::from(seconds)),
         ));
         self.last_draw = Instant::now() - Duration::from_secs(1);
         let _ = self.tick(if message.contains("失敗") || message.contains("錯誤") {
@@ -307,7 +344,7 @@ unsafe fn draw(window: HWND, state: &State) -> AppResult<()> {
     let scale = |n: i32| n * dpi / 96;
     let size = scale(state.settings.size as i32);
     let width = scale(320);
-    let height = scale(120) + size + scale(8);
+    let height = scale(136) + size + scale(8);
     let dc = GetDC(ptr::null_mut());
     let memory = CreateCompatibleDC(dc);
     let info = BITMAPINFO {
@@ -336,17 +373,19 @@ unsafe fn draw(window: HWND, state: &State) -> AppResult<()> {
     let pixels = std::slice::from_raw_parts_mut(bits.cast::<u8>(), (width * height * 4) as usize);
     pixels.fill(0);
     if let Some((message, _)) = &state.notice {
-        let rect = RECT {
-            left: 0,
-            top: 0,
-            right: width,
-            bottom: scale(110),
-        };
-        let brush = CreateSolidBrush(0x00F4F8FF);
-        FillRect(memory, &rect, brush);
-        DeleteObject(brush);
+        let bubble_height = scale(128) as usize;
+        let mask = bubble::paint(pixels, width as usize, bubble_height, &state.settings);
         SetBkMode(memory, TRANSPARENT as i32);
-        SetTextColor(memory, 0x003C3028);
+        let [b, g, r] = bubble::color(&state.settings.bubble_color);
+        let luminance = u32::from(r) * 299 + u32::from(g) * 587 + u32::from(b) * 114;
+        SetTextColor(
+            memory,
+            if luminance > 145_000 {
+                0x003C3028
+            } else {
+                0x00FFFFFF
+            },
+        );
         let font = CreateFontW(
             -scale(16),
             0,
@@ -366,10 +405,10 @@ unsafe fn draw(window: HWND, state: &State) -> AppResult<()> {
         let old_font = SelectObject(memory, font);
         let text = wide(&format!("{message}\n點一下查看"));
         let mut text_rect = RECT {
-            left: scale(14),
-            top: scale(10),
-            right: width - scale(14),
-            bottom: scale(100),
+            left: scale(24),
+            top: scale(15),
+            right: width - scale(24),
+            bottom: scale(94),
         };
         DrawTextW(
             memory,
@@ -380,12 +419,17 @@ unsafe fn draw(window: HWND, state: &State) -> AppResult<()> {
         );
         SelectObject(memory, old_font);
         DeleteObject(font);
-        // GDI字體不寫alpha；氣泡區域明確不透明，避免文字在layered window消失。
-        for pixel in pixels[..(width * scale(110) * 4) as usize]
+        // GDI字體不寫alpha；依輪廓遮罩恢復透明度並轉為layered window預乘色。
+        for (pixel, alpha) in pixels[..width as usize * bubble_height * 4]
             .as_chunks_mut::<4>()
             .0
+            .iter_mut()
+            .zip(mask)
         {
-            pixel[3] = 255;
+            for channel in &mut pixel[..3] {
+                *channel = (u16::from(*channel) * u16::from(alpha) / 255) as u8;
+            }
+            pixel[3] = alpha;
         }
     }
     if state.settings.enabled {
@@ -399,7 +443,7 @@ unsafe fn draw(window: HWND, state: &State) -> AppResult<()> {
         let w = (image.width as f64 * ratio) as i32;
         let h = (image.height as f64 * ratio) as i32;
         let left = width - size + (size - w) / 2;
-        let top = scale(120) + size - h + bob.max(0);
+        let top = scale(136) + size - h + bob.max(0);
         for y in 0..h {
             for x in 0..w {
                 let from = ((y as usize * image.height / h as usize) * image.width
@@ -573,6 +617,22 @@ mod tests {
     use super::*;
     use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
 
+    #[test]
+    fn legacy_preferences_gain_bubble_defaults_and_reject_invalid_values() {
+        let mut settings: Settings = serde_json::from_str(r#"{"skin":"dog","size":136}"#).unwrap();
+        assert_eq!(settings.bubble_style, "round");
+        assert_eq!(settings.notice_seconds, 5);
+        for seconds in 0..=5 {
+            settings.notice_seconds = seconds;
+            assert!(settings.validate().is_ok());
+        }
+        settings.notice_seconds = 6;
+        assert!(settings.validate().is_err());
+        settings.notice_seconds = 0;
+        settings.bubble_color = "#GGGGGG".into();
+        assert!(settings.validate().is_err());
+    }
+
     /// 實際建立透明視窗，核對隱藏角色仍能通知、通知到期及設定重開。
     /// 不向使用者視窗送輸入，也不依賴截圖外觀代替Win32狀態核對。
     #[test]
@@ -596,6 +656,7 @@ mod tests {
             size: 136,
             reduced_motion: true,
             position: None,
+            ..Default::default()
         };
         pet.configure(settings).unwrap();
         assert_ne!(unsafe { IsWindowVisible(pet.window) }, 0);
@@ -613,6 +674,11 @@ mod tests {
         pet.state.borrow_mut().notice.as_mut().unwrap().1 = Instant::now();
         pet.tick("idle").unwrap();
         assert_eq!(unsafe { IsWindowVisible(pet.window) }, 0);
+        let mut settings = pet.settings();
+        settings.notice_seconds = 0;
+        pet.configure(settings).unwrap();
+        pet.notify("0秒不顯示");
+        assert!(pet.state.borrow().notice.is_none());
         let window = pet.window;
         drop(pet);
         assert_eq!(unsafe { IsWindow(window) }, 0);
