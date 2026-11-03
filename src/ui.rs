@@ -36,9 +36,11 @@ mod access;
 mod diagnostics;
 mod mail_batch;
 mod onboarding;
+mod pet;
 mod projects;
 mod retry;
 mod site;
+mod tarot;
 mod tutorial_preview;
 mod vnc;
 mod window_behavior;
@@ -49,6 +51,12 @@ const TRAY_MESSAGE: u32 = WM_APP + 4;
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Command {
+    Pet {
+        command: pet::PetCommand,
+    },
+    Tarot {
+        command: tarot::TarotCommand,
+    },
     OnboardingWelcomeDismiss,
     OnboardingAck {
         topic: String,
@@ -196,6 +204,8 @@ enum Event {
     AllRead(u64, usize),
 }
 struct App {
+    pet: crate::pet::Pet,
+    tarot: crate::tarot::Round,
     onboarding: onboarding::Onboarding,
     projects: projects::ProjectRuntime,
     vnc: vnc::VncRuntime,
@@ -262,7 +272,7 @@ impl Drop for App {
         self.cancelled.store(true, Ordering::Relaxed);
         self.socket_cancel.store(true, Ordering::Relaxed);
         selection::unregister(self.window);
-        tray(self.window, NIM_DELETE, None);
+        tray(self.window, NIM_DELETE);
     }
 }
 impl App {
@@ -691,6 +701,8 @@ impl App {
     fn command(&mut self, command: Command) -> AppResult<()> {
         command.check_access(self.logged_in(), self.versions.blocked(), self.smoke)?;
         match command {
+            Command::Pet { command } => self.pet_command(command)?,
+            Command::Tarot { command } => self.tarot_command(command)?,
             Command::OnboardingAck { topic } => self.onboarding.acknowledge(&topic)?,
             Command::OnboardingWelcomeDismiss => self.onboarding.dismiss_practice_welcome()?,
             Command::ExportDiagnostics { include_details } => {
@@ -1571,11 +1583,7 @@ impl App {
                         if added > 0 && self.config.notification_popups && !self.is_foreground() {
                             self.work.tray_restore_only = false;
                             self.work.task_balloon = false;
-                            tray(
-                                self.window,
-                                NIM_MODIFY,
-                                Some(&format!("收到 {added} 則新通知，點一下查看。")),
-                            );
+                            self.desktop_notice(&format!("收到 {added} 則新通知，點一下查看。"));
                         }
                         if more || self.notifications_pending {
                             self.notifications_pending = false;
@@ -1602,6 +1610,7 @@ impl App {
         Ok(())
     }
     fn tick(&mut self) {
+        self.tick_pet();
         let mut changed = false;
         // 先處理到期，再接受 UI 命令或背景結果，不能因本機工作忙碌而繼續使用過期授權。
         if !self.smoke && self.session.is_some() && !self.logged_in() && self.busy != "login" {
@@ -1878,7 +1887,7 @@ fn taskbar_created_message() -> u32 {
     *MESSAGE.get_or_init(|| unsafe { RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()) })
 }
 /// 原生通知不搶焦點，點擊後才顯示主視窗；Windows 可自行停用彈出提示。
-fn tray(window: HWND, operation: u32, message: Option<&str>) {
+fn tray(window: HWND, operation: u32) {
     let mut data = NOTIFYICONDATAW {
         cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
         hWnd: window,
@@ -1890,16 +1899,6 @@ fn tray(window: HWND, operation: u32, message: Option<&str>) {
     data.hIcon = app_icon(true);
     for (dest, source) in data.szTip.iter_mut().zip(wide("LM_AI")) {
         *dest = source;
-    }
-    if let Some(message) = message {
-        data.uFlags = NIF_INFO;
-        data.dwInfoFlags = NIIF_INFO;
-        for (dest, source) in data.szInfoTitle.iter_mut().zip(wide("LM_AI 通知")) {
-            *dest = source;
-        }
-        for (dest, source) in data.szInfo.iter_mut().take(255).zip(wide(message)) {
-            *dest = source;
-        }
     }
     unsafe {
         Shell_NotifyIconW(operation, &data);
@@ -1923,12 +1922,33 @@ unsafe extern "system" fn window_proc(
         if let Ok(mut app) = unsafe { &*pointer }.try_borrow_mut() {
             if message == taskbar_created_message() && !app.smoke {
                 // Explorer 重啟會清除通知區圖案；隱藏中的 App 必須重新加入，才能讓使用者還原。
-                tray(window, NIM_ADD, None);
+                tray(window, NIM_ADD);
                 return 0;
             }
             match message {
                 crate::single_instance::RESTORE_MESSAGE => {
                     app.restore_window();
+                    return 0;
+                }
+                crate::pet::MESSAGE => {
+                    match wparam {
+                        1 => app.restore_window(),
+                        2 => {
+                            PostMessageW(window, TRAY_MESSAGE, 0, NIN_BALLOONUSERCLICK as isize);
+                        }
+                        3 | 4 => {
+                            show_window(window);
+                            let _=app.view.post(&json!({"type":if wparam==3{"show_tarot"}else{"show_pet_settings"}}));
+                        }
+                        5 => {
+                            let mut settings = app.pet.settings();
+                            settings.enabled = false;
+                            if let Err(error) = app.pet.configure(settings) {
+                                app.fail(error);
+                            }
+                        }
+                        _ => (),
+                    }
                     return 0;
                 }
                 crate::selection_popup::CLICK_MESSAGE => {
@@ -2229,7 +2249,10 @@ fn run_with_local(
                 && session.as_ref().is_some_and(|s| s.valid_for(&config)),
             Ordering::Relaxed,
         );
+        let pet = crate::pet::Pet::new(window, &root, smoke || local.is_some())?;
         let mut app = App {
+            pet,
+            tarot: crate::tarot::Round::default(),
             onboarding: onboarding::Onboarding::load(smoke || local.is_some()),
             projects: projects::ProjectRuntime::load(&root),
             vnc: vnc::VncRuntime::default(),
@@ -2309,7 +2332,7 @@ fn run_with_local(
             }
             app.refresh_services();
             app.start_notifications();
-            tray(window, NIM_ADD, None);
+            tray(window, NIM_ADD);
         }
         let state = Box::new(RefCell::new(app));
         SetWindowLongPtrW(

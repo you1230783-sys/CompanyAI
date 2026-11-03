@@ -32,7 +32,7 @@ pub struct Block {
     #[serde(default)]
     pub format: serde_json::Value,
 }
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Snapshot {
     pub scope: String,
     #[serde(default)]
@@ -40,6 +40,17 @@ pub struct Snapshot {
     #[serde(default)]
     pub formats: Vec<serde_json::Value>,
     pub blocks: Vec<Block>,
+    /// 計算值供模型核對；易變公式值不當成來源結構版本（原公式本身仍嚴格比較）。
+    #[serde(default)]
+    pub calculation: Vec<serde_json::Value>,
+}
+impl PartialEq for Snapshot {
+    fn eq(&self, other: &Self) -> bool {
+        self.scope == other.scope
+            && self.structure == other.structure
+            && self.formats == other.formats
+            && self.blocks == other.blocks
+    }
 }
 impl Snapshot {
     pub fn serialize(&self) -> AppResult<String> {
@@ -487,7 +498,7 @@ impl Session {
                         )?;
                     }
                 }
-                "Excel 工作表 UsedRange（最多 2000 格）；公式顯示公式文字且不可修改，合併格及特殊值唯讀；不含圖表、註解、資料連線。"
+                "Excel 工作表 UsedRange（最多 2000 格）；公式文字及calculation計算結果；修改公式需excel-formulas技能，合併格及特殊值唯讀；不含圖表、註解、資料連線。"
             }
             _ => {
                 let slides = child(document, "Slides")?;
@@ -520,7 +531,20 @@ impl Session {
                 "PowerPoint 一般文字框及標題；不含群組、SmartArt、圖表、表格、備忘稿或圖片文字。"
             }
         };
+        let mut calculation = Vec::new();
+        if self.collection == "Workbooks" {
+            for (block, target) in blocks.iter().zip(&targets) {
+                if block.kind == "formula" {
+                    let value = get(target, "Value2")?;
+                    let error = unsafe { value.Anonymous.Anonymous.vt } == VT_ERROR;
+                    calculation.push(serde_json::json!({"id":block.id,"formula":block.text,
+                        "value":if error { serde_json::Value::Null } else { serde_json::Value::String(string(&value)?) },
+                        "display":string(&get(target,"Text")?)?,"error":error}));
+                }
+            }
+        }
         let snapshot = Snapshot {
+            calculation,
             scope: scope.into(),
             structure: authoring::structure(self)?,
             formats,
@@ -619,6 +643,7 @@ mod tests {
     use super::*;
     fn sample(kind: &str) -> Snapshot {
         Snapshot {
+            calculation: vec![],
             scope: "Excel".into(),
             structure: serde_json::Value::Null,
             formats: Vec::new(),

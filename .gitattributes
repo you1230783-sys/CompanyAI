@@ -27,3 +27,6 @@ ui/vendor/MERMAID-NOTICES.txt -whitespace
 
 # Unmodified offline font binaries and their upstream license notices.
 ui/fonts/*.txt text eol=lf -whitespace
+
+# Preserve the pinned tarot upstream attribution files byte-for-byte.
+assets/licenses/tarot-rider-waite/* -text -whitespace

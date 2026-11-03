@@ -207,7 +207,17 @@ impl Broker {
         // 固定的是首次成功讀取的實際版本；即使舊快照已作廢也不退回 latest。
         let bound_version;
         let version = if path.is_none() {
-            bound_version = self.cad_session.version(version)?;
+            bound_version = if version
+                .parse::<u16>()
+                .ok()
+                .is_some_and(|year| (1990..=2099).contains(&year))
+            {
+                let inventory = crate::cad::inventory(cancel)?;
+                self.cad_session
+                    .version_from_inventory(version, &inventory)?
+            } else {
+                self.cad_session.version(version)?
+            };
             bound_version.as_str()
         } else {
             if self.cad_session.stopped() {

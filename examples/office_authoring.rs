@@ -17,6 +17,8 @@ pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResul
                 json!({"kind":"word_table","rows":[["項目","數值"],["速度","12 m/min"]]}),
                 json!({"kind":"word_paragraph","before":"p2","text":"插入的摘要","format":{"italic":true}}),
                 json!({"kind":"format","target":"p1","format":{"color":"#336699"}}),
+                json!({"kind":"word_paragraphs","before":null,"paragraphs":["多段第一段😀","多段第二段"],"format":{"space_after":6.0}}),
+                json!({"kind":"word_table_append","table":1,"rows":[["追加列","25"]]}),
             ],
         ),
         (
@@ -28,6 +30,7 @@ pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResul
                 json!({"kind":"format","target":"s1:B2","format":{"number_format":"decimal","color":"#FF0000"}}),
                 json!({"kind":"excel_sheet","name":"摘要"}),
                 json!({"kind":"excel_write","sheet":2,"cell":"A1","rows":[["測試完成"]]}),
+                json!({"kind":"excel_append","sheet":2,"rows":[[3,4],[5,6]]}),
             ],
         ),
         (
@@ -38,6 +41,7 @@ pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResul
                 json!({"kind":"ppt_slide","layout":"two_column","title":"比較","body":"左欄","right":"右欄"}),
                 json!({"kind":"format","target":"s2:shape2","format":{"size":20.0,"font":"Arial","bullets":true,"space_after":8.0,"line_spacing":1.2}}),
                 json!({"kind":"format","target":"s1:shape1","format":{"size":32.0,"bold":true,"color":"#336699","alignment":"center"}}),
+                json!({"kind":"ppt_duplicate","slide":2}),
             ],
         ),
     ] {
@@ -128,6 +132,106 @@ pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResul
                 },
             )?;
             assert_eq!(chart["chart_index"], 0);
+        }
+        if ext == "xlsx" {
+            let formulas = |revision: &str| Tool::WriteExcelFormulas {
+                copy_id: id.clone(),
+                revision: revision.into(),
+                sheet: 2,
+                cell: "C2".into(),
+                rows: vec![vec!["=SUM(A2:B2)".into()], vec!["=SUM(A3:B3)".into()]],
+                dynamic: false,
+            };
+            assert!(call("formula_without_skill", formulas(&revision)).is_err());
+            call(
+                "load_formulas",
+                Tool::LoadSkill {
+                    id: "excel-formulas".into(),
+                },
+            )?;
+            let calculated = call("formulas", formulas(&revision))?;
+            revision = calculated["revision"].as_str().unwrap().to_owned();
+            let values = calculated["calculation"]
+                .as_array()
+                .ok_or("缺少原生公式結果")?;
+            for (id, expected) in [("s2:$C$2", "7"), ("s2:$C$3", "11")] {
+                let value = values.iter().find(|v| v["id"] == id).ok_or("公式格遺失")?;
+                assert_eq!(value["value"], expected);
+                assert_eq!(value["error"], false);
+            }
+            let wrong = call(
+                "formula_error",
+                Tool::WriteExcelFormulas {
+                    copy_id: id.clone(),
+                    revision: revision.clone(),
+                    sheet: 2,
+                    cell: "D2".into(),
+                    rows: vec![vec!["=1/0".into()]],
+                    dynamic: false,
+                },
+            )?;
+            assert!(wrong["calculation"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v["id"] == "s2:$D$2" && v["error"] == true));
+            revision = wrong["revision"].as_str().unwrap().to_owned();
+            let fixed = call(
+                "formula_fix",
+                Tool::WriteExcelFormulas {
+                    copy_id: id.clone(),
+                    revision: revision.clone(),
+                    sheet: 2,
+                    cell: "D2".into(),
+                    rows: vec![vec!["=IFERROR(1/0,0)".into()]],
+                    dynamic: false,
+                },
+            )?;
+            assert!(fixed["calculation"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|v| v["error"] == false));
+            revision = fixed["revision"].as_str().unwrap().to_owned();
+            // 真正走Formula2，核對動態陣列的起始值；發布流程另外保存並重開整份副本。
+            let dynamic = call(
+                "formula_dynamic_array",
+                Tool::WriteExcelFormulas {
+                    copy_id: id.clone(),
+                    revision: revision.clone(),
+                    sheet: 2,
+                    cell: "F2".into(),
+                    rows: vec![vec!["=SEQUENCE(2,1,10,10)".into()]],
+                    dynamic: true,
+                },
+            )?;
+            assert!(dynamic["calculation"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v["id"] == "s2:$F$2" && v["value"] == "10" && v["error"] == false));
+            revision = dynamic["revision"].as_str().unwrap().to_owned();
+            // 前格合法、後格非法也必須整批不提交，不能留下部分公式。
+            assert!(call(
+                "formula_partial_rejected",
+                Tool::WriteExcelFormulas {
+                    copy_id: id.clone(),
+                    revision: revision.clone(),
+                    sheet: 2,
+                    cell: "H2".into(),
+                    rows: vec![vec!["=42".into(), "不是公式".into()]],
+                    dynamic: false,
+                }
+            )
+            .is_err());
+            let unchanged = call(
+                "after_formula_rejection",
+                Tool::ReadFile {
+                    path: id.clone(),
+                    offset: 0,
+                },
+            )?;
+            assert_eq!(unchanged["revision"], revision);
         }
         // 驗證陳舊版本被拒絕，拒絕後正確版本仍可發布。
         assert!(call(

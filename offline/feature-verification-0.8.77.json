@@ -1,0 +1,190 @@
+{
+  "version": "0.8.77.0",
+  "recorded_on": "2026-11-03",
+  "result": "AUTOMATED_BUILD_AND_INSTALLER_PASS_WITH_MODEL_LIMITATIONS",
+  "build": {
+    "complete": true,
+    "msvc": "14.29.30133",
+    "compiler_probe": "192930159 x64",
+    "empty_cargo_cache": true,
+    "frozen": true,
+    "rust_tests": 452,
+    "cad_contract_tests": 101,
+    "recorded_at": "2026-11-03T08:53:36.4456013+08:00",
+    "exe_sha256": "f8fe1aca3472ecf982f5171af2313210bb1b1f938b73e36bd8d8b1d41bb74699",
+    "cargo_cache_files": [
+      ".global-cache",
+      ".package-cache",
+      ".package-cache-mutate",
+      "registry/CACHEDIR.TAG"
+    ]
+  },
+  "features": {
+    "pet": {
+      "states": 6,
+      "bundled_characters": [
+        "cat",
+        "dog"
+      ],
+      "png_import": {
+        "source_bytes": 718969,
+        "output_bytes": 13352,
+        "dimensions": [
+          256,
+          256
+        ],
+        "alpha_preserved": true,
+        "source_unchanged": true
+      },
+      "native_window_lifecycle_test": true,
+      "manual_click_and_drag_acceptance": false
+    },
+    "tarot": {
+      "cards": 78,
+      "face_and_back_size": [
+        360,
+        600
+      ],
+      "bundled_images": 79,
+      "total_image_bytes": 6525613,
+      "largest_image_bytes": 106301,
+      "source_commit": "840b84d012c6b74dc1634fa2d00d1b21f5b28093",
+      "source_and_output_hashes_checked": true,
+      "native_gui_card_back_and_face_observed": true,
+      "ui_checks": 17
+    },
+    "settings_tutorials": {
+      "count": 55,
+      "result": "PASS",
+      "release_notes_version": "0.8.77"
+    },
+    "cad_circle_blocks": {
+      "native_cases": [
+        {
+          "year": "2008",
+          "status": "PASS",
+          "rejected": [
+            {
+              "case": "subset",
+              "error": "修改共用圖塊會影響未列入的引用（可能位於模型、配置或巢狀圖塊）；請列齊全部ModelSpace引用，否則不修改"
+            },
+            {
+              "case": "stale",
+              "error": "文件身分或內容已變更；未修改，請重新讀取目前圖面"
+            },
+            {
+              "case": "bad_member",
+              "error": "member_handle不屬於所選圖塊"
+            }
+          ],
+          "undo": true,
+          "reopen": true,
+          "original_file_unchanged_before_save": true
+        },
+        {
+          "year": "2022",
+          "status": "PASS",
+          "rejected": [
+            {
+              "case": "subset",
+              "error": "修改共用圖塊會影響未列入的引用（可能位於模型、配置或巢狀圖塊）；請列齊全部ModelSpace引用，否則不修改"
+            },
+            {
+              "case": "stale",
+              "error": "文件身分或內容已變更；未修改，請重新讀取目前圖面"
+            },
+            {
+              "case": "bad_member",
+              "error": "member_handle不屬於所選圖塊"
+            }
+          ],
+          "undo": true,
+          "reopen": true,
+          "original_file_unchanged_before_save": true
+        }
+      ],
+      "runtime_sha256": "6e58e34eb3f23154e4de80eaf1fc06a09359a578d11be4d11f8cde0bc997445d",
+      "scope": "Ordinary direct circle blocks with all shared references selected; synthetic drawings only."
+    }
+  },
+  "model": {
+    "name": "gpt-6-luna",
+    "effort": "low",
+    "real_model": true,
+    "company_service_tested": false,
+    "raw_arguments_preserved": true,
+    "candidate_version": "0.8.76.0",
+    "candidate_r3_sha256": "3615c7176aa6e5ee2cfc3d43cd116073ebf5862d5a21fab362117015bb2a3a1d",
+    "candidate_r4_sha256": "b73a4d4b3ec7042a9898f577b2d7db295e03c6fc7b6b09988de9e83c28c3a9c5",
+    "ordinary_chat_r2": {
+      "result": "PASS",
+      "injected_transient_failure": true,
+      "two_user_turns": true,
+      "same_tarot_card_context": true,
+      "duplicate_user_or_answer": false,
+      "candidate_sha256": "0664da462aa4021e08158dd7fbc474bdbc581539450ae1d9ee41aa43def4c674"
+    },
+    "office_r1_r2": {
+      "result": "FAILED",
+      "note": "Data/formula misuse and repeated skill switching; fixed data-writing availability and diagnostics before R3."
+    },
+    "office_r3": {
+      "result": "PARTIAL",
+      "first_formula_file": "PASS",
+      "second_excel_and_word_delivery": "FAILED",
+      "reason": "Model repeated prior task metadata, then used an unavailable external tool.",
+      "candidate_sha256": "b73a4d4b3ec7042a9898f577b2d7db295e03c6fc7b6b09988de9e83c28c3a9c5"
+    },
+    "excel_focused_r1": {
+      "result": "PASS",
+      "user_turns": 2,
+      "inferences": 34,
+      "original_values": [
+        30,
+        31.5,
+        60
+      ],
+      "new_values": [
+        40,
+        42,
+        70
+      ],
+      "formulas_preserved": true,
+      "saved_xlsx_independently_checked": true,
+      "note": "Focused Excel-only request; does not erase multi-artifact failure.",
+      "candidate_sha256": "b73a4d4b3ec7042a9898f577b2d7db295e03c6fc7b6b09988de9e83c28c3a9c5"
+    },
+    "cad_2008_r2": {
+      "result": "PASS_REQUESTED_EDIT_AND_READBACK",
+      "first_comparison_export": "FAILED_SHORT_ID",
+      "short_id_fix_tested_afterward": true,
+      "user_turns": 2,
+      "native_geometry_pass": true,
+      "disk_unchanged": true,
+      "visual_checked": true,
+      "candidate_sha256": "3615c7176aa6e5ee2cfc3d43cd116073ebf5862d5a21fab362117015bb2a3a1d"
+    },
+    "cad_2022_r2": {
+      "result": "PARTIAL_MODEL_COMPLETION",
+      "native_edit": "PASS",
+      "short_id_comparison_export": "PASS",
+      "first_turn_finish": "PAUSED_INVALID_DELIVERABLE_TARGET",
+      "second_readonly_turn": "PASS",
+      "native_geometry_pass": true,
+      "disk_unchanged": true,
+      "visual_checked": true,
+      "candidate_sha256": "b73a4d4b3ec7042a9898f577b2d7db295e03c6fc7b6b09988de9e83c28c3a9c5"
+    },
+    "limits": [
+      "Synthetic files and drawings only; company model, network and Outlook mailbox not tested.",
+      "Model may still repeat reads, guess invalid CAD names or fail multi-output delivery.",
+      "Tarot meanings are bundled symbolic interpretations; no prediction accuracy claim."
+    ]
+  },
+  "release": {
+    "nsis_complete": true,
+    "setup_sha256": "9abc4978babe8400e14739843ad113001c8c90f96ca6597f840c4df8e56188ea",
+    "setup_bytes": 53664368,
+    "remote_verification_protocol": "After push: compare origin/main commit and download both LFS artifacts at that immutable commit; retain actual result in delivery record."
+  }
+}

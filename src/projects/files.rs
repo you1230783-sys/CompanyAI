@@ -2938,6 +2938,29 @@ impl Broker {
                 Ok(result)
             }
             Tool::SearchFiles { paths, query } => self.search_files(paths, query, worker, cancel),
+            Tool::WriteExcelFormulas {
+                copy_id,
+                revision,
+                sheet,
+                cell,
+                rows,
+                dynamic,
+            } => {
+                if !self.loaded_skills.iter().any(|s| s == "excel-formulas") {
+                    return Err("請先載入excel-formulas。".into());
+                }
+                self.office_action(
+                    copy_id,
+                    revision,
+                    office::Action::ExcelFormulas {
+                        sheet: *sheet,
+                        cell: cell.clone(),
+                        rows: rows.clone(),
+                        dynamic: *dynamic,
+                    },
+                    cancel,
+                )
+            }
             Tool::OfficeBatch {
                 copy_id,
                 revision,
@@ -3723,6 +3746,11 @@ impl Broker {
             return Err("每批需為 1–20 個 Office 操作。".into());
         }
         for action in &mut actions {
+            if matches!(action, office::Action::ExcelFormulas { .. })
+                && !self.loaded_skills.iter().any(|s| s == "excel-formulas")
+            {
+                return Err("寫入公式需獨立excel-formulas技能。".into());
+            }
             if let office::Action::InsertImage { path, sha256, .. } = action {
                 if sha256.is_some() {
                     return Err("圖片雜湊由程式管理，不接受模型提供的 sha256。".into());
@@ -3742,7 +3770,7 @@ impl Broker {
         }
         let snapshot = render_office(&self.project, &copy.name, &candidate, None, cancel)?;
         let content = snapshot.serialize()?;
-        let result = json!({"copy_id":id,"revision":text::revision(&content),"structure":snapshot.structure,
+        let result = json!({"copy_id":id,"revision":text::revision(&content),"structure":snapshot.structure,"calculation":snapshot.calculation,
             "blocks_tail":snapshot.blocks.iter().rev().take(12).map(|b| json!({"id":b.id,"label":b.label,"kind":b.kind,"format":b.format,"preview":b.text.chars().take(120).collect::<String>()})).collect::<Vec<_>>(),
             "hint":"結構改變後使用新版本與區塊 ID；完整內容可用 read_file(copy_id) 讀取。"});
         candidate.desired = snapshot;

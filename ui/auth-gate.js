@@ -11,7 +11,7 @@
 
   function lockControls() {
     for (const element of document.querySelectorAll(controls)) {
-      if (loginButtons.has(element.id)) continue;
+      if (loginButtons.has(element.id) || element.closest("[data-offline]")) continue;
       const property = "disabled" in element ? "disabled" : "inert";
       if (!locked.has(element)) locked.set(element, { property, value: element[property] });
       if (!element[property]) element[property] = true;
@@ -34,7 +34,7 @@
     $("login-entry-code").textContent = state.login_code ? "請核對登入碼：" + state.login_code : "";
     if (loggedIn) return;
     // 授權到期／登出時移除遮住登入入口的對話框，不允許在舊 modal 繼續操作。
-    for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
+    for (const dialog of document.querySelectorAll("dialog[open]:not([data-offline])")) dialog.close();
     $("model-menu").hidden = true;
     lockControls();
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "inert"] });
@@ -46,7 +46,7 @@
       if (state.logged_in) return;
       if (type === "keydown" && event.key === "Tab") return;
       const control = event.target.closest?.(controls);
-      if (control && loginButtons.has(control.id)) return;
+      if (control && (loginButtons.has(control.id) || control.closest("[data-offline]"))) return;
       event.preventDefault();
       event.stopImmediatePropagation();
     }, true);
@@ -56,7 +56,7 @@
   $("login-entry-reopen").onclick = () => send({ type: "reopen_login" });
   window.AuthUI = {
     beforeRender, apply,
-    canSend: command => !!state.logged_in || publicCommands.has(command.type),
+    canSend: command => !!state.logged_in || publicCommands.has(command.type) || command.type === "pet" || (command.type === "tarot" && command.command?.action !== "analyze"),
   };
   apply();
 })();

@@ -1358,6 +1358,8 @@ if (bridge) {
     else if (event.data.type === "self_test") window.runSelfTest?.(event.data.reply_fixture);
     else {
       receiveHotkeyMessage(event.data);
+        window.TarotUI?.receive(event.data);
+        window.PetUI?.receive(event.data);
         window.SettingsUI?.receive(event.data);
         window.ProjectUI?.receive(event.data);
         window.ArtifactUI?.receive(event.data);

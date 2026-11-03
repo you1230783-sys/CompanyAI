@@ -11,6 +11,21 @@ pub(super) struct ActiveSession {
 }
 
 impl ActiveSession {
+    /// 年份依安裝清單轉成確切ProgID，再核對本任務已綁定的版本。
+    /// 不能把2008直接交給COM，也不能因指定版本不符而改用另一套CAD。
+    pub(super) fn version_from_inventory(
+        &self,
+        requested: &str,
+        inventory: &Value,
+    ) -> AppResult<String> {
+        self.version("latest")?;
+        let selected = super::cad_plan::select_version(requested, inventory)?;
+        self.version(
+            selected["progid"]
+                .as_str()
+                .ok_or("CAD安裝清單缺少ProgID。")?,
+        )
+    }
     /// latest 只在首次連線時選新版；後續刷新沿用已選版本，不偷偷切換 CAD。
     pub(super) fn version(&self, requested: &str) -> AppResult<String> {
         if self.terminal {
@@ -77,6 +92,37 @@ impl ActiveSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn active_year_resolves_inventory_without_switching_bound_document() {
+        let inventory = json!({"versions":[
+            {"progid":"Icad.Application.1","year":2008,"server_exists":true},
+            {"progid":"GStarCAD.Application.22","year":2022,"server_exists":true}
+        ]});
+        let mut session = ActiveSession::default();
+        assert_eq!(
+            session.version_from_inventory("2008", &inventory).unwrap(),
+            "Icad.Application.1"
+        );
+        assert_eq!(
+            session.version_from_inventory("2022", &inventory).unwrap(),
+            "GStarCAD.Application.22"
+        );
+        session
+            .bind("Icad.Application.1", &json!({"pid":1,"name":"Drawing1"}))
+            .unwrap();
+        assert_eq!(
+            session.version_from_inventory("2008", &inventory).unwrap(),
+            "Icad.Application.1"
+        );
+        assert!(session.version_from_inventory("2022", &inventory).is_err());
+        assert!(session.version_from_inventory("2019", &inventory).is_err());
+        assert!(session
+            .version_from_inventory("2008", &json!({"versions":[]}))
+            .is_err());
+        session.edited(&json!({"status":"CANCELLED"}), &[]);
+        assert!(session.version_from_inventory("2008", &inventory).is_err());
+    }
 
     #[test]
     fn latest_keeps_original_version_and_document_binding() {

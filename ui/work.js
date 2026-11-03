@@ -42,6 +42,7 @@ const workLabels = {
   expired: "附件已到期，請重新選取",
   submitting: "確認接收中",
   running: "AI 處理中",
+    reconnecting: "等待自動重連",
   cancelling: "正在取消",
   completed: "已完成",
   failed: "失敗",
@@ -305,7 +306,7 @@ function renderWork() {
   const current = tasks.find(t => !t.project && t.active && t.conversation_id === state.active_id)
     || tasks.find(t => t.conversation_id === state.active_id && t.tool_events?.length);
   const live = $("live-task");
-  const savedPartial = current && state.messages.some((message) => message.request_id === current.id && message.role === "assistant" && message.incomplete);
+  const savedPartial = current && state.messages.some((message) => message.request_id === (current.history_id || current.id) && message.role === "assistant" && message.incomplete);
   const partial = savedPartial ? "" : current?.partial || "";
   const liveSignature = JSON.stringify([
     current?.id,

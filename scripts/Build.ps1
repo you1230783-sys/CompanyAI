@@ -29,6 +29,25 @@ try {
             throw "Bundled font is missing, corrupt or an unresolved LFS pointer: $($fontAsset.file)"
         }
     }
+    # 離線塔羅必須完整內建78張牌面與一張牌背，避免打包遺漏或LFS指標當成圖片。
+    $tarotRoot = Join-Path $projectRoot 'ui\tarot'
+    $tarotManifest = Get-Content -LiteralPath (Join-Path $tarotRoot 'manifest.json') -Raw | ConvertFrom-Json
+    $tarotCatalog = @(Get-Content -LiteralPath (Join-Path $projectRoot 'ui\tarot-data.json') -Raw | ConvertFrom-Json)
+    if ($tarotManifest.images.Count -ne 79 -or $tarotCatalog.Count -ne 78) { throw 'Incomplete offline tarot deck.' }
+    foreach ($card in $tarotManifest.images) {
+        if ($card.file -cnotmatch '^(\d{2}|back)\.jpg$') { throw 'Invalid tarot asset path.' }
+        $cardPath = Join-Path $tarotRoot $card.file
+        if ((Get-Item -LiteralPath $cardPath).Length -ne $card.bytes -or $card.bytes -ge 500000 -or
+            (Get-FileHash -LiteralPath $cardPath -Algorithm SHA256).Hash -ine $card.sha256) {
+            throw "Tarot image is missing or corrupt: $($card.file)"
+        }
+    }
+    for ($cardIndex = 0; $cardIndex -lt 78; $cardIndex++) {
+        if ($tarotCatalog[$cardIndex].image -cne ('tarot/{0:00}.jpg' -f $cardIndex) -or
+            $tarotCatalog[$cardIndex].name -cne $tarotManifest.images[$cardIndex].name) {
+            throw 'Tarot card names and images do not match the manifest.'
+        }
+    }
     # Mermaid 含有可重現的 SVG 純文字修補；不允許損毀或漏抓的引擎進入安裝包。
     $vendorPackages = Get-Content -LiteralPath (Join-Path $projectRoot 'ui\vendor\packages.json') -Raw | ConvertFrom-Json
     $mermaidPackage = @($vendorPackages | Where-Object { $_.name -eq 'mermaid' })

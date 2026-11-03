@@ -455,6 +455,15 @@ pub enum Tool {
         paths: Vec<String>,
         query: String,
     },
+    WriteExcelFormulas {
+        copy_id: String,
+        revision: String,
+        sheet: i32,
+        cell: String,
+        rows: Vec<Vec<String>>,
+        #[serde(default)]
+        dynamic: bool,
+    },
     OfficeBatch {
         copy_id: String,
         revision: String,
@@ -725,6 +734,7 @@ impl Tool {
             Self::OutlookIndex { .. } => "查回已取得郵件的代號",
             Self::AskPreference { .. } => "詢問可選偏好並繼續工作",
             Self::SearchFiles { .. } => "跨文件搜尋",
+            Self::WriteExcelFormulas { .. } => "寫入並計算Excel公式",
             Self::OfficeBatch { .. } => "批次編輯 Office",
             Self::CreateMermaid { .. } => "產生並驗證 Mermaid 圖形",
             Self::InspectMermaid { .. } => "讀取 Mermaid 原始碼與版本",

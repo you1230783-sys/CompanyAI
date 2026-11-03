@@ -58,7 +58,13 @@ impl PollFailures {
     }
 
     pub fn should_stop(&self, models_healthy: bool) -> bool {
-        self.count >= REPEATED_ERROR_LIMIT && models_healthy
+        // 模型清單正常不代表任務端點正常；429／5xx／斷線仍進入有限重連。
+        self.count >= REPEATED_ERROR_LIMIT
+            && models_healthy
+            && self
+                .last
+                .as_ref()
+                .is_some_and(|f| matches!(f.http_status, Some(400 | 401 | 403 | 404 | 410 | 422)))
     }
 }
 
@@ -145,7 +151,7 @@ mod tests {
         for _ in 0..3 {
             failures.record(&"網路逾時".to_string().into());
         }
-        assert!(failures.should_stop(true));
+        assert!(!failures.should_stop(true));
         failures.record(&"回應 JSON 無效".to_string().into());
         assert!(!failures.should_stop(true));
     }

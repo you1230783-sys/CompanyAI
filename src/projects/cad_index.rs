@@ -181,7 +181,7 @@ impl Snapshot {
             }
             let fact = json!({"candidate":candidate["candidate"],"handle":row["handle"],
                 "kind":row["kind"],"editable":row["editable"],"allowed_edits":row["allowed_edits"],
-                "properties":row["properties"],"geometry":row["geometry"]});
+                "properties":row["properties"],"geometry":row["geometry"],"block":row["block"]});
             self.recent_details
                 .retain(|previous| previous["handle"] != fact["handle"]);
             if fact.to_string().len() > 8000 {

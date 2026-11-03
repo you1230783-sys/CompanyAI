@@ -32,7 +32,7 @@ impl App {
             return false;
         };
         if let Some(task) = self.work.store.tasks.iter().find(|task| {
-            Some(task.request_id.as_str()) == message.request_id.as_deref()
+            Some(task.history_id()) == message.request_id.as_deref()
                 && Some(&task.conversation_id) == self.active_id.as_ref()
                 && !task.title_generation
         }) {
@@ -90,7 +90,7 @@ impl App {
             .tasks
             .iter()
             .find(|task| {
-                task.request_id.as_str() == question.request_id.as_deref().unwrap_or("")
+                task.history_id() == question.request_id.as_deref().unwrap_or("")
                     && Some(&task.conversation_id) == self.active_id.as_ref()
                     && !task.title_generation
             })
@@ -138,7 +138,7 @@ impl App {
             .tasks
             .iter()
             .find(|task| {
-                Some(task.request_id.as_str()) == request_id
+                Some(task.history_id()) == request_id
                     && task.conversation_id == conversation
                     && !task.title_generation
             })

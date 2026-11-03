@@ -18,3 +18,5 @@ cad_session是程式維護的執行事實，優先於舊筆記。stopped=true或
 
 進度筆記只記新進展，ID及精確資料已有常駐狀態，不反覆抄寫；最後答案只說工具已核對的數值。cad_active_read保留舊分頁相容入口，新任務使用快照查詢。
 修改結果有comparison_available時，用export_cad_comparison(source_operation=實際修改操作ID,name="修改比較.txt")輸出TXT／JSON。列出實際差異及固定尺寸文字警告；未建立關聯的尺寸／引線仍未驗證，不猜與圓／孔一致。此工具不儲存目前DWG；報告失敗不重做修改。
+
+既有圖塊若allowed_edits含block_circle：從block.members取圓member_handle，對block.model_reference_handles每個引用各列一項{handle,kind:"block_circle",value:{member_handle,diameter:目標直徑,color:ACI}}。同一定義參數一致，operations=[]；程式按引用比例換算局部半徑，同時改色／改徑。定義共用，必須需求涵蓋全部引用；只改部分時先說明影響，不自行擴大範圍。限1–32個直接圓的普通圖塊、正向等比例；巢狀／配置／外部／動態或非圓成員拒絕，不分解或重畫。block.read_only_reason說明限制。

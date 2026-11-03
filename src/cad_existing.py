@@ -53,6 +53,9 @@ def comparison(before, after):
             fields.append({'field': 'geometry', 'before': previous.get('geometry'),
                            'after': current.get('geometry')})
             geometry_changed = True
+        if previous.get('block') != current.get('block'):
+            fields.append({'field': 'block', 'before': previous.get('block'), 'after': current.get('block')})
+            geometry_changed = True
         if fields:
             measurements = {}
             if current.get('kind') == 'circle':
@@ -127,6 +130,8 @@ def describe(entity, api):
                  if key in lower), "unknown")
     if lower.startswith("dim"):
         kind = "dimension"  # 佑達 2008 使用 DimAligned／DimDiametric 名稱。
+    if lower in ('blockinsert', 'insert'):
+        kind = 'blockreference'
     row = {"handle": str(entity.Handle).upper(), "type": name, "kind": kind, "properties": {}}
     if kind == 'dimension':
         override = optional(entity, 'TextOverride')
@@ -156,7 +161,7 @@ def describe(entity, api):
                 row["properties"][field] = api.coordinate(value)
             except (TypeError, ValueError, AttributeError):
                 pass
-    # 圖塊只讀名稱／位置／屬性。定義與巢狀內容不展開、不修改。
+    # 普通圓圖塊的有界定義資料由snapshot統一附加，其他類型保留摘要。
     if kind == "polyline":
         # 只接受可直接解釋為 WCS XY 的直線折線；有 bulge／傾斜法向量不猜圓弧。
         # 3D 折線、不可讀屬性及過大頂點集合仍保留原圖元摘要。
@@ -214,7 +219,10 @@ def snapshot(doc, api, guard=None):
     """正式入口：批次建立完整索引；沒有原生介面的合成測試仍使用 COM。"""
     if getattr(api, "BULK_ENABLED", False):
         from cad_bulk import snapshot as bulk_snapshot
-        return bulk_snapshot(doc, api, guard)
+        entities, rows = bulk_snapshot(doc, api, guard)
+        from cad_block_circles import annotate
+        annotate(doc, entities, rows, api, guard)
+        return entities, rows
     return com_snapshot(doc, api, guard)
 
 
@@ -315,6 +323,9 @@ def _edit_document(app, doc, legacy, request, report, api, entities, before, out
     original_before = copy.deepcopy(before)
     edits = request["edits"]
     api.require(isinstance(edits, list) and len(edits) <= 100, "每次最多修改 100 個圖元")
+    if any(isinstance(edit, dict) and edit.get('kind') == 'block_circle' for edit in edits):
+        from cad_block_circles import execute as execute_block_circles
+        return execute_block_circles(app, doc, legacy, request, report, api, entities, before, output, guard)
     from cad_geometry import EDIT_KINDS
     if any(isinstance(edit,dict) and edit.get('kind') in EDIT_KINDS for edit in edits):
         from cad_geometry_edit import execute as execute_geometry

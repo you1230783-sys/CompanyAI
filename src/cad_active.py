@@ -180,6 +180,7 @@ def edit_capabilities(app, doc, legacy):
     if legacy and callable(optional(app, 'RunCommand')) and callable(optional(app, 'LoadLISP')):
         return dict(method='icad_runcommand_native', edits={'radius':['circle'],
             'color':['line','circle','arc','text','mtext'], 'text':['text','mtext'],
+            'block_circle':['ordinary_circle_only_block_all_references'],
             'diameter':['dimension_with_verified_diameter_endpoints']}, additions=False, deletion=False,
             geometry_edits=['copy','rotate','mirror','array','offset','trim','extend','fillet','layer'],geometry_copy_additions=True,
             notice='2008原生Undo支援半徑、ACI、TEXT/MTEXT及有界2D幾何修改；副本／陣列／偏移／圓角可新增幾何，operations通用新增與刪除仍不開放。幾何與文字等修改分批。直徑標註替換回傳replacement_handles，依allowed_edits。')

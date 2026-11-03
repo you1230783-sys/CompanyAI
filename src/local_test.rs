@@ -57,7 +57,12 @@ impl LocalTest {
             &config,
         )?;
         // 準備獨立專案；GUI 可直接選取並送出合成測試要求。
-        let workspace = root.join("workspace");
+        // 與WebView2資料目錄並列，避免專案的祖先目錄pin與瀏覽器鎖檔互相阻擋。
+        let name = root
+            .file_name()
+            .and_then(|v| v.to_str())
+            .ok_or("測試目錄名稱不正確。")?;
+        let workspace = root.with_file_name(format!("{name}-workspace"));
         std::fs::create_dir(&workspace).map_err(|e| e.to_string())?;
         let mut store = crate::projects::Store::default();
         store.add("Luna 本機 CAD 測試", workspace)?;

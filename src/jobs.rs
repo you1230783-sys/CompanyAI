@@ -17,6 +17,7 @@ use std::{
 pub const PREFIX: &str = "/lm_server/api/desktop";
 
 pub(crate) mod polling;
+pub(crate) mod retry;
 pub(crate) mod submission;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -78,7 +79,11 @@ fn deserialize_agent_envelope<'de, D: serde::Deserializer<'de>>(
     {
         Ok(fields)
     } else {
-        Ok(Default::default())
+        // 一般聊天也保留結構化錯誤代碼供有限重連；其餘舊契約額外欄位仍忽略。
+        Ok(fields
+            .into_iter()
+            .filter(|(key, value)| key == "error" && value.is_object())
+            .collect())
     }
 }
 impl TaskStatus {
@@ -124,7 +129,7 @@ impl TaskStatus {
         matches!(self.state.as_str(), "completed" | "failed" | "cancelled")
     }
 }
-/// 專案推論的恢復狀態，隨原有 DPAPI 任務保存；一般聊天維持空值。
+/// 推論恢復狀態，隨DPAPI任務保存；欄名沿用舊版以保持檔案相容。
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct ProjectRetry {
     pub attempts: usize,
@@ -163,6 +168,15 @@ pub struct Task {
     pub project_retry: ProjectRetry,
 }
 impl Task {
+    /// 自動重試更換網路請求ID，對話仍歸屬第一次提問，避免新增使用者訊息。
+    pub(crate) fn history_id(&self) -> &str {
+        self.project_retry
+            .history
+            .first()
+            .and_then(|h| h["request_id"].as_str())
+            .unwrap_or(&self.request_id)
+    }
+
     pub fn active(&self) -> bool {
         !self.applied
     }
@@ -311,15 +325,15 @@ pub fn retain_partial(archive: &mut crate::history::Archive, task: &Task) -> App
     let user_index = conversation
         .messages
         .iter()
-        .position(|m| m.role == "user" && m.request_id.as_deref() == Some(&task.request_id))
+        .position(|m| m.role == "user" && m.request_id.as_deref() == Some(task.history_id()))
         .ok_or("部分回覆缺少對應的使用者訊息。")?;
     let mut message = Message::assistant(task.partial.clone());
-    message.request_id = Some(task.request_id.clone());
+    message.request_id = Some(task.history_id().to_owned());
     message.incomplete = true;
     if let Some(existing) = conversation
         .messages
         .iter_mut()
-        .find(|m| m.role == "assistant" && m.request_id.as_deref() == Some(&task.request_id))
+        .find(|m| m.role == "assistant" && m.request_id.as_deref() == Some(task.history_id()))
     {
         if !existing.incomplete || existing.content.len() >= message.content.len() {
             return Ok(false);
@@ -344,14 +358,14 @@ pub fn apply_reply(archive: &mut crate::history::Archive, task: &Task) -> AppRes
         .find(|c| c.id == task.conversation_id)
         .ok_or("任務對應的本機對話不存在，結果仍留在任務紀錄。")?;
     if conversation.messages.iter().any(|m| {
-        m.role == "assistant" && !m.incomplete && m.request_id.as_deref() == Some(&task.request_id)
+        m.role == "assistant" && !m.incomplete && m.request_id.as_deref() == Some(task.history_id())
     }) {
         return Ok(false);
     }
     if !conversation
         .messages
         .iter()
-        .any(|m| m.role == "user" && m.request_id.as_deref() == Some(&task.request_id))
+        .any(|m| m.role == "user" && m.request_id.as_deref() == Some(task.history_id()))
     {
         return Err("任務缺少對應的使用者訊息，不會加入其他對話。".into());
     }
@@ -362,11 +376,11 @@ pub fn apply_reply(archive: &mut crate::history::Archive, task: &Task) -> AppRes
         // REST 的明確欄位優先；缺欄位可從同一 request 的串流補回，其他原文另存供展開。
         protocol::preserve_received_reply(&mut message, &task.partial, true);
     }
-    message.request_id = Some(task.request_id.clone());
+    message.request_id = Some(task.history_id().to_owned());
     if let Some(existing) = conversation
         .messages
         .iter_mut()
-        .find(|m| m.role == "assistant" && m.request_id.as_deref() == Some(&task.request_id))
+        .find(|m| m.role == "assistant" && m.request_id.as_deref() == Some(task.history_id()))
     {
         *existing = message;
     } else {

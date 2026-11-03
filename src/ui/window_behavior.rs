@@ -7,11 +7,7 @@ impl App {
         unsafe { ShowWindow(self.window, SW_HIDE) };
         self.work.tray_restore_only = true;
         if !self.smoke {
-            tray(
-                self.window,
-                NIM_MODIFY,
-                Some("應用程式已縮小至系統托盤，如需離開，請在托盤圖示按右鍵 → 離開。"),
-            );
+            self.desktop_notice("應用程式已縮小至系統托盤，如需離開，請在托盤圖示按右鍵 → 離開。");
         }
     }
 }

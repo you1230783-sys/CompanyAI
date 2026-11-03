@@ -1,13 +1,13 @@
 {
-  "recorded_at": "2026-11-02T15:54:17.4033237+08:00",
+  "recorded_at": "2026-11-03T08:43:57.5263935+08:00",
   "result": "PASS",
-  "app_version": "0.8.76",
-  "exe_sha256": "6236a49d61d7434c1a033efce6c2527ffc683a991888b1ac99e27a3abfb95d51",
+  "app_version": "0.8.77",
+  "exe_sha256": "f8fe1aca3472ecf982f5171af2313210bb1b1f938b73e36bd8d8b1d41bb74699",
   "viewer_version": "1.8.2.4",
   "viewer_sha256": "b273b5af301cb95d9d82830c2a2521a5825c14be57ee1e9af967c277179cb873",
   "cases": [
     {
-      "app_version": "0.8.76",
+      "app_version": "0.8.77",
       "checks": [
         "native connect() launch",
         "loopback RFB 3.8",
@@ -25,7 +25,7 @@
       "viewer": "C:\\Program Files\\uvnc bvba/UltraVNC/vncviewer.exe"
     },
     {
-      "app_version": "0.8.76",
+      "app_version": "0.8.77",
       "checks": [
         "native connect() launch",
         "loopback RFB 3.8",

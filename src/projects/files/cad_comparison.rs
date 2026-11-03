@@ -10,6 +10,7 @@ pub(super) fn project_verification(value: &Value) -> Value {
     }
     projected
 }
+
 impl Broker {
     pub(super) fn retain_cad_comparison(&mut self, id: &str, result: &mut Value) -> AppResult<()> {
         let data = &mut result["result"];
@@ -40,8 +41,10 @@ impl Broker {
         operation: &str,
         name: &str,
     ) -> AppResult<Value> {
+        // 與閱讀筆記共用穩定別名；內部查詢及比較資料仍使用完整冪等 ID。
+        let operation = self.references.resolve(operation)?;
         let (request, _result) = self
-            .recorded_operation(operation)?
+            .recorded_operation(&operation)?
             .ok_or("CAD來源操作不存在。")?;
         if !matches!(
             request["tool"].as_str(),
@@ -51,7 +54,7 @@ impl Broker {
         }
         let data = self
             .comparison_records
-            .get(operation)
+            .get(&operation)
             .ok_or("原生結果沒有可用的前後比較；不依提交參數猜測修改。")?;
         let comparison = &data["comparison"];
         let path = relative(name)?;
@@ -120,5 +123,48 @@ impl Broker {
             json!({"text_path":txt_path,"json_path":json_path,"comparison_complete":comparison["complete"],"source_operation":operation,
             "notice":"報告列出實際差異；geometry_consistency=unverified與固定文字警告仍需確認，不視為尺寸關聯通過。"}),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn comparison_export_accepts_stable_short_operation_id() {
+        let root =
+            std::env::temp_dir().join(format!("cad-alias-{}", crate::jobs::new_id().unwrap()));
+        fs::create_dir(&root).unwrap();
+        let mut broker = Broker::new(
+            Project {
+                id: "cad-alias".into(),
+                name: "CAD別名".into(),
+                root: root.clone(),
+                imports: BTreeMap::new(),
+            },
+            "run".into(),
+        )
+        .unwrap();
+        let id = "a".repeat(64);
+        let tool = Tool::CadActiveEdit {
+            revision: "r".into(),
+            edits: vec![],
+            operations: vec![],
+        };
+        let mut result = json!({"ok":true,"result":{"status":"EDITED_UNSAVED","saved":false,
+            "verification":{"comparison":{"complete":true,"before_count":5,"after_count":5,
+                "added":[],"deleted":[],"changed":[{"handle":"1C0"}],"annotation_checks":[],"scope":"fixture"}}}});
+        broker.retain_cad_comparison(&id, &mut result).unwrap();
+        broker.remember_result(&id, &tool, &result).unwrap();
+        let alias = broker.reference_id(&id);
+        assert!(alias.starts_with("op_"));
+        let exported = broker.export_cad_comparison(&alias, "比較.txt").unwrap();
+        assert_eq!(exported["source_operation"], id);
+        let report =
+            fs::read_to_string(root.join(exported["text_path"].as_str().unwrap())).unwrap();
+        assert!(report.contains("1C0"));
+        assert!(broker.export_cad_comparison("op_9999", "未知.txt").is_err());
+        drop(broker);
+        fs::remove_dir_all(root).unwrap();
     }
 }

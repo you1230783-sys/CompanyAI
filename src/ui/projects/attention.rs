@@ -56,11 +56,7 @@ impl App {
         }
         self.projects.attention_conversation = Some(conversation);
         if self.config.notification_popups {
-            tray(
-                self.window,
-                NIM_MODIFY,
-                Some("專案工作需要您確認，請回到 LM_AI 查看待處理的問題。"),
-            );
+            self.desktop_notice("專案工作需要您確認，請回到 LM_AI 查看待處理的問題。");
         }
         let info = FLASHWINFO {
             cbSize: std::mem::size_of::<FLASHWINFO>() as u32,

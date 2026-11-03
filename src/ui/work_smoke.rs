@@ -138,10 +138,46 @@ impl App {
         verify(self.work.store.tasks[0].active(), "網站異常不誤停止")?;
         self.tracking_error(&id, 503, true)?;
         verify(
-            !self.work.store.tasks[0].active(),
-            "網站恢復後可停止持續錯誤任務",
+            self.work.store.tasks[0].active()
+                && self.work.store.tasks[0].project_retry.due_at_millis > 0,
+            "模型端點正常不能把任務503當永久失敗",
         )?;
-        cases.push("unhealthy models prevent stopping; subsequent healthy check permits stopping");
+        // 模擬等待到期後持續失聯；只查原ID，五次用完才停止追蹤。
+        for _ in 0..5 {
+            self.work.store.tasks[0].project_retry.due_at_millis = 0;
+            self.tracking_error(&id, 503, true)?;
+        }
+        verify(
+            !self.work.store.tasks[0].active()
+                && self.work.store.tasks[0].request_id == id
+                && self.work.store.tasks[0].project_retry.attempts == 5,
+            "有限重連不新增未知請求",
+        )?;
+        cases.push(
+            "503 retries original ID despite healthy model list; stops after five persisted waits",
+        );
+
+        let id = self.tracking_fixture()?;
+        let failed = serde_json::from_value(
+            json!({"task_id":"remote_fixture","client_request_id":id,"state":"failed",
+            "error":{"error_code":"UPSTREAM_TIMEOUT"}}),
+        )
+        .map_err(|e| e.to_string())?;
+        self.work_event(WorkEvent::Polled(id.clone(), Ok(failed)))?;
+        let saved = WorkStore::load(&self.root, &self.config, "tracking_fixture")?;
+        verify(
+            saved.tasks[0].active()
+                && saved.tasks[0].project_retry.replace_failed
+                && saved.tasks[0].project_retry.attempts == 1,
+            "已確認暫時失敗保存重試排程",
+        )?;
+        self.persist_stopped_task(&id, false, "使用者停止等待")?;
+        self.finish_tasks()?;
+        verify(
+            !self.work.store.tasks[0].active(),
+            "停止等待不能被終態事件復活",
+        )?;
+        cases.push("confirmed transient failure schedules replacement; stopping prevents restart");
 
         let id = self.tracking_fixture()?;
         for status in [404, 500, 404] {

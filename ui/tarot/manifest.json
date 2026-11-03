@@ -1,0 +1,643 @@
+{
+  "repository": "https://github.com/mixvlad/TarotCards",
+  "commit": "840b84d012c6b74dc1634fa2d00d1b21f5b28093",
+  "width": 360,
+  "height": 600,
+  "format": "JPEG",
+  "quality": 86,
+  "fit": "contain, no crop",
+  "license": "Rider-Waite images: Public Domain per upstream metadata",
+  "images": [
+    {
+      "index": 0,
+      "name": "愚者",
+      "file": "00.jpg",
+      "source": "00_Fool.jpg",
+      "sha256": "5e3e9e54677f5af30ac4d9d7b103d01c885ff21009e47b918801d560a443e790",
+      "bytes": 81694
+    },
+    {
+      "index": 1,
+      "name": "魔術師",
+      "file": "01.jpg",
+      "source": "01_Magician.jpg",
+      "sha256": "8222eed20f0425b50113f177664c9ca6013563998dc8504ff02e54c56a26d394",
+      "bytes": 82655
+    },
+    {
+      "index": 2,
+      "name": "女祭司",
+      "file": "02.jpg",
+      "source": "02_High_Priestess.jpg",
+      "sha256": "7d87c8eb956694c18052904594b8f2751c009fda19b8a61cc3ad1a09e927f579",
+      "bytes": 89859
+    },
+    {
+      "index": 3,
+      "name": "皇后",
+      "file": "03.jpg",
+      "source": "03_Empress.jpg",
+      "sha256": "c794c520275053465cb2a59d6aab9237a80711b37b5e5d42522dd5f68c17813c",
+      "bytes": 104010
+    },
+    {
+      "index": 4,
+      "name": "皇帝",
+      "file": "04.jpg",
+      "source": "04_Emperor.jpg",
+      "sha256": "e6eb9f9871d1aa63e0c6728c0cda5e10e74cb8eb1942ec11f713f90c02168a79",
+      "bytes": 96354
+    },
+    {
+      "index": 5,
+      "name": "教皇",
+      "file": "05.jpg",
+      "source": "05_Hierophant.jpg",
+      "sha256": "2910cf51fc44793db9a43c666bd4516c8bcf460a15d5d62f487523e1b718ec2d",
+      "bytes": 98845
+    },
+    {
+      "index": 6,
+      "name": "戀人",
+      "file": "06.jpg",
+      "source": "06_Lovers.jpg",
+      "sha256": "80882000fd49b8739215bfec9d5d3fc59a756866974a493414dea41658a79181",
+      "bytes": 102312
+    },
+    {
+      "index": 7,
+      "name": "戰車",
+      "file": "07.jpg",
+      "source": "07_Chariot.jpg",
+      "sha256": "2098fc767381ed8e1c667f6374f68c51251e14e70532711d24e0dff6be9bf050",
+      "bytes": 95268
+    },
+    {
+      "index": 8,
+      "name": "力量",
+      "file": "08.jpg",
+      "source": "08_Strength.jpg",
+      "sha256": "505b481b3d6f2c93c47af92d5c69903c0cd91317339feca52468fd16fe6b7cb6",
+      "bytes": 74224
+    },
+    {
+      "index": 9,
+      "name": "隱者",
+      "file": "09.jpg",
+      "source": "09_Hermit.jpg",
+      "sha256": "7293403e42fb8b8fc0032c72bf48cb6e949c5468fe4f5ae1f6c86d8a52eed0fd",
+      "bytes": 56725
+    },
+    {
+      "index": 10,
+      "name": "命運之輪",
+      "file": "10.jpg",
+      "source": "10_Wheel_of_Fortune.jpg",
+      "sha256": "b9c6867757154f6a13d784580aa734b5a14d32fc7d8f018efd37803fcbfc15c7",
+      "bytes": 94500
+    },
+    {
+      "index": 11,
+      "name": "正義",
+      "file": "11.jpg",
+      "source": "11_Justice.jpg",
+      "sha256": "88afccbdf3b4f48b084afbc1013303d5191c6f868dd271a0fcbb0679a22ab549",
+      "bytes": 93060
+    },
+    {
+      "index": 12,
+      "name": "倒吊人",
+      "file": "12.jpg",
+      "source": "12_Hanged_Man.jpg",
+      "sha256": "33918a639592171ee2e8a98db9d94fe16e4213279d43298d30d7a87cf7796fed",
+      "bytes": 74794
+    },
+    {
+      "index": 13,
+      "name": "死神",
+      "file": "13.jpg",
+      "source": "13_Death.jpg",
+      "sha256": "4d76244449257d60d050defab6bf61ead648e914a55bc53c5ec00d078329ca21",
+      "bytes": 98106
+    },
+    {
+      "index": 14,
+      "name": "節制",
+      "file": "14.jpg",
+      "source": "14_Temperance.jpg",
+      "sha256": "c4b5ba1561267c25e57b9d5b40bded72033850e3dbb3f865d23041395349b255",
+      "bytes": 100444
+    },
+    {
+      "index": 15,
+      "name": "惡魔",
+      "file": "15.jpg",
+      "source": "15_Devil.jpg",
+      "sha256": "74e7e286662a56b013766a85b88e44f96a63e54523efaca66bf34641cffe5900",
+      "bytes": 74977
+    },
+    {
+      "index": 16,
+      "name": "高塔",
+      "file": "16.jpg",
+      "source": "16_Tower.jpg",
+      "sha256": "68318292d5c8c9b9b742a828f8722bbedfd7a0d94332563cf740dd695b87ddd2",
+      "bytes": 74027
+    },
+    {
+      "index": 17,
+      "name": "星星",
+      "file": "17.jpg",
+      "source": "17_Star.jpg",
+      "sha256": "5105f9eb2e15b64d31022a265ac33e6dea50b99fd7a4b2dc8196a4ef48cc9fd2",
+      "bytes": 84933
+    },
+    {
+      "index": 18,
+      "name": "月亮",
+      "file": "18.jpg",
+      "source": "18_Moon.jpg",
+      "sha256": "e0faba2cfa797243e81e35b6a96a51a2e43c3de3b6aad77e3fdb1facb3d46969",
+      "bytes": 88355
+    },
+    {
+      "index": 19,
+      "name": "太陽",
+      "file": "19.jpg",
+      "source": "19_Sun.jpg",
+      "sha256": "2d907d4dbf1caca800ed881a49bc9f5caccefc47439b26fdb5c9979ccaa21c88",
+      "bytes": 101264
+    },
+    {
+      "index": 20,
+      "name": "審判",
+      "file": "20.jpg",
+      "source": "20_Judgement.jpg",
+      "sha256": "dca1521894385fc1cfb1f5b7aae0f5f7de0a339befc7e545c0af091d90b5b75a",
+      "bytes": 97247
+    },
+    {
+      "index": 21,
+      "name": "世界",
+      "file": "21.jpg",
+      "source": "21_World.jpg",
+      "sha256": "37ccc39efa512db6dccdb0d56e7623d0fa7e8e23f4a4215084e8c6918a8ecb56",
+      "bytes": 95522
+    },
+    {
+      "index": 22,
+      "name": "權杖一",
+      "file": "22.jpg",
+      "source": "Wands01.jpg",
+      "sha256": "5687de0ccfb38fbdb92e8d0a2084d464b5774788f52f7bc834378f1977e187c4",
+      "bytes": 72949
+    },
+    {
+      "index": 23,
+      "name": "權杖二",
+      "file": "23.jpg",
+      "source": "Wands02.jpg",
+      "sha256": "6def29eabd6db5c24a932196c4848c0cdfbb69ba6ae0a4c493496b2c6187741c",
+      "bytes": 72827
+    },
+    {
+      "index": 24,
+      "name": "權杖三",
+      "file": "24.jpg",
+      "source": "Wands03.jpg",
+      "sha256": "93ec21db75c0b4febcbc5ed6ca21344a5a8c63df11fe7d06ee3e3566037afecc",
+      "bytes": 70968
+    },
+    {
+      "index": 25,
+      "name": "權杖四",
+      "file": "25.jpg",
+      "source": "Wands04.jpg",
+      "sha256": "c793747a1ff75d5a887f4025fe8b8467937c5cb5793a1cc2fae5aa5d361e9655",
+      "bytes": 75018
+    },
+    {
+      "index": 26,
+      "name": "權杖五",
+      "file": "26.jpg",
+      "source": "Wands05.jpg",
+      "sha256": "0c6375391197d3e1ae3d03c520ac59c237d0e2e400be28d737dc350524563fe2",
+      "bytes": 77005
+    },
+    {
+      "index": 27,
+      "name": "權杖六",
+      "file": "27.jpg",
+      "source": "Wands06.jpg",
+      "sha256": "eab76e4c64c6b25c7bb86891516c6d55418be7ee31a98130d58f6feba82f9493",
+      "bytes": 80156
+    },
+    {
+      "index": 28,
+      "name": "權杖七",
+      "file": "28.jpg",
+      "source": "Wands07.jpg",
+      "sha256": "275b0f20b6fc3291dfaa416d174c690f8bb0f40706591b13221fec1f782c05db",
+      "bytes": 70481
+    },
+    {
+      "index": 29,
+      "name": "權杖八",
+      "file": "29.jpg",
+      "source": "Wands08.jpg",
+      "sha256": "eb1a6ed7e253e962abe695da351746b1d78c63ef38d01ce15c463dd3cdb06b2f",
+      "bytes": 70589
+    },
+    {
+      "index": 30,
+      "name": "權杖九",
+      "file": "30.jpg",
+      "source": "Wands09.jpg",
+      "sha256": "9d70fecb0e083d985a1b202e9eb1ab8cd4a3b8f294255f42230b2211aa68918b",
+      "bytes": 84804
+    },
+    {
+      "index": 31,
+      "name": "權杖十",
+      "file": "31.jpg",
+      "source": "Wands10.jpg",
+      "sha256": "4e0cc79ef2fad90153ec251639c5e4e2dde7ea3e9fadfaa832c9a0892a88237a",
+      "bytes": 78726
+    },
+    {
+      "index": 32,
+      "name": "權杖侍者",
+      "file": "32.jpg",
+      "source": "Wands11.jpg",
+      "sha256": "62f5c5a57714d3e8960481d1fc5e96de0396704984fd5115385b091c735c8754",
+      "bytes": 80502
+    },
+    {
+      "index": 33,
+      "name": "權杖騎士",
+      "file": "33.jpg",
+      "source": "Wands12.jpg",
+      "sha256": "2e567d6836f1facee4a56eae23334a5cc857312c5feb760e4caec5159280512e",
+      "bytes": 91701
+    },
+    {
+      "index": 34,
+      "name": "權杖皇后",
+      "file": "34.jpg",
+      "source": "Wands13.jpg",
+      "sha256": "f09f1836d7952d566047c88f6e04852910a6bf122fdb0fe6401f0e116821de75",
+      "bytes": 99314
+    },
+    {
+      "index": 35,
+      "name": "權杖國王",
+      "file": "35.jpg",
+      "source": "Wands14.jpg",
+      "sha256": "3fdb36a7ffe1f9549ee2d8a06c6b136c5805e5404faba83f68529f5e0796e6b8",
+      "bytes": 95907
+    },
+    {
+      "index": 36,
+      "name": "聖杯一",
+      "file": "36.jpg",
+      "source": "Cups01.jpg",
+      "sha256": "9bbc2fa415c75ce1ff067f479303b3c994c0e385a01a194edfa26d9c42dedd31",
+      "bytes": 80052
+    },
+    {
+      "index": 37,
+      "name": "聖杯二",
+      "file": "37.jpg",
+      "source": "Cups02.jpg",
+      "sha256": "de3e94baea6a2f1b1fa394b9a8e7365070472f3495e0bd49a2b63fe7c3a69782",
+      "bytes": 82145
+    },
+    {
+      "index": 38,
+      "name": "聖杯三",
+      "file": "38.jpg",
+      "source": "Cups03.jpg",
+      "sha256": "701af72decb38a182d94f393ae631960e687a5ae537c66ab4844e88e25d841fa",
+      "bytes": 86263
+    },
+    {
+      "index": 39,
+      "name": "聖杯四",
+      "file": "39.jpg",
+      "source": "Cups04.jpg",
+      "sha256": "d28ea73f737e7638d03e0ac2e5c0fe51402bc3ecdfb50fea7aa530e6d676fd11",
+      "bytes": 77299
+    },
+    {
+      "index": 40,
+      "name": "聖杯五",
+      "file": "40.jpg",
+      "source": "Cups05.jpg",
+      "sha256": "68891ebb31813f967db2788dd9fcb41915622781f9dd5ff99ba721bcdce807a4",
+      "bytes": 50691
+    },
+    {
+      "index": 41,
+      "name": "聖杯六",
+      "file": "41.jpg",
+      "source": "Cups06.jpg",
+      "sha256": "e338247e7d8054a50204125e9375d04d704ef549185fb33a0734a2949f4afa43",
+      "bytes": 98146
+    },
+    {
+      "index": 42,
+      "name": "聖杯七",
+      "file": "42.jpg",
+      "source": "Cups07.jpg",
+      "sha256": "3c5324fd380d41adaec818c9d6b47626dcf0f4cc9910d88f80083432ce9b3cf5",
+      "bytes": 82834
+    },
+    {
+      "index": 43,
+      "name": "聖杯八",
+      "file": "43.jpg",
+      "source": "Cups08.jpg",
+      "sha256": "0705e738afb86bec404c1744b5513387edb60502f7c76fdf0eb525b439d9b3c4",
+      "bytes": 71872
+    },
+    {
+      "index": 44,
+      "name": "聖杯九",
+      "file": "44.jpg",
+      "source": "Cups09.jpg",
+      "sha256": "1e6510b0e059525069abdf4d194b47cc7cdba7fb9598aac22e3a12b82f617476",
+      "bytes": 86931
+    },
+    {
+      "index": 45,
+      "name": "聖杯十",
+      "file": "45.jpg",
+      "source": "Cups10.jpg",
+      "sha256": "1c892faa7150b7b820b3ba945bbf32f410b031ed814c6958fdfe11b927c6bf83",
+      "bytes": 82882
+    },
+    {
+      "index": 46,
+      "name": "聖杯侍者",
+      "file": "46.jpg",
+      "source": "Cups11.jpg",
+      "sha256": "55fc0b0385c1f3aa5187fca46692bf9af151550714b3d981fb2c80c9c46945c7",
+      "bytes": 78927
+    },
+    {
+      "index": 47,
+      "name": "聖杯騎士",
+      "file": "47.jpg",
+      "source": "Cups12.jpg",
+      "sha256": "1567fe028a6fd8377a76a5cbe4e1e3ef3a3f873708a9aa0a1cd155090064650a",
+      "bytes": 84389
+    },
+    {
+      "index": 48,
+      "name": "聖杯皇后",
+      "file": "48.jpg",
+      "source": "Cups13.jpg",
+      "sha256": "78ad7fbae42cbeccd7d6471d7393660f32b52e2f767dcf8d3e11a04c09c50c57",
+      "bytes": 87749
+    },
+    {
+      "index": 49,
+      "name": "聖杯國王",
+      "file": "49.jpg",
+      "source": "Cups14.jpg",
+      "sha256": "07c64f16eaa267482c43822293c7bbe42290bd0e6d658bd5a654d47466dafb78",
+      "bytes": 84809
+    },
+    {
+      "index": 50,
+      "name": "寶劍一",
+      "file": "50.jpg",
+      "source": "Swords01.jpg",
+      "sha256": "2f6a7cdedd3f5dfe36b0b188e7463eea416567ad57e1b81a0aa76165863140ba",
+      "bytes": 73143
+    },
+    {
+      "index": 51,
+      "name": "寶劍二",
+      "file": "51.jpg",
+      "source": "Swords02.jpg",
+      "sha256": "90dd3c787f827f7518a3063d19a45b053d98e015b49d5284ecabe8d44fe831ea",
+      "bytes": 65524
+    },
+    {
+      "index": 52,
+      "name": "寶劍三",
+      "file": "52.jpg",
+      "source": "Swords03.jpg",
+      "sha256": "644c3a755bdbbf96baf17fa2f1774885400b2b67027ac31f15f6087245590223",
+      "bytes": 56856
+    },
+    {
+      "index": 53,
+      "name": "寶劍四",
+      "file": "53.jpg",
+      "source": "Swords04.jpg",
+      "sha256": "df01d2518057faa6470e3a201654f562ac197cb4ccce99c470f69e6f7b58905d",
+      "bytes": 74521
+    },
+    {
+      "index": 54,
+      "name": "寶劍五",
+      "file": "54.jpg",
+      "source": "Swords05.jpg",
+      "sha256": "4f16323cbfc14de53a3ce978498269833cdc9e7d4336f4b0cf5d0a92164cc52f",
+      "bytes": 81722
+    },
+    {
+      "index": 55,
+      "name": "寶劍六",
+      "file": "55.jpg",
+      "source": "Swords06.jpg",
+      "sha256": "344fd8d4745d7448f2bc3221250ee10f09ccd1a581d4153cc835f38090eddbeb",
+      "bytes": 80393
+    },
+    {
+      "index": 56,
+      "name": "寶劍七",
+      "file": "56.jpg",
+      "source": "Swords07.jpg",
+      "sha256": "523362f8f2efbd9547f8072784a01826fed204bbcae768e624534b35c98ebea1",
+      "bytes": 73165
+    },
+    {
+      "index": 57,
+      "name": "寶劍八",
+      "file": "57.jpg",
+      "source": "Swords08.jpg",
+      "sha256": "af21b4e31eb2184a88faf973d222c46c638424b3a4d12b03231353f9f5d51fb4",
+      "bytes": 83436
+    },
+    {
+      "index": 58,
+      "name": "寶劍九",
+      "file": "58.jpg",
+      "source": "Swords09.jpg",
+      "sha256": "0ebfed39d706747d435f354f906b2b90d12c3f765fc7a23028f9f8a22870a64f",
+      "bytes": 73697
+    },
+    {
+      "index": 59,
+      "name": "寶劍十",
+      "file": "59.jpg",
+      "source": "Swords10.jpg",
+      "sha256": "35d95f26045244ce927aec33f9dc0c4f1016d10b0b5da1027fad73c8e82be337",
+      "bytes": 69830
+    },
+    {
+      "index": 60,
+      "name": "寶劍侍者",
+      "file": "60.jpg",
+      "source": "Swords11.jpg",
+      "sha256": "d27acc694d9975afca63e34107fa7e84b3fe759529f1a5c07d3909ddee8e44b0",
+      "bytes": 79194
+    },
+    {
+      "index": 61,
+      "name": "寶劍騎士",
+      "file": "61.jpg",
+      "source": "Swords12.jpg",
+      "sha256": "c8536105df523c43bc4d17d3b4d3d120caec2a843f82655e3ec0954a37ae0df7",
+      "bytes": 84731
+    },
+    {
+      "index": 62,
+      "name": "寶劍皇后",
+      "file": "62.jpg",
+      "source": "Swords13.jpg",
+      "sha256": "11e8ab9862f972f18429461ab1801e5474f8e2295a72a7172adc1bf0dfa341f9",
+      "bytes": 79099
+    },
+    {
+      "index": 63,
+      "name": "寶劍國王",
+      "file": "63.jpg",
+      "source": "Swords14.jpg",
+      "sha256": "bdcf78c99462b06ed7c44ab6535c28eff1025c31ffe86f16f42ab145e18ea42e",
+      "bytes": 87221
+    },
+    {
+      "index": 64,
+      "name": "錢幣一",
+      "file": "64.jpg",
+      "source": "Pents01.jpg",
+      "sha256": "d78f12f111abdb39dfc3c9cb08863a61629839b969f22c24b827cec4f8fcd3b9",
+      "bytes": 74839
+    },
+    {
+      "index": 65,
+      "name": "錢幣二",
+      "file": "65.jpg",
+      "source": "Pents02.jpg",
+      "sha256": "d081ac95120f8da56ae978b288e8e45f112b7db792d367d89a326a1af0a868c3",
+      "bytes": 71637
+    },
+    {
+      "index": 66,
+      "name": "錢幣三",
+      "file": "66.jpg",
+      "source": "Pents03.jpg",
+      "sha256": "13d0711023322e9d2da8a191a32955b9e6e769adb64b276e59814782c52c9165",
+      "bytes": 92558
+    },
+    {
+      "index": 67,
+      "name": "錢幣四",
+      "file": "67.jpg",
+      "source": "Pents04.jpg",
+      "sha256": "68421c2a0086f82472c463e8e0cfd0ea95e11525ae44d15263f9251e12cc160c",
+      "bytes": 65565
+    },
+    {
+      "index": 68,
+      "name": "錢幣五",
+      "file": "68.jpg",
+      "source": "Pents05.jpg",
+      "sha256": "f7fc6ae0747abf356a8b8db2b4c6cc108914abf20ad84b3c60eceb3cfa0d5495",
+      "bytes": 101802
+    },
+    {
+      "index": 69,
+      "name": "錢幣六",
+      "file": "69.jpg",
+      "source": "Pents06.jpg",
+      "sha256": "5be3af7b843fc1a6521c9ca0c68123ee5841ac710969fbe62063cf065b95ce69",
+      "bytes": 78610
+    },
+    {
+      "index": 70,
+      "name": "錢幣七",
+      "file": "70.jpg",
+      "source": "Pents07.jpg",
+      "sha256": "6908ede4b84b078d2f4767abf8b79beb2b306780204999b7daebbfbd16e789ea",
+      "bytes": 84772
+    },
+    {
+      "index": 71,
+      "name": "錢幣八",
+      "file": "71.jpg",
+      "source": "Pents08.jpg",
+      "sha256": "19cf1af68945b81d4766933a3a89c4ac7cd079ec8674988e93686f8933819fa0",
+      "bytes": 67036
+    },
+    {
+      "index": 72,
+      "name": "錢幣九",
+      "file": "72.jpg",
+      "source": "Pents09.jpg",
+      "sha256": "5a2d6c8082b3fbc779b55ec75249b1fc8a9ba14a62991ba349ad06d9799d0aa1",
+      "bytes": 87776
+    },
+    {
+      "index": 73,
+      "name": "錢幣十",
+      "file": "73.jpg",
+      "source": "Pents10.jpg",
+      "sha256": "f2334b72d120519418f0958d9a13ebb679bb30e1d2be191220272940615d7378",
+      "bytes": 102365
+    },
+    {
+      "index": 74,
+      "name": "錢幣侍者",
+      "file": "74.jpg",
+      "source": "Pents11.jpg",
+      "sha256": "0a557cab55b4a46a0781e427c113a51db7dd626818e634b11fd4c5170994e633",
+      "bytes": 67139
+    },
+    {
+      "index": 75,
+      "name": "錢幣騎士",
+      "file": "75.jpg",
+      "source": "Pents12.jpg",
+      "sha256": "0eecd33345e1f07b1602cb69a5a8dbc2307c7837d0e54ff3ac3b30c31dd2022f",
+      "bytes": 67951
+    },
+    {
+      "index": 76,
+      "name": "錢幣皇后",
+      "file": "76.jpg",
+      "source": "Pents13.jpg",
+      "sha256": "4b7a016f1a78f43564d663cf0624aecf1ee156c973ec2e81af32d04bd799100d",
+      "bytes": 106301
+    },
+    {
+      "index": 77,
+      "name": "錢幣國王",
+      "file": "77.jpg",
+      "source": "Pents14.jpg",
+      "sha256": "b93ce7e9123a5acddf0d59802b5a8c46f05e4503463061f6e6cf3850f4c2ab5c",
+      "bytes": 89638
+    },
+    {
+      "file": "back.jpg",
+      "source": "user-provided",
+      "source_sha256": "6a5b88f18f9fbaf2f84f6b5a7b1effc44c41d6d87510c36379a0fe61c5e7a748",
+      "sha256": "1e20dce74d90f7e50e02874729cc566e0022c27bdd682d0bf6b6ac88b83372ef",
+      "bytes": 89981
+    }
+  ]
+}

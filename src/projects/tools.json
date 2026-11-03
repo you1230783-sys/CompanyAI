@@ -697,7 +697,9 @@
                       "const": "excel_write"
                     },
                     "sheet": {
-                      "type": "integer"
+                      "type": "integer",
+                      "minimum": 1,
+                      "description": "工作表編號從1起算；第一張填1，不是0。"
                     },
                     "cell": {
                       "type": "string"
@@ -800,7 +802,8 @@
                             },
                             "sheet": {
                               "type": "integer",
-                              "minimum": 1
+                              "minimum": 1,
+                              "description": "工作表編號從1起算；第一張填1，不是0。"
                             },
                             "cell": {
                               "type": "string",
@@ -849,6 +852,183 @@
                     "path",
                     "target",
                     "width"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "word_paragraphs"
+                      ]
+                    },
+                    "before": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "paragraphs": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "minItems": 1,
+                      "maxItems": 100
+                    },
+                    "format": {
+                      "type": "object",
+                      "properties": {
+                        "style": {
+                          "type": "string"
+                        },
+                        "font": {
+                          "type": "string"
+                        },
+                        "color": {
+                          "type": "string"
+                        },
+                        "alignment": {
+                          "type": "string"
+                        },
+                        "fill": {
+                          "type": "string"
+                        },
+                        "number_format": {
+                          "type": "string"
+                        },
+                        "size": {
+                          "type": "number"
+                        },
+                        "space_before": {
+                          "type": "number"
+                        },
+                        "space_after": {
+                          "type": "number"
+                        },
+                        "line_spacing": {
+                          "type": "number"
+                        },
+                        "column_width": {
+                          "type": "number"
+                        },
+                        "bold": {
+                          "type": "boolean"
+                        },
+                        "italic": {
+                          "type": "boolean"
+                        },
+                        "bullets": {
+                          "type": "boolean"
+                        },
+                        "borders": {
+                          "type": "boolean"
+                        },
+                        "wrap": {
+                          "type": "boolean"
+                        },
+                        "font_east_asia": {
+                          "type": "string",
+                          "description": "Word 東亞字型，需本機已安裝。"
+                        }
+                      },
+                      "required": [],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "before",
+                    "paragraphs",
+                    "format"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "word_table_append"
+                      ]
+                    },
+                    "table": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "table",
+                    "rows"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "excel_append"
+                      ]
+                    },
+                    "sheet": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "description": "工作表編號從1起算；第一張填1，不是0。"
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": [
+                            "string",
+                            "number",
+                            "null"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "sheet",
+                    "rows"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "ppt_duplicate"
+                      ]
+                    },
+                    "slide": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 200
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "slide"
                   ],
                   "additionalProperties": false
                 }
@@ -1372,7 +1552,8 @@
                 "cad-active",
                 "cad-copy",
                 "cad-excel",
-                "mermaid"
+                "mermaid",
+                "excel-formulas"
               ]
             },
             "progress_note": {
@@ -1652,7 +1833,9 @@
                         "const": "excel_write"
                       },
                       "sheet": {
-                        "type": "integer"
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "工作表編號從1起算；第一張填1，不是0。"
                       },
                       "cell": {
                         "type": "string"
@@ -1755,7 +1938,8 @@
                               },
                               "sheet": {
                                 "type": "integer",
-                                "minimum": 1
+                                "minimum": 1,
+                                "description": "工作表編號從1起算；第一張填1，不是0。"
                               },
                               "cell": {
                                 "type": "string",
@@ -1804,6 +1988,183 @@
                       "path",
                       "target",
                       "width"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "word_paragraphs"
+                        ]
+                      },
+                      "before": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "paragraphs": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "minItems": 1,
+                        "maxItems": 100
+                      },
+                      "format": {
+                        "type": "object",
+                        "properties": {
+                          "style": {
+                            "type": "string"
+                          },
+                          "font": {
+                            "type": "string"
+                          },
+                          "color": {
+                            "type": "string"
+                          },
+                          "alignment": {
+                            "type": "string"
+                          },
+                          "fill": {
+                            "type": "string"
+                          },
+                          "number_format": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "number"
+                          },
+                          "space_before": {
+                            "type": "number"
+                          },
+                          "space_after": {
+                            "type": "number"
+                          },
+                          "line_spacing": {
+                            "type": "number"
+                          },
+                          "column_width": {
+                            "type": "number"
+                          },
+                          "bold": {
+                            "type": "boolean"
+                          },
+                          "italic": {
+                            "type": "boolean"
+                          },
+                          "bullets": {
+                            "type": "boolean"
+                          },
+                          "borders": {
+                            "type": "boolean"
+                          },
+                          "wrap": {
+                            "type": "boolean"
+                          },
+                          "font_east_asia": {
+                            "type": "string",
+                            "description": "Word 東亞字型，需本機已安裝。"
+                          }
+                        },
+                        "required": [],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "before",
+                      "paragraphs",
+                      "format"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "word_table_append"
+                        ]
+                      },
+                      "table": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "rows": {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "table",
+                      "rows"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "excel_append"
+                        ]
+                      },
+                      "sheet": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "工作表編號從1起算；第一張填1，不是0。"
+                      },
+                      "rows": {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "string",
+                              "number",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "sheet",
+                      "rows"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "ppt_duplicate"
+                        ]
+                      },
+                      "slide": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 200
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "slide"
                     ],
                     "additionalProperties": false
                   }
@@ -6577,6 +6938,50 @@
                       "value"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "block_circle"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "member_handle": {
+                            "type": "string"
+                          },
+                          "diameter": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "color": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 255
+                          }
+                        },
+                        "required": [
+                          "member_handle",
+                          "diameter",
+                          "color"
+                        ],
+                        "additionalProperties": false,
+                        "description": "普通圓圖塊；全部引用各列一項且參數一致。直徑為圖面單位，程式換算比例。member_handle取block.members。operations=[]。"
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               }
@@ -8434,6 +8839,50 @@
                       },
                       "value": {
                         "type": "string"
+                      }
+                    },
+                    "required": [
+                      "handle",
+                      "kind",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "handle": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "block_circle"
+                        ]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "member_handle": {
+                            "type": "string"
+                          },
+                          "diameter": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "color": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 255
+                          }
+                        },
+                        "required": [
+                          "member_handle",
+                          "diameter",
+                          "color"
+                        ],
+                        "additionalProperties": false,
+                        "description": "普通圓圖塊；全部引用各列一項且參數一致。直徑為圖面單位，程式換算比例。member_handle取block.members。operations=[]。"
                       }
                     },
                     "required": [
@@ -12057,6 +12506,63 @@
             "workflow_id",
             "offset",
             "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "write_excel_formulas",
+        "description": "excel-formulas技能：在Office工作副本寫入AI自訂的A1公式矩形、計算並讀回calculation的值與error。保留原檔、核對revision。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "copy_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "revision": {
+              "type": "string",
+              "minLength": 1
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "每輪更新交接：目標、決策、已完成、待辦、下一步；建議200–500字。"
+            },
+            "sheet": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "工作表編號從1起算；第一張填1，不是0。"
+            },
+            "cell": {
+              "type": "string"
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "minItems": 1
+            },
+            "dynamic": {
+              "type": "boolean",
+              "description": "false使用Formula；true使用Excel動態陣列Formula2，需版本支援。"
+            }
+          },
+          "required": [
+            "copy_id",
+            "revision",
+            "progress_note",
+            "sheet",
+            "cell",
+            "rows",
+            "dynamic"
           ],
           "additionalProperties": false
         }

@@ -127,10 +127,10 @@ impl App {
         })).collect();
         let mut tasks:Vec<_>=self.work.store.tasks.iter().rev().filter(|t| !t.title_generation).map(|t|json!({
             "id":t.request_id,"conversation_id":t.conversation_id,"title":t.title,"mode":t.mode,"tool_events":t.tool_events,"created_at":t.created_at,
-            "state":if t.applied && !t.remote.as_ref().is_some_and(TaskStatus::terminal){"stopped"}else{t.remote.as_ref().map(|r|r.state.as_str()).unwrap_or("submitting")},"active":t.active(),"message":t.message,
+            "history_id":t.history_id(),"state":if t.active() && t.project_retry.due_at_millis > 0 {"reconnecting"}else if t.applied && !t.remote.as_ref().is_some_and(TaskStatus::terminal){"stopped"}else{t.remote.as_ref().map(|r|r.state.as_str()).unwrap_or("submitting")},"active":t.active(),"message":t.message,
             "progress":t.remote.as_ref().and_then(|r|r.progress),"queue_position":t.remote.as_ref().and_then(|r|r.queue_position),
             "partial":if Some(&t.conversation_id)==self.active_id.as_ref(){t.partial.as_str()}else{""},
-            "can_retry":t.active()&&t.remote.is_none()&&!self.work.streams.contains(&t.request_id),
+            "can_retry":t.active()&&t.project_retry.due_at_millis==0&&t.remote.is_none()&&!self.work.streams.contains(&t.request_id),
             "tool_status":if t.active(){self.work.tool_status.get(&t.request_id)}else{None}
         })).collect();
         if let Some(task) = self.project_task() {
@@ -488,6 +488,16 @@ impl App {
                 }
             }
             WorkCommand::CancelTask { id } => {
+                if self
+                    .work
+                    .store
+                    .tasks
+                    .iter()
+                    .any(|t| t.request_id == id && t.active() && t.project_retry.due_at_millis > 0)
+                {
+                    self.stop_local_task(&id, false)?;
+                    return Ok(());
+                }
                 let task = self
                     .work
                     .store
@@ -847,7 +857,63 @@ impl App {
             }
         }
     }
+    /// 等待不阻塞UI；先保存新ID，再提交。重新啟動只查已保存的ID，不猜是否送達。
+    fn resume_chat_retries(&mut self) -> AppResult<()> {
+        if !self.logged_in() || self.versions.blocked() || self.work.storage_error {
+            return Ok(());
+        }
+        let due: Vec<_> = self
+            .work
+            .store
+            .tasks
+            .iter()
+            .filter(|t| {
+                t.active()
+                    && t.project_retry.due_at_millis > 0
+                    && t.project_retry.due_at_millis <= jobs::retry::now_millis()
+            })
+            .cloned()
+            .collect();
+        for mut task in due {
+            let old_id = task.request_id.clone();
+            let replace = task.project_retry.replace_failed;
+            if replace {
+                self.preserve_partial_reply(&task)?;
+                jobs::retry::replace(&mut task)?;
+                task.partial.clear();
+                task.tool_events.clear();
+            }
+            task.project_retry.due_at_millis = 0;
+            task.message = if replace {
+                "正在重送已確認失敗的推論"
+            } else {
+                "正在查回原請求"
+            }
+            .into();
+            let mut next = self.work.store.clone();
+            *next
+                .tasks
+                .iter_mut()
+                .find(|t| t.request_id == old_id)
+                .ok_or("重連任務已移除")? = task.clone();
+            next.save(&self.root, &self.config)?;
+            self.work.store = next;
+            if replace {
+                if let Some(cancel) = self.work.cancellations.remove(&old_id) {
+                    cancel.store(true, Ordering::Relaxed);
+                }
+                self.work.streams.remove(&old_id);
+                self.work.tool_status.remove(&old_id);
+                self.work.poll_failures.remove(&old_id);
+                self.submit_work(task)?;
+            }
+        }
+        Ok(())
+    }
     pub(super) fn poll_work(&mut self, force: bool) {
+        if let Err(error) = self.resume_chat_retries() {
+            self.status = error;
+        }
         self.start_uploads();
         if self.smoke
             || !self.logged_in()
@@ -865,7 +931,10 @@ impl App {
             .tasks
             .iter()
             // 尚未取得任務 ID 的提交先等 POST 回應；重新啟動或傳輸失聯則查原 ID。
-            .filter(|t| t.can_poll(self.work.streams.contains(&t.request_id)))
+            .filter(|t| {
+                t.project_retry.due_at_millis == 0
+                    && t.can_poll(self.work.streams.contains(&t.request_id))
+            })
             .cloned()
             .collect();
         let files: Vec<_> = self
@@ -1314,7 +1383,16 @@ impl App {
                                 .iter_mut()
                                 .find(|task| task.request_id == id)
                             {
-                                task.message = failure.message;
+                                if !task.title_generation && task.project_retry.due_at_millis == 0 {
+                                    if jobs::retry::schedule(task, false, &failure.message) {
+                                        task.message = jobs::retry::notice(task);
+                                    } else {
+                                        let message = format!("自動重連五次仍無法確認結果，已停止本機追蹤；可稍後手動確認。{}", failure.message);
+                                        self.persist_stopped_task(&id, false, &message)?;
+                                    }
+                                } else if task.project_retry.due_at_millis == 0 {
+                                    task.message = failure.message;
+                                }
                             }
                             self.work.poll_delay = (self.work.poll_delay * 2).min(30);
                             self.work_save()?;
@@ -1371,6 +1449,23 @@ impl App {
             .cloned()
             .collect();
         for task in pending {
+            if !task.title_generation && !task.mail_analysis && jobs::retry::replaceable(&task) {
+                if task.project_retry.due_at_millis > 0 {
+                    continue;
+                }
+                let saved = self
+                    .work
+                    .store
+                    .tasks
+                    .iter_mut()
+                    .find(|t| t.request_id == task.request_id)
+                    .ok_or("缺少重連任務")?;
+                if jobs::retry::schedule(saved, true, "伺服器確認推論暫時失敗") {
+                    saved.message = jobs::retry::notice(saved);
+                    self.work_save()?;
+                    continue;
+                }
+            }
             let remote = task.remote.as_ref().ok_or("缺少任務狀態。")?;
             if remote.state == "completed" {
                 let mut archive = self.archive.clone();
@@ -1446,7 +1541,7 @@ impl App {
             {
                 self.work.tray_restore_only = false;
                 self.work.task_balloon = true;
-                tray(self.window, NIM_MODIFY, Some(label));
+                self.desktop_notice(label);
             }
         }
         Ok(())

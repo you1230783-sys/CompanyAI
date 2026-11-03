@@ -5,3 +5,5 @@ edits每項{handle,kind,value}；依回傳allowed_edits，圖層鎖定停止，�
 text=文字；color=ACI1–255；move=[dx,dy]；radius=正數；height=正數；delete=null；linetype={name,scale}。不是所有圖元皆支援，2008目前圖面原生備援支援TEXT/MTEXT改字及已核對平面直徑標註diameter=目標直徑；只對allowed_edits列出的動作，不支援刪除／新增。其他尺寸／引線依allowed_edits，不承諾刪除重建可用。修改附屬MTEXT可保留引線本體；改圓不自動同步標註或備註，需依需求逐一更新。直徑標註改真正量測端點，不用文字偽造尺寸。不猜Handle、不刪未知圖元。
 2008的diameter在同一圖面安全替換該直徑標註並保留位置／方向／樣式，結果replacement_handles提供舊→新Handle；後續依新Handle查詢。文字及引線附屬MTEXT仍原位修改，不能把引線本體當成文字圖元。
 需新增時用operations，無新增填[]；特殊圖形按需讀cad-geometry。副本模式存成新檔，目前圖面模式不存檔，不能互換承諾。
+
+既有圖塊若allowed_edits含block_circle：從block.members取圓member_handle，對block.model_reference_handles每個引用各列一項{handle,kind:"block_circle",value:{member_handle,diameter:目標直徑,color:ACI}}。同一定義參數一致，operations=[]；程式按引用比例換算局部半徑，同時改色／改徑。定義共用，必須需求涵蓋全部引用；只改部分時先說明影響，不自行擴大範圍。限1–32個直接圓的普通圖塊、正向等比例；巢狀／配置／外部／動態或非圓成員拒絕，不分解或重畫。block.read_only_reason說明限制。

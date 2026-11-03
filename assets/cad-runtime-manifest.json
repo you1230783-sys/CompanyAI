@@ -1,8 +1,9 @@
 {
   "cad.py": "9fa08d20e1a47d33bbd3eabf65bce5bb6dead824369bac0256e67e2d59e78804",
-  "cad_active.py": "6e9078111ad778a823714489e1ef8245446f9075abfe2c03d486b4a577fbdf4e",
+  "cad_active.py": "a599c2b8ea95829ffcc7e2e6d0a4e437a9c69fd784b6000f05837f43970c3700",
+  "cad_block_circles.py": "4360ea77683009ec6fdf77eb5bcd18c73983c8bc07510f35aecd13bb4460515e",
   "cad_bulk.py": "864e683ca620282ee621cbeb7127e20fffef5d96f4624cfb5086cae1deee58a2",
-  "cad_existing.py": "9c8a14cc8987f526d5f37b5975557f39054ae097536ecacf004c892724f11ab3",
+  "cad_existing.py": "e631c5bd22d23ae815bcea58017327537608bec2b86ee6cb6ec28ca05c41b6ac",
   "cad_export.lsp": "bd30d7c2f8bd95477a1fef51286ce0a44c5ddb5f235c5fc342e047ebadd9ab15",
   "cad_geometry.py": "a2aeda43ae07eb7833f7cd5d355449e6cc890753686d5b6e787946e092be47bc",
   "cad_geometry_edit.py": "32759bdb8105c9dbce36259025707eb1e79b8cedab69a6eb54b8d9526f3f1311",

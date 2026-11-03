@@ -42,6 +42,7 @@ def main():
         "python313.zip\n.\n..\nLib/site-packages\nLib/site-packages/win32\nLib/site-packages/win32/lib\nLib/site-packages/Pythonwin\nimport site\n", encoding="ascii")
     shutil.copyfile(ROOT / "src/cad_worker.py", stage / "worker.py")
     shutil.copyfile(ROOT / "src/cad_existing.py", stage / "cad_existing.py")
+    shutil.copyfile(ROOT / "src/cad_block_circles.py", stage / "cad_block_circles.py")
     shutil.copyfile(ROOT / "src/cad_active.py", stage / "cad_active.py")
     shutil.copyfile(ROOT / "src/cad_bulk.py", stage / "cad_bulk.py")
     shutil.copyfile(ROOT / "src/cad_undo.py", stage / "cad_undo.py")

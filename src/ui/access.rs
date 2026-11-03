@@ -8,6 +8,8 @@ impl Command {
         update_required: bool,
         smoke: bool,
     ) -> AppResult<()> {
+        let offline = matches!(self, Command::Pet { .. })
+            || matches!(self, Command::Tarot { command } if !matches!(command, super::tarot::TarotCommand::Analyze { .. }));
         let login_flow = matches!(self, Self::Login | Self::CancelLogin | Self::ReopenLogin);
         let lifecycle = matches!(self, Self::Ready | Self::Exit | Self::SelfTestResult { .. });
         // --self-check 既有的原生鍵盤錄製測試不讀真實帳密，例外僅限這三個錄製命令。
@@ -18,11 +20,12 @@ impl Command {
                     | Self::CancelHotkeyRecording
                     | Self::RecordedHotkey { .. }
             );
-        if !logged_in && !login_flow && !lifecycle && !smoke_recording {
+        if !logged_in && !offline && !login_flow && !lifecycle && !smoke_recording {
             return Err("請先完成瀏覽器登入，再使用此功能。".into());
         }
         // 未登入仍能完成登入；登入後再顯示既有的強制更新畫面，避免兩種門檻互相卡住。
         if update_required
+            && !offline
             && !login_flow
             && !lifecycle
             && !matches!(self, Self::Draft { .. } | Self::Refresh | Self::Download)

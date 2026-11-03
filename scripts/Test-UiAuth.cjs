@@ -13,7 +13,7 @@ class Element {
     this.events = new Map(); this.inert = false; this.resetCount = 0;
     if (["button", "input", "select", "textarea"].includes(tag)) this.disabled = disabled;
   }
-  closest() { return this; }
+  closest(selector) { return selector === "[data-offline]" ? (this.offline ? this : null) : this; }
   addEventListener(type, handler) {
     if (!this.events.has(type)) this.events.set(type, []);
     this.events.get(type).push(handler);
@@ -48,8 +48,8 @@ const document = {
   body: {append() {}},
   querySelectorAll: selector => selector === "dialog"
     ? [...elements.values()].filter(e => e.tag === "dialog")
-    : selector === "dialog[open]"
-    ? [...elements.values()].filter(e => e.tag === "dialog" && e.open)
+    : selector.startsWith("dialog[open]")
+    ? [...elements.values()].filter(e => e.tag === "dialog" && e.open && (!selector.includes(":not") || !e.offline))
     : [...elements.values()].filter(e => ["button", "input", "select", "textarea", "a", "summary"].includes(e.tag)),
   addEventListener: (type, callback) => listeners.set(type, callback),
 };
@@ -119,5 +119,7 @@ observers.at(-1).trigger(); addedDialog.open = true;
 addedDialog.dispatch("pointerdown", outside); addedDialog.dispatch("click", outside);
 assert.equal(addedDialog.open, false, "future dialogs also receive backdrop behavior");
 assert.ok(html.includes('id="login-entry" class="primary-button">登入</button>'));
-assert.ok(html.includes("尚未登入時無法使用其他功能"));
+assert.ok(html.includes("塔羅"));
+assert.ok(gate.canSend({type:"tarot",command:{action:"shuffle"}}));
+assert.ok(gate.canSend({type:"pet",command:{action:"state"}}));
 console.log(`PASS: login lock/lifecycle, dynamic controls, command filter, all ${dialogIds.length} dialog backdrops and future dialogs`);

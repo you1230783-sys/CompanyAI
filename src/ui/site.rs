@@ -157,11 +157,9 @@ impl App {
                         if added > 0 && self.config.notification_popups && !self.is_foreground() {
                             self.work.tray_restore_only = false;
                             self.work.task_balloon = false;
-                            tray(
-                                self.window,
-                                NIM_MODIFY,
-                                Some(&format!("收到 {added} 則全站新通知，點一下查看。")),
-                            );
+                            self.desktop_notice(&format!(
+                                "收到 {added} 則全站新通知，點一下查看。"
+                            ));
                         }
                     }
                     Err(e) => self.site_failure(e),

@@ -31,6 +31,17 @@ pub enum Action {
         #[serde(default)]
         format: Format,
     },
+    /// 一次新增多個正文段落，順序與傳入陣列一致。
+    WordParagraphs {
+        before: Option<String>,
+        paragraphs: Vec<String>,
+        #[serde(default)]
+        format: Format,
+    },
+    WordTableAppend {
+        table: i32,
+        rows: Vec<Vec<String>>,
+    },
     WordTable {
         before: Option<String>,
         rows: Vec<Vec<String>>,
@@ -43,6 +54,22 @@ pub enum Action {
         sheet: i32,
         cell: String,
         rows: Vec<Vec<Value>>,
+    },
+    ExcelAppend {
+        sheet: i32,
+        rows: Vec<Vec<Value>>,
+    },
+    /// 只由獨立公式工具建立；一般office_action不開放此項。
+    ExcelFormulas {
+        sheet: i32,
+        cell: String,
+        rows: Vec<Vec<String>>,
+        #[serde(default)]
+        dynamic: bool,
+    },
+    /// 複製範本投影片到末尾，保留版面；文字替換沿用edit_office。
+    PptDuplicate {
+        slide: i32,
     },
     PptSlide {
         layout: String,
@@ -202,7 +229,7 @@ fn excel_range(session: &Session, target: &str) -> AppResult<IDispatch> {
     }
     let sheets = child(session.document()?, "Worksheets")?;
     if index < 1 || index > integer(&sheets, "Count")? {
-        return Err("工作表不存在。".into());
+        return Err("工作表編號不存在；sheet從1起算，第一張填1而非0。請依read_file結構中的工作表數核對，不要因此新增或重建工作表。".into());
     }
     obj(invoke(
         &item(&sheets, index)?,
@@ -482,7 +509,7 @@ fn rectangular<T>(rows: &[Vec<T>]) -> AppResult<usize> {
         || rows.len() * width > 2000
         || rows.iter().any(|r| r.len() != width)
     {
-        return Err("資料需為等寬矩形，最多 2000 格。".into());
+        return Err("資料需為等寬矩形，最多 2000 格；每列欄數必須相同。不同起始格或不同寬度請分次操作。excel_write只寫常數資料，公式另以write_excel_formulas寫入目標格，不要拼成不等寬資料列。".into());
     }
     Ok(width)
 }
@@ -648,6 +675,72 @@ impl Session {
                 )?;
                 apply_format(&range, self.collection, format)?;
             }
+            Action::WordParagraphs {
+                before,
+                paragraphs,
+                format,
+            } if self.collection == "Documents" => {
+                if paragraphs.is_empty() || paragraphs.len() > 100 {
+                    return Err("每批1–100段。".into());
+                }
+                // 段落ID會移動；先固定插入點，結尾追加可逐段使用原入口。
+                let range = self.word_insertion(before, cancel)?;
+                let start = integer(&range, "Start")?;
+                for text in paragraphs {
+                    plain(text)?;
+                }
+                let text = format!("{}\r", paragraphs.join("\r"));
+                super::super::text::validate(&text)?;
+                set(&range, "Text", text.as_str().into())?;
+                let inserted = obj(invoke(
+                    doc,
+                    "Range",
+                    vec![
+                        start.into(),
+                        (start + text.encode_utf16().count() as i32).into(),
+                    ],
+                    false,
+                )?)?;
+                apply_format(
+                    &inserted,
+                    self.collection,
+                    &Format {
+                        style: Some("body".into()),
+                        bullets: Some(false),
+                        ..Format::default()
+                    },
+                )?;
+                apply_format(&inserted, self.collection, format)?;
+            }
+            Action::WordTableAppend { table, rows } if self.collection == "Documents" => {
+                let width = rectangular(rows)?;
+                let tables = child(doc, "Tables")?;
+                if *table < 1 || *table > integer(&tables, "Count")? {
+                    return Err("表格不存在。".into());
+                }
+                let target = item(&tables, *table)?;
+                if integer(&child(&target, "Columns")?, "Count")? != width as i32 {
+                    return Err("新增列須與現有表格欄數一致；合併表格不支援。".into());
+                }
+                let collection = child(&target, "Rows")?;
+                let first = integer(&collection, "Count")?;
+                if (first as usize + rows.len()) * width > 2000 {
+                    return Err("表格超過2000格。".into());
+                }
+                for (r, values) in rows.iter().enumerate() {
+                    invoke(&collection, "Add", vec![], false)?;
+                    for (c, text) in values.iter().enumerate() {
+                        plain(text)?;
+                        let cell = obj(invoke(
+                            &target,
+                            "Cell",
+                            vec![(first + r as i32 + 1).into(), (c as i32 + 1).into()],
+                            false,
+                        )?)?;
+                        set(&child(&cell, "Range")?, "Text", text.as_str().into())?;
+                    }
+                }
+            }
             Action::WordTable { before, rows } if self.collection == "Documents" => {
                 let width = rectangular(rows)?;
                 for text in rows.iter().flatten() {
@@ -719,7 +812,7 @@ impl Session {
                 }
                 let sheets = child(doc, "Worksheets")?;
                 if *sheet < 1 || *sheet > integer(&sheets, "Count")? {
-                    return Err("工作表不存在。".into());
+                    return Err("工作表編號不存在；sheet從1起算，第一張填1而非0。請依read_file結構中的工作表數核對，不要因此新增或重建工作表。".into());
                 }
                 let cells = child(&item(&sheets, *sheet)?, "Cells")?;
                 for (r, values) in rows.iter().enumerate() {
@@ -755,6 +848,90 @@ impl Session {
                         }
                     }
                 }
+            }
+            Action::ExcelAppend { sheet, rows } if self.collection == "Workbooks" => {
+                let sheets = child(doc, "Worksheets")?;
+                if *sheet < 1 || *sheet > integer(&sheets, "Count")? {
+                    return Err("工作表編號不存在；sheet從1起算，第一張填1而非0。請依read_file結構中的工作表數核對，不要因此新增或重建工作表。".into());
+                }
+                let used = child(&item(&sheets, *sheet)?, "UsedRange")?;
+                // CountA區分真正空白表與A1唯一資料；追加不覆寫任何既有格。
+                let occupied = f64::try_from(&invoke(
+                    &child(&self.app, "WorksheetFunction")?,
+                    "CountA",
+                    vec![used.clone().into()],
+                    false,
+                )?)
+                .map_err(|e| e.to_string())?;
+                let next = if occupied == 0.0 {
+                    1
+                } else {
+                    integer(&used, "Row")? + integer(&child(&used, "Rows")?, "Count")?
+                };
+                self.apply(
+                    &Action::ExcelWrite {
+                        sheet: *sheet,
+                        cell: format!("A{next}"),
+                        rows: rows.clone(),
+                    },
+                    cancel,
+                )?;
+            }
+            Action::ExcelFormulas {
+                sheet,
+                cell: address,
+                rows,
+                dynamic,
+            } if self.collection == "Workbooks" => {
+                let width = rectangular(rows)?;
+                let (row, col) = cell(address)?;
+                if row + rows.len() as i32 - 1 > 1000 || col + width as i32 - 1 > 100 {
+                    return Err("公式範圍超出上限。".into());
+                }
+                let sheets = child(doc, "Worksheets")?;
+                if *sheet < 1 || *sheet > integer(&sheets, "Count")? {
+                    return Err("工作表編號不存在；sheet從1起算，第一張填1而非0。請依read_file結構中的工作表數核對，不要因此新增或重建工作表。".into());
+                }
+                let worksheet = item(&sheets, *sheet)?;
+                let cells = child(&worksheet, "Cells")?;
+                for (r, values) in rows.iter().enumerate() {
+                    for (c, formula) in values.iter().enumerate() {
+                        validate_formula(formula)?;
+                        let target = obj(invoke(
+                            &cells,
+                            "Item",
+                            vec![(row + r as i32).into(), (col + c as i32).into()],
+                            false,
+                        )?)?;
+                        if bool::try_from(&get(&target, "MergeCells")?).unwrap_or(true)
+                            || bool::try_from(&get(&target, "HasArray")?).unwrap_or(true)
+                        {
+                            return Err("不可覆寫合併格或既有陣列公式。".into());
+                        }
+                        let property = if *dynamic { "Formula2" } else { "Formula" };
+                        set(&target, property, formula.as_str().into()).map_err(|e| {
+                            format!("公式寫入失敗（{property}；dynamic需Excel支援Formula2）：{e}")
+                        })?;
+                        if !bool::try_from(&get(&target, "HasFormula")?).unwrap_or(false) {
+                            return Err("Excel未接受為公式。".into());
+                        }
+                    }
+                }
+                invoke(&worksheet, "Calculate", vec![], false)?;
+            }
+            Action::PptDuplicate { slide } if self.collection == "Presentations" => {
+                let slides = child(doc, "Slides")?;
+                let count = integer(&slides, "Count")?;
+                if *slide < 1 || *slide > count || count >= 200 {
+                    return Err("投影片不存在或已達200張。".into());
+                }
+                let duplicate = obj(invoke(&item(&slides, *slide)?, "Duplicate", vec![], false)?)?;
+                invoke(
+                    &item(&duplicate, 1)?,
+                    "MoveTo",
+                    vec![(count + 1).into()],
+                    false,
+                )?;
             }
             Action::PptSlide {
                 layout,
@@ -802,6 +979,39 @@ impl Session {
         }
         Ok(())
     }
+}
+
+/// 接受AI提供的A1公式，不限定函數清單；禁止公式變成外部讀取或DDE執行入口。
+fn validate_formula(formula: &str) -> AppResult<()> {
+    let upper = formula.to_ascii_uppercase();
+    if !formula.starts_with('=') {
+        return Err("write_excel_formulas只寫公式，不能填文字、數字或空白；本批尚未寫入。請直接用本技能已提供的office_action之excel_write寫入常數資料，再用write_excel_formulas寫公式，沿用同一copy_id及最新revision，不必切換技能。不要替文字加=來繞過檢查。".into());
+    }
+    if formula.len() > 8192 || formula.chars().any(char::is_control) {
+        return Err("公式需以=起始、最多8192 bytes且不可含控制字元。".into());
+    }
+    // 保留Table[Column]結構參照；外部活頁簿的]...!及DDE/網路函數不在此技能範圍。
+    if formula.contains('|')
+        || formula
+            .rsplit_once(']')
+            .is_some_and(|(_, tail)| tail.contains('!'))
+        || [
+            "WEBSERVICE(",
+            "RTD(",
+            "CALL(",
+            "REGISTER.ID(",
+            "HYPERLINK(",
+            "IMAGE(",
+            "HTTP:",
+            "HTTPS:",
+            "FILE:",
+        ]
+        .iter()
+        .any(|v| upper.replace(' ', "").contains(v))
+    {
+        return Err("公式技能僅計算工作簿資料，不執行DDE、外部連結或網路資料函數。".into());
+    }
+    Ok(())
 }
 
 fn plain(text: &str) -> AppResult<()> {
@@ -882,6 +1092,26 @@ pub fn render(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn custom_formulas_are_not_limited_to_a_function_catalog() {
+        for formula in [
+            "=SUM(A1:B8)",
+            "=LET(x,A1,x^2)",
+            "=Table1[金額]",
+            "=IFERROR(XLOOKUP(A1,B:B,C:C),0)",
+            "=1/0",
+        ] {
+            assert!(validate_formula(formula).is_ok(), "{formula}");
+        }
+        for formula in [
+            "SUM(A1)",
+            "=cmd|' /C calc'!A0",
+            "='[other.xlsx]Sheet1'!A1",
+            "=WEBSERVICE(\"https://example.com\")",
+        ] {
+            assert!(validate_formula(formula).is_err(), "{formula}");
+        }
+    }
     #[test]
     fn ranges_and_formats_cannot_escape_fixed_operations() {
         for s in ["[book]A1", "A:A", "A1,B2", "A0", "A1001", "CW1", "A1!B2"] {

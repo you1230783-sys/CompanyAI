@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="vendor/highlight.css" />
     <link rel="stylesheet" href="vendor/texmath.css" />
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="tarot.css" />
     <link rel="stylesheet" href="project-tutorial.css" />
   </head>
   <body>
@@ -28,6 +29,8 @@
             data-icon="panel"
           ></button>
         </div>
+        <button id="show-pet" class="nav-button" data-offline="true" title="桌寵與通知"><span>♧</span><span class="nav-label">桌寵與通知</span></button>
+        <button id="show-tarot" class="nav-button" data-offline="true" title="離線塔羅"><span>✦</span><span class="nav-label">塔羅牌桌</span></button>
         <button id="show-outlook" class="nav-button" title="Outlook 助理">
           <span data-icon="mail"></span
           ><span class="nav-label">Outlook 助理</span>
@@ -77,7 +80,7 @@
         </header>
         <button id="project-context" class="project-context project-folder-link" type="button" hidden></button>
         <section id="login-panel" class="login-panel" aria-label="登入公司服務">
-          <p>尚未登入時無法使用其他功能</p>
+          <p>塔羅牌桌可離線使用；AI與工作功能請先登入</p>
           <div class="button-row">
             <button id="login-entry" class="primary-button">登入</button>
             <button id="login-entry-cancel" class="secondary-button" hidden>取消登入</button>
@@ -732,6 +735,8 @@
     <script src="reply-tables.js"></script>
     <script src="fonts/licenses.js"></script>
     <script src="app.js"></script>
+    <script src="tarot.js"></script>
+    <script src="pet.js"></script>
     <script src="work.js"></script>
     <script src="mail.js"></script>
     <script src="behavior.js"></script>

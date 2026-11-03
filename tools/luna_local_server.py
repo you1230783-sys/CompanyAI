@@ -168,9 +168,13 @@ class Bridge:
         self.folder.mkdir(parents=True, exist_ok=True)
         self.token = secrets.token_urlsafe(32)
         self.tasks, self.requests, self.fingerprints = {}, {}, {}
+        # 正式一般聊天只送當輪問題，由網站依conversation_id補歷史。
+        # 本機轉接也實作此契約；專案context已含完整快照，不能重複附加。
+        self.conversations = {}
         self.lock = threading.RLock()
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         self.count = 0
+        self.chat_failure_injected = False
 
     def submit(self, body):
         request_id = body["client_request_id"]
@@ -186,13 +190,19 @@ class Bridge:
             task_id = "luna_" + secrets.token_hex(8)
             task = {"contract_version": "desktop-agent-v1", "task_id": task_id,
                 "client_request_id": request_id, "conversation_id": body["conversation_id"],
-                "context": body["context"], "state": "queued", "result": None,
+                "context": body.get("context", {}), "state": "queued", "result": None,
                 "error": None, "error_message": ""}
             self.tasks[task_id] = task
             self.requests[request_id] = task_id
             self.fingerprints[request_id] = fingerprint
             accepted = copy.deepcopy(task)
-            self.executor.submit(self.work, task_id, body, self.count)
+            # 明確測試選項：只注入一次已確認失敗，不改Luna文字或後續工具參數。
+            if self.args.chat_fail_once and not self.chat_failure_injected and "context" not in body and body.get("model") == "quality":
+                self.chat_failure_injected = True
+                task.update(state="failed", error={"error_code":"UPSTREAM_TIMEOUT"}, error_message="合成重連故障：首次聊天推論暫時失敗")
+                (self.folder / f"turn-{self.count:03d}.injected-failure.json").write_text(json.dumps({"fault_injected":True,"request":body,"task":task},ensure_ascii=False,indent=2),encoding="utf-8")
+            else:
+                self.executor.submit(self.work, task_id, body, self.count)
             return accepted
 
     def work(self, task_id, request, sequence):
@@ -206,7 +216,16 @@ class Bridge:
                     return
                 self.tasks[task_id]["state"] = "running"
             client = CodexTurn(self.args.codex, self.folder, prefix)
-            chosen, arguments, usage = client.infer(request, self.folder)
+            model_input = copy.deepcopy(request)
+            if 'context' not in request:
+                with self.lock:
+                    history = copy.deepcopy(self.conversations.get(request['conversation_id'], []))
+                current = request['messages']
+                model_input['messages'] = ([m for m in current if m['role'] == 'system']
+                                           + history + [m for m in current if m['role'] != 'system'])
+                prefix.with_suffix('.model-input.json').write_text(
+                    json.dumps(model_input, ensure_ascii=False, indent=2), encoding='utf-8')
+            chosen, arguments, usage = client.infer(model_input, self.folder)
             message = {"role": "assistant", "content": chosen["content"]}
             is_tool = chosen["name"] != "text"
             if is_tool:
@@ -221,6 +240,10 @@ class Bridge:
             prefix.with_suffix(".response.json").write_text(json.dumps(trace, ensure_ascii=False, indent=2), encoding="utf-8")
             with self.lock:
                 if self.tasks[task_id]["state"] != "cancelled":
+                    if 'context' not in request:
+                        self.conversations.setdefault(request['conversation_id'], []).extend(
+                            [copy.deepcopy(m) for m in request['messages'] if m['role'] != 'system']
+                            + [copy.deepcopy(message)])
                     self.tasks[task_id].update(state="completed", result=completion)
             print(f"turn={sequence} tool={chosen['name']} offset={arguments.get('offset', '-')} seconds={trace['elapsed_seconds']}", flush=True)
         except Exception as error:
@@ -287,6 +310,8 @@ def handler(bridge):
                     "minimum_version": bridge.args.app_version, "message": "本機模型測試"})
             if path.endswith("/conversations") and self.command == "POST":
                 return self.reply(200, {"conversation_id": "local_" + body["client_conversation_id"]})
+            if path.endswith("/chat/completions") and self.command == "POST":
+                return self.reply(202, bridge.submit(body))
             if path.endswith("/agent/turns") and self.command == "POST":
                 return self.reply(202, bridge.submit(body))
             if "/tasks/" in path:
@@ -322,6 +347,7 @@ def main():
     parser.add_argument("--port", type=int, default=8766)
     parser.add_argument("--max-turns", type=int, default=30)
     parser.add_argument("--app-version", default="0.8.68")
+    parser.add_argument("--chat-fail-once", action="store_true", help="只注入一次普通聊天推論暫時失敗；驗證原生自動重連")
     args = parser.parse_args()
     bridge = Bridge(args)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), handler(bridge))

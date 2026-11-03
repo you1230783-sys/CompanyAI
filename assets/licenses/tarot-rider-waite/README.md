@@ -1,0 +1,408 @@
+# Tarot Cards Repository
+
+A curated collection of tarot card decks with high-quality images and comprehensive documentation.
+
+## Overview
+
+This repository contains various tarot card decks: public domain decks and the original Soimoi deck, released under Creative Commons. Each deck is organized in its own directory with proper attribution and source information.
+
+## Available Decks
+
+### Rider-Waite Tarot Deck
+- **Location**: `tarot/rider-waite/`
+- **Source**: [Steve-P.org Tarot Collection](https://steve-p.org/cards/RWSa.html)
+- **License**: Public Domain
+- **Description**: The classic Rider-Waite-Smith tarot deck, one of the most influential and widely used tarot decks in the world.
+- **Formats**: Full resolution (JPG in `full/`, lossless PNG in `full-png/`) and 720px
+- **Complete deck**: 78 cards (22 Major Arcana + 56 Minor Arcana)
+
+### Soimoi Tarot Deck
+- **Location**: `tarot/soimoi/`
+- **Author**: Mike Koz ([koz.tv](https://koz.tv/)), created with a generative image model
+- **License**: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) — free for any use, including commercial, with attribution (see [tarot/soimoi/LICENSE](tarot/soimoi/LICENSE))
+- **Description**: Original 78-card tarot deck
+- **Format**: JPG images in full resolution and 720px
+
+### Sola Busca Tarot Deck
+- **Location**: `tarot/sola-busca/`
+- **Source**: Wikimedia Commons
+- **License**: Public Domain
+- **Description**: The earliest known fully illustrated 78-card tarot (Italy, c. 1491) and a direct influence on the Rider-Waite-Smith deck.
+- **Format**: 78 JPG cards (`00.jpg`–`77.jpg`; trumps 00–21, pips/courts 22–77)
+
+### Tarot de Marseille
+- **Location**: `tarot/marseille/`
+- **Source**: Wikimedia Commons
+- **License**: Public Domain
+- **Description**: The classic French Tarot de Marseille pattern. Uses the historical trump numbering (VIII Justice, XI Force) — the reverse of Rider-Waite.
+- **Format**: 78 PNG cards (22 trumps + 56 minor arcana)
+
+### Grand Etteilla
+- **Location**: `tarot/etteilla/`
+- **Source**: BnF (Gallica) via Wikimedia Commons
+- **License**: Public Domain
+- **Description**: The first tarot designed for divination, in Etteilla's own 1–78 system (H. Pussey edition, Paris, c. 1880–1890). Each card shows an upright meaning at the top and a reversed one at the bottom.
+- **Format**: 75 JPG cards `NN_<Title>.jpg` (49, 63 and 78 are missing on Commons)
+
+### Tarot de Viéville
+- **Location**: `tarot/vieville/`
+- **Source**: BnF (Gallica) via Wikimedia Commons
+- **License**: Public Domain
+- **Description**: Jacques Viéville's tarot (Paris, c. 1650), one of the earliest surviving French decks, predating the classic Marseille pattern.
+- **Format**: 78 JPG cards (Marseille-style names) plus `Cover.jpg`
+
+### Visconti-Sforza
+- **Location**: `tarot/visconti-sforza/`
+- **Source**: Wikimedia Commons (scans of a facsimile edition)
+- **License**: Public Domain
+- **Description**: The most famous Renaissance tarot, hand-painted with gold leaf (Milan, c. 1450–1470). Four cards of the original are lost.
+- **Format**: 73 JPG cards with RWS-style names
+
+### Oswald Wirth Tarot
+- **Location**: `tarot/oswald-wirth/`
+- **Source**: BnF (Gallica) via Wikimedia Commons
+- **License**: Public Domain
+- **Description**: Oswald Wirth's esoteric tarot (Paris, 1889), a classic of the occult tradition.
+- **Format**: 22 JPG cards — major arcana only
+
+### Tarot Nouveau
+- **Location**: `tarot/tarot-nouveau/`
+- **Source**: BnF (Gallica) via Wikimedia Commons
+- **License**: Public Domain
+- **Description**: French-suited game tarot by Grimaud (1898): trumps are numbered genre scenes, suits are ♥ ♦ ♣ ♠. Made for the card game, not for divination.
+- **Format**: 78 JPG cards plus `Cover.jpg`
+
+## Repository Structure
+
+```
+TarotCards/
+├── README.md
+├── LICENSE
+├── SOURCES.md
+├── requirements.txt
+├── tarot/
+│   ├── rider-waite/      # Rider-Waite-Smith (Steve-P.org, PD)
+│   │   ├── full/         # Full-resolution JPG
+│   │   ├── full-png/     # Lossless PNG originals (same scans)
+│   │   ├── 720px/        # Resized cards (720px wide)
+│   │   ├── gif/          # Generated GIF animations
+│   │   └── metadata.json
+│   ├── soimoi/           # Soimoi deck by Mike Koz (CC BY 4.0)
+│   │   ├── full/
+│   │   ├── 720px/
+│   │   ├── gif/
+│   │   └── LICENSE
+│   ├── sola-busca/       # Sola Busca deck (Wikimedia Commons, PD)
+│   │   ├── full/
+│   │   ├── 720px/
+│   │   ├── gif/
+│   │   └── metadata.json
+│   ├── marseille/        # Tarot de Marseille (Wikimedia Commons, PD)
+│   │   ├── full/
+│   │   ├── 720px/
+│   │   ├── gif/
+│   │   └── metadata.json
+│   ├── etteilla/         # Grand Etteilla (BnF via Commons, PD)
+│   ├── vieville/         # Tarot de Viéville (BnF via Commons, PD)
+│   ├── visconti-sforza/  # Visconti-Sforza (Commons, PD)
+│   ├── oswald-wirth/     # Oswald Wirth, major arcana (BnF via Commons, PD)
+│   └── tarot-nouveau/    # Tarot Nouveau (BnF via Commons, PD)
+│                         # each: full/, 720px/, gif/, metadata.json
+├── decks_config.json      # Configuration file for all decks
+└── scripts/
+    ├── download_commons_deck.py
+    ├── resize_cards.py
+    ├── create_tarot_gif.py
+    ├── convert_to_jpg.py
+    └── deck_manager.py    # Deck management utility
+```
+
+## Installation
+
+### Prerequisites
+
+Install required Python packages:
+
+```bash
+pip install -r requirements.txt
+```
+
+Required packages:
+- `Pillow` - Image processing and manipulation
+
+## Scripts Documentation
+
+### 1. download_commons_deck.py
+**Purpose**: Downloads complete public-domain decks straight from the Wikimedia Commons API, verifying each file's licence and recording it in `metadata.json`.
+
+**Usage**:
+```bash
+# List the decks this script knows how to fetch
+python scripts/download_commons_deck.py --list
+
+# Download a full deck (saved to tarot/<deck>/full/)
+python scripts/download_commons_deck.py --deck sola-busca
+python scripts/download_commons_deck.py --deck marseille
+python scripts/download_commons_deck.py --deck etteilla   # also: vieville, visconti-sforza, oswald-wirth, tarot-nouveau
+```
+
+**Features**:
+- Pulls original-resolution images and per-file licence via the Commons API
+- Skips any file whose licence is not free (never assumes public domain)
+- Writes `tarot/<deck>/metadata.json` with source URL, licence and dimensions per card
+- Faithful per-deck naming (e.g. Marseille keeps the historical VIII Justice / XI Force order)
+
+### 2. resize_cards.py
+**Purpose**: Universal script for resizing tarot card images to different resolutions.
+
+**Usage**:
+```bash
+# Resize Rider-Waite cards to 720px width
+python scripts/resize_cards.py --source tarot/rider-waite/full --output tarot/rider-waite/720px --width 720
+
+# Create thumbnails for Soimoi deck (200px height)
+python scripts/resize_cards.py -s tarot/soimoi/full -o tarot/soimoi/thumbs --height 200 -q 85
+
+# Resize without preserving aspect ratio
+python scripts/resize_cards.py -s tarot/new_deck/full -o tarot/new_deck/400x600 -w 400 -H 600 --no-preserve-aspect
+```
+
+**Arguments**:
+- `-s, --source`: Source directory with cards (required)
+- `-o, --output`: Output directory for resized cards (required)
+- `-w, --width`: Target width in pixels
+- `-H, --height`: Target height in pixels
+- `-q, --quality`: JPEG quality (1-100, default: 95)
+- `--no-preserve-aspect`: Don't preserve aspect ratio
+
+**Features**:
+- Batch resize all cards in a directory
+- Maintains original aspect ratio by default
+- Creates optimized versions for web/mobile use
+- Supports multiple output formats
+- Configurable for any tarot deck
+
+### 3. create_tarot_gif.py
+**Purpose**: Universal script for creating animated GIF files from tarot cards.
+
+**Usage**:
+```bash
+# Create single card animation
+python scripts/create_tarot_gif.py --source tarot/rider-waite/720px --output tarot/rider-waite/gif --type single
+
+# Create three cards layout for Soimoi deck
+python scripts/create_tarot_gif.py -s tarot/soimoi/720px -o tarot/soimoi/gif -t three --pool 20
+
+# Create Celtic Cross spread with custom settings
+python scripts/create_tarot_gif.py -s tarot/new_deck/images -o tarot/new_deck/gif -t celtic --frames 15 --duration 600
+
+# Create Telegram-optimized GIF
+python scripts/create_tarot_gif.py -s tarot/rider-waite/720px -o tarot/rider-waite/gif -t telegram
+
+# Create random cards GIF
+python scripts/create_tarot_gif.py -s tarot/soimoi/full -o tarot/soimoi/gif -t random --cards 30 --name my_random
+```
+
+**Arguments**:
+- `-s, --source`: Source directory with cards (required)
+- `-o, --output`: Output directory for GIF (required)
+- `-t, --type`: Type of GIF to create (required)
+  - `single`: Single changing card
+  - `three`: Three cards side by side
+  - `celtic`: Celtic Cross spread (10 cards)
+  - `telegram`: Optimized for Telegram
+  - `random`: Random sequence of cards
+  - `all`: All cards in sequence
+  - `filtered`: Filtered cards (e.g., major arcana only)
+- `--name`: Custom output filename (without extension)
+- `--frames`: Number of frames in animation
+- `--duration`: Duration of each frame in ms (default: 500)
+- `--pool`: Size of card pool for random selection
+- `--cards`: Number of cards for random type
+- `--width`: Card width in pixels
+- `--height`: Card height in pixels
+- `--loop`: Number of loops (0 = infinite)
+- `--filter`: Filter for cards (for filtered type)
+
+**Features**:
+- **Single Card Animation**: Creates GIF with one changing card
+  - Default: 12 frames, 500ms per frame, 232x360px
+  
+- **Three Cards Layout**: Shows 3 random cards side by side
+  - Default: 640x360px (doubled resolution)
+  - Random selection from card pool
+  
+- **Celtic Cross Spread**: Traditional 10-card tarot spread
+  - Frame size: 500x600px
+  - Card size: 72x120px
+  - Proper card positioning with overlay effects
+  
+- **Telegram Optimization**: Creates small, fast GIFs
+  - Optimized file size (<1MB)
+  - Fast animation (100ms per frame)
+  - Reduced palette for better compression
+
+### 4. convert_to_jpg.py
+**Purpose**: Universal script for converting all images to JPG format.
+
+**Usage**:
+```bash
+# Convert images in Soimoi deck to JPG
+python scripts/convert_to_jpg.py --dir tarot/soimoi/full
+
+# Convert with custom quality
+python scripts/convert_to_jpg.py -d tarot/new_deck/images --quality 90
+
+# Convert but keep original files
+python scripts/convert_to_jpg.py -d tarot/backup --keep-originals
+```
+
+**Arguments**:
+- `-d, --dir, --directory`: Directory with images (default: tarot/soimoi/full)
+- `-q, --quality`: JPEG quality (1-100, default: 95)
+- `--keep-originals`: Don't delete original files after conversion
+
+**Features**:
+- Converts PNG, GIF, BMP, TIFF, WEBP to JPG
+- Handles transparency with white background
+- Maintains high quality (95% JPEG quality by default)
+- Optionally deletes source files after conversion
+- Renames .jpeg extensions to .jpg for consistency
+- Works with any directory
+
+### 5. deck_manager.py
+**Purpose**: Centralized management utility for tarot decks and their configurations.
+
+**Usage**:
+```bash
+# List all configured decks
+python scripts/deck_manager.py --list
+
+# Add a new deck
+python scripts/deck_manager.py --add marseille --name "Tarot de Marseille" --source tarot/marseille
+
+# Get information about a deck
+python scripts/deck_manager.py --info rider-waite
+
+# Generate processing scripts for a deck
+python scripts/deck_manager.py --deck soimoi --scripts resize
+python scripts/deck_manager.py --deck soimoi --scripts gif
+python scripts/deck_manager.py --deck soimoi --scripts convert
+
+# Remove a deck from configuration
+python scripts/deck_manager.py --remove old_deck
+```
+
+**Features**:
+- Centralized deck configuration management
+- Automatic directory structure creation
+- Script generation for batch processing
+- Easy deck addition and removal
+- Configuration stored in `decks_config.json`
+
+## Configuration File
+
+The `decks_config.json` file stores configuration for all tarot decks:
+
+```json
+{
+  "decks": {
+    "rider-waite": {
+      "name": "Rider-Waite",
+      "source_dir": "tarot/rider-waite",
+      "full_size_dir": "tarot/rider-waite/full",
+      "resized_dirs": {
+        "720px": "tarot/rider-waite/720px"
+      },
+      "gif_dir": "tarot/rider-waite/gif",
+      "card_count": 78
+    }
+  },
+  "default_settings": {
+    "gif": {...},
+    "resize": {...}
+  }
+}
+```
+
+## Workflow Examples
+
+### Adding a New Tarot Deck
+
+1. **Place card images in a directory**:
+   ```bash
+   mkdir -p tarot/new_deck/full
+   # Copy your card images to tarot/new_deck/full/
+   ```
+
+2. **Register the deck**:
+   ```bash
+   python scripts/deck_manager.py --add new_deck --name "My New Deck" --source tarot/new_deck
+   ```
+
+3. **Convert images to JPG if needed**:
+   ```bash
+   python scripts/convert_to_jpg.py --dir tarot/new_deck/full
+   ```
+
+4. **Create resized versions**:
+   ```bash
+   # 720px width version
+   python scripts/resize_cards.py -s tarot/new_deck/full -o tarot/new_deck/720px -w 720
+   
+   # Thumbnails
+   python scripts/resize_cards.py -s tarot/new_deck/full -o tarot/new_deck/thumbs --height 200
+   ```
+
+5. **Generate GIF animations**:
+   ```bash
+   # Single card GIF
+   python scripts/create_tarot_gif.py -s tarot/new_deck/720px -o tarot/new_deck/gif -t single
+   
+   # Three cards GIF
+   python scripts/create_tarot_gif.py -s tarot/new_deck/720px -o tarot/new_deck/gif -t three
+   
+   # Celtic Cross spread
+   python scripts/create_tarot_gif.py -s tarot/new_deck/720px -o tarot/new_deck/gif -t celtic
+   ```
+
+### Batch Processing with Deck Manager
+
+```bash
+# Get all commands for processing a deck
+python scripts/deck_manager.py --deck new_deck --scripts resize
+python scripts/deck_manager.py --deck new_deck --scripts gif
+
+# The deck manager will output ready-to-use commands for batch processing
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Add new decks with proper attribution
+4. Update the README and SOURCES.md files
+5. Submit a pull request
+
+## License
+
+Each part of the repository has its own license:
+
+| Part | License |
+|---|---|
+| Scripts and documentation | [MIT](LICENSE) |
+| Rider-Waite, Sola Busca, Tarot de Marseille, Grand Etteilla, Viéville, Visconti-Sforza, Oswald Wirth, Tarot Nouveau images | Public Domain |
+| Soimoi deck images (`tarot/soimoi/`) | [CC BY 4.0](tarot/soimoi/LICENSE) |
+
+**This means**:
+- ✅ Public domain decks can be used for any purpose without restrictions
+- ✅ The Soimoi deck can be used for any purpose, including commercial, as long as you credit the author: *"Soimoi Tarot" by Mike Koz (https://koz.tv/), licensed under CC BY 4.0*
+- ✅ The scripts can be used, modified and redistributed under the MIT license
+
+## Sources and Attribution
+
+All decks except Soimoi come from public domain sources. The Soimoi deck is an original work by Mike Koz. See [SOURCES.md](SOURCES.md) for detailed attribution information.
+
+## Disclaimer
+
+All images are distributed in accordance with their respective licenses and copyright terms. Check the license of each deck before reuse — see the [License](#license) section and [SOURCES.md](SOURCES.md). 

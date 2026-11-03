@@ -4,6 +4,11 @@ use serde_json::{json, Value};
 mod core;
 const SKILLS: &[(&str, &str, &str)] = &[
     (
+        "excel-formulas",
+        "Excel自訂公式寫入、計算與結果核對",
+        include_str!("skills/excel-formulas.md"),
+    ),
+    (
         "mermaid",
         "文字／程式碼專案轉流程圖、時序圖、狀態圖與原始碼修改",
         include_str!("skills/mermaid.md"),
@@ -299,10 +304,13 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
         | "set_chart_policy"
         | "set_chart_reference_lines" => has("charts"),
         "create_working_copy" | "save_copy" | "delete_copy" => {
-            has("text-edit") || has("office-edit") || has("python-edit")
+            has("text-edit") || has("office-edit") || has("python-edit") || has("excel-formulas")
         }
+        "write_excel_formulas" => has("excel-formulas"),
         "edit_text" => has("text-edit") || has("python-edit"),
-        "edit_office" | "office_action" | "office_batch" => has("office-edit"),
+        // 公式工作也需要輸入來源數字，保留資料寫入入口，避免兩個技能來回切換。
+        "office_action" | "office_batch" => has("office-edit") || has("excel-formulas"),
+        "edit_office" => has("office-edit"),
         "search_files" => has("research") || has("text-edit") || has("python-edit"),
         "list_document_sections" | "read_document_section" | "summarize_document" => {
             has("research")
@@ -320,6 +328,22 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn formula_skill_keeps_source_data_writes_without_reloading() {
+        let mut ids = vec![];
+        activate(&mut ids, "excel-formulas").unwrap();
+        for tool in [
+            "office_action",
+            "office_batch",
+            "write_excel_formulas",
+            "save_copy",
+        ] {
+            assert!(enabled(tool, &ids), "{tool}");
+        }
+        assert!(!enabled("edit_office", &ids));
+        activate(&mut ids, "office-edit").unwrap();
+        assert!(!enabled("write_excel_formulas", &ids));
+    }
     #[test]
     fn new_cad_outline_guidance_matches_available_primitives() {
         let tools: Value = serde_json::from_str(include_str!("tools.json")).unwrap();

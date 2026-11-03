@@ -26,7 +26,8 @@ pub(super) fn system_prompt_for(model: &str) -> AppResult<String> {
             !matches!(
                 t["function"]["name"].as_str(),
                 Some(
-                    "record_reading_notes"
+                    "write_excel_formulas"
+                        | "record_reading_notes"
                         | "read_reading_notes"
                         | "register_report_values"
                         | "apply_report_values"
@@ -50,6 +51,28 @@ pub(super) fn system_prompt_for(model: &str) -> AppResult<String> {
                     tool["function"]["parameters"]["properties"]["show_user"]["enum"] =
                         json!([true]);
                 }
+            }
+        }
+    }
+    for tool in definitions["tools"].as_array_mut().into_iter().flatten() {
+        for pointer in [
+            "/function/parameters/properties/operation/oneOf",
+            "/function/parameters/properties/operations/items/oneOf",
+            "/function/parameters/properties/edits/items/oneOf",
+        ] {
+            if let Some(variants) = tool.pointer_mut(pointer).and_then(Value::as_array_mut) {
+                variants.retain(|v| {
+                    !matches!(
+                        v["properties"]["kind"]["enum"][0].as_str(),
+                        Some(
+                            "word_paragraphs"
+                                | "word_table_append"
+                                | "excel_append"
+                                | "ppt_duplicate"
+                                | "block_circle"
+                        )
+                    )
+                });
             }
         }
     }
@@ -565,6 +588,10 @@ mod tests {
     #[test]
     fn catalogue_covers_all_existing_operations_and_defaults() {
         let samples = [
+            (
+                "write_excel_formulas",
+                json!({"copy_id":"c","revision":"r","sheet":1,"cell":"C2","rows":[["=SUM(A2:B2)"]],"dynamic":false}),
+            ),
             (
                 "read_code_section",
                 json!({"path":"a.py","first_line":1,"last_line":4}),

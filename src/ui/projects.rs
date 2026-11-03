@@ -313,6 +313,9 @@ impl ProjectRuntime {
         }
         runtime
     }
+    pub fn is_running(&self) -> bool {
+        self.running.is_some()
+    }
     pub fn cancel(&mut self) {
         if let Some(run) = &self.running {
             run.cancel.store(true, Ordering::Relaxed);
@@ -1950,7 +1953,7 @@ impl App {
                             waiting.then(|| conversation.clone());
                         self.work.tray_restore_only = false;
                         self.work.task_balloon = true;
-                        tray(self.window, NIM_MODIFY, Some(&self.projects.status));
+                        self.desktop_notice(&self.projects.status.clone());
                     }
                 }
                 let completed =

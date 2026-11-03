@@ -1534,7 +1534,9 @@ window.runSelfTest = async (structuredFixture) => {
     check(!document.querySelector("dialog[open]"), "unauthenticated update gate cannot cover login");
     const loginIds = new Set(["login-entry", "login-entry-cancel", "login-entry-reopen"]);
     check([...document.querySelectorAll("button,input,select,textarea")]
-      .every(element => loginIds.has(element.id) || element.disabled), "all non-login controls are disabled");
+      .every(element => loginIds.has(element.id) || element.closest('[data-offline]') || element.disabled), "network controls remain locked; local pet and tarot are available");
+    check(!document.getElementById('show-pet').disabled && !document.getElementById('show-tarot').disabled,
+      "offline pet and tarot entries remain available");
     const dynamicButton = document.createElement("button");
     document.body.append(dynamicButton);
     await frame();

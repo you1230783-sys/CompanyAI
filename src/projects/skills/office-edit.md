@@ -5,3 +5,5 @@ Office：新建時 create_working_copy(source:null,name:檔名.docx/xlsx/pptx)�
 圖片：僅 PNG。先 export_chart_png 取得 path（或選用專案既有 PNG），再 office_action(copy_id,revision,operation:{kind:"insert_image",path,target,width})，最後 save_copy。target 為 {kind:"word",before:null或段落ID}、{kind:"excel",sheet:1,cell:"H2"} 或 {kind:"ppt",slide:1,left:40,top:100}；width 為點（72 點＝1 英吋），保持比例，不可超出頁面。圖片嵌入，不建立外部連結；原 PNG 在發布前必須保持不變。圖片只是插入，不代表模型看過圖片內容。修改必須使用 create_working_copy 真正回傳的 copy_id 和最新 revision，不可填空字串。快速模型自行使用 read_file 等閱讀工具，不呼叫 summarize_document。
 
 office_batch 每批 1–20 個操作，整批成功才提交工作版本；失败不重做已成功的其他批次。
+
+新增寫入方式：word_paragraphs(before,paragraphs,format)可一次寫1–100段；word_table_append(table,rows)依1起算表格編號追加等寬列；excel_append(sheet,rows)從真正UsedRange之後追加資料；ppt_duplicate(slide)將1起算範本投影片複製到最後，保留格式，再用read_file與edit_office填寫副本的文字。既有office_batch可組合操作，format只填需要修改的屬性即可。Excel公式請切excel-formulas，不能當一般excel_write字串寫入。
