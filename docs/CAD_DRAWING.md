@@ -2,7 +2,7 @@
 
 分段新圖的 `cad_plan_start` 可以接收 `latest`／`auto`、年份或確切 ProgID，由程式內部查安裝清單，回傳並固定 `selected_cad`。模型可沿用專案記憶的偏好，但本輪指定優先；版本不存在或年份有歧義時停止，不換版。此規則取代分段新圖要求模型先呼叫 inventory 的流程；直接 `cad_draw` 仍依下節使用確切版本。
 
-2008目前圖面的TEXT／MTEXT及引線附屬文字可原位修改；已核對的平面直徑標註可用 `diameter` 更新真實端點，於同圖替換並回傳新Handle，避免原生Undo留下過期量測快取。其他尺寸、通用新增／刪除未開放，依每列 `allowed_edits`；改圓不會自動全圖更新說明。文字編碼、版本／文件／revision、圖層鎖及未指定圖元保護保留。驗證與未測界線見[0.8.71紀錄](VALIDATION_0_8_71.md)。
+2008目前圖面的TEXT／MTEXT及引線附屬文字可原位修改；已核對的平面直徑標註可用 `diameter` 更新真實端點，於同圖替換並回傳新Handle，避免原生Undo留下過期量測快取。其他尺寸、通用新增／刪除未開放，依每列 `allowed_edits`；改圓不會自動全圖更新說明。文字編碼、版本／文件／revision、圖層鎖及未指定圖元保護保留。驗證與未測界線見[0.8.71紀錄](https://github.com/you1230783-sys/CompanyAI/blob/fa2833f641694554aac25483979becc17cb5c59d/docs/VALIDATION_0_8_71.md)。
 
 ## 0.8.70：直接新圖使用確切CAD版本（2026-10-19）
 
@@ -51,7 +51,7 @@
 
 整批所需樣式在幾何繪製／既有圖元刪改之前準備；目前文件的樣式準備保留在 Undo 群組內。前置失敗仍可能留下新建空圖或未使用樣式，不自動關閉、重播或假稱沒有寫入。
 
-介面參考：[IntelliCAD Document 成員](https://www.progesoft.com/products/progecad-professional/manual?mp=developer-reference/api-reference/objects/document-object/members)、[DimensionStyle 原生屬性](https://www.progesoft.com/products/progecad-professional/manual?mp=developer-reference/api-reference/objects/dimensionstyle-object/members)。參考文件較新，不能取代公司2008實測。[本版驗證](VALIDATION_0_8_60.md)。
+介面參考：[IntelliCAD Document 成員](https://www.progesoft.com/products/progecad-professional/manual?mp=developer-reference/api-reference/objects/document-object/members)、[DimensionStyle 原生屬性](https://www.progesoft.com/products/progecad-professional/manual?mp=developer-reference/api-reference/objects/dimensionstyle-object/members)。參考文件較新，不能取代公司2008實測。[本版驗證](https://github.com/you1230783-sys/CompanyAI/blob/fa2833f641694554aac25483979becc17cb5c59d/docs/VALIDATION_0_8_60.md)。
 
 ## 0.8.59：標註與舊版讀取修正
 
@@ -62,7 +62,7 @@
 - 已讀取的尺寸／原生引線只允許 delete，重標時先核對 Handle 再刪除重建。不明額外物件不在自動刪除範圍。
 - unsupported_capability 禁止相同版本反覆重試；讀取失敗在介面明示失敗。
 
-ISO 對正參照 [Autodesk 尺寸文字設定](https://help.autodesk.com/cloudhelp/2026/ENU/AutoCAD-Core/files/GUID-38DAEEF0-AB44-4C58-8D0E-955BFCFF71A7.htm)；中文 SHX 搭配參照 [Big Font 說明](https://help.autodesk.com/cloudhelp/2022/ENU/AutoCAD-MAC-Core/files/GUID-CBC3F683-06F3-4B9C-8747-D01F3C262956.htm)。文件僅供介面語意參考，不能取代2008／2022實測。驗證見 [0.8.59驗證紀錄](VALIDATION_0_8_59.md)。
+ISO 對正參照 [Autodesk 尺寸文字設定](https://help.autodesk.com/cloudhelp/2026/ENU/AutoCAD-Core/files/GUID-38DAEEF0-AB44-4C58-8D0E-955BFCFF71A7.htm)；中文 SHX 搭配參照 [Big Font 說明](https://help.autodesk.com/cloudhelp/2022/ENU/AutoCAD-MAC-Core/files/GUID-CBC3F683-06F3-4B9C-8747-D01F3C262956.htm)。文件僅供介面語意參考，不能取代2008／2022實測。驗證見 [0.8.59驗證紀錄](https://github.com/you1230783-sys/CompanyAI/blob/fa2833f641694554aac25483979becc17cb5c59d/docs/VALIDATION_0_8_59.md)。
 
 # 0.8.58：目前圖面與 Excel 座標
 
@@ -92,7 +92,7 @@ ISO 對正參照 [Autodesk 尺寸文字設定](https://help.autodesk.com/cloudhe
 - 每次100列、展開後100個操作上限。空白、非數值、負半徑、零長線等整批拒絕，不暗中跳過。初版無分組輪廓、3D、標籤避讓或任意公式；公式儲存格使用既有 Excel 讀取值，不強制刷新外部連結。
 - 目標 new/copy 會另存成果，active 不儲存。apply 前重查 Excel revision，座標計畫一次使用。
 
-實機 2008／2022 文件 HWND、Undo 群組、未儲存持續修改與 Excel→CAD 全流程仍需公司環境確認；本機基礎驗證詳見 [0.8.58驗證紀錄](VALIDATION_0_8_58.md)。
+實機 2008／2022 文件 HWND、Undo 群組、未儲存持續修改與 Excel→CAD 全流程仍需公司環境確認；本機基礎驗證詳見 [0.8.58驗證紀錄](https://github.com/you1230783-sys/CompanyAI/blob/fa2833f641694554aac25483979becc17cb5c59d/docs/VALIDATION_0_8_58.md)。
 
 ---
 

@@ -1,8 +1,8 @@
 # CAD 本機快照、候選查詢與局部預覽
 
-0.8.68 建立本機索引與候選查詢；0.8.69 整合 CAD 程序內批次匯出，並將相同流程用於修改前、存檔前及重開核對。建置結果、兩版本實測及未驗證範圍見 [0.8.69 驗證](VALIDATION_0_8_69.md)。
+0.8.68 建立本機索引與候選查詢；0.8.69 整合 CAD 程序內批次匯出，並將相同流程用於修改前、存檔前及重開核對。建置結果、兩版本實測及未驗證範圍見 [0.8.69 驗證](https://github.com/you1230783-sys/CompanyAI/blob/fa2833f641694554aac25483979becc17cb5c59d/docs/VALIDATION_0_8_69.md)。
 
-0.8.68 的 Luna low 實測曾遇到 2008 大圖逾時及模型錯誤編輯參數，原始結果保留於 [Luna CAD 專項實測](VALIDATION_LUNA_CAD_INDEX.md)。不能把新版本的讀取效能改善視為所有模型均可正確修改的保證。
+0.8.68 的 Luna low 實測曾遇到 2008 大圖逾時及模型錯誤編輯參數，原始結果保留於 [Luna CAD 專項實測](https://github.com/you1230783-sys/CompanyAI/blob/fa2833f641694554aac25483979becc17cb5c59d/docs/VALIDATION_LUNA_CAD_INDEX.md)。不能把新版本的讀取效能改善視為所有模型均可正確修改的保證。
 
 ## 工作流程
 

@@ -30,3 +30,6 @@ site-notifications.dpapi
 
 # 本機Outlook資料夾隱私設定，不納入交付。
 outlook-folders.dpapi
+
+# 本機舊版留存，不納入 Git。
+/舊版留存/

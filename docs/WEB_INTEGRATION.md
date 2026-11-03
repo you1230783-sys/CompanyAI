@@ -1,201 +1,18 @@
-**待發布來源修改（2026-11-02，尚未編譯驗證）：** 新增桌面基本工具 `update_deliverables(items)`，以當輪Schema為準。每項含 `id/description/kind/target/blocked_reason`，`kind=file|answer`；target及blocked_reason可null。檔案狀態由桌面工作副本、成果索引與交付讀回產生，不接受模型填入完成狀態。使用者偏好與條件卡由桌面保存並加入既有請求上下文；條件在等待回覆時改變，桌面會回覆候選操作未執行並要求重新核對。沒有新增網站API、公司資料載入或自動切換模型；沿用現有原生工具轉發及重試契約。詳 [來源交接與驗證安排](IMPLEMENTATION_2026_11_02.md)。
-
-**0.8.55 CAD 對話繪圖測試版：** 新增按需載入的 `cad-drawing` 技能，以及 `cad_inventory`／`cad_draw(name,version,operations)`。沿用 desktop-agent-v1 原生工具轉發，不新增網站路由。工具參數 Schema 由桌面提供，operations 使用非根位置 oneOf（傳送時轉 anyOf）區分固定幾何操作與 ACI 顏色；網站不執行 CAD。模型不得把工具成功誤解為外觀已驗收；結果 `DATA_VERIFIED_VISUAL_PENDING` 表示指定屬性／存檔重開核對通過，仍需人工檢查。DWG 由桌面保存於專案並自動加入成果，不上傳網站轉檔。失敗不自動重播，既有圖面不修改。詳見 [CAD 說明](CAD_DRAWING.md)。
-
-**0.8.54 桌面程式碼唯讀：** 專案基本工具 read_code_section／find_text 可讀新程式與設定格式；工具 Schema 由桌面提供，網站不需增加 API。來源分段有 revision、行號與範圍限制。一般對話的附件白名單／轉檔路由沒有隨此功能放寬。當時 CAD 為獨立人工測試程式，0.8.55 才加入上述模型工具。
-
-**0.8.53，2026-10-14：** 一般聊天POST等待回應、尚無task_id時不先GET；明確413／415等4xx拒絕直接保存原HTTP錯誤並停止。408／網路失聯／未明示拒絕的5xx保留原ID查回；若提供 `task_accepted` 布林值則優先採用，已取得任務ID者仍核對原任務。
-
-一般任務GET連續三次相同錯誤，且當輪 `GET /lm_server/api/desktop/models` 回HTTP200與有效模型清單時，自動停止本機追蹤，保存已收到文字與停止狀態。HTTP錯誤比較狀態碼；非HTTP錯誤比較本機訊息。成功或查詢ID改變歸零，正式failed／cancelled照原流程立即收尾。健康檢查每輪最多一次，不新增路由；自動停止不另發取消、補查或POST重送，不代表伺服器工作已取消。初次提供基礎驗證NSIS測試包，使用者回報測試OK後已於2026-10-14補完完整開發環境與NSIS驗證，詳見[0.8.53驗證範圍](VALIDATION_0_8_53.md)。
-
-**0.8.52 桌面工具補充：** 不新增網站API。新增 `record_log_events(events)`，由log-analysis／python-analysis按需公告，參數以當次tools Schema為準；網站只轉發，事件時間與原文引用由桌面核對。每筆evidence使用本次成功read_log的`/lines/N`或search_logs的`/matches/N`，N為零基索引；operation_id是桌面工具結果代號。
-
-`search_files`增加coverage、complete、omitted與來源原文預覽。Office命中回傳block_id／label，offset與line是該區塊內的位置，`offset_basis=block_text`；純文字是全文位置（document_text）。不要把區塊offset當成read_file的全文位置。需要更多內容用區塊標籤／list_document_sections定位再read_document_section，並核對revision。
-
-模型只接收精簡completion及事件數索引；完整左右比較快照、來源預覽與事件表保存在既有本機DPAPI紀錄。重用方法只產生普通提問草稿，沒有自動執行端點。Outlook ConversationID修正保持既有權限與參數。詳見[0.8.52](VALIDATION_0_8_52.md)。
-
-**0.8.51 桌面工具補充：** 不新增網站 API。`edit_code_section` 優先使用 `copy_id/section_id/replacement`；舊的 revision/first_line/last_line/section_hash 整組介面仍相容，兩種方式不能混用。`read_code_section` 回報實際範圍、next_line、eof、source_kind 與 copy_id，超出檔尾自動裁切，超過200行／6000字於完整行分頁。副本 section_id 由桌面核對版本，原件不提供可編輯代號。
-
-目前程式工作資料加入既有 messages，包含有界原文與真實 code_state；相同 section_id 及逐字內容的工具投影改為 text_ref，原始操作紀錄完整保留。網站應照 client_snapshot 傳遞，不額外補回歷史。`run_batch` 的無進展按一次呼叫計算，子項成功／失敗與資料覆蓋仍分別記錄。
-
-Outlook 專案介面日期參數不變；本機改 Table 批次與10分鐘輔助程序。副本鍵只含完整主旨與寄送時間（秒），隱藏資料不送模型；可見 To/CC 是顯示文字群組，`recipients_are_groups=true` 時 `recipient_count=null`，不把整串顯示文字算成一位收件者。授權政策版本已更新，舊的四欄比對快照不能直接重用。詳見 [本版驗證](VALIDATION_0_8_51.md)。
-
-> **0.8.45 圖片閱讀：** 移除專案圖片快捷入口與 image-read 技能公告，analyze_image 納入基本工具，支援圖片的模型第一輪可直接使用；工具總數仍50項。舊圖片子請求格式、大小／額度、快取、身分與未知結果保護不變。
-
-> **0.8.45 恢復政策：** 專案主推論及子請求依10／30／60／180／300秒恢復。已核對身分的 failed、無result，且 error_code 為 AI_BACKEND_ERROR／UPSTREAM_UNAVAILABLE／UPSTREAM_TIMEOUT 時，桌面可另建這輪推論，即使舊網站標 retryable=false；明確的內層永久錯誤仍拒絕。保留messages／tools／parent，僅更換client_request_id並遞增turn_index。未知提交只GET原ID，不重播本機工具；五次耗盡保留checkpoint。詳見 [契約補充](DESKTOP_AGENT_V1_CONTRACT.md#0845-桌面有限恢復補充)。不新增網站API，一般聊天政策不變。
-
-> **實際進度：** 桌面續接資料增加 no_progress_reason 與 outlook_paging（已交付標題數、總數、下一游標及掃描完成狀態）；四次提醒、八次暫停。以新郵件／版本／內文區間辨識進展，不以操作ID或AI筆記判定。上游恢復的Task metadata僅存本機DPAPI，不加入HTTP頂層欄位。
-
-> **0.8.45：分析概況與方法記憶。** 新增 `record_analysis(report)`，工具目錄共50項，依已載入技能公告；`run_python.inputs` 可選 `log_range: {start_line,line_count}`。參數仍以當次工具 Schema 為準，網站不執行 Python 或證據核對。工具結果增加桌面 `operation_id`，供後續引用；它與原生 `tool_call_id` 不同，後者的訊息配對規則不變。完整分析面板隨桌面 DPAPI 歷史保存，模型只接收有界概況及既有工具結果；一般聊天不新增這份本機欄位。映射磁碟解析及錯誤通知修正皆在桌面，不新增網站 API 或資料表。
-
-> **0.8.44：圖表編輯與工具重試。** 頁籤、說明、自動範圍、空白參考線與雙座標提示均為桌面呈現，不新增網站 API 或工具。桌面 Progress 快照增加 tool_failures（python／python_limit=10／other／other_limit=5）；已辨識原生工具的非嚴格參數錯誤、執行失敗及交付檢查歸入對應預算。工具失敗不再重複增加8次無進展計數，自動整理保留計數；使用者續接重設。未知提交與嚴格 Schema／身分拒絕不變。詳見 [驗證紀錄](VALIDATION_0_8_44.md)。
-
-> **0.8.43：Python 沿用、專案圖片與圖表座標。** 安裝最佳化只在桌面 NSIS 內，不改更新端點或清單格式。專案圖片沿用 `analyze_image(path,focus)`、無工具圖片子請求與同一父對話；每次請求一張，任務內最多20次不同辨識要求。`list_files` 對圖片增加 `kind:image`、`bytes`、`read_tool`、`skill`；`read_file` 對圖片只回中繼資料與導引，`content_read:false`，不自動送圖。單張5,000,000 bytes與整份請求上限不變。新增 `transform_chart(chart_index,transform)`，工具共49項，按charts技能及已有圖表公告；X／Y皆可original／offset／index，drop_empty為全系列皆缺值才刪列。參數以本次tools Schema為準，不需新增網站白名單或專用執行。三張異常值示意及編輯器座標轉換均在桌面本機。一般聊天及 Outlook 附件流程不變，不新增網站 API／資料表。`run_python.inputs` 新增可選 encoding（auto／big5／utf8），模型仍按本次 Schema 提供參數；LOG 解碼在桌面進行。工具參數錯誤維持 executed:false，加入最多6項欄位路徑診斷，不自動補猜或執行。詳見 [本版驗證](VALIDATION_0_8_43.md)。
-
-> **0.8.42：** 新增 `run_python(purpose,code,inputs)` 及 `python-analysis` 技能，工具目錄共48項、仍按需公告。Python 在桌面本機隔離執行，網站只按當次工具 Schema 轉發程式與精簡結果，不執行 Python、不接收全部輸入檔案。既有 `skills:false`、agent/turns 與 client_snapshot 不變。兩個更新清單端點都需提供本版已簽署的 `kind:nsis` 清單及完整 Setup，不再以 EXE 更新包交付本版。
-
-> **0.8.41：父子請求必須同一遠端對話。** 圖片與原生快速摘要直接沿用父請求的 conversation_id，同owner/project/run；client_request_id仍各自唯一。圖片最大5,000,000 bytes，Base64後整份JSON最多10,000,000 bytes且不超過capabilities.limits.request_bytes；網站需同步公告實際可接受上限。每次任務只試1張，fast不送圖片。辨識結果只含文字重點與來源；後續主請求沒有image_url或Base64。既有client_snapshot規則不變，網站不能因conversation相同自行拼接歷史。明確拒絕請回task_accepted=false，桌面會清除待查圖片；結果不明仍只查原ID。
-
-> **0.8.40：** 新增 `plan_excel_analysis(proposal)`、`export_planned_excel(plan_id,start_row,scan_rows,window,name)`，工具目錄47項，依技能按需公告；JSON Schema見 `src/projects/tools.json`。圖表kind增加 `step`、`area`、`horizontal_bar`。網站依當次工具定義驗證參數，不固定舊名稱／圖型清單。使用者圖表編輯及PNG保存都是桌面本機操作，不新增網站端點、不傳顯示設定給模型。圖片子請求仍採下方0.8.39格式。
-
-> **0.8.39：圖片試驗需要轉發多模態 content。** 專案 Outlook 快速入口沿用既有郵件工具。新增 `analyze_image(path,focus)`（工具目錄 45 項，載入 `image-read` 才公告）；圖片工具由桌面發出獨立的無工具子請求，仍走 `/lm_server/api/desktop/agent/turns`、目前 model、Bearer 與 `desktop-agent-v1`。主請求仍是文字／原生工具訊息，不改一般附件上傳流程。
-
-圖片子請求 `tools=[]`、`tool_choice=none`、`skills=false`，`context.parent_request_id` 指向父請求。完整請求範例見 [IMAGE_REQUEST_EXAMPLE.json](IMAGE_REQUEST_EXAMPLE.json)（ID、模型、圖片資訊及Base64為佔位範例，不是實際封包）。目前不送 `detail`、`max_tokens`、`attachments` 或 `image_base64`。最後一則 user 訊息形狀如下（不可把陣列轉成字串、刪除 image_url 或自行補回其他歷史）：
-
-```json
-{"role":"user","content":[{"type":"text","text":"辨識要求與來源資訊"},{"type":"image_url","image_url":{"url":"data:image/png;base64,..."}}]}
-```
-
-這是使用者要求的明確圖片試驗，允許對舊版只公告 text 的能力回覆嘗試上述子請求；網站若仍強制 `content:string`，須放行／原樣轉發這種無工具圖片訊息後才能使用。模型伺服器已由使用者獨立測過，**不代表公司代理入口已驗收**。本版不修改網站伺服器，也不新增路由或資料表。
-
-JPG／PNG 原圖單張最多 1 MiB，整份序列化請求不得超過網站 `limits.request_bytes` 及本機 2 MiB。既有文字訊息限制用於文字部分；伺服器需另計 image_url／多模態成本，不能把 Base64 當純文字 token。圖片辨識以文字回答，結果仍須原任務／owner／context 身分對應。未知提交僅 GET 查回，明確拒絕應回 `task_accepted:false`；不自動換 ID 重送。轉發及模型若不支援，回報失敗，桌面不繞過公司 API。詳見 [驗證與限制](VALIDATION_0_8_39.md)。
-
-> **0.8.35：LOG 定位、主輸入框與進度筆記。** LOG 技能以近似時間定位事件；專案主輸入框可選下一輪提示、停止後新任務、完成後新任務。新增的是桌面原生命令與本機加密排程，不新增網站 API、資料表或工具參數。停止後的新任務使用新 run／request ID；原任務仍照原取消與未知請求契約處理。既有 `arguments.progress_note` 作執行中摘要，結束後收進工具紀錄，不改最終 message。詳見 [本版驗證](VALIDATION_0_8_35.md)。
-
-> **0.8.38：** 桌面週報精靈只組合一般專案要求，不新增網站路由／資料表。`outlook_folders` 的 scope 加入 `online_inbox`（Exchange／OST 收件匣及子資料夾），仍有 `local_inbox`、`online_sent`，工具總數維持 44。無效回覆按兩次一般修復＋兩次精簡恢復處理，每段累計 30；未知提交／owner／client_request_id 去重契約不變。詳見 [本版驗證](VALIDATION_0_8_38.md)。
-
-> **0.8.37：** 新增桌面 `outlook_compare(mail_ids,offset)`，工具目錄44項，按需公告。只回本機前文比較摘要、字數及建議閱讀，最多1000封本機比較、50封AI閱讀；資料夾完整選擇清單與比較原文不送伺服器。後端按當次Schema處理，不固定舊工具白名單；無新增路由／資料表。詳見[本版契約與驗證](VALIDATION_0_8_37.md)。
-
-
-> **0.8.34：** 桌面新增 LOG 與 Outlook 專案工具，目錄共 38 項，仍按需公告；Outlook 同意由原生 UI 管理。補充作後續 user 訊息；被取代候選有 role=tool、executed=false。每段最長 24 小時，checkpoint 自動換批及 context 精簡；網站必須採用 client_snapshot，不自行把完整歷史加回。未知原請求只 GET 查回，需保留可續接的任務狀態／結果；不要求單一 HTTP 連線存活 24 小時。無新增路由／資料表。詳見 [功能與驗證](VALIDATION_0_8_34.md)。
-
-> **0.8.32：** Office 既有操作新增 `insert_image` 分支，不增加路由或資料庫欄位。工具目錄仍為 32 項，但每次請求依模型及副本／圖表狀態提供其中可用項目，網站不要假設 tools 永遠相同。原生回覆白名單與 `provider_specific_fields` 的處理，見 [本次驗證與配合事項](VALIDATION_0_8_32.md)。
-
-> **0.8.31：** 新增 `export_chart_png`，工具總數由 31 增為 32；仍透過既有原生 tools 通用契約。PNG 在桌面內嵌 ECharts 產生，不增加網站 API、資料庫欄位或伺服器工具。詳見 [驗證紀錄](VALIDATION_0_8_31.md)。
-
-> **0.8.30：修正多型別工具 Schema。** Office 表格與圖表橫軸的 string／number 聯集改用 anyOf，符合既有 desktop-agent-v1；網站不需放寬 type 陣列驗證。詳見 [修正及驗證](VALIDATION_0_8_30.md)。
-
-> **0.8.29：desktop-agent-v1 桌面端已接入，待實機聯合驗收。** 新專案及快速摘要委派使用代理能力／提交入口、原生 tools／tool_calls／role=tool；一般聊天、Outlook、標題及 PDF 路由不變。請依 [完整契約](DESKTOP_AGENT_V1_CONTRACT.md) 實作網站，另見 [桌面實作與驗證狀態](VALIDATION_0_8_29.md)。以下 0.8.28／0.8.25 描述保留作舊版本及舊 checkpoint 參考。
-
-本次追加 `inspect_excel`、`read_excel_range`、`chart_excel_range`，以通用 `tools` 與 `role:tool` 承載，不新增 Excel 專用路由或資料表欄位。後端應按請求的工具定義驗證，不將 28 個舊工具名稱寫死為白名單；目前桌面共提供 31 個工具。
-
-> **0.8.28：** 技能、圖表均由桌面管理。品質模型委派使用既有背景路由 model=fast、skills:false，每段獨立 conversation 並保留 client_request_id；不新增 HTTP tools 欄位。後端不得補入其他對話歷史，通知保留原 task／request 關聯。詳見 [契約](DESKTOP_0_8_28_CONTRACT.md)。
-
-> **0.8.25：** 專案 system 文字包含 Chat Completions 形狀的 tools 定義；模型在回答文字內輸出單一 tool_calls，桌面轉成既有工具執行。HTTP 不新增 tools／tool_choice／response_format，工具結果仍放 user.content，skills:false 不變。網站只需保留 messages 與回答正文，不解析或剝除內層 JSON。舊 action 格式相容，缺漏工具名稱採有限修復。詳見 [契約](DESKTOP_0_8_25_CONTRACT.md)／[驗證](VALIDATION_0_8_25.md)。
-
-> **0.8.24：** 移除三次閱讀／六次操作的筆記提示。桌面僅在同一文件第五次有效閱讀後且未读完時，在 messages 附一次可選閱讀筆記技能；模型可略過。`skills:false`、路由與 `.lmai` 格式均不變。詳見 [0.8.24 契約](DESKTOP_0_8_24_CONTRACT.md)。
-
-> **0.8.23：** 專案跨任務改送選取記憶／近期使用者要求，不重送所有舊答案。請完整採用桌面 `messages`，不要自行補回舊對話或技能。`task_summary` 僅為模型正文操作 JSON 的可選欄位，HTTP 仍 `skills:false`，PDF 路由不變。通知的 `resource_id` 須為該輪 task_id 或 client_request_id，桌面才能隱藏內部工具／標題通知；缺少關聯時保留通知，不猜測。桌面顯示單一任務不等於網站已合併工作。詳見 [0.8.23 契約](DESKTOP_0_8_23_CONTRACT.md)。
-
-> **0.8.22：** 專案以既有背景路由與 `skills:false` 傳送筆記、真實工具進度及續接提示，新增內容都在 messages，不新增 HTTP 欄位。請保留桌面提供的 messages，勿另附目的技能或重複拼接歷史。專案較長工具歷程可超過一般聊天 40 則訊息，桌面另設 204 則／240,000 UTF-8 bytes 內容上限；後端實際模型上下文限制仍須公司驗證。已完成但空白的模型結果可有限修復，身分／取消／結果未知不自動重送。詳見 [0.8.22 契約](DESKTOP_0_8_22_CONTRACT.md)。
-
-> **0.8.21：** 新增專案 PDF 同步 multipart 轉換。正式路由 `/lm_server/api/desktop/documents/pdf-to-markdown`，Bearer 桌面 Token＋X-Client-Version；200 為 UTF-8 Markdown bytes，錯誤為既有 JSON。詳見 [0.8.21 契約](DESKTOP_0_8_21_CONTRACT.md)。聊天 skills 與一般附件 API 不變。
-
-> **0.8.20：** 路由與 skills 不變；專案 `ask_user`／`finish` 同樣可附說明文字，桌面按單一完整 JSON 處理。MSG 暫存副本與 COM 診斷由桌面完成。詳見 [0.8.20 契約](DESKTOP_0_8_20_CONTRACT.md)。
-
-> **0.8.19：** 網站路由與 `skills` 不變。專案工具往返仍為 false；桌面可解析說明文字＋單一完整工具 JSON，說明只作文字顯示。PDF／MSG／舊版 Office 處理由桌面固定工具完成，網站不需分流。詳見 [0.8.19 契約](DESKTOP_0_8_19_CONTRACT.md)。
-
-> **0.8.16 更新優先：** 新請求移除 outlook_triage／auto_generate_title，改用 skills 布林值。一般聊天與 Outlook 附件最終整理 true；初篩、標題與專案工具 false。詳細格式與狀態語意見 [0.8.16 契約](DESKTOP_0_8_16_CONTRACT.md)。下文舊版欄位僅記錄歷史行為。
-
 # LM_AI：網站／API 串接契約
 
-> **0.8.17：** 專案進度、有限格式修正重送與手動重試沿用既有路由及 skills 契約，詳見 [0.8.17 契約](DESKTOP_0_8_17_CONTRACT.md)。
+## 現行基準
 
-## 0.8.15 登入門檻與彈窗關閉
+本文件保留登入、基本聊天與版本欄位的串接規格；舊版逐次發行與待發布紀錄已封存。範例中的版本與模型名稱只示意資料格式，實際版本以[首頁](../README.md)為準。較完整的持久任務／原生工具契約優先於下方早期基本請求範例。
 
-原始碼已改為獨立「登入」入口，登入後隱藏；未登入時包含 Outlook、VNC、偏好設定在內的其他控制與原生命令均停用。仍有效的保存授權視為已登入，不要求每次重開瀏覽器。登入路由及網站契約不變；VNC 網站登入仍使用獨立 Cookie，不與 AI 授權共用。所有 HTML dialog 支援外部點擊關閉，更新提示關閉不解除版本門檻。此變更納入 0.8.15 EXE 與 NSIS，檢查範圍見 [0.8.15 驗收](VALIDATION_0_8_15.md)。
+- 一般聊天採串流，背景工作採持久任務；SSE／WebSocket不能取代REST結果與owner／client_request_id核對。具體欄位參照[原生代理契約](DESKTOP_AGENT_V1_CONTRACT.md)及[通知與聊天契約](NOTIFICATIONS_AND_OUTLOOK.md)。
+- 原生工具由桌面當輪Schema公告，網站轉發client_snapshot、messages及tools，不自行補回已精簡的桌面歷史，不執行本機Office、CAD或Python。工具配對、strict相容、子請求及圖片身分依原生代理契約。
+- 交付清單、條件卡、來源筆記與偏好由桌面保存；狀態由實際工具結果核對，不能接受模型自行宣告檔案完成。這些功能不新增公司資料載入或網站API。
+- 一般聊天及專案對已確認的暫時推論失敗採有限退避重試，未知提交查原ID；不可重播已成功的本機寫入。權限、額度與永久錯誤不以模型清單健康作為重試理由。
+- CAD採按需分組技能、已安裝版本解析、來源身分／revision及獨立讀回；幾何成功不代表設計或外觀核准。詳[CAD能力](CAD_CAPABILITIES.md)與[快照查詢](CAD_SNAPSHOT_QUERY.md)。
+- EXE／NSIS清單、同版NSIS優先、一次確認與固定安裝路徑見[更新契約](UPDATE_CONTRACT.md)。不要沿用舊版的EXE優先或兩次確認說明。
+- 現行功能及模型限制見[0.8.77驗證](VALIDATION_0_8_77.md)。公司模型、信箱與加密環境仍需實機驗收。
 
-> **0.8.1 更新流程以 [UPDATE_0_8_1_CONTRACT.md](UPDATE_0_8_1_CONTRACT.md) 為準**：支援 EXE／NSIS 簽署 JSON，合法最高版本優先、同版選 EXE。EXE 手動更換，NSIS 保留原生安裝；聊天與 SSE 以 0.7 契約為準。
-
-> **0.6 新功能請見 [DESKTOP_0_6_CONTRACT.md](DESKTOP_0_6_CONTRACT.md)**：依模型的附件規則、全站鈴鐺同步／已讀／刪除及 Outlook MSG 自動補充。本頁以下保留既有相容契約。
-
-> **0.5 新功能請先實作 [DESKTOP_0_5_CONTRACT.md](DESKTOP_0_5_CONTRACT.md)**：附件規則路由、文件／圖片上傳、串流、持久背景任務與通知（歷史估時功能已於 0.8.4 移除）。此處保留既有登入／版本／模型／通知基礎；驗證範圍見各版驗收文件。
-
-## 0.8.14 VNC Session 與匯入預覽
-
-VNC 使用相同路由與欄位，改為匯入／捨棄後才登出。首次未分類達 50% 自動重取一輪且上限一次；手動重取只 GET 已設定 API，不重登入、不另外觸發自動重取。自然排序與同名／IP 比對規則見 [VNC 說明](VNC_QUICK_CONNECT.md)。Cookie 保留於原生背景工作，從不送至前端或 AI。
-
-使用者已回報 0.8.14 測試成功並要求 NSIS 交付，維持版本 0.8.14，`Build.ps1 -EmptyCargoCache -IncludeInstaller` 交付 EXE、NSIS、兩份更新清單與原始碼至 main。EXE／NSIS 必須各與自己的已簽署清單成對部署；Git 推送不代表內網下載路由已更新。驗證見 [0.8.14 驗收](VALIDATION_0_8_14.md)。
-
-## 0.8.13 VNC 手動同步與 EXE 交付
-
-使用者授權新增機台網站同步，屬於既有 VNC 工具，仍需勾選啟用；不使用 AI Token 或聊天 API。網站帳密／根目錄／相對連結可記住，僅在使用者按更新時執行首頁、登入、清單查詢與登出，各請求前等待 300ms。清單取得後依分類／機台勾選匯入，保留手動機台及既有密碼，新增密碼為 1234；管理新增批次移動與刪除。完整路由與資料映射見 [VNC 說明](VNC_QUICK_CONNECT.md)。
-
-本次進版 0.8.13，執行 `Build.ps1 -EmptyCargoCache`，只交付 LM_AI.exe 與 update-manifest-exe.json、原始碼及驗證文件，推送既有 main。NSIS／其清單保留 0.8.12，待使用者實測成功後再製作，不公告為 0.8.13 安裝包。EXE 與其清單須成對部署，Git 推送不代表公司網站已部署。驗證見 [0.8.13 驗收](VALIDATION_0_8_13.md)。
-
-## 0.8.13 一併套用：更新提示用詞
-
-更新下載完成後的按鈕與提示改為「安裝並重新啟動 LM_AI」，安裝確認明確說明只重新啟動 LM_AI 應用程式，不會重新啟動電腦；確認框的舊安裝位置文字同步改為現行 `C:\largan\LM_AI`。僅調整文字，API、安裝與重新啟動流程不變。前輪依使用者要求暫存，本輪納入 0.8.13 EXE。
-
-## 0.8.12 統一完成結果格式
-
-使用者確認背景模式原先未由網站完整回傳，並指定串流／背景的最終 `result` 統一為 Chat Completions 物件。桌面新增支援：正文取 `result.choices[0].message.content`，重點／來源／信心／限制取 `result.sections`，引用取 `result.citations`。兩模式完成後均經既有 TaskStatus 解析及保存，不依賴串流原文補齊。外層 task_id／client_request_id／state 與 POST／查詢路由維持原契約，result.id 不能取代任務識別碼。
-
-沿用先前授權打包並推送，進版 0.8.12；EXE／NSIS 各與對應更新清單成對部署。網站可公告 latest_version 0.8.12，不需提高最低版本。詳見 [回覆契約](STRUCTURED_REPLY_CONTRACT.md) 與 [驗收記錄](VALIDATION_0_8_12.md)。Git 推送不等同內網部署。
-
-## 0.8.11 完成回覆保留修正
-
-0.8.10 對只有 answer 的 payload 直接採用，可能忽略同回覆更完整的 content；完成結果也可能覆蓋串流全文。0.8.11 保留結構化非空欄位優先，但在正文相符時從較完整的結果或同任務已收到的完整五段文字補空欄位。標題與內文同列、五段英文 Markdown 壓成單行皆支援；無法安全合併的原文放進可展開區，隨 DPAPI 歷史及複製文字保存。詳見 [回覆契約](STRUCTURED_REPLY_CONTRACT.md)。
-
-接續先前打包推送授權，EXE、NSIS 與兩份更新清單進版 0.8.11；網站可公告 latest_version 0.8.11，不調高最低版本。檔案與其清單須成對部署，Git 推送不等於內網已部署。驗證範圍見 [0.8.11 驗收](VALIDATION_0_8_11.md)。
-
-## 0.8.10 結構化回覆與章節收合修正
-
-桌面舊格式顯示改為按編號章節辨識中英文正文、回答重點、來源、信心與限制；標籤依使用者提供的網頁規則，只收合後三者，避免把 Sources 後再次出現的正文或回答重點一起藏起來。沒有編號或格式無法確認時維持完整 Markdown，原始訊息不刪減。串流與完成訊息共用相同顯示規則。規則與測試範圍見 [介面與串流](UI_AND_STREAMING.md)。
-
-依使用者提供的背景回覆範例，桌面新增結構化優先解析：正文 `answer`、字串陣列 `sections.key_points / sources / limitations`、字串 `sections.confidence`、陣列 `citations`；無有效結構化欄位時才解析舊格式。支援結果直接是 payload，以及任務／result／message 上的 `response_payload_json` 物件或 JSON 字串。修正原先只讀 `result.choices[0].message.content` 而漏掉其他欄位的問題。背景與串流完成共用同一解析，串流 delta 及任務 REST 路由不變；完整欄位保存到本機歷史，也包含在複製回答與後續對話文字中。外層 `confidence: medium` 不覆寫 `sections.confidence: High (高)`。詳細支援形式及非顯示欄位界線見 [結構化回覆契約](STRUCTURED_REPLY_CONTRACT.md)。
-
-使用者已要求打包並推送。本次進版 0.8.10，使用 `Build.ps1 -EmptyCargoCache -IncludeInstaller` 交付 `LM_AI.exe`／`update-manifest-exe.json` 與 `LM_AI_Setup.exe`／`update-manifest.json`；各組檔案必須成對部署。網站可公告 `latest_version: 0.8.10`，本次修正不需要提高 minimum_version。既有同版本優先選 EXE 的規則不變：若要使用 NSIS 自動安裝，所有探索來源應只公告新版 NSIS 清單，不能只更換下載檔。驗證範圍見 [0.8.10 驗收](VALIDATION_0_8_10.md)。歷史離線 ZIP 不重製，Git 推送不等於內網網站已部署。
-
-## 0.8.9 三花貓圖示發行
-
-本版只更新使用者提供的圖示並進版 0.8.9，不改動聊天、附件、Outlook 或 VNC API。交付 `LM_AI.exe`／`update-manifest-exe.json` 與 `LM_AI_Setup.exe`／`update-manifest.json`，每組檔案必須成對部署，網站可公告 `latest_version: 0.8.9`，一般圖示更新無須提高最低版本。
-
-同版本仍優先選 EXE；若要使用 NSIS 自動安裝流程，所有可探索的更新來源只能公告本版 NSIS，EXE 清單不公開或保留舊版。NSIS 延續只安裝、不檢查或附帶 WebView2，一般安裝完成後手動開啟主程式。驗證見 [0.8.9 驗收](VALIDATION_0_8_9.md)，歷史離線 ZIP 不更新。
-
-## 0.8.8 附件接收修正
-
-使用者實測後追加 0.8.8 NSIS 發行，`dist/LM_AI_Setup.exe` 與 `dist/update-manifest.json` 必須成對部署；固定安裝至 `C:\largan\LM_AI`，保留既有機台設定。獨立 EXE 與其更新清單也維持 0.8.8。既有雙格式更新選擇規則不變：同版本兩種格式同時被公告時，桌面優先選 EXE（手動替換）；需要 NSIS 安裝流程時，網站所有可探索的清單來源應只公告該版 NSIS，EXE 清單不公開或保留較舊版，不能只修改 download 路由卻保留同版 EXE 清單。Git 上傳本身不會部署內網網站。
-
-0.8.7 移除右上刪除按鈕後，附件接收中的鎖定流程仍引用舊 DOM ID，造成選檔後尚未發出 `file_begin` 就中斷並停留在忙碌狀態。0.8.8 改為鎖定對話列控制項，並在接收結束／失敗時依目前狀態還原；初始畫面更新亦納入 finally 清理範圍。附件 API 不變，不需因本次錯誤修改後端 job_id 或路由。
-
-新增 WebView2 回歸案例：已有文字對話後選檔、跨區塊原始內容一致性、接收期間停用對話操作、成功後立即恢復、原生拒絕後中止及重新選取。同時保留原生 loopback 的預約附件／PUT 原始內容／查詢狀態／帶 token 聊天測試；尚不能代替公司服務實測。
-
-### 0.8.8 精簡安裝包與 WebView2 分開提供
-
-最新 `LM_AI_Setup.exe` 只安裝 LM_AI，不偵測、不嵌入或安裝 WebView2；公司另行提供 Git `dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe` 至內網下載區。一般安裝完成頁不提供自動開啟，使用者安裝後自行使用捷徑啟動。主程式沿用原有 WebView2 初始化失敗提示，缺少 Runtime 時先補裝再開啟 LM_AI，不必重跑 Setup。先前 Setup 的 Runtime 退出碼 2 阻擋流程已移除。
-
-主程式維持 0.8.8；部署時必須一起替換 Setup 與新簽署的 NSIS 清單，清除舊下載快取，避免同檔名舊完整包與新 SHA256 不符。已安裝 0.8.8 的用戶不需要為拆包重新更新。獨立 Runtime 與主程式更新清單分開提供。
-
-SFX 測試包因使用者要求已從最新 Git 移除。既有 NSIS 更新協定仍保留 `/UPDATEPID`／`/RESTART`：只有使用者在 App 同意安裝並重新啟動時才自動重啟。一般手動安裝不啟動主程式；API／簽署格式不變。
-
-## 0.8.7 Outlook 模型可用性與介面整理
-
-每次進入 Outlook 助理時重新取得既有模型清單，依穩定代號 `quality` 判斷自動補充內文是否可用，不以顯示名稱猜測。網站停用模型時應從模型清單移除該代號；桌面不讀取網站 env。未登入、查詢中或查詢失敗時不可啟用自動補充；成功查詢但沒有 quality 時顯示「目前品質模型維護中，暫時停用自動補充內文功能」。恢復供應後由使用者重新勾選，不自動恢復先前被清除的授權。
-
-初篩仍可只送基本資訊；選用自動補充時，確認視窗分行並以紅色標示完整內容匯出授權。確認視窗開啟期間模型若停用，送出前再次阻擋，原生層亦檢查查詢狀態及 quality 代號，最終整理沿用既有能力與模型檢查。API 路由、附件 token、MSG 與模型請求格式不變。
-
-左上品牌沿用嵌入的 EXE 黑貓 ICO；側欄新對話移至最近對話旁，各對話列提供滑鼠／鍵盤可用的編輯、置頂、刪除圖示，右上僅保留通知與任務圖示及狀態。EXE／EXE JSON 進版 0.8.7，NSIS 0.8.5 與歷史離線 ZIP 不重建。
-
-## 0.8.6 EXE 發行與選用 VNC
-
-一般／背景模式與輸入快捷鍵提示置於同一列，工作狀態另列；換行、送出與選字快捷鍵提示依已套用的本機偏好更新，停用選字快捷鍵時隱藏該提示。Outlook 日期查詢預設為目前資料夾及子資料夾，介面移除所有信箱範圍。
-
-本次只發布 `dist/LM_AI.exe` 與 `dist/update-manifest-exe.json`，網站將 EXE／JSON 成對部署，`latest_version` 可改為 `0.8.6`；一般更新不必提高 `minimum_version`。版本較舊的 NSIS 清單可維持 0.8.5，不能將舊 Setup 改標為 0.8.6。既有 0.8.1 以上客戶端會依版本選擇新版 EXE，下載後仍需使用者手動替換；0.8.0 客戶端不支援 EXE 更新。驗證界線見 [0.8.6 驗收](VALIDATION_0_8_6.md)。
-
-另新增選用的本機 VNC 快速連線：設定 `vnc_enabled` 預設 false，使用者啟用後才顯示側欄入口。設定檔固定沿用 LM_AI.exe 旁的 `machines.json` 與 `user_config.json` 原格式；機台只以使用者手動上移／下移調整順序，不自動排序。Rust 直接呼叫已安裝的 UltraVNC Viewer，不新增網站 API，也不將機台、密碼或連線操作交給 AI。規格與驗證見 [VNC 快速連線](VNC_QUICK_CONNECT.md)。
-
-## 0.8.5 NSIS 固定位置發行（既有安裝包）
-
-- 本版交付 `LM_AI_Setup.exe` 與 `update-manifest.json`，以及 `LM_AI.exe` 與 `update-manifest-exe.json`；版本均為 0.8.5。
-- 供應商顯示 `Largan, Inc.`，安裝位置固定 `C:\largan\LM_AI\`，一般使用者執行，缺少的資料夾自動逐層建立。無新增聊天／登入 API。
-- **若要讓既有 0.8.1～0.8.4 用戶透過更新取得 NSIS，網站此次只發布 0.8.5 NSIS 清單**：`/desktop/download` 回傳 NSIS 清單，獨立 EXE 清單路由保留舊版或回 404。同時提供兩種 0.8.5 清單仍會依既有契約優先選 EXE，不能只改安裝包檔名或 JSON 的 kind。
-- Git 保留兩種已簽署 JSON 供部署選擇；此次上傳 Git 不代表已部署公司網站。`latest_version` 可設 0.8.5，無須因此提高 `minimum_version`。
-- 舊安裝路徑處理與測試界線見 [0.8.5 驗收](VALIDATION_0_8_5.md)。
-
-## 0.8.4 移除估時與介面整理
-
-- 桌面移除估時命令、背景請求與顯示，不再呼叫 `POST /lm_server/api/desktop/chat/estimate`，亦不再為估時預先建立伺服器對話。
-- `capabilities.timing_estimates`、任務／附件 `timing` 即使仍由舊後端回傳，也視為額外欄位忽略；既有加密工作紀錄仍可載入。伺服器不必先刪除欄位或下線供舊客戶端使用的路由。
-- 一般／背景模式、實際進度、排隊順位、任務取消及斷線補查維持原有契約。狀態說明移到模式按鈕同一列。
-- 設定面板改為 520 px（仍受視窗寬度限制），只保留垂直捲動；快捷鍵控制項可換行，單選選項採圓圈與文字並排。
-- 無新增網站 API；繼續使用 0.8.1 的 EXE／NSIS 雙格式選版，0.8.3 的固定內網直連。驗證範圍見 [0.8.4 驗收](VALIDATION_0_8_4.md)。
-
-0.4.1 僅更新桌面端的快捷鍵錄製與剪貼簿擷取，既有 API 契約不變，不需新增路由。
-網站下載頁可提供新版 EXE，並依部署政策更新 latest_version／minimum_version；不要只因版本不同就強制更新。
-桌面操作與公司實機驗收方式見 [快捷鍵錄製與 PDF 選字](HOTKEY_0_4_1.md)。
-
-## 1. 本次必須修改的內容
+## 1. 固定路由與共用要求
 
 本版使用固定主機 **`http://lp2-en-server`**，下列完整路徑已寫在 `src/config.rs`，一般使用者不能查看或更改連線設定。
 這是產品操作限制，不是保密機制；原始碼與 EXE 本身仍可被檢視。變更主機或路由時，需重新建置並發佈桌面版。
@@ -207,7 +24,7 @@ SFX 測試包因使用者要求已從最新 Git 移除。既有 NSIS 更新協�
 | POST | `/lm_server/v1/chat/completions` | Bearer Token；模型代號替換後轉送 |
 | GET | `/lm_server/api/desktop/version` | 匿名查詢最低／最新版本 |
 | GET | `/lm_server/api/desktop/models` | 可匿名或依 Bearer Token 回傳有權使用的模型選單 |
-| GET | `/lm_server/desktop/download` | 更新清單 JSON；格式見 0.8 契約（可依 Accept 保留 HTML 頁） |
+| GET | `/lm_server/desktop/download` | 更新清單 JSON；格式見更新契約（可依 Accept 保留 HTML 頁） |
 
 另外需提供瀏覽器授權頁，例如 `/lm_server/desktop/activate`（GET 顯示、POST 允許／拒絕）。
 這個頁面的 URL 由 device 回應決定，不必固定上述例子，但入口必須與公司主機同來源。
@@ -216,7 +33,7 @@ SFX 測試包因使用者要求已從最新 Git 移除。既有 NSIS 更新協�
 **建議實作順序：固定路由 → models → version／download → 完整驗收。**
 選取文字、快捷鍵與翻譯／摘要／潤飾在桌面端完成，不需要新增選字 API；按下按鈕後仍送相同 Chat Completions JSON。
 
-所有桌面 API 請求會帶 `X-Client-Version: 0.4.1` 與 `Accept: application/json`。
+所有桌面 API 請求會帶 `X-Client-Version: <目前應用程式版本>` 與 `Accept: application/json`。
 此 Header 是相容性提示，不是驗證憑證；伺服器仍須自行檢查 Token、權限、模型白名單及配額。
 `client_id` 固定為 `company-ai-desktop`，是公開客戶端識別，不配置 client_secret。
 API 回應用 UTF-8 JSON，禁止 API redirect／HTML 登入頁；建議 `Cache-Control: no-store`。
@@ -414,7 +231,7 @@ EXE 不自動重送聊天請求，避免逾時後重複計費／執行。網站�
 ```http
 GET /lm_server/api/desktop/version HTTP/1.1
 Accept: application/json
-X-Client-Version: 0.4.1
+X-Client-Version: <目前應用程式版本>
 ```
 
 HTTP 200：
@@ -447,7 +264,7 @@ HTTP 200：
 ```http
 GET /lm_server/api/desktop/models HTTP/1.1
 Accept: application/json
-X-Client-Version: 0.4.1
+X-Client-Version: <目前應用程式版本>
 Authorization: Bearer desktop_xxxxxxxxx
 ```
 
@@ -509,7 +326,7 @@ HTTP 200：
 - 無自訂代理帳密／用戶端憑證選取；不需要 CORS。SSO、Cookie 和 CSRF 由瀏覽器授權頁處理。
 - 正式模式不開本機 HTTP port，只有 --demo 會在 127.0.0.1 隨機埠啟動模擬服務。
 
-### 0.8.2 登入連線診斷
+### 登入連線診斷
 
 登入依序為：POST device 取得登入碼 → ShellExecuteW 開啟預設瀏覽器 → POST token 輪詢授權。若 device 連線失敗，瀏覽器尚未開啟。Edge 能讀取 version JSON，只代表該瀏覽器當時能連到 version GET，不代表桌面 WinHTTP 或兩個登入 POST 已通過。
 
@@ -519,7 +336,7 @@ HTTP 200：
 
 參考：[Microsoft WinHTTP](https://learn.microsoft.com/en-us/windows/win32/api/winhttp/nf-winhttp-winhttpopen)、[Windows Socket 錯誤碼](https://learn.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2)。
 
-### 0.8.3 隔離內網直連
+### 隔離內網直連
 
 公司實測回報模型與 device 都在 WinHttpOpen 回傳 10022，尚未呼叫 WinHttpConnect 或送出 HTTP 請求。使用者確認公司網路與外網完全隔離，Windows 代理為「自動偵測」。因此固定公司 origin 改用 `WINHTTP_ACCESS_TYPE_NO_PROXY`，不再為這個目的地初始化 `WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY`。這是針對已確認的失敗階段與部署環境調整，仍不能斷言 Trend 或某個 Windows 服務就是根因。
 
@@ -535,7 +352,7 @@ HTTP 200：
 4. 伺服器映射到真正模型並回覆，桌面顯示內容、可追問和複製。
 5. models 新增 ultra，按重新整理後出現 Ultra，不更新 EXE。
 6. version 回 latest=0.5.0、minimum=0.4.0，允許使用；minimum=0.5.0，提示更新、禁止新登入與聊天。
-7. 全新啟動時只有 version 回 503，models／登入／聊天正常：可使用；已知強制更新後 version 再斷線：同次執行仍阻擋。
+7. 全新啟動時只有 version 回 503，models／登入／聊天正常：可使用；已知強制更新後 version 再斷線：重新啟動後仍阻擋。
 8. models 先回 401，完成登入後可取到清單；空清單、重複 id、錯誤 default 不可默默送出未知模型。
 9. 選取文字按快捷鍵，確認伺服器沒有收到聊天；再按摘要才收到一次請求。
 10. 驗證到期、拒絕、一次性碼重複及並行兌換、401 撤銷、429 限流、HTML／redirect 等錯誤。
@@ -547,107 +364,12 @@ HTTP 200：
 
 ## 格式參考
 
-介面與串流修正見 [UI_AND_STREAMING.md](UI_AND_STREAMING.md)：支援網站的 `start` → `tool_status` → `delta.text` → `done`，保留 OpenAI 相容格式；斷線保存部分回答並提示不完整，REST 完整結果可原位取代。工具名稱及狀態以原文顯示，不顯示 arguments／result。此修正不新增網站路由。
+介面與串流修正見 [UI_AND_STREAMING.md](https://github.com/you1230783-sys/CompanyAI/blob/fa2833f641694554aac25483979becc17cb5c59d/docs/UI_AND_STREAMING.md)：支援網站的 `start` → `tool_status` → `delta.text` → `done`，保留 OpenAI 相容格式；斷線保存部分回答並提示不完整，REST 完整結果可原位取代。工具名稱及狀態以原文顯示，不顯示 arguments／result。此修正不新增網站路由。
 
 Outlook 日期查詢預設為「Outlook 目前資料夾及子資料夾」，另可選「預設收件匣及子資料夾」；介面已移除所有已載入信箱與本機資料檔選項，詳見 [Outlook 查詢說明](OUTLOOK_SEARCH.md)。這是桌面介面調整，不新增網站 API；批次基本資訊保留 `folder` 顯示來源資料夾，仍不提供 EntryID／StoreID 或磁碟路徑。本次僅保存變更，未進版或打包。
 
-Outlook 第一輪維持以 `# Outlook 郵件初篩 outlook-triage` 開頭，供網站分流至不額外附帶提示詞／技能的初篩路由。第二輪保留資料與摘要，固定送 `model: "quality"`，列出每份上傳 MSG 對應的完整 `.md` 名稱並允許網站文件工具；不重送初篩 Skill，由網站使用正常提示詞與技能。詳見 [0.6 分流與附件名稱契約](DESKTOP_0_6_CONTRACT.md#初篩與附件分析的分流)。
+Outlook 第一輪維持以 `# Outlook 郵件初篩 outlook-triage` 開頭，供網站分流至不額外附帶提示詞／技能的初篩路由。第二輪保留資料與摘要，固定送 `model: "quality"`，列出每份上傳 MSG 對應的完整 `.md` 名稱並允許網站文件工具；不重送初篩 Skill，由網站使用正常提示詞與技能。詳見 [0.6 分流與附件名稱契約](https://github.com/you1230783-sys/CompanyAI/blob/fa2833f641694554aac25483979becc17cb5c59d/docs/DESKTOP_0_6_CONTRACT.md#初篩與附件分析的分流)。
 
 - [OAuth Device Authorization Grant — RFC 8628](https://www.rfc-editor.org/rfc/rfc8628.html)
 - [Windows WinHTTP](https://learn.microsoft.com/en-us/windows/win32/api/winhttp/nf-winhttp-winhttpopen)
 - [Windows DPAPI](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata)
-
-## 0.7 桌面契約
-
-新版用途旗標、一般／背景模式、SSE、Outlook 容錯與自動更新欄位見 [DESKTOP_0_7_CONTRACT.md](DESKTOP_0_7_CONTRACT.md)；驗證範圍見 [VALIDATION_0_7.md](VALIDATION_0_7.md)。聊天路徑保留 /lm_server/v1/chat/completions。
-
-
-## 0.8.18 桌面 Office 工具
-
-後端路由沒有新增欄位；專案工具含 `edit_office` 仍由桌面透過 `skills:false` 傳入本機契約與 JSON 工具往返。成果定位、檔名及時間目錄均由桌面處理，網站不需要解析磁碟路徑或呼叫 Office。詳細資料結構見 [0.8.18 契約](DESKTOP_0_8_18_CONTRACT.md)。
-
-
-## 0.8.26 桌面 Office 與暫停續接
-
-HTTP 協定保持不變：專案請求 `skills:false`，工具定義／呼叫／結果仍為 messages 文字。新增 office_action 與 read_work_log 由桌面處理，網站不執行檔案操作。每段 60 工具／80 模型回覆上限及手動續接也由桌面管理。
-
-專案 messages 可能超過一般聊天的 40 則（20 輪），桌面上限為 204 則、單則 64 KB；請後端檢查是否仍套用一般聊天筆數限制。不能僅憑第 20 輪失敗就斷定此原因。桌面現在保留提交 POST 的錯誤與後續 GET tasks/by-request 或 tasks/{id} 的錯誤；404 可能是路由不存在或該請求尚未建立／已不可查，請以 request_id 對照服務端日誌。未知結果不重送 POST、不換 request_id。
-
-詳細見 [0.8.26 契約](DESKTOP_0_8_26_CONTRACT.md)。
-
-
-## 0.8.27 專案暫停查回
-
-桌面每段時限延長至 2 小時。等待背景任務逾時或連續三次狀態查詢失敗時，可加密保存後由使用者按「繼續」；只 GET 原 task_id 或 client_request_id，禁止重新 POST 不明請求。後端需在預期續接期間保留任務狀態與結果，否則桌面維持暫停並提示查詢失敗。已確認 completed 的結果可在本機續接時沿用，不需額外路由。沒有更改聊天或工具協定，也不會調整伺服器／代理本身的 timeout。
-
-## 0.8.33 桌面技能與圖表決策
-
-沿用 desktop-agent-v1；沒有新增路由、能力旗標或資料庫欄位。桌面每輪依已載入技能、模型及副本／圖表狀態建立 `tools`。網站須原樣轉送該輪完整 `messages`／`tools` 快照，不以早期回合的工具快取覆蓋，也不要求歷史 tool_calls 的名稱必須出現在當輪 tools。
-
-`load_skill` 的參數仍為 `{id}`；新增文字、Office、Excel、研究、筆記群組。工具結果只回已載入 ID，完整說明在下一輪唯一的 system 訊息出現。等待圖表資料選擇完全由桌面處理，不新增模型請求、不虛構 role=tool 成功回覆；暫停後續接同一已完成的模型請求，再產生實際工具結果。
-
-
-## 0.8.34 桌面本機互動
-
-- 原生 UI outlook_consent／file_ready 回覆均核對 conversation、run_id、request_id；不能由模型內容或網站通知代替同意。
-- Outlook 工具依序 outlook_folders、outlook_headers、outlook_read；工具结果不含 EntryID、StoreID、PST／OST 磁碟路徑。
-- read_work_log 可選 operation_id，未指定回索引；read_task_result 的 field 新增 operations。offset 以 Unicode 字元計算，完整結果可分頁回讀。
-- 跨對話只帶近期原要求、最終答案、工具計數及所選記憶；模型需尊重 client_snapshot，不能由後端重新加入所有工具輸出。
-- 單次模型／COM／網路呼叫仍有原有有限期限。24 小時是桌面單段總時限，不能將服務端逾時視為可重新 POST 的理由。
-
-## 0.8.36：本地資料集與交接整理
-
-不新增網站路由。desktop-agent-v1 的 client_snapshot 維持不變；桌面 catalog 增加 export_log_dataset、export_excel_dataset、inspect_dataset、chart_dataset、compact_context，共 43 項（含終態），初始 8 項基本工具。內建技能共 13 項，新增 dataset-charts／context-management；圖表技能啟用 CSV 工具。新增工具同樣由既有 Schema 正規化器處理 strict／nullable 參數。
-
-匯出只回 dataset {path,revision,rows,columns}、statistics、head／tail 各最多 10 筆（每格預覽最多 80 字）及有界來源資訊。CSV 正文及圖表座標不進 tool response；圖表透過既有本地 UI 事件顯示。跨任務 inspect_dataset 可省略 revision 取得目前版本；chart_dataset 必須帶版本並在使用者異常值決策後再次核對。CSV 發布／checkpoint 恢復／finish 均核對內容，原始檔不修改。
-
-CSV 成功：archive_results → compact_now（僅最近一對工具訊息）→ 加密 checkpoint。compact_context 先驗證 working_note（2000 字）、superseded（最多 12 條，各 200 字）與 next_step（500 字）；封存成功後才套用交接並縮減。補充於模型／工具界線處理，舊筆記 instruction_review_required=true，新候選若過期仍 executed=false。用戶原文保留，來源／副本與資料集索引由程式管理，主動整理不重設修復或無進展計數。任何封存失敗不宣稱整理成功。
-
-已提交／未知模型請求保持原 client_request_id、原 request payload；整理僅作用於下一個新請求。舊 checkpoint 新欄位使用 serde default。原始加密操作簿與 read_work_log／read_task_result 查回入口不變。
-
-
-## 0.8.46 上下文與偏好補充
-
-專案仍使用 client_snapshot，網站不得補回桌面已移出的工具歷史。桌面以累積筆記、目前技能核心／工具及近期1–3組結果組裝請求，8K–12K為軟目標；原結果本機查回。工具目錄新增 read_skill_guide、outlook_index、ask_preference(question,options,default_choice)、set_chart_policy(chart_index,policy)，共54項，實際公告依工作階段而定。progress_note請每輪更新；舊checkpoint仍可解析未帶筆記的工具結果。
-
-read_work_log目錄offset按筆數，每頁20筆固定快照；指定operation_id後的原文offset仍按字元。Outlook空白cursor視為null，不改有效游標格式與授權。可選偏好不終止任務；未回答使用預先公告的預設，權限不得使用此路徑。圖表Y預設保留缺值，可切換呈現；無效X未取得明確選擇時回deferred，先處理其他工作。
-
-一般聊天桌面只送當前使用者訊息，不再受20輪上限；網站依conversation_id附加歷史。Outlook助理與專案請求不套用此裁減。DEBUG可保存桌面送出／收到的JSON與獨立無正文用量報表；請保留模型原始usage（含prompt/input、completion/output與可用的cached/reasoning細項），未回傳時桌面明示缺漏。
-
-
-## 0.8.47 日期、圖表與診斷
-
-一般聊天仍只送本次提問及既有 conversation_id；另帶一則 `system` 日期提示（Windows 本機日期／星期／ISO週與當週範圍），供網站轉發時作今天的依據。網站仍負責既有聊天歷史；不應把文件日期或伺服器預設日期覆蓋此桌面時區依據。專案原生工具的 system 也加入日期，既有未知提交快照不改寫；API路由、owner和request_id去重不變。
-
-圖表工具目錄新增 `set_chart_reference_lines`；由桌面執行並驗證，不增加網站工具執行權限。診斷錯誤碼與JSON匯出全在本機，沒有自動上傳端點。設計與用量分析見 [前置紀錄](PENDING_SETTINGS_CHARTS_DIAGNOSTICS.md)，發行驗證見 [0.8.47紀錄](VALIDATION_0_8_47.md)。
-
-
-### 0.8.47 郵件成果與階段
-
-原生代理工具目錄57項，新增 `read_mail_notes`／`set_work_stage`，仍依目前技能及實際對象只送子集。網站沿用請求中的tools，不額外補歷史或永久載入所有技能。
-
-成功 `outlook_read` 後，下一請求在各工具參數動態增加 `mail_note` 字串。字串內為JSON，包含 source_operation、summary、draft、disposition(include/exclude/uncertain)、rationale、open_questions。詳細契約在system只說一次，避免複製每工具的大型schema。必須搭配下一操作提交，不另外推論摘要；`read_mail_notes` 可用null先查本地來源，其餘操作需先提交摘要。非待摘要回合只在兩個筆記管理工具提供可空的修訂欄位。桌面將該欄位與工具參數分離，核對來源後才執行；網站不處理或保存應用程式筆記。未知／待查請求仍使用原Schema與原ID。
-
-階段read載入Outlook、organize載入notes、write載入office-edit、chart載入dataset-charts；切換不刪來源、圖表或副本。寫入選最多4份草稿，下輪帶摘要與原文操作索引；實際成功寫入另記關聯，階段不是完成證據。完整內容沿用加密broker與journal。摘要不能取代授權或精確事實核對。
-
-### 2026-10-12 Outlook 標題相容性修正（併0.8.52）
-
-桌面將 Table 的 ConversationID 改為選用欄位；資料提供者拒絕加入時仍可讀取標題，thread_id 留空，沿用既有候選分組。必要識別／日期欄位失敗仍回報查詢錯誤，不回傳假零封。此修正不變更網站路由、工具 Schema、資料夾權限或隱藏副本判定。實作與驗證紀錄見 [開發文件](DEVELOPMENT.md)。
-# CAD 本機批次讀取與進度（0.8.69）
-
-桌面 CAD 讀取、繪圖及修改含重開核對採 600 秒期限，inventory／probe 為 240 秒。
-固定 LISP 在 CAD 程序內匯出資料，Python 轉成本機索引；未知／傾斜圖元保留 COM 詳讀，數量不符時才完整 COM 備援。
-讀取數量及經過時間只在桌面非模態提示顯示，不加入 AI messages 或網站 API。
-完整索引成功後才提供原有 `cad_snapshot`／`cad_query` 結果；取消及失敗不提供部分快照。
-這項變更不需要網站新增路由，快速模型仍不接收圖片。實測與限制見 `VALIDATION_LUNA_CAD_INDEX.md`。
-
-## 待發行：新建CAD使用確切版本（2026-10-19）
-
-`cad_draw.version`只接受使用者指定或`cad_inventory`回傳的確切ProgID，不接受`latest`。未知時先查清單；桌面與原生worker在建圖前拒絕別名，不由網站改寫模型參數、不新增路由。實測驗收比對原生報告的實際版本，錯版產物標記`WRONG_CAD_VERSION`，不能算指定版本通過。此修正尚未發布，進度見專案驗證文件。
-## 0.8.70 CAD分段工具補充
-
-專案agent傳入的工具目錄新增cad_plan_start、cad_plan_part、cad_plan_inspect、cad_plan_commit；沿用既有turns傳輸與單一工具回覆格式，不新增網站路由。工具參數仍以該輪桌面提供的Schema為準，網站若有固定名稱白名單須同步接受這四個名稱，不能在網站重組或自動執行分段參數。
-
-桌面依狀態公告工具：短方案完成後可開始計畫，開始後每段1–20項；最後commit僅帶plan_id與plan_revision。完整幾何保存在桌面，後續請求帶區段目錄與最新版本；只有inspect指定區段才回傳該段。此狀態不是CAD圖面讀取快照、寫入授權或繪圖成功證據。
-
-本機真模型驗證不代表公司網站已部署、支援所有供應商工具子集或完成公司模型驗收。測試連線與原始模型資料不納入應用程式、Git或使用者教學。

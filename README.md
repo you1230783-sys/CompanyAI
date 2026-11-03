@@ -1,4 +1,4 @@
-<!-- 開頭版本公告最多保留最新 3 個版本；歷史文件保留於 docs。 -->
+<!-- 開頭版本公告最多保留最新 3 個版本；較早版本依 docs/ARCHIVE_POLICY.md 封存。 -->
 **0.8.77：桌寵、離線塔羅與工作操作。** 可替換透明PNG桌寵、78張離線塔羅與一般聊天解析、自動重連、Excel自訂公式與Office寫入擴充，以及既有普通圓圖塊修改。[本版驗證與限制](docs/VALIDATION_0_8_77.md)
 
 **0.8.76：專案工作與來源筆記。** 新增交付清單、條件卡、偏好與成果整理；重連不刷屏、完整歷程分頁、各專案獨立收合。來源查詢改短ID，讀完先保存筆記並保留必要查證。CAD延至下一版；Luna讀圖及多步交付仍有未通過案例。[本版驗證與限制](docs/VALIDATION_0_8_76.md)
@@ -13,13 +13,13 @@ CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供�
 
 ## 下載與開始使用
 
-1. [下載 0.8.77 完整 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從系統托盤選「離開」，再以一般權限安裝至 `C:\largan\LM_AI`；Python 會放在旁邊的 `python` 子目錄。驗證範圍請見[本版紀錄](docs/VALIDATION_0_8_76.md)；公司服務與真實 CAD 圖面仍需公司實機確認。
+1. [下載 0.8.77 完整 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從系統托盤選「離開」，再以一般權限安裝至 `C:\largan\LM_AI`；Python 會放在旁邊的 `python` 子目錄。驗證範圍請見[本版紀錄](docs/VALIDATION_0_8_77.md)；公司服務與真實 CAD 圖面仍需公司實機確認。
 2. 開啟程式，按「登入」，在瀏覽器核對短碼並允許授權。
 3. 選擇模型後開始對話；需要讀取或修改資料夾內的文件時，先建立「專案」。
 
 執行需要 WebView2 Runtime，不需安裝 Rust、Node 或 Python。若啟動時提示缺少 WebView2，請依 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md) 處理。正式功能需要公司服務連線與桌面帳號權限。
 
-目前交付的 EXE 與 NSIS 都是 **0.8.77**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史 `CompanyAI-offline.zip` 未更新；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
+目前交付的 EXE 與 NSIS 都是 **0.8.77**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史完整離線包已依[封存政策](docs/ARCHIVE_POLICY.md)移出目前目錄；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
 
 ## 可以做什麼
 
@@ -35,7 +35,7 @@ CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供�
 | 生成週報 | 建立素材資料夾、設定日期與補充、再次確認後整理文件及授權郵件；可參考上週格式。 |
 | 專案技能與圖表 | 論文證據、週報增量、Excel 抽取、跨文件搜尋、批次 Office、離線圖表與快速模型摘要委派。 |
 | 專案 Mermaid | 流程／狀態等圖形、原始碼複製、MMD／SVG／PNG、版本保留與下一輪修改。 |
-| CAD 圖面 | 讀取索引、條件查詢、原生幾何／尺寸／圖層／基本圖塊、有限 2D 修改與同圖分段新建；2008／2022 測試範例可下載，概念圖仍須人工核對。 |
+| CAD 圖面 | 讀取索引、條件查詢、原生幾何／尺寸／圖層／基本圖塊、有限 2D 修改與同圖分段新建；2008／2022 的操作與概念圖仍須人工核對。 |
 | Python 原始碼（試用） | 分段修訂 .py 並更新同一草稿，依需求核對實際成果、語法及隔離功能測試；明列模擬依賴與未驗證範圍。 |
 | Python 分析 | 本機 pandas 分組、合併、事件分析；輸出追蹤 CSV 及多工作表 XLSX，模型只接收精簡結論。 |
 | LOG 分析 | 支援只有時間的紀錄；以近似時間定位事件，分批回讀前後文並附來源行號。 |

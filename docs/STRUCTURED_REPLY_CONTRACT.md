@@ -32,7 +32,7 @@
 
 新的 Chat Completions 結果與直接 payload 同樣正規化為 `ReplyPayload`，不需要網站另外補 `answer`。只有存在 `sections` 或 `citations` 時才啟用此轉換，純文字 choices 沿用舊格式備援；若同一物件本來已有 answer，維持 answer 優先。明確的 response_payload_json 仍優先於此格式，正文一致時只補空欄位。`id`、`object`、`created`、`model`、`usage`、`finish_reason` 及工具資料不加入顯示 DTO。共用測試樣本為 `ui/fixtures/completion-reply.json`。
 
-舊格式備援只辨識編號章節（如 `1. 回答：`、`## 2. Key points`），標籤與使用者提供的網頁清單一致，見 [介面與串流](UI_AND_STREAMING.md)。一般正文碰巧提到 Sources、信心度等字詞不會觸發收合。0.8.11 支援標題與內容同列，以及使用者回報的五段英文 Markdown 壓成單行。Rust 只在 Answer 開頭、五種章節各出現一次時正規化；不從引用、程式碼或說明前言猜測欄位。若 answer 本身是這種完整五段全文，也會拆出正文並補空欄位，既有非空 sections 仍優先。
+舊格式備援只辨識編號章節（如 `1. 回答：`、`## 2. Key points`），標籤與使用者提供的網頁清單一致，見 [介面與串流](https://github.com/you1230783-sys/CompanyAI/blob/fa2833f641694554aac25483979becc17cb5c59d/docs/UI_AND_STREAMING.md)。一般正文碰巧提到 Sources、信心度等字詞不會觸發收合。0.8.11 支援標題與內容同列，以及使用者回報的五段英文 Markdown 壓成單行。Rust 只在 Answer 開頭、五種章節各出現一次時正規化；不從引用、程式碼或說明前言猜測欄位。若 answer 本身是這種完整五段全文，也會拆出正文並補空欄位，既有非空 sections 仍優先。
 
 ## 串流、保存與複製
 
@@ -42,4 +42,4 @@
 
 0.8.11 補強完成切換：只有 answer 的 payload 不代表其他欄位已完整。正文一致（忽略重複空白）時，從較低優先序結果或同任務串流已收到的完整五段回覆補齊空欄位，不覆寫 REST 的非空欄位。若正文改變、欄位衝突或原文格式無法辨識，透過可省略的 `received_replies` 保存另列文字，畫面在「來源、信心、限制與原文」區塊供點擊展開；複製文字也包含這些內容。結構化 JSON 的備份只含可讀欄位，不納入內部工具資料。這項保留不改變任務完成判定，也不會把未完成的串流直接當成 REST 完成結果。
 
-本次不自動重新查詢或改寫已保存的舊正文訊息。新收到的結果會保存完整結構，重新開啟對話後仍可展開閱讀。測試範例在 `ui/fixtures/structured-reply.json`，與 Rust 協定測試、WebView2 自檢共用；驗證記錄見 [回覆章節驗收](VALIDATION_REPLY_SECTIONS.md)。
+本次不自動重新查詢或改寫已保存的舊正文訊息。新收到的結果會保存完整結構，重新開啟對話後仍可展開閱讀。測試範例在 `ui/fixtures/structured-reply.json`，與 Rust 協定測試、WebView2 自檢共用；驗證記錄見 [回覆章節驗收](https://github.com/you1230783-sys/CompanyAI/blob/fa2833f641694554aac25483979becc17cb5c59d/docs/VALIDATION_REPLY_SECTIONS.md)。

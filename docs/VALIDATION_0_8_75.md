@@ -32,5 +32,5 @@
 - [可公開分項摘要](../offline/tutorial-verification-0.8.75.json)
 - [基本原生驗證](../offline/exe-verification.json)
 - [本版封裝驗證](../offline/installer-verification.json)
-- [0.8.74 完整原生驗證存檔](../offline/exe-verification-0.8.74.json)
-- [0.8.74 完整安裝驗證存檔](../offline/installer-verification-0.8.74.json)
+- [0.8.74 完整原生驗證存檔](https://github.com/you1230783-sys/CompanyAI/blob/fa2833f641694554aac25483979becc17cb5c59d/offline/exe-verification-0.8.74.json)
+- [0.8.74 完整安裝驗證存檔](https://github.com/you1230783-sys/CompanyAI/blob/fa2833f641694554aac25483979becc17cb5c59d/offline/installer-verification-0.8.74.json)

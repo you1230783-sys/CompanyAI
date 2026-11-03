@@ -6,7 +6,7 @@
 
 每批1–4組測試、新 AppContainer／Job、60秒、1GiB、單程序；由 Windows 建立本次私有資料夾，允許合成檔案讀寫，不授權專案、使用者 TEMP、網路或子程序。缺少模組、跳過或沒有實際案例、沒有載入副本都不能標 passed。來源 hash、測試 id、需求 id 與結果由原生核對；保存／續接仍使用加密狀態。任何修改均使舊證據失效。
 
-check_python 的下述不執行保證不變；只有另行呼叫 test_python 才會執行來源，包含頂層程式。save_copy 現在同時要求當前語法通過及逐項核對，未完成需求不可發布；未具備外部測試環境可明列界線交付。實際整合案例在 `examples/python_smoke/verification.rs`，記錄見 [0.8.50 驗證](VALIDATION_0_8_50.md)。
+check_python 的下述不執行保證不變；只有另行呼叫 test_python 才會執行來源，包含頂層程式。save_copy 現在同時要求當前語法通過及逐項核對，未完成需求不可發布；未具備外部測試環境可明列界線交付。實際整合案例在 `examples/python_smoke/verification.rs`，記錄見 [0.8.50 驗證](https://github.com/you1230783-sys/CompanyAI/blob/fa2833f641694554aac25483979becc17cb5c59d/docs/VALIDATION_0_8_50.md)。
 
 ## 0.8.49：並行與分段草稿
 
@@ -25,7 +25,7 @@ read_code_section／edit_code_section以revision、1起算行號與section_hash�
 
 語法驗證只適用內建CPython 3.13.12，不代表依賴、外部資源、執行結果或其他版本相容。本版沒有pytest／pip，不默默執行整份來源程式。Python worker、套件、runtime清單與指紋不變，安裝仍可通過自檢後沿用舊環境。
 
-整合驗證入口`examples/python_smoke/edit.rs`包含：語法錯誤與修正、編碼宣告、UTF-8 BOM、Big5、未安裝模組、頂層raise不執行、版本檢查失效、拒絕未檢查的發布、成果讀回及原檔不變。實際結果見 [0.8.48驗證](VALIDATION_0_8_48.md)。
+整合驗證入口`examples/python_smoke/edit.rs`包含：語法錯誤與修正、編碼宣告、UTF-8 BOM、Big5、未安裝模組、頂層raise不執行、版本檢查失效、拒絕未檢查的發布、成果讀回及原檔不變。實際結果見 [0.8.48驗證](https://github.com/you1230783-sys/CompanyAI/blob/fa2833f641694554aac25483979becc17cb5c59d/docs/VALIDATION_0_8_48.md)。
 
 
 ## 0.8.45：大檔分段與分析核對
@@ -36,7 +36,7 @@ Python worker 及 runtime 指紋不變；metadata 自動帶入原始行號與下
 
 record_analysis 可引用成功操作的原文／計算快照，並從 result 的 JSON Pointer 核對非負整數筆數。balance 驗證總數等於分項、zero 檢查是否有未配對／重複／反例；不把數量相符當成語意或因果驗證。可重用方法保存為 project 範圍的版本化筆記，新對話依相關性提示，使用前需核對目前樣本。
 
-0.8.44 不變更 Python 套件或環境指紋；相同環境仍可原地沿用。任務內 `run_python` 的連續失敗獨立計算，上限10次，其餘工具共同上限5次；同類成功才歸零。已辨識原生工具的非嚴格參數錯誤也納入，已知失敗不另外增加8次無進展計數。停止保留 checkpoint，使用者按「繼續」後重設；未知提交、嚴格 Schema／權限／身分拒絕不放寬。見 [0.8.44 驗證](VALIDATION_0_8_44.md)。
+0.8.44 不變更 Python 套件或環境指紋；相同環境仍可原地沿用。任務內 `run_python` 的連續失敗獨立計算，上限10次，其餘工具共同上限5次；同類成功才歸零。已辨識原生工具的非嚴格參數錯誤也納入，已知失敗不另外增加8次無進展計數。停止保留 checkpoint，使用者按「繼續」後重設；未知提交、嚴格 Schema／權限／身分拒絕不放寬。見 [0.8.44 驗證](https://github.com/you1230783-sys/CompanyAI/blob/fa2833f641694554aac25483979becc17cb5c59d/docs/VALIDATION_0_8_44.md)。
 
 0.8.42 將 Python 放在 EXE 旁的 `python/`，不嵌入 Rust EXE、不查詢 PATH／登錄／使用者 site-packages。NSIS 安裝與修復會驗證 runtime 清單、設定該目錄的 AppContainer 唯讀執行權，再以真正隔離程序驗證 pandas 和 XLSX 生成；成功後才完成 EXE 替換。
 
