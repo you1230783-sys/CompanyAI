@@ -1,0 +1,228 @@
+{
+  "source_commit": "aa3629676f41c29158bbf129be316e7cecf447b6",
+  "scope": "Function bodies identical apart from whitespace and listed module paths; visibility/reexports reviewed separately.",
+  "visibility": "Private moved helpers become pub(super); old projects-level pub(super) methods become pub(in crate::projects); existing public APIs remain reexported.",
+  "functions": [
+    {
+      "name": "command",
+      "from": "src/ui.rs",
+      "line": 761,
+      "to": "src/ui/commands.rs",
+      "body_sha256": "9a386389d324ec8f1171cde997bda33cab6fc99576ac9ab65863b0929b1b5d50",
+      "path_rewrites": [
+        [
+          "include_str!(\"../ui/fixtures/",
+          "include_str!(\"../../ui/fixtures/"
+        ]
+      ]
+    },
+    {
+      "name": "event",
+      "from": "src/ui.rs",
+      "line": 1431,
+      "to": "src/ui/events.rs",
+      "body_sha256": "3f4b216e820321b8c8e2d47076199e004de237c842e7aea932c9771723b5e1b6",
+      "path_rewrites": []
+    },
+    {
+      "name": "tick",
+      "from": "src/ui.rs",
+      "line": 1730,
+      "to": "src/ui/events.rs",
+      "body_sha256": "860102ac84f57bcb5a0e79d241a803cb0f7558a0e91fbefb6808f4d9294063b4",
+      "path_rewrites": []
+    },
+    {
+      "name": "refresh_services",
+      "from": "src/ui.rs",
+      "line": 557,
+      "to": "src/ui/session.rs",
+      "body_sha256": "2afb40405bb49fabf9911d963bbf8c19b361a4f7a62426774752f86d3e8ca291",
+      "path_rewrites": []
+    },
+    {
+      "name": "start_notifications",
+      "from": "src/ui.rs",
+      "line": 576,
+      "to": "src/ui/session.rs",
+      "body_sha256": "63d2404a16828f3426689bc17255dfe34d44500fafb7f0725ea72445f1c6c402",
+      "path_rewrites": []
+    },
+    {
+      "name": "fetch_events",
+      "from": "src/ui.rs",
+      "line": 623,
+      "to": "src/ui/session.rs",
+      "body_sha256": "5adf5f2725ad53870aba88b429c213ebe84583d71cf633c42b1b4a16213b6672",
+      "path_rewrites": []
+    },
+    {
+      "name": "logout",
+      "from": "src/ui.rs",
+      "line": 647,
+      "to": "src/ui/session.rs",
+      "body_sha256": "a7fbe8eb8009e102b4b6439ae8f57dbea3b7071e69f827c0e33060315024818a",
+      "path_rewrites": []
+    },
+    {
+      "name": "begin_chat",
+      "from": "src/ui.rs",
+      "line": 685,
+      "to": "src/ui/session.rs",
+      "body_sha256": "5317b7d2ca3eab18a69137ee9cad39b2847c32da20f401baf2e85660717836f1",
+      "path_rewrites": []
+    },
+    {
+      "name": "read_mail",
+      "from": "src/ui.rs",
+      "line": 731,
+      "to": "src/ui/session.rs",
+      "body_sha256": "756c0a5c803687cff663ba2a942aa33e87ab8f1b315e548632250419735c203a",
+      "path_rewrites": []
+    },
+    {
+      "name": "confirm_update",
+      "from": "src/ui.rs",
+      "line": 1811,
+      "to": "src/ui/updates.rs",
+      "body_sha256": "232983a064d55178124e26c4995c046401ea64624df6099b179d7ebbde5690b8",
+      "path_rewrites": []
+    },
+    {
+      "name": "start_update_download",
+      "from": "src/ui.rs",
+      "line": 1832,
+      "to": "src/ui/updates.rs",
+      "body_sha256": "9ee6f2ef53c5318828f991851cbb57f5e9cc4f88afc83b93e5a5765958bd4185",
+      "path_rewrites": []
+    },
+    {
+      "name": "apply_ready_update",
+      "from": "src/ui.rs",
+      "line": 1860,
+      "to": "src/ui/updates.rs",
+      "body_sha256": "83f9bca51e5b7d134aad8c097282c8cb270624ca7cd846b05b1a800087d07515",
+      "path_rewrites": []
+    },
+    {
+      "name": "open_browser",
+      "from": "src/ui.rs",
+      "line": 1934,
+      "to": "src/ui/bootstrap.rs",
+      "body_sha256": "4b32b62ae49dcd1bdf733628d4f0a059d2c41351ce29a085274ce4bb036c212c",
+      "path_rewrites": []
+    },
+    {
+      "name": "show_window",
+      "from": "src/ui.rs",
+      "line": 1964,
+      "to": "src/ui/bootstrap.rs",
+      "body_sha256": "480ffb0bb504643854aac2aa77e0dc3964b34761cd2a6de036b8a7c16cca71cb",
+      "path_rewrites": []
+    },
+    {
+      "name": "app_icon",
+      "from": "src/ui.rs",
+      "line": 1983,
+      "to": "src/ui/bootstrap.rs",
+      "body_sha256": "2e3bd3681a0d096e4b5c6ecd9f6ec0bbf99ee17349d49469621c47018038f600",
+      "path_rewrites": []
+    },
+    {
+      "name": "taskbar_created_message",
+      "from": "src/ui.rs",
+      "line": 2008,
+      "to": "src/ui/bootstrap.rs",
+      "body_sha256": "06468820a8c987369b5b2238214f841213e6b4cfc958f8e8d0af1a9e1cad3212",
+      "path_rewrites": []
+    },
+    {
+      "name": "tray",
+      "from": "src/ui.rs",
+      "line": 2013,
+      "to": "src/ui/bootstrap.rs",
+      "body_sha256": "e6f1aef029315eebfe928f2b9d90b2c499002b78e5bfac66e8c723f8d9df6dc7",
+      "path_rewrites": []
+    },
+    {
+      "name": "window_proc",
+      "from": "src/ui.rs",
+      "line": 2030,
+      "to": "src/ui/bootstrap.rs",
+      "body_sha256": "ea699dc12af62d741c9ebee18d1667a9c8a0b3875b13afc77a2e64359dddc2b0",
+      "path_rewrites": []
+    },
+    {
+      "name": "drop",
+      "from": "src/ui.rs",
+      "line": 2262,
+      "to": "src/ui/bootstrap.rs",
+      "body_sha256": "bbc03804614ae5da6d46cea8148d8d7a8e2f716226cb57a55a370e126d787ed7",
+      "path_rewrites": []
+    },
+    {
+      "name": "run",
+      "from": "src/ui.rs",
+      "line": 2269,
+      "to": "src/ui/bootstrap.rs",
+      "body_sha256": "6f9adc5092ef739c777828a9b497d99f96833f6cf1eb87f2d4b4d2f17b0efcf8",
+      "path_rewrites": []
+    },
+    {
+      "name": "verify_panic_recovery",
+      "from": "src/ui.rs",
+      "line": 2274,
+      "to": "src/ui/bootstrap.rs",
+      "body_sha256": "d36b6ee8713f354c1e2cbfa33d0608f09542e54fd4c6b0a62aa1ee60add1fe8d",
+      "path_rewrites": []
+    },
+    {
+      "name": "run_tutorial_preview",
+      "from": "src/ui.rs",
+      "line": 2282,
+      "to": "src/ui/bootstrap.rs",
+      "body_sha256": "1cbb37c7785c85ecc11c239d2eca3e57e14c77dad632249aa8d01821c4094cec",
+      "path_rewrites": []
+    },
+    {
+      "name": "run_local",
+      "from": "src/ui.rs",
+      "line": 2287,
+      "to": "src/ui/bootstrap.rs",
+      "body_sha256": "71df8dcaefb331bdde0510029bb7cfd698b8603e70ee2ec404e4b5e61ab36c35",
+      "path_rewrites": []
+    },
+    {
+      "name": "run_local_scenario",
+      "from": "src/ui.rs",
+      "line": 2292,
+      "to": "src/ui/bootstrap.rs",
+      "body_sha256": "e7b6a9043506ff536b683e066f230e81206b64dccdd84915c26401c680805ba4",
+      "path_rewrites": []
+    },
+    {
+      "name": "run_with_local",
+      "from": "src/ui.rs",
+      "line": 2297,
+      "to": "src/ui/bootstrap.rs",
+      "body_sha256": "cb87b387577be4d47ae7aa92b136c1c52c7e8af351e8e708c36ebddbafc25e4a",
+      "path_rewrites": []
+    },
+    {
+      "name": "apply_window_theme",
+      "from": "src/ui.rs",
+      "line": 2613,
+      "to": "src/ui/bootstrap.rs",
+      "body_sha256": "bfbad1aba075f7f8ed5683f768900f34eabfb43b4eb0d056c6efa8804a823142",
+      "path_rewrites": []
+    },
+    {
+      "name": "show_fatal_error",
+      "from": "src/ui.rs",
+      "line": 2636,
+      "to": "src/ui/bootstrap.rs",
+      "body_sha256": "392da11c817a00760eb83abd4000c49ed486a8d9d3cb2fe0134c124178b03a2c",
+      "path_rewrites": []
+    }
+  ]
+}
