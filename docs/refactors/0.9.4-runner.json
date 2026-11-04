@@ -1,0 +1,224 @@
+{
+  "source_commit": "74d80d1c71bd223742daa2f8d81be1636a15ba84",
+  "scope": "Function bodies identical apart from whitespace and listed module paths; visibility/reexports reviewed separately.",
+  "visibility": "Private moved helpers become pub(super); old projects-level pub(super) methods become pub(in crate::projects); existing public APIs remain reexported.",
+  "functions": [
+    {
+      "name": "run_for",
+      "from": "src/projects/runner.rs",
+      "line": 266,
+      "to": "src/projects/runner/execution.rs",
+      "body_sha256": "6aa95813c4908482f1eee5aa5a2920a7a0f7ecf642d5b96a9239912571879e9b",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "report",
+      "from": "src/projects/runner.rs",
+      "line": 1603,
+      "to": "src/projects/runner/execution.rs",
+      "body_sha256": "8ce0fc624eb2210b3e291d1b15018f4e7fe525f0411ac2e91d3a37f2c8ecab37",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "recover_activity",
+      "from": "src/projects/runner.rs",
+      "line": 1614,
+      "to": "src/projects/runner/recovery.rs",
+      "body_sha256": "f8ce875708f1524e2efdb48bc419c76db971d38d845ac0ff6164b15b1266d9fc",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "recover",
+      "from": "src/projects/runner.rs",
+      "line": 1646,
+      "to": "src/projects/runner/recovery.rs",
+      "body_sha256": "3fad1b3eaa3949b0d4f3655cdcf1bbb2df0e569a717c2daca7c926031d41dfb7",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "recover_charts",
+      "from": "src/projects/runner.rs",
+      "line": 1679,
+      "to": "src/projects/runner/recovery.rs",
+      "body_sha256": "70c167b9a4650c289c1d0126236b17e30e5e979e3f5fe0107ab1b10f84b062ba",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "recover_diagrams",
+      "from": "src/projects/runner.rs",
+      "line": 1698,
+      "to": "src/projects/runner/recovery.rs",
+      "body_sha256": "a4db2bde0423d9fc9466bf1de68981c1ff2e6a54073eb65868b9bc2dab7ab402",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "replay_safe",
+      "from": "src/projects/runner.rs",
+      "line": 1720,
+      "to": "src/projects/runner/recovery.rs",
+      "body_sha256": "e5c3d3dfb4fd8936daeef63088d7987cc1ebccc3208603917623ab9f3059420d",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "invalidate_pause",
+      "from": "src/projects/runner.rs",
+      "line": 1757,
+      "to": "src/projects/runner/recovery.rs",
+      "body_sha256": "8d8db9ae5c338feba6848caa48c0185cba606afedbc061dae195627de86814c7",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "trim_journal",
+      "from": "src/projects/runner.rs",
+      "line": 1764,
+      "to": "src/projects/runner/recovery.rs",
+      "body_sha256": "a75316acb67841b4b4f8fff6513f5f9f2d6206b4259b35d4439d5636befe64d0",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "recover_review",
+      "from": "src/projects/runner.rs",
+      "line": 1775,
+      "to": "src/projects/runner/recovery.rs",
+      "body_sha256": "ac8f6ff5759251523c6c00ee6b6770c05a15a373b0791941b941bc2fc7087197",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "recover_analysis",
+      "from": "src/projects/runner.rs",
+      "line": 1791,
+      "to": "src/projects/runner/recovery.rs",
+      "body_sha256": "0b0a85be24f52355755a61701f9e1b48c51247672fc96a7b0ba3a7facf5c71ea",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "recover_overview",
+      "from": "src/projects/runner.rs",
+      "line": 1803,
+      "to": "src/projects/runner/recovery.rs",
+      "body_sha256": "a65e415c8de7fada1cc24c389a5e9431e1a94f42bb5c3abd229d2ee9551ec766",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "recover_local_time",
+      "from": "src/projects/runner.rs",
+      "line": 1815,
+      "to": "src/projects/runner/recovery.rs",
+      "body_sha256": "c720d32ab734abf53f0c26827f3bd55adf391dd9d55fd6c65765f8572dd1d2da",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "activity_keeps_early_entries_and_restores_more_than_one_page",
+      "from": "src/projects/runner.rs",
+      "line": 1833,
+      "to": "src/projects/runner/pause_tests.rs",
+      "body_sha256": "7b1091737c5b28aee5d115aeefbe60ead8916784e537eeb15340a13754a1f851",
+      "path_rewrites": []
+    },
+    {
+      "name": "saved_design_and_precreation_error_are_visible_without_a_dwg_artifact",
+      "from": "src/projects/runner.rs",
+      "line": 1856,
+      "to": "src/projects/runner/pause_tests.rs",
+      "body_sha256": "bb58c8534012b9dbd5fdba7bb6fa9a16ac260a54e2ee4db57cfe72736e12a31c",
+      "path_rewrites": []
+    },
+    {
+      "name": "segment_budget_is_twenty_four_hours_and_cancellation_stays_separate",
+      "from": "src/projects/runner.rs",
+      "line": 1873,
+      "to": "src/projects/runner/pause_tests.rs",
+      "body_sha256": "59556b65f7b2ef38c3618cf11c9a6a0d6615ce95ccebc0df4737e10097aff1da",
+      "path_rewrites": []
+    },
+    {
+      "name": "tool_and_model_quotas_pause_at_the_exact_boundary",
+      "from": "src/projects/runner.rs",
+      "line": 1879,
+      "to": "src/projects/runner/pause_tests.rs",
+      "body_sha256": "8d6c9a9b09b936f25daa297c88b76f0c50221b882ca3f5fd042baf3f4089ac6d",
+      "path_rewrites": []
+    },
+    {
+      "name": "review_journal_restores_only_the_selected_encrypted_artifact",
+      "from": "src/projects/runner.rs",
+      "line": 1886,
+      "to": "src/projects/runner/pause_tests.rs",
+      "body_sha256": "33326c7516af17bf393a687602724c7367d21f50585ec5d0c9e969ddd4536147",
+      "path_rewrites": []
+    },
+    {
+      "name": "recovery_never_replays_unknown_writes",
+      "from": "src/projects/runner.rs",
+      "line": 1918,
+      "to": "src/projects/runner/pause_tests.rs",
+      "body_sha256": "bde38472699bf7346ca7f512c15e0230f81a921ffc77f02796cd7ba8f6e1c20b",
+      "path_rewrites": []
+    }
+  ]
+}
