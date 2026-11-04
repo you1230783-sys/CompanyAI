@@ -40,7 +40,7 @@ impl App {
                 .clone();
             let tx = self.tx.clone();
             let conversation = target.conversation.clone();
-            thread::spawn(move || {
+            crate::reliability::spawn(move || {
                 let result = (|| {
                     let changed = projects::files::fingerprint(&project, &origin.path)
                         .map(|h| h != origin.source_sha256)
@@ -104,7 +104,7 @@ impl App {
         }
         let tx = self.tx.clone();
         let conversation = target.conversation.clone();
-        thread::spawn(move || {
+        crate::reliability::spawn(move || {
             let result = (|| {
                 let bytes = if matches!(format, projects::diagrams::Format::Mmd) {
                     diagram.source.as_bytes().to_vec()

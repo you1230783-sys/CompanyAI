@@ -83,6 +83,11 @@ enum Command {
     ExportDiagnostics {
         include_details: bool,
     },
+    SaveDiagnostics {
+        preview_id: String,
+    },
+    CancelDiagnostics,
+    CopyError,
     StartHotkeyRecording,
     CancelHotkeyRecording,
     RecordedHotkey {
@@ -208,6 +213,9 @@ enum Event {
     AllRead(u64, usize),
 }
 struct App {
+    panic_probe: bool,
+    panic_fault: bool,
+    diagnostic_preview: Option<(String, Vec<u8>)>,
     reminders: reminders::ReminderRuntime,
     pet: crate::pet::Pet,
     tarot: crate::tarot::Round,
@@ -291,7 +299,8 @@ impl App {
             .is_some_and(|s| s.valid_for(&self.config))
     }
     fn can_send(&self) -> bool {
-        self.logged_in()
+        !crate::reliability::faulted()
+            && self.logged_in()
             && self.busy == "none"
             && !self.projects.active(self.active_id.as_deref())
             && self.work_ready()
@@ -516,7 +525,7 @@ impl App {
             self.tx.clone(),
             self.generation,
         );
-        thread::spawn(move || {
+        crate::reliability::spawn(move || {
             let version = service::fetch_version(&config);
             let models = service::fetch_models(&config, session.as_ref());
             let _ = tx.send(Event::Services(generation, version, models));
@@ -541,7 +550,7 @@ impl App {
             self.socket_cancel.clone(),
             self.generation,
         );
-        thread::spawn(move || {
+        crate::reliability::spawn(move || {
             let Ok(url) = config.endpoint(notifications::SOCKET_PATH) else {
                 return;
             };
@@ -587,7 +596,7 @@ impl App {
             self.generation,
         );
         if let Some(session) = session {
-            thread::spawn(move || {
+            crate::reliability::spawn(move || {
                 let result = notifications::fetch_page(&config, &session, cursor.as_deref());
                 let _ = tx.send(Event::Events(generation, result));
             });
@@ -693,7 +702,7 @@ impl App {
             self.mail = None;
         }
         let (tx, generation, demo) = (self.tx.clone(), self.generation, self.demo);
-        thread::spawn(move || {
+        crate::reliability::spawn(move || {
             let result = if demo {
                 Ok(outlook::demo_mail(body))
             } else {
@@ -704,6 +713,19 @@ impl App {
         Ok(())
     }
     fn command(&mut self, command: Command) -> AppResult<()> {
+        if crate::reliability::faulted()
+            && !matches!(
+                command,
+                Command::Ready
+                    | Command::Exit
+                    | Command::CopyError
+                    | Command::ExportDiagnostics { .. }
+                    | Command::SaveDiagnostics { .. }
+                    | Command::CancelDiagnostics
+            )
+        {
+            return Err("Error Code: 13\n本次執行已進入保護狀態，請匯出診斷並重新啟動。".into());
+        }
         command.check_access(self.logged_in(), self.versions.blocked(), self.smoke)?;
         match command {
             Command::Reminder { command } => self.reminder_command(command)?,
@@ -713,6 +735,13 @@ impl App {
             Command::OnboardingWelcomeDismiss => self.onboarding.dismiss_practice_welcome()?,
             Command::ExportDiagnostics { include_details } => {
                 self.export_diagnostics(include_details)?
+            }
+            Command::SaveDiagnostics { preview_id } => self.save_diagnostics(&preview_id)?,
+            Command::CancelDiagnostics => self.diagnostic_preview = None,
+            Command::CopyError => {
+                let text = format!("LM_AI {}\n{}", service::CURRENT_VERSION, self.status);
+                selection::copy_text(self.window, &text)?;
+                self.toast("已複製目前錯誤資訊");
             }
             Command::Project { command } => {
                 let stage = if matches!(
@@ -759,7 +788,7 @@ impl App {
                 self.view.set_interface_scale(self.config.interface_scale)?;
                 self.ready = true;
                 self.publish();
-                if self.smoke {
+                if self.smoke && !self.panic_probe {
                     // 自檢樣本經正式 Rust 解析後，透過既有訊息橋傳給畫面。
                     // 前端禁止自行連網，不為測試放寬 CSP 或開放 fetch。
                     let payload: serde_json::Value =
@@ -871,7 +900,7 @@ impl App {
                             crate::projects::diagrams::Format::Png,
                             mermaid_png_reply,
                         )?;
-                        thread::spawn(move || {
+                        crate::reliability::spawn(move || {
                             let result = (|| -> AppResult<()> {
                                 let url = response
                                     .recv_timeout(Duration::from_secs(20))
@@ -1198,7 +1227,7 @@ impl App {
                 self.status = "正在申請一次性登入碼…".into();
                 self.error = false;
                 let (config, tx, id) = (self.config.clone(), self.tx.clone(), self.login_operation);
-                thread::spawn(move || {
+                crate::reliability::spawn(move || {
                     let _ = tx.send(Event::Grant(id, auth::request_device(&config)));
                 });
             }
@@ -1238,7 +1267,7 @@ impl App {
                 if let Some(session) = self.session.clone() {
                     let (config, tx, generation) =
                         (self.config.clone(), self.tx.clone(), self.generation);
-                    thread::spawn(move || {
+                    crate::reliability::spawn(move || {
                         let mut failures = 0;
                         for id in ids {
                             if notifications::mark_read(&config, &session, &id).is_err() {
@@ -1279,7 +1308,7 @@ impl App {
                     self.tx.clone(),
                     self.generation,
                 );
-                thread::spawn(move || {
+                crate::reliability::spawn(move || {
                     let result = notifications::mark_read(&config, &session, &id);
                     let _ = tx.send(Event::Read(generation, id, result));
                 });
@@ -1413,7 +1442,7 @@ impl App {
                     self.grant = Some(grant.clone());
                     let (config, tx, cancel) =
                         (self.config.clone(), self.tx.clone(), self.cancelled.clone());
-                    thread::spawn(move || {
+                    crate::reliability::spawn(move || {
                         let _ = tx.send(Event::Login(
                             id,
                             auth::wait_for_login(&config, &grant, &cancel),
@@ -1616,6 +1645,10 @@ impl App {
         Ok(())
     }
     fn tick(&mut self) {
+        if crate::reliability::faulted() {
+            self.fault_tick();
+            return;
+        }
         self.tick_pet();
         self.tick_reminders();
         let mut changed = false;
@@ -1734,7 +1767,7 @@ impl App {
         let tx = self.tx.clone();
         self.update_busy = true;
         self.update_status = "正在背景下載並驗證更新…".into();
-        thread::spawn(move || {
+        crate::reliability::spawn(move || {
             let _ = tx.send(Event::UpdateReady(crate::deployment::download(
                 &config, &latest,
             )));
@@ -1806,7 +1839,7 @@ impl App {
             let tx = self.tx.clone();
             let generation = self.generation;
             self.busy = "capture";
-            thread::spawn(move || {
+            crate::reliability::spawn(move || {
                 let _ = tx.send(Event::Capture(
                     generation,
                     selection::capture(source as HWND, hotkey),
@@ -1917,197 +1950,220 @@ unsafe extern "system" fn window_proc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
-    if message == WM_DESTROY {
-        unsafe {
-            PostQuitMessage(0);
-        }
-        return 0;
-    }
-    let pointer = unsafe { GetWindowLongPtrW(window, GWLP_USERDATA) } as *const RefCell<App>;
-    if !pointer.is_null() {
-        // COM 可能重入視窗程序，try_borrow_mut 避免重疊的可變參照。
-        if let Ok(mut app) = unsafe { &*pointer }.try_borrow_mut() {
-            if message == taskbar_created_message() && !app.smoke {
-                // Explorer 重啟會清除通知區圖案；隱藏中的 App 必須重新加入，才能讓使用者還原。
-                tray(window, NIM_ADD);
-                return 0;
+    crate::reliability::win32(if message == WM_CREATE { -1 } else { 0 }, || {
+        // 僅獨立驗證入口建立的smoke視窗允許故障注入，正式UI沒有對應命令。
+        if message == WM_APP + 999 {
+            let pointer = GetWindowLongPtrW(window, GWLP_USERDATA) as *const RefCell<App>;
+            if !pointer.is_null()
+                && (&*pointer)
+                    .try_borrow()
+                    .is_ok_and(|app| app.smoke && app.panic_probe)
+            {
+                panic!("fixture-private-user-path-must-not-be-recorded");
             }
-            match message {
-                crate::single_instance::RESTORE_MESSAGE => {
-                    app.restore_window();
+        }
+        if message == WM_DESTROY {
+            unsafe {
+                PostQuitMessage(0);
+            }
+            return 0;
+        }
+        let pointer = unsafe { GetWindowLongPtrW(window, GWLP_USERDATA) } as *const RefCell<App>;
+        if !pointer.is_null() {
+            // COM 可能重入視窗程序，try_borrow_mut 避免重疊的可變參照。
+            if let Ok(mut app) = unsafe { &*pointer }.try_borrow_mut() {
+                if message == taskbar_created_message() && !app.smoke {
+                    // Explorer 重啟會清除通知區圖案；隱藏中的 App 必須重新加入，才能讓使用者還原。
+                    tray(window, NIM_ADD);
                     return 0;
                 }
-                crate::pet::MESSAGE => {
-                    match wparam {
-                        1 => app.restore_window(),
-                        2 => {
-                            PostMessageW(window, TRAY_MESSAGE, 0, NIN_BALLOONUSERCLICK as isize);
-                        }
-                        3 | 4 => {
-                            show_window(window);
-                            let _=app.view.post(&json!({"type":if wparam==3{"show_tarot"}else{"show_pet_settings"}}));
-                        }
-                        5 => {
-                            let mut settings = app.pet.settings();
-                            settings.enabled = false;
-                            if let Err(error) = app.pet.configure(settings) {
-                                app.fail(error);
-                            }
-                        }
-                        _ => (),
-                    }
-                    return 0;
-                }
-                crate::selection_popup::CLICK_MESSAGE => {
-                    let source = app.selection_popup.source;
-                    app.selection_popup.update(None);
-                    if source != 0
-                        && app.logged_in()
-                        && app.busy == "none"
-                        && !app.versions.blocked()
-                    {
-                        let tx = app.tx.clone();
-                        let generation = app.generation;
-                        app.busy = "capture";
-                        thread::spawn(move || {
-                            let hotkey = Hotkey {
-                                modifiers: 0,
-                                key: 0,
-                            };
-                            let _ = tx.send(Event::Capture(
-                                generation,
-                                selection::capture(source as HWND, hotkey),
-                            ));
-                        });
-                    }
-                    return 0;
-                }
-                WM_CLOSE => {
-                    if let Err(e) = app.preserve_draft() {
-                        app.fail(e);
-                        app.publish();
-                        return 0;
-                    }
-                    if wparam == 0 {
-                        app.hide_to_tray();
-                        return 0;
-                    }
-                    unsafe {
-                        DestroyWindow(window);
-                    }
-                    return 0;
-                }
-                WM_ACTIVATEAPP if wparam == 0 => {
-                    if let Err(e) = app.stop_recording() {
-                        app.fail(e);
-                    }
-                    return 0;
-                }
-                WM_TIMER => {
-                    app.tick();
-                    return 0;
-                }
-                WM_SIZE if wparam == SIZE_MINIMIZED as usize => {
-                    if let Err(e) = app.preserve_draft() {
-                        app.fail(e);
-                    }
-
-                    // Windows 已完成最小化；保留工作列時不要再呼叫 SW_HIDE。
-                    if !app.config.minimize_to_taskbar {
-                        app.hide_to_tray();
-                    }
-                    return 0;
-                }
-                WM_SIZE => {
-                    let mut rect = RECT::default();
-                    unsafe {
-                        GetClientRect(window, &mut rect);
-                    }
-                    app.view.resize(rect.right, rect.bottom);
-                    return 0;
-                }
-                WM_HOTKEY if wparam == selection::HOTKEY_ID as usize => {
-                    app.capture();
-                    return 0;
-                }
-                TRAY_MESSAGE
-                    if matches!(
-                        lparam as u32,
-                        WM_LBUTTONUP | WM_LBUTTONDBLCLK | NIN_BALLOONUSERCLICK
-                    ) =>
-                {
-                    if lparam as u32 == NIN_BALLOONUSERCLICK {
-                        show_window(window);
-                    } else {
+                match message {
+                    crate::single_instance::RESTORE_MESSAGE => {
                         app.restore_window();
+                        return 0;
                     }
-                    if lparam as u32 == NIN_BALLOONUSERCLICK
-                        && !app.work.tray_restore_only
-                        && !app.open_project_attention().unwrap_or(false)
+                    crate::pet::MESSAGE => {
+                        match wparam {
+                            1 => app.restore_window(),
+                            2 => {
+                                PostMessageW(
+                                    window,
+                                    TRAY_MESSAGE,
+                                    0,
+                                    NIN_BALLOONUSERCLICK as isize,
+                                );
+                            }
+                            3 | 4 => {
+                                show_window(window);
+                                let _=app.view.post(&json!({"type":if wparam==3{"show_tarot"}else{"show_pet_settings"}}));
+                            }
+                            5 => {
+                                let mut settings = app.pet.settings();
+                                settings.enabled = false;
+                                if let Err(error) = app.pet.configure(settings) {
+                                    app.fail(error);
+                                }
+                            }
+                            _ => (),
+                        }
+                        return 0;
+                    }
+                    crate::selection_popup::CLICK_MESSAGE => {
+                        let source = app.selection_popup.source;
+                        app.selection_popup.update(None);
+                        if source != 0
+                            && app.logged_in()
+                            && app.busy == "none"
+                            && !app.versions.blocked()
+                        {
+                            let tx = app.tx.clone();
+                            let generation = app.generation;
+                            app.busy = "capture";
+                            crate::reliability::spawn(move || {
+                                let hotkey = Hotkey {
+                                    modifiers: 0,
+                                    key: 0,
+                                };
+                                let _ = tx.send(Event::Capture(
+                                    generation,
+                                    selection::capture(source as HWND, hotkey),
+                                ));
+                            });
+                        }
+                        return 0;
+                    }
+                    WM_CLOSE => {
+                        if crate::reliability::faulted() {
+                            // 狀態可能部分修改，不再保存／覆寫歷史；明確離開以便重新啟動。
+                            DestroyWindow(window);
+                            return 0;
+                        }
+                        if let Err(e) = app.preserve_draft() {
+                            app.fail(e);
+                            app.publish();
+                            return 0;
+                        }
+                        if wparam == 0 {
+                            app.hide_to_tray();
+                            return 0;
+                        }
+                        unsafe {
+                            DestroyWindow(window);
+                        }
+                        return 0;
+                    }
+                    WM_ACTIVATEAPP if wparam == 0 => {
+                        if let Err(e) = app.stop_recording() {
+                            app.fail(e);
+                        }
+                        return 0;
+                    }
+                    WM_TIMER => {
+                        app.tick();
+                        return 0;
+                    }
+                    WM_SIZE if wparam == SIZE_MINIMIZED as usize => {
+                        if let Err(e) = app.preserve_draft() {
+                            app.fail(e);
+                        }
+
+                        // Windows 已完成最小化；保留工作列時不要再呼叫 SW_HIDE。
+                        if !app.config.minimize_to_taskbar {
+                            app.hide_to_tray();
+                        }
+                        return 0;
+                    }
+                    WM_SIZE => {
+                        let mut rect = RECT::default();
+                        unsafe {
+                            GetClientRect(window, &mut rect);
+                        }
+                        app.view.resize(rect.right, rect.bottom);
+                        return 0;
+                    }
+                    WM_HOTKEY if wparam == selection::HOTKEY_ID as usize => {
+                        app.capture();
+                        return 0;
+                    }
+                    TRAY_MESSAGE
+                        if matches!(
+                            lparam as u32,
+                            WM_LBUTTONUP | WM_LBUTTONDBLCLK | NIN_BALLOONUSERCLICK
+                        ) =>
                     {
-                        let _ = app.view.post(&json!({"type":if app.work.task_balloon {"show_tasks"} else {"show_notifications"}}));
+                        if lparam as u32 == NIN_BALLOONUSERCLICK {
+                            show_window(window);
+                        } else {
+                            app.restore_window();
+                        }
+                        if lparam as u32 == NIN_BALLOONUSERCLICK
+                            && !app.work.tray_restore_only
+                            && !app.open_project_attention().unwrap_or(false)
+                        {
+                            let _ = app.view.post(&json!({"type":if app.work.task_balloon {"show_tasks"} else {"show_notifications"}}));
+                        }
+                        return 0;
                     }
-                    return 0;
-                }
-                TRAY_MESSAGE if matches!(lparam as u32, WM_RBUTTONUP | WM_CONTEXTMENU) => {
-                    unsafe {
-                        let menu = CreatePopupMenu();
-                        if !menu.is_null() {
-                            AppendMenuW(menu, MF_STRING, 1, wide("還原視窗").as_ptr());
-                            AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
-                            AppendMenuW(menu, MF_STRING, 2, wide("離開 LM_AI").as_ptr());
-                            let mut point = POINT::default();
-                            GetCursorPos(&mut point);
-                            SetForegroundWindow(window);
-                            let action = TrackPopupMenu(
-                                menu,
-                                TPM_RETURNCMD | TPM_RIGHTBUTTON,
-                                point.x,
-                                point.y,
-                                0,
-                                window,
-                                ptr::null(),
-                            );
-                            DestroyMenu(menu);
-                            PostMessageW(window, WM_NULL, 0, 0);
-                            match action {
-                                1 => {
-                                    app.restore_window();
+                    TRAY_MESSAGE if matches!(lparam as u32, WM_RBUTTONUP | WM_CONTEXTMENU) => {
+                        unsafe {
+                            let menu = CreatePopupMenu();
+                            if !menu.is_null() {
+                                AppendMenuW(menu, MF_STRING, 1, wide("還原視窗").as_ptr());
+                                AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
+                                AppendMenuW(menu, MF_STRING, 2, wide("離開 LM_AI").as_ptr());
+                                let mut point = POINT::default();
+                                GetCursorPos(&mut point);
+                                SetForegroundWindow(window);
+                                let action = TrackPopupMenu(
+                                    menu,
+                                    TPM_RETURNCMD | TPM_RIGHTBUTTON,
+                                    point.x,
+                                    point.y,
+                                    0,
+                                    window,
+                                    ptr::null(),
+                                );
+                                DestroyMenu(menu);
+                                PostMessageW(window, WM_NULL, 0, 0);
+                                match action {
+                                    1 => {
+                                        app.restore_window();
+                                    }
+                                    2 => {
+                                        PostMessageW(window, WM_CLOSE, 1, 0);
+                                    }
+                                    _ => {}
                                 }
-                                2 => {
-                                    PostMessageW(window, WM_CLOSE, 1, 0);
-                                }
-                                _ => {}
                             }
                         }
+                        return 0;
                     }
-                    return 0;
-                }
-                WM_GETMINMAXINFO => {
-                    let info = unsafe { &mut *(lparam as *mut MINMAXINFO) };
-                    info.ptMinTrackSize = POINT { x: 640, y: 500 };
-                    return 0;
-                }
-                WM_DPICHANGED => {
-                    let rect = unsafe { &*(lparam as *const RECT) };
-                    unsafe {
-                        SetWindowPos(
-                            window,
-                            ptr::null_mut(),
-                            rect.left,
-                            rect.top,
-                            rect.right - rect.left,
-                            rect.bottom - rect.top,
-                            SWP_NOZORDER | SWP_NOACTIVATE,
-                        );
+                    WM_GETMINMAXINFO => {
+                        let info = unsafe { &mut *(lparam as *mut MINMAXINFO) };
+                        info.ptMinTrackSize = POINT { x: 640, y: 500 };
+                        return 0;
                     }
-                    return 0;
+                    WM_DPICHANGED => {
+                        let rect = unsafe { &*(lparam as *const RECT) };
+                        unsafe {
+                            SetWindowPos(
+                                window,
+                                ptr::null_mut(),
+                                rect.left,
+                                rect.top,
+                                rect.right - rect.left,
+                                rect.bottom - rect.top,
+                                SWP_NOZORDER | SWP_NOACTIVATE,
+                            );
+                        }
+                        return 0;
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
         }
-    }
-    unsafe { DefWindowProcW(window, message, wparam, lparam) }
+        unsafe { DefWindowProcW(window, message, wparam, lparam) }
+    })
 }
 struct ComApartment;
 impl Drop for ComApartment {
@@ -2119,7 +2175,15 @@ impl Drop for ComApartment {
 }
 /// 自我檢查使用隔離資料夾，實際載入 WebView2 與 Markdown DOM，不連公司服務。
 pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
-    run_with_local(demo, smoke, None, None)
+    run_with_local(demo, smoke, None, None, None)
+}
+
+/// 獨立程序驗證背景／WndProc／WebView2 panic；只使用指定的全新測試目錄。
+pub fn verify_panic_recovery(mode: &str, root: &Path) -> AppResult<()> {
+    if !matches!(mode, "background" | "callback" | "com") {
+        return Err("未知異常測試模式。".into());
+    }
+    run_with_local(None, true, None, None, Some((mode, root)))
 }
 
 /// 手動體驗互動教學，不啟動正式 App、登入流程、模型或外部工具。
@@ -2129,13 +2193,13 @@ pub fn run_tutorial_preview() -> AppResult<()> {
 
 /// 本機模型測試保留正式畫面與工具流程，所有個人資料寫入獨立目錄。
 pub fn run_local(local: crate::local_test::LocalTest) -> AppResult<()> {
-    run_with_local(None, false, Some(local), None)
+    run_with_local(None, false, Some(local), None, None)
 }
 
 /// 本機模型情境沿用正式控制器與離線呈現器；不使用一般使用者資料目錄。
 pub fn run_local_scenario(mut local: crate::local_test::LocalTest, path: &Path) -> AppResult<()> {
     local.config.notification_popups = false;
-    run_with_local(None, false, Some(local), Some(path))
+    run_with_local(None, false, Some(local), Some(path), None)
 }
 
 fn run_with_local(
@@ -2143,6 +2207,7 @@ fn run_with_local(
     smoke: bool,
     local: Option<crate::local_test::LocalTest>,
     scenario_path: Option<&Path>,
+    panic_probe: Option<(&str, &Path)>,
 ) -> AppResult<()> {
     let mut scenario = match (scenario_path, local.as_ref()) {
         (Some(path), Some(local)) => {
@@ -2168,7 +2233,9 @@ fn run_with_local(
     }
     .map_err(|_| "無法初始化桌面介面。")?;
     let _apartment = ComApartment;
-    let root = if let Some(local) = &local {
+    let root = if let Some((_, root)) = panic_probe {
+        root.to_path_buf()
+    } else if let Some(local) = &local {
         local.root.clone()
     } else if smoke {
         std::env::temp_dir().join("CompanyAI-ui-smoke")
@@ -2258,6 +2325,9 @@ fn run_with_local(
         );
         let pet = crate::pet::Pet::new(window, &root, smoke || local.is_some())?;
         let mut app = App {
+            panic_probe: panic_probe.is_some(),
+            panic_fault: false,
+            diagnostic_preview: None,
             reminders: reminders::ReminderRuntime::load(&root),
             pet,
             tarot: crate::tarot::Round::default(),
@@ -2353,6 +2423,7 @@ fn run_with_local(
             ShowWindow(window, SW_SHOW);
         }
         let started = Instant::now();
+        let mut panic_injected = false;
         let mut result = Ok(());
         loop {
             let mut message = MSG::default();
@@ -2376,6 +2447,49 @@ fn run_with_local(
                 }
             }
             if smoke {
+                if let Some((mode, _)) = panic_probe {
+                    if !panic_injected && state.borrow().ready {
+                        panic_injected = true;
+                        state.borrow_mut().busy = "capture";
+                        match mode {
+                            "background" => {
+                                crate::reliability::spawn(|| {
+                                    panic!("fixture-private-user-path-must-not-be-recorded")
+                                });
+                            }
+                            "callback" => {
+                                PostMessageW(window, WM_APP + 999, 0, 0);
+                            }
+                            "com" => state.borrow().view.probe_panic()?,
+                            _ => unreachable!(),
+                        }
+                    }
+                    if state.borrow().panic_fault {
+                        let mut app = state.borrow_mut();
+                        if app.busy != "none" || app.can_send() || app.projects.is_running() {
+                            result = Err("異常後未正確解除busy或撤銷工作能力。".into());
+                        } else if app.command(Command::NewChat).is_ok() {
+                            result = Err("異常後仍允許新工作。".into());
+                        } else {
+                            // 在正式控制器證實診斷仍可預覽；晚到服務事件不得清除保護狀態。
+                            app.tx
+                                .send(Event::Services(
+                                    app.generation,
+                                    Err("late".into()),
+                                    Err("late".into()),
+                                ))
+                                .map_err(|_| "測試通道關閉。")?;
+                            app.fault_tick();
+                            app.export_diagnostics(false)?;
+                            if app.diagnostic_preview.is_none()
+                                || !app.status.starts_with("Error Code: 13")
+                            {
+                                result = Err("異常後診斷入口或晚到事件隔離失敗。".into());
+                            }
+                        }
+                        break;
+                    }
+                }
                 let done = state.borrow_mut().smoke_result.take();
                 if let Some(done) = done {
                     // 放開 RefCell 借用後，真正送出原生最小化／關閉訊息。

@@ -1696,3 +1696,7 @@ dialog textarea:focus, dialog input:focus { outline: 2px solid var(--accent); ou
 .reminder-row > div:last-child { display: flex; gap: 8px; flex-shrink: 0; }
 .reminder-row p { color: var(--muted); margin: 6px 0 0; font-size: .9em; }
 @media (max-width: 540px) { .reminder-fields { grid-template-columns: 1fr; gap: 0; } .reminder-row { align-items: flex-start; flex-direction: column; } }
+/* 診斷預覽保持可捲動；原始文字以textarea呈現，不能當HTML執行。 */
+#diagnostics-preview { width: min(820px, 92vw); max-height: 85vh; overflow: auto; }
+#diagnostics-preview-text { box-sizing: border-box; width: 100%; font-family: monospace; }
+#project-capability-hint { flex-basis: 100%; margin: 2px 0 6px; }

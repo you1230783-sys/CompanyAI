@@ -8,10 +8,18 @@ impl Command {
         update_required: bool,
         smoke: bool,
     ) -> AppResult<()> {
-        let offline = matches!(self, Command::Pet { .. } | Command::Reminder { .. })
-            || matches!(self, Command::Tarot { command } if !matches!(command, super::tarot::TarotCommand::Analyze { .. }));
+        let offline = matches!(
+            self,
+            Command::Pet { .. }
+                | Command::Reminder { .. }
+                | Command::ExportDiagnostics { .. }
+                | Command::SaveDiagnostics { .. }
+                | Command::CancelDiagnostics
+                | Command::CopyError
+        ) || matches!(self, Command::Tarot { command } if !matches!(command, super::tarot::TarotCommand::Analyze { .. }));
         let login_flow = matches!(self, Self::Login | Self::CancelLogin | Self::ReopenLogin);
-        let lifecycle = matches!(self, Self::Ready | Self::Exit | Self::SelfTestResult { .. });
+        let lifecycle = matches!(self, Self::Ready | Self::Exit | Self::SelfTestResult { .. })
+            || matches!(self, Self::OnboardingAck { topic } if topic == "release");
         // --self-check 既有的原生鍵盤錄製測試不讀真實帳密，例外僅限這三個錄製命令。
         let smoke_recording = smoke
             && matches!(
@@ -41,13 +49,39 @@ mod tests {
     use super::*;
 
     #[test]
+    fn diagnostics_and_release_ack_are_available_without_unlocking_other_commands() {
+        for command in [
+            Command::ExportDiagnostics {
+                include_details: false,
+            },
+            Command::SaveDiagnostics {
+                preview_id: "test".into(),
+            },
+            Command::CancelDiagnostics,
+            Command::CopyError,
+            Command::OnboardingAck {
+                topic: "release".into(),
+            },
+        ] {
+            assert!(command.check_access(false, true, false).is_ok());
+        }
+        assert!(Command::OnboardingAck {
+            topic: "chat".into()
+        }
+        .check_access(false, false, false)
+        .is_err());
+        assert!(Command::Copy {
+            text: "injected".into()
+        }
+        .check_access(false, false, false)
+        .is_err());
+    }
+
+    #[test]
     fn unauthenticated_features_are_rejected_even_when_called_directly() {
         let commands = [
             Command::ChartPalette {
                 colors: crate::config::default_chart_palette(),
-            },
-            Command::ExportDiagnostics {
-                include_details: false,
             },
             Command::ReadMail,
             Command::ReadMailBody,

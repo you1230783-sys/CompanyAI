@@ -2017,6 +2017,7 @@ impl Broker {
         cancel: &AtomicBool,
         notify: &mut dyn FnMut(&str),
     ) -> AppResult<Value> {
+        super::runner::check_cancel(cancel)?;
         self.reauthorize_outlook(cancel, self.chart_deadline)?;
         crate::jobs::validate_id(id)?;
         // 連重播舊工具結果都先經本次同意；授權不隨 checkpoint 恢復。

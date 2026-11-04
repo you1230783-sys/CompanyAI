@@ -42,37 +42,40 @@ impl Drop for Popup {
     }
 }
 unsafe extern "system" fn popup_proc(window: HWND, message: u32, w: WPARAM, l: LPARAM) -> LRESULT {
-    match message {
-        WM_MOUSEACTIVATE => MA_NOACTIVATE as isize,
-        WM_LBUTTONUP => {
-            unsafe {
-                PostMessageW(GetWindow(window, GW_OWNER), CLICK_MESSAGE, 0, 0);
+    crate::reliability::win32(
+        if message == WM_CREATE { -1 } else { 0 },
+        || match message {
+            WM_MOUSEACTIVATE => MA_NOACTIVATE as isize,
+            WM_LBUTTONUP => {
+                unsafe {
+                    PostMessageW(GetWindow(window, GW_OWNER), CLICK_MESSAGE, 0, 0);
+                }
+                0
             }
-            0
-        }
-        WM_PAINT => unsafe {
-            use windows_sys::Win32::Graphics::Gdi::*;
-            let mut paint = PAINTSTRUCT::default();
-            let dc = BeginPaint(window, &mut paint);
-            let mut rect = RECT {
-                left: 0,
-                top: 0,
-                right: 36,
-                bottom: 30,
-            };
-            SetBkMode(dc, TRANSPARENT as i32);
-            DrawTextW(
-                dc,
-                wide("AI").as_ptr(),
-                2,
-                &mut rect,
-                DT_CENTER | DT_VCENTER | DT_SINGLELINE,
-            );
-            EndPaint(window, &paint);
-            0
+            WM_PAINT => unsafe {
+                use windows_sys::Win32::Graphics::Gdi::*;
+                let mut paint = PAINTSTRUCT::default();
+                let dc = BeginPaint(window, &mut paint);
+                let mut rect = RECT {
+                    left: 0,
+                    top: 0,
+                    right: 36,
+                    bottom: 30,
+                };
+                SetBkMode(dc, TRANSPARENT as i32);
+                DrawTextW(
+                    dc,
+                    wide("AI").as_ptr(),
+                    2,
+                    &mut rect,
+                    DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+                );
+                EndPaint(window, &paint);
+                0
+            },
+            _ => unsafe { DefWindowProcW(window, message, w, l) },
         },
-        _ => unsafe { DefWindowProcW(window, message, w, l) },
-    }
+    )
 }
 impl Popup {
     pub(crate) fn new(

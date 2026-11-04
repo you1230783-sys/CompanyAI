@@ -152,7 +152,7 @@
 }
 .pet-bubble-sample small {
   display: block;
-  font-size: 12px;
+  font-size: inherit;
 }
 .pet-bubble-sample::after {
   content: "";

@@ -294,7 +294,7 @@ impl App {
                     let (commands, receiver) = std::sync::mpsc::channel();
                     self.vnc.commands = Some(commands);
                     self.vnc.workers.retain(|worker| !worker.is_finished());
-                    self.vnc.workers.push(thread::spawn(move || {
+                    self.vnc.workers.push(crate::reliability::spawn(move || {
                         sync::run_session(&settings, &cancel, receiver, |event| {
                             tx.send(Event::VncSync(id.clone(), event)).is_ok()
                         });
@@ -533,7 +533,7 @@ impl App {
         self.vnc.search_id = Some(id.clone());
         self.vnc.status = "正在標準安裝目錄搜尋 vncviewer.exe…".into();
         let tx = self.tx.clone();
-        thread::spawn(move || {
+        crate::reliability::spawn(move || {
             let _ = tx.send(Event::VncSearch(id, vnc::find_viewer()));
         });
         Ok(())

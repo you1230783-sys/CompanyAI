@@ -11,6 +11,10 @@ static LOG_LOCK: Mutex<()> = Mutex::new(());
 /// 代碼一旦發行便不換意義，文件與程式採同一組對照。
 pub fn description(code: &str) -> (&'static str, &'static str) {
     match code {
+        "13" => (
+            "程式發生非預期錯誤，已停止接受新工作。",
+            "請預覽並匯出診斷後重新啟動；核對原請求及既有成果，不直接重播寫入。",
+        ),
         "01" => (
             "選擇或建立專案資料夾時權限受到限制。",
             "請選擇可讀寫的資料夾；網路磁碟請確認連線帳號與公司存取權限。",
@@ -310,7 +314,10 @@ pub fn report(root: &Path, stage: &str, raw: &str, secrets: &[&str]) -> String {
 
 /// 預設白名單輸出固定欄位，沒有對話、帳號、檔名與原始例外；詳細資訊必須由使用者勾選。
 pub fn export(root: &Path, include_details: bool) -> AppResult<Vec<u8>> {
-    let _guard = LOG_LOCK.lock().map_err(|_| "錯誤紀錄鎖定失敗。")?;
+    // 鎖只序列化磁碟存取，沒有需恢復的記憶體狀態；report中panic後仍須能讀取診斷。
+    let _guard = LOG_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let (entries, log_status) = match load(root) {
         Ok(entries) => (entries, "ok"),
         Err(_) => (vec![], "unreadable_or_invalid"),
@@ -326,7 +333,10 @@ pub fn export(root: &Path, include_details: bool) -> AppResult<Vec<u8>> {
             "includes_error_details":include_details,"app_version":crate::service::CURRENT_VERSION,
             "platform":"windows-x64","exported_at_unix":crate::unix_now(),
             "local_date":crate::calendar::today().ok().map(|date| date.to_string()),
-            "log_status":log_status,"retained_event_limit":MAX_EVENTS,"events":events
+            "log_status":log_status,"retained_event_limit":MAX_EVENTS,"events":events,
+            "panic_events":crate::reliability::events(root),
+            "panic_log_incomplete":crate::reliability::log_failed(),
+            "environment":{"architecture":"x64","runtime":"WebView2","panic_strategy":"unwind"}
         }),
     )
     .map_err(|e| e.to_string())

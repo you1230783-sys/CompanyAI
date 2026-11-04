@@ -3,6 +3,13 @@
 use company_ai::{demo::DemoServer, ui, AppResult};
 
 fn main() {
+    // Hook早於任何工作／COM回呼；不輸出panic payload或使用者路徑。
+    if let Err(error) =
+        company_ai::storage::data_dir().and_then(|root| company_ai::reliability::install(&root))
+    {
+        ui::show_fatal_error(&error);
+        std::process::exit(1);
+    }
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     if arguments.as_slice() == ["--tutorial-preview"] {
         if let Err(error) = ui::run_tutorial_preview() {

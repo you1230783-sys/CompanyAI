@@ -2,7 +2,7 @@
 "use strict";
 (() => {
   const loginButtons = new Set(["login-entry", "login-entry-cancel", "login-entry-reopen"]);
-  const publicCommands = new Set(["ready", "login", "cancel_login", "reopen_login", "exit", "self_test_result"]);
+  const publicCommands = new Set(["ready", "login", "cancel_login", "reopen_login", "exit", "self_test_result", "export_diagnostics", "save_diagnostics", "cancel_diagnostics", "copy_error"]);
   const controls = "button,input,select,textarea,a,summary,[contenteditable='true']";
   const locked = new Map();
   const observer = new MutationObserver(() => {
@@ -58,7 +58,7 @@
   $("login-entry-reopen").onclick = () => send({ type: "reopen_login" });
   window.AuthUI = {
     beforeRender, apply,
-    canSend: command => !!state.logged_in || publicCommands.has(command.type) || command.type === "pet" || command.type === "reminder" || (command.type === "tarot" && command.command?.action !== "analyze"),
+    canSend: command => !!state.logged_in || publicCommands.has(command.type) || (command.type === "onboarding_ack" && command.topic === "release") || command.type === "pet" || command.type === "reminder" || (command.type === "tarot" && command.command?.action !== "analyze"),
   };
   apply();
 })();

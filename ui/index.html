@@ -30,6 +30,9 @@
           ></button>
         </div>
         <button id="show-advanced" class="nav-button" data-offline="true" title="進階功能" aria-haspopup="dialog"><span>✦</span><span class="nav-label">進階功能</span></button>
+        <button id="show-vnc" class="nav-button" title="VNC 快速連線" hidden>
+          <span data-icon="monitor"></span><span class="nav-label">VNC 快速連線</span>
+        </button>
         <section class="project-section" aria-label="專案">
           <div class="section-caption"><button id="collapse-projects" class="section-toggle nav-label" aria-controls="project-list" aria-expanded="true">▾ 專案</button><button id="new-project" class="text-button" title="新增專案"><span data-icon="plus"></span><span class="nav-label">新增專案</span></button></div>
           <div id="project-list" class="nav-label"></div>
@@ -61,6 +64,8 @@
             <h1 id="page-title">新對話</h1>
           </div>
           <div class="topbar-actions">
+            <button id="copy-error" class="text-button" data-offline="true">複製錯誤資訊</button>
+            <button id="diagnostics-open" class="text-button" data-offline="true">錯誤診斷</button>
             <span id="save-label" class="subtle">本機保存</span>
             <button id="show-notifications" class="icon-button" title="通知" aria-label="通知">
               <span data-icon="bell"></span><span id="unread-badge" class="badge" hidden>0</span>
@@ -709,11 +714,8 @@
           <span data-icon="mail"></span
           ><span class="nav-label">Outlook 助理</span>
         </button>
-        <button id="show-vnc" class="nav-button" title="VNC 快速連線" hidden>
-          <span data-icon="monitor"></span><span class="nav-label">VNC 快速連線</span>
-        </button>
 </div>
-      <p class="subtle">桌寵、塔羅與提醒事項可離線使用；Outlook 與 VNC 需先登入，VNC 另依設定啟用。</p>
+      <p class="subtle">桌寵、塔羅與提醒事項可離線使用；Outlook 需先登入。</p>
     </dialog>
     <script src="vendor/markdown-it.min.js"></script>
     <script src="vendor/footnote.min.js"></script>

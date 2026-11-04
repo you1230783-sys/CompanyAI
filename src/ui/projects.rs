@@ -316,6 +316,12 @@ impl ProjectRuntime {
     pub fn is_running(&self) -> bool {
         self.running.is_some()
     }
+    /// 發生panic後撤銷待確認操作；保留磁碟上的journal，不自動恢復寫入。
+    pub fn quarantine(&mut self) {
+        self.cancel();
+        self.running = None;
+        self.status = "非預期中止，成果與操作結果待確認；未自動重試。".into();
+    }
     pub fn cancel(&mut self) {
         if let Some(run) = &self.running {
             run.cancel.store(true, Ordering::Relaxed);
@@ -886,7 +892,7 @@ impl App {
                 .iter()
                 .find(|t| t.request_id == *run_id && t.conversation_id == *conversation)
                 .cloned();
-            thread::spawn(move || {
+            crate::reliability::spawn(move || {
                 let result = projects::diagnostics::reports(
                     &root,
                     &id,
@@ -1479,7 +1485,7 @@ impl App {
         }
         self.projects.status = "正在建立受限制執行器…".into();
         let tx = self.tx.clone();
-        thread::spawn(move || {
+        crate::reliability::spawn(move || {
             let export_tx = tx.clone();
             let export_id = id.clone();
             let renderer: projects::charts::png::Renderer = Box::new(move |chart, cancel| {

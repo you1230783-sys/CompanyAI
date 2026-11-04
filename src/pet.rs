@@ -39,6 +39,8 @@ pub struct Settings {
     pub bubble_opacity: u8,
     /// 0秒表示不顯示通知泡泡，通知中心仍保存通知。
     pub notice_seconds: u8,
+    /// 桌寵自己的邏輯像素字級；只隨Windows DPI縮放，不沿用主介面的字級或縮放比例。
+    pub font_size: u8,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -52,6 +54,7 @@ impl Default for Settings {
             bubble_color: "#FFF8ED".into(),
             bubble_opacity: 100,
             notice_seconds: 5,
+            font_size: 16,
         }
     }
 }
@@ -67,8 +70,9 @@ impl Settings {
                 .all(u8::is_ascii_hexdigit)
             || self.bubble_opacity > 100
             || self.notice_seconds > 5
+            || !(12..=28).contains(&self.font_size)
         {
-            return Err("桌寵角色、尺寸或泡泡設定不正確。".into());
+            return Err("桌寵角色、尺寸、字級或泡泡設定不正確。".into());
         }
         Ok(())
     }
@@ -241,9 +245,9 @@ impl Pet {
         self.state.borrow().settings.clone()
     }
 
-    /// 沿用一般設定的同一組字型、字級與介面比例，不另存一份桌寵文字偏好。
-    pub fn typography(&mut self, config: &crate::config::Config) {
-        if self.state.borrow_mut().typography.update(config) {
+    /// 只有字型與應用程式共用；字級由桌寵偏好獨立保存。
+    pub fn typography(&mut self, font: crate::config::UiFont) {
+        if self.state.borrow_mut().typography.update(font) {
             self.last_draw = Instant::now() - Duration::from_secs(1);
         }
     }
@@ -388,16 +392,13 @@ unsafe fn draw(window: HWND, state: &State) -> AppResult<()> {
         SetBkMode(memory, TRANSPARENT as i32);
         let [b, g, r] = bubble::color(&state.settings.bubble_color);
         let luminance = u32::from(r) * 299 + u32::from(g) * 587 + u32::from(b) * 114;
-        SetTextColor(
-            memory,
-            if luminance > 145_000 {
-                0x003C3028
-            } else {
-                0x00FFFFFF
-            },
-        );
+        let (text_color, outline_color) = if luminance > 145_000 {
+            (0x00000000, 0x00FFFFFF)
+        } else {
+            (0x00FFFFFF, 0x00000000)
+        };
         let font = CreateFontW(
-            -scale(state.typography.pixels()),
+            -scale(i32::from(state.settings.font_size)),
             0,
             0,
             0,
@@ -420,6 +421,35 @@ unsafe fn draw(window: HWND, state: &State) -> AppResult<()> {
             right: width - scale(24),
             bottom: scale(94),
         };
+        // 八個方向先畫相反的黑／白色輪廓，再畫字心；各次矩形只平移，
+        // 保持相同寬高及換行位置，避免描邊與前景文字在斷行處錯位。
+        let stroke = scale(if state.settings.font_size >= 22 { 2 } else { 1 }).max(1);
+        SetTextColor(memory, outline_color);
+        for (dx, dy) in [
+            (-1, -1),
+            (0, -1),
+            (1, -1),
+            (-1, 0),
+            (1, 0),
+            (-1, 1),
+            (0, 1),
+            (1, 1),
+        ] {
+            let mut outline_rect = RECT {
+                left: text_rect.left + dx * stroke,
+                top: text_rect.top + dy * stroke,
+                right: text_rect.right + dx * stroke,
+                bottom: text_rect.bottom + dy * stroke,
+            };
+            DrawTextW(
+                memory,
+                text.as_ptr(),
+                (text.len() - 1) as i32,
+                &mut outline_rect,
+                DT_WORDBREAK | DT_NOPREFIX | DT_END_ELLIPSIS,
+            );
+        }
+        SetTextColor(memory, text_color);
         DrawTextW(
             memory,
             text.as_ptr(),
@@ -517,109 +547,111 @@ unsafe fn draw(window: HWND, state: &State) -> AppResult<()> {
 }
 
 unsafe extern "system" fn window_proc(window: HWND, message: u32, w: WPARAM, l: LPARAM) -> LRESULT {
-    let pointer = GetWindowLongPtrW(window, GWLP_USERDATA) as *const RefCell<State>;
-    if !pointer.is_null() {
-        if let Ok(mut state) = (&*pointer).try_borrow_mut() {
-            match message {
-                WM_MOUSEACTIVATE => return MA_NOACTIVATE as isize,
-                WM_LBUTTONDOWN => {
-                    let mut cursor = POINT::default();
-                    let mut rect = RECT::default();
-                    GetCursorPos(&mut cursor);
-                    GetWindowRect(window, &mut rect);
-                    state.drag = Some((cursor, rect));
-                    state.moved = false;
-                    SetCapture(window);
-                    return 0;
-                }
-                WM_MOUSEMOVE => {
-                    if let Some((start, rect)) = state.drag {
-                        let mut now = POINT::default();
-                        GetCursorPos(&mut now);
-                        let dx = now.x - start.x;
-                        let dy = now.y - start.y;
-                        if dx.abs() + dy.abs() > 4 {
-                            state.moved = true;
-                        }
-                        if state.moved {
-                            SetWindowPos(
-                                window,
-                                ptr::null_mut(),
-                                rect.left + dx,
-                                rect.top + dy,
-                                0,
-                                0,
-                                SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE,
-                            );
-                        }
-                    }
-                    return 0;
-                }
-                WM_LBUTTONUP => {
-                    if state.drag.take().is_some() {
-                        ReleaseCapture();
-                        if state.moved {
-                            let mut rect = RECT::default();
-                            GetWindowRect(window, &mut rect);
-                            state.settings.position = Some([rect.left, rect.top]);
-                            state.position_dirty = true;
-                        } else {
-                            PostMessageW(
-                                state.owner,
-                                MESSAGE,
-                                if state.notice.is_some() { 2 } else { 1 },
-                                0,
-                            );
-                            state.notice = None;
-                        }
-                    }
-                    return 0;
-                }
-                WM_RBUTTONUP => {
-                    // TrackPopupMenu會處理巢狀訊息；先釋放借用，讓主視窗tick可安全更新桌寵。
-                    let owner = state.owner;
-                    drop(state);
-                    let menu = CreatePopupMenu();
-                    if !menu.is_null() {
-                        for (id, label) in [
-                            (1, "開啟主視窗"),
-                            (3, "塔羅牌桌"),
-                            (4, "桌寵設定"),
-                            (5, "隱藏桌寵"),
-                        ] {
-                            AppendMenuW(menu, MF_STRING, id, wide(label).as_ptr());
-                        }
+    crate::reliability::win32(if message == WM_CREATE { -1 } else { 0 }, || {
+        let pointer = GetWindowLongPtrW(window, GWLP_USERDATA) as *const RefCell<State>;
+        if !pointer.is_null() {
+            if let Ok(mut state) = (&*pointer).try_borrow_mut() {
+                match message {
+                    WM_MOUSEACTIVATE => return MA_NOACTIVATE as isize,
+                    WM_LBUTTONDOWN => {
                         let mut cursor = POINT::default();
+                        let mut rect = RECT::default();
                         GetCursorPos(&mut cursor);
-                        SetForegroundWindow(window);
-                        let action = TrackPopupMenu(
-                            menu,
-                            TPM_RETURNCMD | TPM_RIGHTBUTTON,
-                            cursor.x,
-                            cursor.y,
-                            0,
-                            window,
-                            ptr::null(),
-                        );
-                        DestroyMenu(menu);
-                        if action != 0 {
-                            PostMessageW(owner, MESSAGE, action as usize, 0);
-                        }
+                        GetWindowRect(window, &mut rect);
+                        state.drag = Some((cursor, rect));
+                        state.moved = false;
+                        SetCapture(window);
+                        return 0;
                     }
-                    return 0;
+                    WM_MOUSEMOVE => {
+                        if let Some((start, rect)) = state.drag {
+                            let mut now = POINT::default();
+                            GetCursorPos(&mut now);
+                            let dx = now.x - start.x;
+                            let dy = now.y - start.y;
+                            if dx.abs() + dy.abs() > 4 {
+                                state.moved = true;
+                            }
+                            if state.moved {
+                                SetWindowPos(
+                                    window,
+                                    ptr::null_mut(),
+                                    rect.left + dx,
+                                    rect.top + dy,
+                                    0,
+                                    0,
+                                    SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE,
+                                );
+                            }
+                        }
+                        return 0;
+                    }
+                    WM_LBUTTONUP => {
+                        if state.drag.take().is_some() {
+                            ReleaseCapture();
+                            if state.moved {
+                                let mut rect = RECT::default();
+                                GetWindowRect(window, &mut rect);
+                                state.settings.position = Some([rect.left, rect.top]);
+                                state.position_dirty = true;
+                            } else {
+                                PostMessageW(
+                                    state.owner,
+                                    MESSAGE,
+                                    if state.notice.is_some() { 2 } else { 1 },
+                                    0,
+                                );
+                                state.notice = None;
+                            }
+                        }
+                        return 0;
+                    }
+                    WM_RBUTTONUP => {
+                        // TrackPopupMenu會處理巢狀訊息；先釋放借用，讓主視窗tick可安全更新桌寵。
+                        let owner = state.owner;
+                        drop(state);
+                        let menu = CreatePopupMenu();
+                        if !menu.is_null() {
+                            for (id, label) in [
+                                (1, "開啟主視窗"),
+                                (3, "塔羅牌桌"),
+                                (4, "桌寵設定"),
+                                (5, "隱藏桌寵"),
+                            ] {
+                                AppendMenuW(menu, MF_STRING, id, wide(label).as_ptr());
+                            }
+                            let mut cursor = POINT::default();
+                            GetCursorPos(&mut cursor);
+                            SetForegroundWindow(window);
+                            let action = TrackPopupMenu(
+                                menu,
+                                TPM_RETURNCMD | TPM_RIGHTBUTTON,
+                                cursor.x,
+                                cursor.y,
+                                0,
+                                window,
+                                ptr::null(),
+                            );
+                            DestroyMenu(menu);
+                            if action != 0 {
+                                PostMessageW(owner, MESSAGE, action as usize, 0);
+                            }
+                        }
+                        return 0;
+                    }
+                    WM_CAPTURECHANGED => {
+                        state.drag = None;
+                    }
+                    WM_CLOSE => {
+                        PostMessageW(state.owner, MESSAGE, 5, 0);
+                        return 0;
+                    }
+                    _ => (),
                 }
-                WM_CAPTURECHANGED => {
-                    state.drag = None;
-                }
-                WM_CLOSE => {
-                    PostMessageW(state.owner, MESSAGE, 5, 0);
-                    return 0;
-                }
-                _ => (),
             }
         }
-    }
-    DefWindowProcW(window, message, w, l)
+        DefWindowProcW(window, message, w, l)
+    })
 }
 
 #[cfg(test)]
@@ -632,6 +664,16 @@ mod tests {
         let mut settings: Settings = serde_json::from_str(r#"{"skin":"dog","size":136}"#).unwrap();
         assert_eq!(settings.bubble_style, "round");
         assert_eq!(settings.notice_seconds, 5);
+        assert_eq!(settings.font_size, 16);
+        for font_size in [12, 16, 28] {
+            settings.font_size = font_size;
+            assert!(settings.validate().is_ok());
+        }
+        for font_size in [0, 11, 29] {
+            settings.font_size = font_size;
+            assert!(settings.validate().is_err());
+        }
+        settings.font_size = 16;
         for seconds in 0..=5 {
             settings.notice_seconds = seconds;
             assert!(settings.validate().is_ok());
@@ -665,6 +707,7 @@ mod tests {
             skin: "dog".into(),
             size: 136,
             reduced_motion: true,
+            font_size: 22,
             position: None,
             ..Default::default()
         };
@@ -696,6 +739,7 @@ mod tests {
         assert!(!reopened.settings().enabled);
         assert_eq!(reopened.settings().skin, "dog");
         assert_eq!(reopened.settings().size, 136);
+        assert_eq!(reopened.settings().font_size, 22);
         drop(reopened);
         // 僅移除本測試建立的已知檔案；不遞迴刪除資料目錄。
         std::fs::remove_file(root.join("pet-settings.json")).unwrap();

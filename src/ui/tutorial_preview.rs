@@ -14,25 +14,27 @@ unsafe extern "system" fn window_proc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
-    let view = GetWindowLongPtrW(window, GWLP_USERDATA) as *const RefCell<WebView>;
-    match message {
-        WM_SIZE if !view.is_null() => {
-            let mut bounds = RECT::default();
-            GetClientRect(window, &mut bounds);
-            (*view).borrow().resize(bounds.right, bounds.bottom);
-            0
+    crate::reliability::win32(if message == WM_CREATE { -1 } else { 0 }, || {
+        let view = GetWindowLongPtrW(window, GWLP_USERDATA) as *const RefCell<WebView>;
+        match message {
+            WM_SIZE if !view.is_null() => {
+                let mut bounds = RECT::default();
+                GetClientRect(window, &mut bounds);
+                (*view).borrow().resize(bounds.right, bounds.bottom);
+                0
+            }
+            WM_CLOSE => {
+                // 教學預覽關閉即離開，不進正式程式的托盤或背景工作。
+                DestroyWindow(window);
+                0
+            }
+            WM_DESTROY => {
+                PostQuitMessage(0);
+                0
+            }
+            _ => DefWindowProcW(window, message, wparam, lparam),
         }
-        WM_CLOSE => {
-            // 教學預覽關閉即離開，不進正式程式的托盤或背景工作。
-            DestroyWindow(window);
-            0
-        }
-        WM_DESTROY => {
-            PostQuitMessage(0);
-            0
-        }
-        _ => DefWindowProcW(window, message, wparam, lparam),
-    }
+    })
 }
 
 pub(super) fn run() -> AppResult<()> {

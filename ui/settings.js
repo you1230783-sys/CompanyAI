@@ -33,11 +33,60 @@ window.SettingsUI = (() => {
     };
   });
   $("diagnostics-export").onclick = () => {
-    $("diagnostics-export-status").textContent = "請選擇儲存位置。";
+    $("diagnostics-export-status").textContent = "正在準備預覽，尚未匯出檔案。";
     send({type:"export_diagnostics", include_details:$("diagnostics-include-details").checked});
   };
+  // 使用原生產生的快照，預覽中的文字不可編輯，儲存只回傳快照識別碼。
+  const preview = document.createElement("dialog");
+  preview.id = "diagnostics-preview";
+  preview.dataset.offline = "true";
+  preview.setAttribute("aria-labelledby", "diagnostics-preview-title");
+  preview.innerHTML = `<h2 id="diagnostics-preview-title">預覽錯誤診斷</h2>
+    <p>先檢查以下完整內容，再決定是否匯出。預設不包含對話、文件、設定或機台清單；詳細錯誤可能包含檔名、專案路徑、Windows帳號或服務回覆。</p>
+    <textarea id="diagnostics-preview-text" readonly rows="14" aria-label="將匯出的完整診斷JSON"></textarea>
+    <details><summary>錯誤代碼與處理方式（離線可用）</summary><div id="diagnostics-help"></div></details>
+    <p id="diagnostics-preview-status" role="status"></p>
+    <div class="button-row"><button id="diagnostics-save">確認並選擇儲存位置</button><button id="diagnostics-cancel" class="secondary-button">取消</button></div>`;
+  document.body.append(preview);
+  let previewId = null, previewReturn = false;
+  $("diagnostics-open").onclick = () => send({type:"export_diagnostics", include_details:false});
+  $("copy-error").onclick = () => send({type:"copy_error"});
+  $("diagnostics-save").onclick = () => {
+    if (!previewId) return;
+    $("diagnostics-save").disabled = true;
+    send({type:"save_diagnostics", preview_id:previewId});
+  };
+  $("diagnostics-cancel").onclick = () => preview.close();
+  preview.addEventListener("close", () => {
+    previewId = null;
+    $("diagnostics-preview-text").value = "";
+    send({type:"cancel_diagnostics"});
+    if (previewReturn && state.logged_in) $("settings-dialog").showModal();
+    previewReturn = false;
+  });
   function receive(message) {
-    if (message.type === "diagnostics_exported") $("diagnostics-export-status").textContent = message.text;
+    if (message.type === "diagnostics_preview") {
+      previewId = message.preview_id;
+      $("diagnostics-preview-text").value = message.text;
+      $("diagnostics-preview-status").textContent = "尚未儲存；匯出內容與上方預覽完全相同。";
+      $("diagnostics-save").disabled = false;
+      $("diagnostics-help").replaceChildren();
+      for (const item of message.help || []) {
+        const p = document.createElement("p");
+        p.textContent = `${item.code}：${item.message} ${item.suggestion}`;
+        $("diagnostics-help").append(p);
+      }
+      if (!preview.open) {
+        previewReturn = $("settings-dialog").open;
+        if (previewReturn) $("settings-dialog").close();
+        preview.showModal();
+      }
+    }
+    if (message.type === "diagnostics_exported") {
+      $("diagnostics-export-status").textContent = message.text;
+      $("diagnostics-preview-status").textContent = message.text;
+      $("diagnostics-save").disabled = !previewId;
+    }
   }
   return {select, receive, render};
 })();

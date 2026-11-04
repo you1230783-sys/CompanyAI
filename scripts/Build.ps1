@@ -120,6 +120,11 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         else { & cargo test --workspace --frozen }
         if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
     }
+    # panic 必須在獨立程序驗證，避免 abort／全域隔離狀態污染一般測試。
+    # 主要回呼與背景工作都須可回到診斷介面，且 abort 前已同步留下紀錄。
+    & cargo build --example reliability_smoke --release --frozen
+    if ($LASTEXITCODE -ne 0) { throw 'Reliability harness build failed.' }
+    & (Join-Path $PSScriptRoot 'Test-Reliability.ps1') -NoBuild -Probe (Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\release\examples\reliability_smoke.exe')
     & cargo build --workspace --release --frozen
     if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
     $exe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\release\company-ai.exe'

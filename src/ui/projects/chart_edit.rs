@@ -77,7 +77,7 @@ impl App {
         let tx = self.tx.clone();
         let conversation = target.conversation.clone();
         // WebView callback 在UI執行緒；等待及檔案I/O放到背景，避免阻塞操作。
-        thread::spawn(move || {
+        crate::reliability::spawn(move || {
             let result = receive
                 .recv_timeout(Duration::from_secs(60))
                 .map_err(|_| "圖片繪製逾時，尚未儲存。".to_owned())

@@ -205,7 +205,7 @@ impl App {
         if task.active() {
             if let Some(session) = self.session.clone() {
                 let config = self.config.clone();
-                thread::spawn(move || {
+                crate::reliability::spawn(move || {
                     // 回應遺失時先用原 request_id 找回；失敗不影響本機移除。
                     if let Ok(remote) = jobs::task_status(&config, &session, &task) {
                         if !remote.terminal() {
@@ -286,7 +286,7 @@ impl App {
             self.generation,
         );
         if let Some(session) = session {
-            thread::spawn(move || {
+            crate::reliability::spawn(move || {
                 let _ = tx.send(Event::Work(
                     generation,
                     WorkEvent::Capabilities(
@@ -454,7 +454,7 @@ impl App {
                 }
                 if let (Some(remote), Some(session)) = (remote, self.session.clone()) {
                     let config = self.config.clone();
-                    thread::spawn(move || {
+                    crate::reliability::spawn(move || {
                         let _: AppResult<Value> = jobs::post(
                             &config,
                             &session,
@@ -516,7 +516,7 @@ impl App {
                     self.tx.clone(),
                     self.generation,
                 );
-                thread::spawn(move || {
+                crate::reliability::spawn(move || {
                     let result = jobs::post(&config, &session, &path, &json!({}));
                     let _ = tx.send(Event::Work(generation, WorkEvent::Polled(id, result)));
                 });
@@ -770,7 +770,7 @@ impl App {
             .map(|a| (a.name.clone(), a.size))
             .collect();
         let principal = self.work.store.principal_id.clone();
-        thread::spawn(move || {
+        crate::reliability::spawn(move || {
             let id = task.request_id.clone();
             let mut chat_started = false;
             let result = (|| -> Result<(), jobs::submission::SubmitFailure> {
@@ -846,7 +846,7 @@ impl App {
                 self.generation,
             );
             if let Some(session) = session {
-                thread::spawn(move || {
+                crate::reliability::spawn(move || {
                     let result = (|| {
                         let remote = jobs::conversation(&config, &session, &a.conversation_id)?;
                         let status = jobs::reserve_attachment(&config, &session, &remote, &a)?;
@@ -959,7 +959,7 @@ impl App {
         );
         let poll_failures = self.work.poll_failures.clone();
         if let Some(session) = session {
-            thread::spawn(move || {
+            crate::reliability::spawn(move || {
                 // 同一輪多個任務失敗時共用一次模型端點檢查；不用舊模型快取判定健康。
                 let mut models_healthy = None;
                 for task in tasks {
@@ -1089,7 +1089,7 @@ impl App {
                     if removed {
                         if let Some(session) = self.session.clone() {
                             let config = self.config.clone();
-                            thread::spawn(move || {
+                            crate::reliability::spawn(move || {
                                 let _: AppResult<Value> = jobs::post(
                                     &config,
                                     &session,
@@ -1112,7 +1112,7 @@ impl App {
                     self.generation,
                     self.root.clone(),
                 );
-                thread::spawn(move || {
+                crate::reliability::spawn(move || {
                     let result = (|| {
                         struct ProgressReader<'a> {
                             reader: attachments::SpoolReader,

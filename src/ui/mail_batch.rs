@@ -129,7 +129,7 @@ impl App {
                     self.mail_flow.operation,
                     self.demo,
                 );
-                thread::spawn(move || {
+                crate::reliability::spawn(move || {
                     let result = if demo {
                         Ok(MailList {
                             mails: (0..3)
@@ -275,7 +275,7 @@ impl App {
                     .clone();
                 self.set_draft(String::new());
                 self.focus_draft = true;
-                thread::spawn(move || {
+                crate::reliability::spawn(move || {
                     let result = (|| {
                         let mut prepared = Prepared {
                             root: root.clone(),

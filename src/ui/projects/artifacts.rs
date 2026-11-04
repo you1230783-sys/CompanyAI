@@ -26,7 +26,7 @@ impl App {
             let id = id.clone();
             let label = label.clone();
             let tx = self.tx.clone();
-            thread::spawn(move || {
+            crate::reliability::spawn(move || {
                 let result = (|| {
                     let memory = projects::memory::Memory::open(project, &conversation)?;
                     let data = if let Some(label) = label {
@@ -74,7 +74,7 @@ impl App {
         if ids.len() > 100 || offset > 5000 {
             return Err("成果選取或位置超過範圍。".into());
         }
-        thread::spawn(move || {
+        crate::reliability::spawn(move || {
             let result = (|| {
                 let memory = projects::memory::Memory::open(project.clone(), &conversation)?;
                 let data = if ids.is_empty() {

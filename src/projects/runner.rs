@@ -1619,6 +1619,11 @@ pub fn recover_activity(root: &Path, id: &str) -> AppResult<Vec<Activity>> {
 }
 
 pub(super) fn check_cancel(cancel: &AtomicBool) -> AppResult<()> {
+    if crate::reliability::faulted() {
+        return Err(
+            "Error Code: 13\n程式已進入異常保護狀態；核對既有成果後重新啟動，不重播寫入。".into(),
+        );
+    }
     if cancel.load(Ordering::Relaxed) {
         return Err("專案任務已停止，不會繼續執行本機工具。".into());
     }

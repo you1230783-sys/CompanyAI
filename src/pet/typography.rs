@@ -1,13 +1,11 @@
 //! WebView的CSS字型不會自動出現在GDI。將相同內建TTF登記為程序私有字型，
 //! 才能在沒有安裝這些字型的使用者電腦上畫出一致的桌寵通知。
-use crate::config::{Config, UiFont};
+use crate::config::UiFont;
 use std::ptr;
 use windows_sys::Win32::{Foundation::HANDLE, Graphics::Gdi::*};
 
 pub(super) struct Typography {
     font: UiFont,
-    size: u8,
-    scale: u16,
     registration: HANDLE,
 }
 
@@ -16,54 +14,42 @@ impl Default for Typography {
         // 首次update時載入實際設定；Microsoft正黑體不需要額外登記。
         Self {
             font: UiFont::MicrosoftJhenghei,
-            size: 14,
-            scale: 100,
             registration: ptr::null_mut(),
         }
     }
 }
 
 impl Typography {
-    pub(super) fn update(&mut self, config: &Config) -> bool {
-        let scale = crate::config::interface_scale(config.interface_scale);
-        let size = config.font_size.clamp(12, 20);
-        if (self.font, self.size, self.scale) == (config.ui_font, size, scale) {
+    pub(super) fn update(&mut self, font: UiFont) -> bool {
+        if self.font == font {
             return false;
         }
-        if self.font != config.ui_font {
-            self.unregister();
-            let name = match config.ui_font {
-                UiFont::MicrosoftJhenghei => "",
-                UiFont::Huninn => "/fonts/jf-openhuninn-2.1.ttf",
-                UiFont::WenkaiTc => "/fonts/LXGWWenKaiTC-Medium.ttf",
-                UiFont::WenkaiMonoTc => "/fonts/LXGWWenKaiMonoTC-Medium.ttf",
+        self.unregister();
+        let name = match font {
+            UiFont::MicrosoftJhenghei => "",
+            UiFont::Huninn => "/fonts/jf-openhuninn-2.1.ttf",
+            UiFont::WenkaiTc => "/fonts/LXGWWenKaiTC-Medium.ttf",
+            UiFont::WenkaiMonoTc => "/fonts/LXGWWenKaiMonoTC-Medium.ttf",
+        };
+        // 共用WebView已內嵌的同一份TTF，避免在EXE重複保存約30MB字型。
+        let bytes = crate::webview::ASSETS
+            .iter()
+            .find_map(|(path, bytes)| (*path == name).then_some(*bytes))
+            .unwrap_or(&[]);
+        if !bytes.is_empty() {
+            let mut count = 0;
+            // 內嵌bytes在程序生命週期內有效，不寫入Windows字型目錄。
+            self.registration = unsafe {
+                AddFontMemResourceEx(
+                    bytes.as_ptr().cast(),
+                    bytes.len() as u32,
+                    ptr::null(),
+                    &raw mut count,
+                )
             };
-            // 共用WebView已內嵌的同一份TTF，避免在EXE重複保存約30MB字型。
-            let bytes = crate::webview::ASSETS
-                .iter()
-                .find_map(|(path, bytes)| (*path == name).then_some(*bytes))
-                .unwrap_or(&[]);
-            if !bytes.is_empty() {
-                let mut count = 0;
-                // 內嵌bytes在程序生命週期內有效，不寫入Windows字型目錄。
-                self.registration = unsafe {
-                    AddFontMemResourceEx(
-                        bytes.as_ptr().cast(),
-                        bytes.len() as u32,
-                        ptr::null(),
-                        &raw mut count,
-                    )
-                };
-            }
-            self.font = config.ui_font;
         }
-        self.size = size;
-        self.scale = scale;
+        self.font = font;
         true
-    }
-
-    pub(super) fn pixels(&self) -> i32 {
-        (i32::from(self.size) * i32::from(self.scale) + 50) / 100
     }
 
     pub(super) fn family(&self) -> &'static str {
@@ -95,19 +81,12 @@ impl Drop for Typography {
 mod tests {
     use super::*;
     #[test]
-    fn bundled_fonts_are_registered_and_settings_are_shared() {
+    fn bundled_fonts_are_registered_and_only_font_choice_is_shared() {
         let mut typography = Typography::default();
-        for font in [UiFont::Huninn, UiFont::WenkaiTc, UiFont::WenkaiMonoTc] {
-            let config = Config {
-                ui_font: font,
-                font_size: 18,
-                interface_scale: 125,
-                ..Config::default()
-            };
-            assert!(typography.update(&config));
+        for ui_font in [UiFont::Huninn, UiFont::WenkaiTc, UiFont::WenkaiMonoTc] {
+            assert!(typography.update(ui_font));
             assert!(!typography.registration.is_null());
-            assert_eq!(typography.pixels(), 23);
-            assert!(!typography.update(&config));
+            assert!(!typography.update(ui_font));
             // 核對GDI確實選到該字型，避免只驗證非空handle卻仍悄悄使用系統替代字型。
             unsafe {
                 let dc = CreateCompatibleDC(ptr::null_mut());
@@ -134,7 +113,7 @@ mod tests {
                 let end = actual.iter().position(|v| *v == 0).unwrap_or(actual.len());
                 let actual = String::from_utf16_lossy(&actual[..end]);
                 // Windows可回傳TTF內的本地化別名，兩者必須都屬於同一內建字型。
-                let aliases: &[&str] = match config.ui_font {
+                let aliases: &[&str] = match ui_font {
                     UiFont::Huninn => &["jf-openhuninn-2.1", "jf open 粉圓 2.1"],
                     UiFont::WenkaiTc => &[
                         "LXGW WenKai TC Medium",

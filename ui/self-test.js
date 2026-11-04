@@ -1025,9 +1025,11 @@ window.runSelfTest = async (structuredFixture) => {
       ];
       LMUI.receive(fixture);
       check(document.querySelector("#history-list button")?.dataset.id === "pinned", "pinned conversation precedes newer ordinary conversation");
-      check(document.querySelectorAll(".topbar-actions button").length === 2 &&
+      check(document.querySelectorAll(".topbar-actions button").length === 4 &&
         document.getElementById("show-notifications").closest(".topbar-actions") &&
         document.getElementById("show-tasks").closest(".topbar-actions") &&
+        document.getElementById("copy-error").closest(".topbar-actions") &&
+        document.getElementById("diagnostics-open").closest(".topbar-actions") &&
         document.getElementById("new-chat").closest(".section-caption"), "compact navigation places tools and new chat correctly");
       const logo = document.querySelector("img.brand-mark");
       check(logo.complete && logo.naturalWidth > 0 && logo.getAttribute("src") === "app.ico", "brand loads embedded application cat icon");
@@ -1214,8 +1216,8 @@ window.runSelfTest = async (structuredFixture) => {
     check(!$("update-shortcut").hidden, "update arrow appears for available release");
     check($("project-list").textContent.includes("專案標題"), "project conversation appears inside project");
     check(!$("history-list").textContent.includes("專案標題"), "project conversation excluded from recent list");
-    check($("advanced-dialog").contains($("show-vnc")) && !$("sidebar").contains($("show-vnc")), "VNC is grouped in advanced functions");
-    check(!!($("show-advanced").compareDocumentPosition($("project-list")) & Node.DOCUMENT_POSITION_FOLLOWING), "projects follow the single advanced entry");
+    check($("sidebar").contains($("show-vnc")) && !$("advanced-dialog").contains($("show-vnc")), "VNC has a direct sidebar entry");
+    check(!!($("show-vnc").compareDocumentPosition($("project-list")) & Node.DOCUMENT_POSITION_FOLLOWING), "projects follow advanced functions and VNC entries");
     check(!!($("project-list").compareDocumentPosition($("history-list")) & Node.DOCUMENT_POSITION_FOLLOWING), "projects precede recent history");
     const savedActive = fixture.active_id, savedMessages = fixture.messages, savedNotifications = fixture.notifications;
     const savedSend = send, retryCommands = [];

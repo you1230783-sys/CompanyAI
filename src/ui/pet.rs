@@ -13,6 +13,7 @@ pub(super) enum PetCommand {
         bubble_color: String,
         bubble_opacity: u8,
         notice_seconds: u8,
+        font_size: Option<u8>,
     },
     Import {
         state: String,
@@ -25,7 +26,7 @@ pub(super) enum PetCommand {
 impl App {
     pub(super) fn desktop_notice(&mut self, message: &str) {
         if !self.smoke {
-            self.pet.typography(&self.config);
+            self.pet.typography(self.config.ui_font);
             self.pet.notify(message);
         }
     }
@@ -43,6 +44,7 @@ impl App {
                     bubble_color,
                     bubble_opacity,
                     notice_seconds,
+                    font_size,
                 } => {
                     let mut settings = self.pet.settings();
                     // 精細圖檔較大；滑桿調整只回偏好，換角色或匯入時才傳六張預覽。
@@ -55,6 +57,9 @@ impl App {
                     settings.bubble_color = bubble_color;
                     settings.bubble_opacity = bubble_opacity;
                     settings.notice_seconds = notice_seconds;
+                    if let Some(font_size) = font_size {
+                        settings.font_size = font_size;
+                    }
                     self.pet.configure(settings)?;
                 }
                 PetCommand::Import { state } => {
@@ -92,7 +97,7 @@ impl App {
         result
     }
     pub(super) fn tick_pet(&mut self) {
-        self.pet.typography(&self.config);
+        self.pet.typography(self.config.ui_font);
         let active = self.work.store.tasks.iter().any(|t| t.active());
         let waiting = self
             .work

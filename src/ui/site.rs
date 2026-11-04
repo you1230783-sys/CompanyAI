@@ -83,7 +83,7 @@ impl App {
             self.site.revision,
         );
         if let Some(session) = session {
-            thread::spawn(move || {
+            crate::reliability::spawn(move || {
                 let result = site::sync(&config, &session, &cache);
                 let _ = tx.send(Event::Site(generation, SiteEvent::Synced(revision, result)));
             });
@@ -117,7 +117,7 @@ impl App {
         self.site.mutating = true;
         self.site.revision += 1; // 操作前發出的 REST 副本不再允許覆蓋新狀態。
         let (config, tx, generation) = (self.config.clone(), self.tx.clone(), self.generation);
-        thread::spawn(move || {
+        crate::reliability::spawn(move || {
             let result = site::action(&config, &session, &action);
             let _ = tx.send(Event::Site(generation, SiteEvent::Acted(action, result)));
         });

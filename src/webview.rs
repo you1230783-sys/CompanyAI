@@ -28,6 +28,17 @@ impl Drop for WebView {
 }
 
 impl WebView {
+    /// 原生測試實際執行WebView2完成回呼；不向網頁暴露故障注入命令。
+    pub(crate) fn probe_panic(&self) -> AppResult<()> {
+        let callback = ExecuteScriptCompletedHandler::create(Box::new(|_, _| {
+            crate::reliability::com(|| panic!("fixture-private-user-path-must-not-be-recorded"))
+        }));
+        unsafe {
+            self.view
+                .ExecuteScript(PCWSTR(wide("1+1").as_ptr()), &callback)
+        }
+        .map_err(|_| "無法開始原生回呼測試。".into())
+    }
     pub fn create(
         window: windows_sys::Win32::Foundation::HWND,
         profile: &Path,
@@ -68,10 +79,12 @@ impl WebView {
                 .map_err(webview2_com::Error::WindowsError)
             }),
             Box::new(move |code, environment| {
-                code?;
-                tx.send(environment.ok_or_else(|| windows::core::Error::from(E_POINTER)))
-                    .map_err(|_| windows::core::Error::from(E_POINTER))?;
-                Ok(())
+                crate::reliability::com(|| {
+                    code?;
+                    tx.send(environment.ok_or_else(|| windows::core::Error::from(E_POINTER)))
+                        .map_err(|_| windows::core::Error::from(E_POINTER))?;
+                    Ok(())
+                })
             }),
         )?;
         let environment = rx.recv().map_err(|_| webview2_com::Error::SendError)??;
@@ -84,10 +97,12 @@ impl WebView {
                     .map_err(webview2_com::Error::WindowsError)
             }),
             Box::new(move |code, controller| {
-                code?;
-                tx.send(controller.ok_or_else(|| windows::core::Error::from(E_POINTER)))
-                    .map_err(|_| windows::core::Error::from(E_POINTER))?;
-                Ok(())
+                crate::reliability::com(|| {
+                    code?;
+                    tx.send(controller.ok_or_else(|| windows::core::Error::from(E_POINTER)))
+                        .map_err(|_| windows::core::Error::from(E_POINTER))?;
+                    Ok(())
+                })
             }),
         )?;
         let controller = rx.recv().map_err(|_| webview2_com::Error::SendError)??;
@@ -114,85 +129,95 @@ impl WebView {
             // 只在使用者明確開啟錄製時攔截，且只作用於本程式的 WebView2。
             controller.add_AcceleratorKeyPressed(
                 &AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {
-                    if !recording_keys.get() {
-                        return Ok(());
-                    }
-                    if let Some(args) = args {
-                        args.SetHandled(true)?;
-                        let mut kind = COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN;
-                        args.KeyEventKind(&mut kind)?;
-                        if kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
-                            && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN
-                        {
+                    crate::reliability::com(|| {
+                        if !recording_keys.get() {
                             return Ok(());
                         }
-                        let mut key = 0;
-                        args.VirtualKey(&mut key)?;
-                        if crate::hotkey::is_modifier(key) {
-                            return Ok(());
+                        if let Some(args) = args {
+                            args.SetHandled(true)?;
+                            let mut kind = COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN;
+                            args.KeyEventKind(&mut kind)?;
+                            if kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
+                                && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN
+                            {
+                                return Ok(());
+                            }
+                            let mut key = 0;
+                            args.VirtualKey(&mut key)?;
+                            if crate::hotkey::is_modifier(key) {
+                                return Ok(());
+                            }
+                            let modifiers = crate::hotkey::pressed_modifiers();
+                            let command = if key == 27 && modifiers == 0 {
+                                serde_json::json!({"type": "cancel_hotkey_recording"})
+                            } else {
+                                serde_json::json!({
+                                    "type": "recorded_hotkey",
+                                    "modifiers": modifiers,
+                                    "key": key
+                                })
+                            };
+                            let _ = key_messages.send(command.to_string());
                         }
-                        let modifiers = crate::hotkey::pressed_modifiers();
-                        let command = if key == 27 && modifiers == 0 {
-                            serde_json::json!({"type": "cancel_hotkey_recording"})
-                        } else {
-                            serde_json::json!({
-                                "type": "recorded_hotkey",
-                                "modifiers": modifiers,
-                                "key": key
-                            })
-                        };
-                        let _ = key_messages.send(command.to_string());
-                    }
-                    Ok(())
+                        Ok(())
+                    })
                 })),
                 &mut token,
             )?;
             view.add_PermissionRequested(
                 &PermissionRequestedEventHandler::create(Box::new(|_, args| {
-                    if let Some(args) = args {
-                        args.SetState(COREWEBVIEW2_PERMISSION_STATE_DENY)?;
-                    }
-                    Ok(())
+                    crate::reliability::com(|| {
+                        if let Some(args) = args {
+                            args.SetState(COREWEBVIEW2_PERMISSION_STATE_DENY)?;
+                        }
+                        Ok(())
+                    })
                 })),
                 &mut token,
             )?;
             view.add_NewWindowRequested(
                 &NewWindowRequestedEventHandler::create(Box::new(|_, args| {
-                    if let Some(args) = args {
-                        args.SetHandled(true)?;
-                    }
-                    Ok(())
+                    crate::reliability::com(|| {
+                        if let Some(args) = args {
+                            args.SetHandled(true)?;
+                        }
+                        Ok(())
+                    })
                 })),
                 &mut token,
             )?;
             view.add_NavigationStarting(
                 &NavigationStartingEventHandler::create(Box::new(move |_, args| {
-                    if let Some(args) = args {
-                        let mut uri = PWSTR::null();
-                        args.Uri(&mut uri)?;
-                        if CoTaskMemPWSTR::from(uri).to_string() != page {
-                            args.SetCancel(true)?;
+                    crate::reliability::com(|| {
+                        if let Some(args) = args {
+                            let mut uri = PWSTR::null();
+                            args.Uri(&mut uri)?;
+                            if CoTaskMemPWSTR::from(uri).to_string() != page {
+                                args.SetCancel(true)?;
+                            }
                         }
-                    }
-                    Ok(())
+                        Ok(())
+                    })
                 })),
                 &mut token,
             )?;
             view.add_WebMessageReceived(
                 &WebMessageReceivedEventHandler::create(Box::new(move |_, args| {
-                    if let Some(args) = args {
-                        let mut source = PWSTR::null();
-                        args.Source(&mut source)?;
-                        if CoTaskMemPWSTR::from(source).to_string() == PAGE {
-                            let mut message = PWSTR::null();
-                            args.WebMessageAsJson(&mut message)?;
-                            let message = CoTaskMemPWSTR::from(message).to_string();
-                            if message.len() <= 300_000 {
-                                let _ = messages.send(message);
+                    crate::reliability::com(|| {
+                        if let Some(args) = args {
+                            let mut source = PWSTR::null();
+                            args.Source(&mut source)?;
+                            if CoTaskMemPWSTR::from(source).to_string() == PAGE {
+                                let mut message = PWSTR::null();
+                                args.WebMessageAsJson(&mut message)?;
+                                let message = CoTaskMemPWSTR::from(message).to_string();
+                                if message.len() <= 300_000 {
+                                    let _ = messages.send(message);
+                                }
                             }
                         }
-                    }
-                    Ok(())
+                        Ok(())
+                    })
                 })),
                 &mut token,
             )?;
@@ -200,7 +225,7 @@ impl WebView {
                 PCWSTR(wide("*").as_ptr()),
                 COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
             )?;
-            view.add_WebResourceRequested(&WebResourceRequestedEventHandler::create(Box::new(move |_, args| {
+            view.add_WebResourceRequested(&WebResourceRequestedEventHandler::create(Box::new(move |_, args| crate::reliability::com(|| {
                 if let Some(args) = args {
                     let request = args.Request()?; let mut uri = PWSTR::null(); request.Uri(&mut uri)?;
                     let uri = CoTaskMemPWSTR::from(uri).to_string();
@@ -212,7 +237,7 @@ impl WebView {
                     let response = environment.CreateWebResourceResponse(&stream, status, PCWSTR(wide(if status == 200 {"OK"} else {"Not Found"}).as_ptr()), PCWSTR(headers.as_ptr()))?;
                     args.SetResponse(&response)?;
                 } Ok(())
-            })), &mut token)?;
+            }))), &mut token)?;
             controller.SetIsVisible(true)?;
             view.Navigate(PCWSTR(wide(page).as_ptr()))?;
             Ok(Self {
@@ -269,20 +294,22 @@ impl WebView {
         let method = wide("Runtime.evaluate");
         let callback =
             CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |status, result| {
-                let value = status
-                    .map_err(|e| format!("Mermaid 呈現失敗：{e}"))
-                    .and_then(|_| {
-                        serde_json::from_str::<serde_json::Value>(&result)
-                            .map_err(|e| e.to_string())
-                    })
-                    .and_then(|v| {
-                        v["result"]["value"]
-                            .as_str()
-                            .map(str::to_owned)
-                            .ok_or("Mermaid 呈現未完成。".into())
-                    });
-                let _ = reply.send(value);
-                Ok(())
+                crate::reliability::com(|| {
+                    let value = status
+                        .map_err(|e| format!("Mermaid 呈現失敗：{e}"))
+                        .and_then(|_| {
+                            serde_json::from_str::<serde_json::Value>(&result)
+                                .map_err(|e| e.to_string())
+                        })
+                        .and_then(|v| {
+                            v["result"]["value"]
+                                .as_str()
+                                .map(str::to_owned)
+                                .ok_or("Mermaid 呈現未完成。".into())
+                        });
+                    let _ = reply.send(value);
+                    Ok(())
+                })
             }));
         unsafe {
             self.view.CallDevToolsProtocolMethod(
@@ -317,14 +344,16 @@ impl WebView {
         let style = serde_json::to_string(&style).map_err(|e| e.to_string())?;
         let script = wide(&format!("window.ChartUI.exportPng({data},{style})"));
         let callback = ExecuteScriptCompletedHandler::create(Box::new(move |status, result| {
-            let result = status
-                .map_err(|e| format!("PNG 繪製失敗：{e}"))
-                .and_then(|_| {
-                    serde_json::from_str::<String>(&result)
-                        .map_err(|_| "PNG 匯出未完成，請確認桌面介面仍可使用。".into())
-                });
-            let _ = reply.send(result);
-            Ok(())
+            crate::reliability::com(|| {
+                let result = status
+                    .map_err(|e| format!("PNG 繪製失敗：{e}"))
+                    .and_then(|_| {
+                        serde_json::from_str::<String>(&result)
+                            .map_err(|_| "PNG 匯出未完成，請確認桌面介面仍可使用。".into())
+                    });
+                let _ = reply.send(result);
+                Ok(())
+            })
         }));
         unsafe { self.view.ExecuteScript(PCWSTR(script.as_ptr()), &callback) }
             .map_err(|e| format!("無法啟動 PNG 繪製：{e}"))
