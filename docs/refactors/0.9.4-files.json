@@ -1,0 +1,540 @@
+{
+  "source_commit": "5544415e57e96ff47f22d506b6ca14d3c4f2bd0d",
+  "scope": "Function bodies identical apart from whitespace and listed module paths; visibility/reexports reviewed separately.",
+  "visibility": "Private moved helpers become pub(super); old projects-level pub(super) methods become pub(in crate::projects); existing public APIs remain reexported.",
+  "functions": [
+    {
+      "name": "new",
+      "from": "src/projects/files.rs",
+      "line": 1168,
+      "to": "src/projects/files/state.rs",
+      "body_sha256": "52d45d66d38a0610e31be95f870a4c6c4baa7fd5cfbc9be8cb316b0629be9145",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "saved",
+      "from": "src/projects/files.rs",
+      "line": 1236,
+      "to": "src/projects/files/state.rs",
+      "body_sha256": "c2573cacc715ffa27ff9f27b2c88ceb10c862d0c0e032ecb0194f0e7ad7a9cd8",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "restore",
+      "from": "src/projects/files.rs",
+      "line": 1245,
+      "to": "src/projects/files/state.rs",
+      "body_sha256": "65869fe0ab18bef58e03cde8e8fb98fcf98b9d4cc9547448f9330818fb797224",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "enable_memory",
+      "from": "src/projects/files.rs",
+      "line": 1385,
+      "to": "src/projects/files/state.rs",
+      "body_sha256": "0aeea4b5470c2b13318867313c485161194e0b189375e63a0a06c4cb6adfbf03",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "memory",
+      "from": "src/projects/files.rs",
+      "line": 1395,
+      "to": "src/projects/files/state.rs",
+      "body_sha256": "e07a91dea4d715ae4b9a003e6a2ad925bd1e0523c71e2bd02b761486ff6db6dc",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "archive_results",
+      "from": "src/projects/files.rs",
+      "line": 1964,
+      "to": "src/projects/files/execution.rs",
+      "body_sha256": "8c6ff5b6c7813067c319a269ebd0014dcb5fe0b0070a0f453512ceab93d341ea",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "recorded_operation",
+      "from": "src/projects/files.rs",
+      "line": 1977,
+      "to": "src/projects/files/execution.rs",
+      "body_sha256": "6eb9c4fe5e55e3b9e8545ba262959461501cffa2d1b849e872c025eb9a9dde4d",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "operation_history",
+      "from": "src/projects/files.rs",
+      "line": 1991,
+      "to": "src/projects/files/execution.rs",
+      "body_sha256": "081a572d31fb34111d75cd3109ad82920e23866078a91fda24d9fa5c4383ef98",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "cached_result",
+      "from": "src/projects/files.rs",
+      "line": 2005,
+      "to": "src/projects/files/execution.rs",
+      "body_sha256": "d3711e0657e492c833002346c3d13f4675934f43f079201a435311fde4a93d20",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "remember_result",
+      "from": "src/projects/files.rs",
+      "line": 2037,
+      "to": "src/projects/files/execution.rs",
+      "body_sha256": "98e905e5b8eba57e18156b46a452d0e449a59fe7da1db6534c748afa6be7482f",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "execute",
+      "from": "src/projects/files.rs",
+      "line": 2094,
+      "to": "src/projects/files/execution.rs",
+      "body_sha256": "cc224f16f3cbfa9966ee0fe7ba7ceb586143347465dbf520a7f4cc4202cc83cf",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "execute_progress",
+      "from": "src/projects/files.rs",
+      "line": 2103,
+      "to": "src/projects/files/execution.rs",
+      "body_sha256": "75f8212a57e794c1655798fd9d88ca183bd2f2c0a7ebe3e14c696556253d54ea",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "set_chart_chooser",
+      "from": "src/projects/files.rs",
+      "line": 1651,
+      "to": "src/projects/files/chart_work.rs",
+      "body_sha256": "a755ebfc225b9eebdef738318357632c173e163c4d1679d06bf5ac9b297a6279",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "review_chart",
+      "from": "src/projects/files.rs",
+      "line": 1659,
+      "to": "src/projects/files/chart_work.rs",
+      "body_sha256": "fa286552fd20c4758bafafe636f10a669b15a1718d44f73a1889930f904d8bcd",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "add_chart",
+      "from": "src/projects/files.rs",
+      "line": 1680,
+      "to": "src/projects/files/chart_work.rs",
+      "body_sha256": "e2b4c682ab6a639bdbe28ebe916c2f356ff306a33b5e8587406d5869b6a26f49",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "verify_chart_export",
+      "from": "src/projects/files.rs",
+      "line": 1699,
+      "to": "src/projects/files/chart_work.rs",
+      "body_sha256": "99297e29950debc3bf01ac27a2c7f8dbfc76101ac2401d27637bfd438b67f507",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "save_dataset",
+      "from": "src/projects/files.rs",
+      "line": 1727,
+      "to": "src/projects/files/chart_work.rs",
+      "body_sha256": "3fbb75eb5ba3cd60c5d3d2e7559a6002cc80eea7eaf3879f3feb385d756b1867",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "export_chart_png",
+      "from": "src/projects/files.rs",
+      "line": 1789,
+      "to": "src/projects/files/chart_work.rs",
+      "body_sha256": "c8d68361d1277d459d8d8b97341ba476a3705293638dc3b53a5daf692a7128f3",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "perform",
+      "from": "src/projects/files.rs",
+      "line": 2392,
+      "to": "src/projects/files/dispatch.rs",
+      "body_sha256": "bbc4fc47e72758c3f977162d36118f2efb7d1f2e8fbc8feb8810de0d9b5f83b2",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "office_action",
+      "from": "src/projects/files.rs",
+      "line": 3833,
+      "to": "src/projects/files/dispatch.rs",
+      "body_sha256": "ca56ece148f6daee23e0822c1b4aa4195d6460672f9f3e7c5a3be3ff038d3b0a",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "office_batch",
+      "from": "src/projects/files.rs",
+      "line": 3843,
+      "to": "src/projects/files/dispatch.rs",
+      "body_sha256": "6c23b54fdc4d83eb8c712d2af8e6e4283c3a277c2ea4bafe05dbf75d317ef625",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "finish",
+      "from": "src/projects/files.rs",
+      "line": 3886,
+      "to": "src/projects/files/completion.rs",
+      "body_sha256": "28a8e7f79e2b222d0c854d636e4ff2c0770bdafa81834246145765d49e107699",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "finish_cancellable",
+      "from": "src/projects/files.rs",
+      "line": 3890,
+      "to": "src/projects/files/completion.rs",
+      "body_sha256": "72230c8445c903f1207f16da9a43ebe3aba571def9eb9fdc65c44257600990f7",
+      "path_rewrites": [
+        [
+          "super::",
+          "crate::projects::"
+        ]
+      ]
+    },
+    {
+      "name": "work_log_outcome_keeps_failure_before_large_request_pages",
+      "from": "src/projects/files.rs",
+      "line": 3991,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "50f95af195132bb154bee9ff61213bed04a7f15fbda301c25cf5488482c6f6ed",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    },
+    {
+      "name": "cad_operation_limit_reports_count_without_creating_output",
+      "from": "src/projects/files.rs",
+      "line": 4005,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "40282652ec7999a75820d48fa526e79bd48c4b3f0d973c0abead943a56b8c44b",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    },
+    {
+      "name": "dataset_checkpoint_reopens_and_rejects_modified_csv_without_touching_sources",
+      "from": "src/projects/files.rs",
+      "line": 4030,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "424902666832d61d5276c0c7ee0963a50f8bf70bef4896a2aeb84b37a09496ba",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    },
+    {
+      "name": "archived_results_keep_operation_identity_and_survive_restore",
+      "from": "src/projects/files.rs",
+      "line": 4073,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "c4482412801fb06fbfe691e4a1099420083e608a930c60050a372c2f4dc4c56d",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    },
+    {
+      "name": "new_drawing_context_keeps_failure_without_requiring_active_snapshot",
+      "from": "src/projects/files.rs",
+      "line": 4117,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "a76e8f7febc314082867be6a6b5f9a2e095833b8558c24616bb1d2353ef1e3d9",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    },
+    {
+      "name": "new_design_hides_drawing_schema_until_saved_and_keeps_state_after_restore",
+      "from": "src/projects/files.rs",
+      "line": 4165,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "3f594b5390298ecc6f4faf7366642d268ac320e48e2f6e855ae176d9daa7711f",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    },
+    {
+      "name": "old_broker_checkpoint_does_not_gain_a_new_drawing_gate",
+      "from": "src/projects/files.rs",
+      "line": 4229,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "67639d6f89ce76b020a08d81e9a4520e82857be90ea003f61395eb0547416534",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    },
+    {
+      "name": "staged_cad_geometry_survives_broker_restore_without_becoming_a_drawing",
+      "from": "src/projects/files.rs",
+      "line": 4248,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "bf631625eefb8090a25e034318bf0687952b318ea0672aa1617ba4fa7893e595",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    },
+    {
+      "name": "same_task_handoff_before_loading_cad_exposes_drawing_without_another_handoff",
+      "from": "src/projects/files.rs",
+      "line": 4333,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "2bcb88f410c168d30fac437df7ef195cf2c487ad6304b1791761b04841f8e36a",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    },
+    {
+      "name": "cad_tools_follow_snapshot_and_active_document_lifetime",
+      "from": "src/projects/files.rs",
+      "line": 4363,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "ebd600488fbee2f2cb6658c32e7eca512dfcf543202969581a2c4120e5c99f5f",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    },
+    {
+      "name": "tools_require_existing_edit_and_export_targets",
+      "from": "src/projects/files.rs",
+      "line": 4425,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "0259740ccfee534f289e8e1eae8369dad217720fc6267b8f41c1dbf541aa62ca",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    },
+    {
+      "name": "excel_binding_survives_broker_checkpoint_and_blocks_unplanned_export",
+      "from": "src/projects/files.rs",
+      "line": 4481,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "18d1d3fdabc1224c6079b1dd133939f149e674a8af071ec60f809c75967e9dde",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    },
+    {
+      "name": "png_exports_preserve_names_reuse_verified_files_and_survive_restore",
+      "from": "src/projects/files.rs",
+      "line": 4508,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "caf771aa629358e253f18d893bc08f6152f1d3f952170aee96871054e5b84635",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    },
+    {
+      "name": "reader_copy_allows_reader_write_access_without_unlocking_original",
+      "from": "src/projects/files.rs",
+      "line": 4576,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "9531448b6f50a444c3263dfb1b1ecba205f96d750d2a4246c98a5b748ff78c9a",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    },
+    {
+      "name": "user_chart_save_reuses_conversation_folder_without_overwrite",
+      "from": "src/projects/files.rs",
+      "line": 4634,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "ad0df0b0eaeab0add8c6c13f84a9ab5949d11ad23f98637354a60da52d0625ea",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    },
+    {
+      "name": "names_collide_without_overwrite_and_directory_pins_still_block_changes",
+      "from": "src/projects/files.rs",
+      "line": 4664,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "0466090fbf7d1de2515698cd736751f3e4e155e7d333ee52e5866dbb929885a3",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    },
+    {
+      "name": "reject_windows_escape_and_device_paths",
+      "from": "src/projects/files.rs",
+      "line": 4767,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "6704b47b5478b1f5228584a0205f9ef8231375a87dfe40f4975fae1d106e9db1",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    },
+    {
+      "name": "historical_diagram_export_keeps_its_original_source_version",
+      "from": "src/projects/files.rs",
+      "line": 4785,
+      "to": "src/projects/files/tests.rs",
+      "body_sha256": "87334577ae3eeebbad629423bbcba572141027d48981acea89fd3e751a8114b8",
+      "path_rewrites": [
+        [
+          "include_str!(\"tools.json\")",
+          "include_str!(\"../tools.json\")"
+        ]
+      ]
+    }
+  ]
+}
