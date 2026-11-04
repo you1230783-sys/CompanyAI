@@ -26,7 +26,7 @@ CompanyAI 位於 `Y:\Rust\Project\CompanyAI`，是獨立 Cargo workspace。共�
 | `-NetworkTestRoot <路徑>` | 既有SMB分享中的獨立測試目錄 |
 | `-IncludeInstaller` | NSIS封裝及安裝／更新／修復／移除驗證 |
 
-完整發行依當次授權組合上述選項。缺少CAD、Office或公司環境時明列未測；自動化、真模型與人工外觀分開判定。現行結果見[0.8.77驗證](VALIDATION_0_8_77.md)。
+完整發行依當次授權組合上述選項。缺少CAD、Office或公司環境時明列未測；自動化、真模型與人工外觀分開判定。現行結果見[0.9.1驗證](VALIDATION_0_9_1.md)。
 
 ## 程式碼位置
 
@@ -66,6 +66,6 @@ CompanyAI 位於 `Y:\Rust\Project\CompanyAI`，是獨立 Cargo workspace。共�
 
 本機私有資料、測試對話與憑證不進Git。更新私鑰在`.private/`；版本與簽署清單必須對應實際成品。純文件整理不修改Cargo版本或重製二進位檔。
 
-現行成品在dist，最近三版驗證在offline及docs。`python-inputs.zip`、`python-lock.json`、`GstarCAD-Probe.zip`與工具授權仍為離線重建輸入。歷史整包已封存，不能當目前依賴；見[離線交付](OFFLINE_AND_GIT.md)與[封存政策](ARCHIVE_POLICY.md)。
+本機成品在dist，公開NSIS及更新JSON在GitHub Releases；驗證在offline及docs。`python-inputs.zip`、`python-lock.json`、`GstarCAD-Probe.zip`與工具授權仍為離線重建輸入。歷史整包已封存，不能當目前依賴；見[離線交付](OFFLINE_AND_GIT.md)與[封存政策](ARCHIVE_POLICY.md)。
 
 VS Code使用`scripts/Configure-VSCode.ps1`產生本機設定，保留rust-src供程式碼分析，不提交含本機路徑的`.vscode/settings.json`。

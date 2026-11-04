@@ -2,10 +2,10 @@
 
 ## 目前工作
 
-- 2026-11-04 使用者授權依 docs/IMPLEMENTATION_PLAN.md 分版實作、驗證、進版與封裝；目前只交付 0.9.0 範圍，後續功能逐版進行。
+- 2026-11-04 使用者授權依 docs/IMPLEMENTATION_PLAN.md 分版實作、驗證、進版與封裝；0.9.0 已推送 main（改寫前fa693b6）；0.9.1 的 U01 指令範本與 U02 截圖提問已完成本機建置、相關回歸與封裝，後續功能逐版進行。人工框選／DPI與公司缺項見docs/VALIDATION_0_9_1.md。
 - 0.9.0本機驗證包已用v142空快取完成全Rust／原生整合與NSIS生命週期驗證；VNC入口、桌寵字級／描邊已納入。本輪已獲授權推送GitHub main；公司環境與桌寵人工DPI缺項見docs/VALIDATION_0_9_0.md。
 - 完整建置與必要封裝、相關驗證成功才可稱完成；公司實機缺項如實記錄。不能把舊發行授權當作本輪測試通過證據。
-- 安裝路徑 C:\largan\LM_AI、公司HTTP、machines.json明文格式與匯入匯出、公司更新同源與簽章檢查均不變。GitHub Releases、LFS策略、CI、LTO與漏洞檢查延後。
+- 安裝路徑 C:\largan\LM_AI、公司HTTP、machines.json明文格式與匯入匯出、公司更新同源與簽章檢查均不變。使用者於0.9.1授權GitHub Releases與歷史清理：安裝包及更新JSON移至Releases，Git不再使用LFS；CI、LTO與漏洞檢查仍延後。
 - 大檔案純搬移延後至獨立commit；不混入功能變更。
 - 歷史授權與驗證已移至 docs/history/AGENTS_BEFORE_0_9_0.md；逐段對照見 docs/AGENTS_MIGRATION.md。
 
@@ -40,7 +40,9 @@
 
 ## 發行與資料留存
 
-- 只有當次授權發行才進版、更新 dist、封裝及推送。正式交付同步 Cargo版本、公告、文件、成品與兩份簽署清單；核對遠端 main 及固定提交 LFS 下載雜湊。
+- 只有當次授權發行才進版、更新 dist、封裝及推送。正式交付同步 Cargo版本、公告、文件、成品與兩份簽署清單；核對遠端 main 與Release標籤，下載Release資產核對SHA256。
 - 更新私鑰、個人設定、Token、模型對話、.build、.codex、dist/onboarding-state.json、icon.png 與本機「舊版留存」不提交。
-- 不因檔案建立較早就移走現行原始碼、授權、vendor 或重建輸入。offline/GstarCAD-Probe.zip 與 python-inputs.zip 是目前重建依賴，保留。
+- 不因檔案建立較早就移走現行原始碼、授權、vendor 或重建輸入。offline/GstarCAD-Probe.zip、python-inputs.zip 與 installer/nsis-3.12.zip 仍是本機重建輸入，依新授權停止追蹤Git；本機保留，鎖定版本／雜湊及準備說明仍提交。
 - 封存保留原相對路徑、搬移清單與檔案核對結果；不得靜默覆寫已有留存。歷史指示以最新使用者授權為準，不把舊交接的等待／暫停當成當前狀態。
+
+- 本輪歷史清理授權：以0.8.75為新根，保留其後原始碼變更至0.9.1；先備份、推送0.9.1與上傳Release資產，再改寫main，正式Release標籤指向重建後main。保留獨立NSIS測試專案；舊應用分支不得繼續引用0.8.74以前歷史。GitHub伺服器LFS回收與Git引用清理分開回報。
