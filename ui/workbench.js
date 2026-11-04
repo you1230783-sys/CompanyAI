@@ -195,14 +195,19 @@ window.WorkbenchUI = (() => {
   function sync() {
     $("work-settings-open").hidden=!state.logged_in||!state.active_id;
     for(const dialog of dialogs) if(dialog.dataset.conversation!==state.active_id||!state.logged_in)dialog.close();
-    const hint=$("project-capability-hint");hint.hidden=!isProject();
+    const hint=$("project-capability-hint");hint.hidden=false;
+    if(!isProject()) {
+      hint.textContent="一般對話：使用公司網站服務與已加入的附件，未連結本機資料夾。";
+      return;
+    }
     if(!hint.hidden) {
       const text=$("prompt").value;
       const image=/圖片|照片|截圖|\.(png|jpe?g|bmp|tiff?)\b/i.test(text);
-      hint.textContent=image&&state.config.model!=="quality" ? "這個專案模型不支援圖片閱讀；請在模型選單切換品質模型後送出。"
+      const detail=image&&state.config.model!=="quality" ? "這個專案模型不支援圖片閱讀；請在模型選單切換品質模型後送出。"
         : /Word|Excel|報告|docx|xlsx/i.test(text) ? "可直接使用內建 Word／Excel 工具；實際 Office 可用性在執行時檢查。"
         : /Python|分析|計算/i.test(text) ? "資料分析使用隨程式提供的 Python 環境；可用套件以工具回報為準。"
         : "可指定輸出格式；多份成果會以交付清單追蹤。";
+      hint.textContent="專案對話：可讀取授權資料夾、建立副本；必要內容仍送公司模型。"+detail;
     }
   }
   $("work-settings-open").onclick=openSettings;

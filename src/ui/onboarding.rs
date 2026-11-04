@@ -19,6 +19,34 @@ struct Saved {
     tutorials: BTreeMap<String, u32>,
     /// 與完成旗標分開；略過選單不代表已學會任一教學。
     practice_welcome_dismissed: bool,
+    /// 0.8.79可能沒有此欄位；缺少時保持未知，不能推測上一個使用版本。
+    last_version: Option<String>,
+    release_pending: bool,
+    release_from: Option<String>,
+}
+
+/// 只接受三段數字版本，不能用字典排序比較0.8.100與0.8.99。
+fn version(value: &str) -> Option<[u32; 3]> {
+    let parts: Vec<_> = value
+        .split('.')
+        .map(str::parse::<u32>)
+        .collect::<Result<_, _>>()
+        .ok()?;
+    parts.try_into().ok()
+}
+
+impl Saved {
+    fn started(&mut self, current: &str) {
+        if self.last_version.as_deref() == Some(current) {
+            return;
+        }
+        let previous = self.last_version.as_deref().and_then(version);
+        let now = version(current);
+        // 降版只記錄實際執行版本，不把較新公告套到較舊程式。
+        self.release_pending = now.is_some() && (previous.is_none() || previous < now);
+        self.release_from = self.last_version.clone().filter(|s| version(s).is_some());
+        self.last_version = Some(current.into());
+    }
 }
 
 pub(super) struct Onboarding {
@@ -61,7 +89,7 @@ impl Onboarding {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
             Err(error) => return Err(error.to_string()),
         }
-        // 舊版版本欄位由 serde 忽略；保留每張教學卡的完成紀錄。
+        self.saved.started(service::CURRENT_VERSION);
         self.persist(&self.saved)
     }
 
@@ -83,6 +111,7 @@ impl Onboarding {
         }
         let mut saved = self.saved.clone();
         match topic {
+            "release" => saved.release_pending = false,
             "chat" => {
                 saved.tutorials.insert(CHAT_ID.into(), CHAT_REVISION);
             }
@@ -117,13 +146,31 @@ impl Onboarding {
     }
 
     pub(super) fn state(&self) -> Value {
-        // 公告檔只保存本版內容；升版時直接替換，不累積舊版公告。
+        // 歷史公告隨EXE提供，離線可查看；只顯示不晚於當前版本的已知紀錄。
         let release_notes: Vec<Value> =
             serde_json::from_str::<Vec<Value>>(include_str!("../../assets/release-notes.json"))
                 .unwrap_or_default()
                 .into_iter()
-                .filter(|entry| entry["version"].as_str() == Some(service::CURRENT_VERSION))
+                .filter(|entry| {
+                    entry["version"]
+                        .as_str()
+                        .and_then(version)
+                        .is_some_and(|v| Some(v) <= version(service::CURRENT_VERSION))
+                })
                 .collect();
+        let from = self.saved.release_from.as_deref().and_then(version);
+        let updates: Vec<_> = release_notes
+            .iter()
+            .filter(|entry| {
+                from.is_none_or(|v| {
+                    entry["version"]
+                        .as_str()
+                        .and_then(version)
+                        .is_some_and(|n| n > v)
+                })
+            })
+            .cloned()
+            .collect();
         let tutorials: Vec<_> = tutorial_catalog()
             .into_iter()
             .map(|mut entry| {
@@ -138,6 +185,8 @@ impl Onboarding {
         json!({"enabled":!self.disabled,"practice_welcome_pending":!self.saved.practice_welcome_dismissed,"chat_pending":!self.disabled && self.error.is_none()
             && self.saved.tutorials.get(CHAT_ID).copied().unwrap_or(0) < CHAT_REVISION,
             "release_notes":release_notes,"tutorials":tutorials,
+            "release_pending":!self.disabled && self.error.is_none() && self.saved.release_pending,
+            "from_version":self.saved.release_from,"updates":updates,
             "version":service::CURRENT_VERSION,
             "error":self.error,"state_file":self.path})
     }
@@ -148,12 +197,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn legacy_state_preserves_tutorials_without_upgrade_announcements() {
-        let saved: Saved = serde_json::from_value(json!({
+    fn legacy_state_preserves_tutorials_and_announces_actual_range() {
+        let mut saved: Saved = serde_json::from_value(json!({
             "last_version":"0.8.65", "pending_from":"0.8.64",
             "tutorials":{"chat.basics":1}
         }))
         .unwrap();
+        saved.started(service::CURRENT_VERSION);
         let state = Onboarding {
             path: None,
             saved,
@@ -161,17 +211,38 @@ mod tests {
             disabled: false,
         };
         assert_eq!(state.state()["chat_pending"], false);
-        assert!(state.state().get("from_version").is_none());
-        assert!(state.state().get("updates").is_none());
+        assert_eq!(state.state()["from_version"], "0.8.65");
+        assert_eq!(state.state()["release_pending"], true);
         let info = state.state();
         let notes = info["release_notes"].as_array().unwrap();
         assert!(!notes.is_empty());
         assert!(notes
             .iter()
-            .all(|entry| entry["version"] == service::CURRENT_VERSION));
+            .all(|entry| entry["version"].as_str().and_then(version)
+                <= version(service::CURRENT_VERSION)));
         let persisted = serde_json::to_value(&state.saved).unwrap();
         assert!(persisted.get("pending_from").is_none());
         assert_eq!(persisted["tutorials"][CHAT_ID], CHAT_REVISION);
+    }
+
+    #[test]
+    fn unknown_version_restart_ack_and_downgrade_are_distinct() {
+        let mut saved = Saved::default();
+        saved.started("0.9.0");
+        assert!(saved.release_pending);
+        assert!(saved.release_from.is_none());
+        saved.started("0.9.0");
+        assert!(saved.release_pending); // 未閱讀不能因重開而消失。
+        saved.release_pending = false;
+        saved.started("0.9.0");
+        assert!(!saved.release_pending);
+        saved.started("0.8.99");
+        assert!(!saved.release_pending); // 降版不宣告新版功能。
+        saved.started("0.8.100");
+        assert!(saved.release_pending);
+        assert_eq!(saved.release_from.as_deref(), Some("0.8.99"));
+        assert!(version("0.8.100") > version("0.8.99"));
+        assert!(version("0.8.bad").is_none());
     }
 
     #[test]

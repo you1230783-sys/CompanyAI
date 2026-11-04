@@ -3,6 +3,7 @@
 window.OnboardingUI = (() => {
   const dialog = document.createElement("dialog");
   dialog.id = "onboarding-dialog";
+  dialog.dataset.offline = "true";
   dialog.className = "onboarding-card";
   dialog.setAttribute("aria-labelledby", "onboarding-title");
   dialog.innerHTML = `<div class="onboarding-eyebrow" id="onboarding-eyebrow"></div>
@@ -115,18 +116,21 @@ window.OnboardingUI = (() => {
     paintLesson(); show(fromSettings);
   }
 
-  function openUpdates() {
-    if (!allowed()) return;
-    mode = "release";
+  function openUpdates(firstStart = false) {
+    if (!state.onboarding?.enabled || (!firstStart && !allowed())) return;
+    mode = firstStart ? "upgrade" : "release";
     const info = state.onboarding;
     $("onboarding-eyebrow").textContent = "版本更新";
     $("onboarding-title").textContent = "更新日誌";
-    $("onboarding-intro").textContent = "目前版本 " + info.version;
-    renderReleases($("onboarding-body"), info.release_notes || []);
+    $("onboarding-intro").textContent = firstStart
+      ? (info.from_version ? `從 ${info.from_version} 更新至 ${info.version}。以下列出隨本版保留的更新重點；較早缺漏請查CHANGELOG。`
+        : `目前版本 ${info.version}；首次使用或舊紀錄未保存版本，因此無法確定升級起點。以下僅列已保存的更新。`)
+      : "目前版本 " + info.version;
+    renderReleases($("onboarding-body"), firstStart ? (info.updates || []) : (info.release_notes || []));
     $("onboarding-previous").hidden = true;
-    $("onboarding-later").textContent = "返回設定";
-    $("onboarding-done").textContent = "關閉";
-    show(true);
+    $("onboarding-later").textContent = firstStart ? "下次啟動再看" : "返回設定";
+    $("onboarding-done").textContent = firstStart ? "已閱讀" : "關閉";
+    show(!firstStart);
   }
 
   $("onboarding-previous").onclick = () => {
@@ -134,12 +138,17 @@ window.OnboardingUI = (() => {
   };
   $("onboarding-later").onclick = () => dialog.close();
   $("onboarding-done").onclick = () => {
+    if (mode === "upgrade") {
+      send({type:"onboarding_ack",topic:"release"});
+      dialog.close();
+      return;
+    }
     if (!allowed()) return;
     if (mode === "lesson") {
       send({type:"onboarding_ack", topic:sequence[position].id});
       if (++position < sequence.length) { paintLesson(); return; }
     }
-    // 更新日誌只供手動查看，不記錄已讀或自動彈出。
+    // 手動重看不影響首次啟動公告；教學與版本已讀旗標互相獨立。
     dialog.close();
   };
   dialog.addEventListener("close", () => {
@@ -185,6 +194,14 @@ window.OnboardingUI = (() => {
 
   function render() {
     renderCatalog();
+    if (state.onboarding?.enabled && state.onboarding.release_pending && !state.onboarding.error && !autoShown && !timer) {
+      timer = setTimeout(() => {
+        timer = null;
+        if (!autoShown && state.onboarding?.release_pending && state.busy === "none" && !document.querySelector("dialog[open]")) openUpdates(true);
+      }, 300);
+      return;
+    }
+    if (dialog.open && mode === "upgrade") return;
     if (!allowed()) { if (dialog.open) dialog.close(); window.ProjectTutorial?.close(); return; }
     // 首次只提供選單。跳過後不再自動連播舊卡片；所有主題仍可在設定手動重看。
     if (autoShown || timer || state.busy !== "none" || state.onboarding.error) return;
