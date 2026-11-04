@@ -1,0 +1,25 @@
+{
+  "result": "PASS",
+  "checks": [
+    "combined recent conversations",
+    "recent ordering retained",
+    "project label is visible",
+    "general filter",
+    "project management filters without switching",
+    "opening preserves originating draft",
+    "preview request binds source and target",
+    "stale preview ignored",
+    "untrusted handoff stays editable inert text",
+    "attachment boundary displayed",
+    "confirm submits only preview id and edited text",
+    "confirmation cannot send chat",
+    "closing clears handoff content",
+    "source navigation retained",
+    "native overview is rendered as inert text",
+    "overview retains verification limits",
+    "old answer cannot invent execution evidence",
+    "tools grouped while stop stays directly accessible",
+    "switching conversations closes and revokes preview",
+    "handoff fits desktop and narrow viewport"
+  ]
+}
