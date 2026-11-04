@@ -171,6 +171,15 @@ pub fn spawn(work: impl FnOnce() + Send + 'static) -> JoinHandle<()> {
     })
 }
 
+/// 批次panic仍是全域故障，不能轉成一般單項錯誤後繼續提交成果。
+/// 保留hook的同步診斷，並通知同組工作取消；guarded也避免再次解構未知panic payload。
+pub(crate) fn batch<T>(cancel: &AtomicBool, work: impl FnOnce() -> AppResult<T>) -> AppResult<T> {
+    guarded(1, work).unwrap_or_else(|_| {
+        cancel.store(true, Ordering::Release);
+        Err("Error Code: 13\n批次工作發生內部異常，程式已進入保護狀態；停止後續操作，請核對既有成果後重新啟動，不重播成功寫入。".into())
+    })
+}
+
 /// 必須在extern system函式內呼叫，不能只在DispatchMessage外層捕捉。
 pub fn win32<T>(fallback: T, work: impl FnOnce() -> T) -> T {
     guarded(2, work).unwrap_or(fallback)

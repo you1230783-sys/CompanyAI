@@ -103,6 +103,11 @@ fn compute(
     cancel: &AtomicBool,
 ) -> AppResult<Prepared> {
     crate::projects::runner::check_cancel(cancel)?;
+    // 僅測試二進位提供注入點；正式成品沒有此分支或可由檔案／環境開啟的後門。
+    #[cfg(test)]
+    if let Some(result) = tests::injected_compute(request) {
+        return result;
+    }
     if let Tool::RunPython {
         purpose,
         code,
@@ -277,6 +282,7 @@ impl Broker {
             .collect();
         let mut results = Vec::new();
         for (group, jobs) in requests.chunks(2).enumerate() {
+            crate::projects::runner::check_cancel(cancel)?;
             let started = crate::calendar::local_timestamp();
             let project = &self.project;
             let reading = &self.reading;
@@ -287,11 +293,13 @@ impl Broker {
                     Err(error) => return Err(error.clone()),
                     Ok(None) => (),
                 }
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                crate::reliability::batch(cancel, || {
                     compute(project, &copies, reading, request, executable, cancel)
-                }))
-                .unwrap_or_else(|_| Err("並行工作非預期中止，未提交該項成果。".into()))
+                })
             });
+            // 同組所有執行緒都已join；panic後不再提交其結果（包含快取分支），
+            // 也不啟動下一組。先前已提交的操作紀錄保留，不回滾或重播。
+            crate::projects::runner::check_cancel(cancel)?;
             for (offset, prepared) in computed.into_iter().enumerate() {
                 let index = group * 2 + offset;
                 let task = &tasks[index];
@@ -350,7 +358,7 @@ impl Broker {
         }
         Ok(
             json!({"execution":"parallel_compute_serial_commit","max_parallel":2,"text_budget_chars":16000,"tasks":results,
-            "notice":"每項獨立成功或失敗；成功項目不重做，只另提失敗項目。不能把整批已回傳當作每項均成功。"}),
+            "notice":"一般工具錯誤為單項失敗，成功項目不重做；內部panic則停止批次並進入全域保護，須核對成果後重啟。不能把整批已回傳當作每項均成功。"}),
         )
     }
 
@@ -486,6 +494,123 @@ mod budget_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::AtomicUsize;
+
+    static INJECT: AtomicBool = AtomicBool::new(false);
+    static STARTED: AtomicUsize = AtomicUsize::new(0);
+
+    pub(super) fn injected_compute(request: &Tool) -> Option<AppResult<Prepared>> {
+        if !INJECT.load(Ordering::Acquire) {
+            return None;
+        }
+        let Tool::ReadFile { path, .. } = request else {
+            return None;
+        };
+        if let Some(index) = path
+            .strip_suffix(".txt")
+            .and_then(|n| n.parse::<usize>().ok())
+        {
+            STARTED.fetch_or(1 << index, Ordering::AcqRel);
+            if index == 2 {
+                panic!("fixture-private-batch-panic");
+            }
+        }
+        Some(if path == "fail.txt" {
+            Err("可預期的單項讀取錯誤".into())
+        } else {
+            Ok(Prepared::Read(json!({"text":"fixture","path":path})))
+        })
+    }
+
+    /// 真hook會污染整個程序，因此以同一測試二進位的獨立子程序跑實際broker批次。
+    #[test]
+    fn real_hook_stops_batch_without_replaying_committed_items() {
+        const CHILD: &str = "COMPANY_AI_BATCH_PANIC_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "projects::files::batch::tests::real_hook_stops_batch_without_replaying_committed_items", "--nocapture"])
+                .env(CHILD, "1")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert!(String::from_utf8_lossy(&output.stdout).contains("PASS real batch panic"));
+            return;
+        }
+        let root = std::env::temp_dir().join(format!(
+            "CompanyAI-batch-panic-{}",
+            crate::jobs::new_id().unwrap()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        crate::reliability::install(&root).unwrap();
+        let project = Project {
+            id: crate::jobs::new_id().unwrap(),
+            name: "fixture".into(),
+            root: root.clone(),
+            imports: BTreeMap::new(),
+        };
+        for name in [
+            "ok.txt", "fail.txt", "0.txt", "1.txt", "2.txt", "3.txt", "4.txt", "5.txt",
+        ] {
+            std::fs::write(root.join(name), "fixture").unwrap();
+        }
+        let task = |name: &str| Task {
+            task_id: name.replace('.', "-"),
+            tool: "read_file".into(),
+            arguments_json: json!({"path":name,"offset":0}).to_string(),
+        };
+        let mut broker = Broker::new(project, crate::jobs::new_id().unwrap()).unwrap();
+        broker.enable_memory("batch-fixture").unwrap();
+        let cancel = AtomicBool::new(false);
+        let exe = std::env::current_exe().unwrap();
+        INJECT.store(true, Ordering::Release);
+        let ordinary = broker
+            .run_batch(
+                "ordinary",
+                &[task("ok.txt"), task("fail.txt")],
+                &exe,
+                &cancel,
+            )
+            .unwrap();
+        assert_eq!(ordinary["tasks"][0]["outcome"]["ok"], true);
+        assert_eq!(ordinary["tasks"][1]["outcome"]["ok"], false);
+        assert!(!crate::reliability::faulted() && !cancel.load(Ordering::Acquire));
+        let prior = broker.archived_results.clone();
+        let tasks: Vec<_> = (0..6).map(|n| task(&format!("{n}.txt"))).collect();
+        let error = broker
+            .run_batch("panic", &tasks, &exe, &cancel)
+            .unwrap_err();
+        assert!(error.contains("保護狀態") && error.contains("重新啟動"));
+        assert!(crate::reliability::faulted() && cancel.load(Ordering::Acquire));
+        assert_eq!(
+            STARTED.load(Ordering::Acquire) & ((1 << 4) | (1 << 5)),
+            0,
+            "下一組不可啟動"
+        );
+        assert_eq!(
+            broker.archived_results.len(),
+            prior.len() + 2,
+            "panic同組不可提交，前一組成功仍保留"
+        );
+        for (id, value) in prior {
+            assert_eq!(broker.archived_results.get(&id), Some(&value));
+        }
+        let saved = broker.archived_results.clone();
+        assert!(broker.run_batch("panic", &tasks, &exe, &cancel).is_err());
+        assert_eq!(broker.archived_results, saved, "保護狀態不可重播已提交項目");
+        let events = serde_json::to_string(&crate::reliability::events(&root)).unwrap();
+        assert_ne!(events, "[]");
+        assert!(
+            !events.contains("fixture-private")
+                && !events.contains(&root.to_string_lossy().to_string())
+        );
+        assert!(!crate::reliability::log_failed());
+        println!("PASS real batch panic: ordinary errors continue; panic logs, cancels, stops groups/commits and preserves completed operation identities");
+    }
     #[test]
     fn batch_uses_the_same_optional_defaults_as_single_calls() {
         let request = Task {
