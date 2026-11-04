@@ -349,9 +349,13 @@ document.fonts?.ready.then(() => {
   if (stickToBottom) bottom();
 });
 
+// 舊測試／預覽資料沒有此欄位時沿用完整版；正式狀態由原生程式提供。
+function featureEnabled(name) {
+  return state.build_features == null || state.build_features[name] === true;
+}
 function showView(view) {
   if (!state.logged_in) view = "chat";
-  if (view === "vnc" && !state.config.vnc_enabled) view = "chat";
+  if (view === "vnc" && (!featureEnabled("vnc") || !state.config.vnc_enabled)) view = "chat";
   // receive() 會重繪目前頁面，只有真正跨頁才觸發一次離開操作。
   const previous = activeView;
   activeView = view;
@@ -892,6 +896,9 @@ function renderMail() {
 function receive(next) {
   window.AuthUI?.beforeRender();
   state = next;
+  for (const name of ["pet", "tarot"]) {
+    $("show-" + name).hidden = !featureEnabled(name);
+  }
   window.SettingsUI?.render(state.config);
   document.documentElement.dataset.theme = state.config.dark_mode ? "dark" : "light";
   $("dark-mode").checked = !!state.config.dark_mode;

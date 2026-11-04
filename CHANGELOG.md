@@ -1,5 +1,12 @@
 # 版本更新紀錄
 
+## 0.9.6 — Cargo選用模組
+
+- CAD、桌寵、塔羅與VNC獨立features，預設全部啟用；核心PNG預覽先以純搬移commit分離。
+- 原生工具與命令拒絕停用模組，介面及教學同步能力；既有偏好、機台檔與工作紀錄保留。
+- 開發建置的精簡EXE與正式成品分開，NSIS與公司更新仍只提供完整版。
+- [建置方式與界線](docs/CARGO_FEATURES.md)、[驗證紀錄](docs/VALIDATION_0_9_6.md)。
+
 ## 0.9.5 — Windows COM邊界整理
 
 - 統一COM初始化／釋放，守衛不能跨執行緒；S_FALSE巢狀初始化與WIC借用STA分別處理。

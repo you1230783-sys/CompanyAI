@@ -39,7 +39,9 @@ impl App {
                     return Err(error);
                 }
             }
+            #[cfg(feature = "pet")]
             Command::Pet { command } => self.pet_command(command)?,
+            #[cfg(feature = "tarot")]
             Command::Tarot { command } => self.tarot_command(command)?,
             Command::OnboardingAck { topic } => self.onboarding.acknowledge(&topic)?,
             Command::OnboardingWelcomeDismiss => self.onboarding.dismiss_practice_welcome()?,
@@ -66,6 +68,7 @@ impl App {
                 self.project_command(command)
                     .map_err(|e| self.friendly_error(stage, &e))?;
             }
+            #[cfg(feature = "vnc")]
             Command::Vnc { command } => self.vnc_command(command)?,
             Command::SiteAction { command } => self.site_action(command)?,
             Command::MailBatch { command } => self.mail_batch_command(command)?,
@@ -344,6 +347,7 @@ impl App {
                 if !selection_icon {
                     self.selection_popup.update(None);
                 }
+                #[cfg(feature = "vnc")]
                 if !vnc_enabled {
                     // 停用即清除記憶體中的機台與密碼；背景搜尋結果也不再套用。
                     self.vnc.disable();

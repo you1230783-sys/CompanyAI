@@ -65,6 +65,8 @@
       $("quick-current").checked = c.quick_actions_fast === false;
       $("always-new-chat").checked = !!c.always_new_chat;
       $("vnc-enabled").checked = !!c.vnc_enabled;
+      $("vnc-enabled").disabled = !featureEnabled("vnc");
+      $("vnc-enabled").title = featureEnabled("vnc") ? "" : "此建置未包含VNC；原有設定仍保留。";
       // 與輸入框 keydown 使用相同的已套用設定；錄製中尚未套用的快捷鍵不顯示於此。
       const sendKey = c.enter_sends ? "Enter" : "Ctrl+Enter";
       const newlineKey = c.enter_sends ? "Shift+Enter" : "Enter";

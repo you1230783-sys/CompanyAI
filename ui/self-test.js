@@ -30,6 +30,8 @@ window.runSelfTest = async (structuredFixture) => {
   try {
     // 原生 ready 訊息可能早於後續 script；先等全部介面入口就緒再驗證動態節點。
     await waitFor(() => !!window.ProjectUI && !!window.AuthUI, "UI modules initialized");
+    check(["cad","pet","tarot","vnc"].every(name =>
+      typeof LMUI.getState().build_features?.[name] === "boolean"), "native compiled capabilities received");
     await window.runReviewTests(check);
     {
       const old = LMUI.getState();
@@ -1093,6 +1095,7 @@ window.runSelfTest = async (structuredFixture) => {
       check(document.getElementById("toast").hidden, "automatic model notice uses shared three-second toast");
     } finally { send = behaviorSend; }
     // VNC 只測試本機頁面命令；攔截傳送，不讀取真實機台檔、不啟動 Viewer。
+    if (featureEnabled("vnc")) {
     const vncSend = send;
     const vncCommands = [];
     try {
@@ -1214,6 +1217,10 @@ window.runSelfTest = async (structuredFixture) => {
       check(document.getElementById("vnc-sync-controls").hidden && document.getElementById("vnc-sync-user").value === "" &&
         document.getElementById("vnc-import-preview").hidden, "VNC disabling hides synchronization and clears credentials in UI");
     } finally { send = vncSend; }
+    } else {
+      check($("show-vnc").hidden && $("vnc-enabled").disabled && $("vnc-sync-open").disabled,
+        "build without VNC hides entry and disables settings and synchronization");
+    }
     // 0.9.2：最近對話統一呈現，專案區保留管理入口；更新入口依舊有新版才顯示。
     const savedConversations = fixture.conversations;
     fixture.projects = {items:[{id:"project-test",name:"測試專案",root:"C:\\測試",import_count:0}],running:false,status:""};
@@ -1547,6 +1554,8 @@ window.runSelfTest = async (structuredFixture) => {
       .every(element => loginIds.has(element.id) || element.closest('[data-offline]') || element.disabled), "network controls remain locked; local pet and tarot are available");
     check(!document.getElementById('show-pet').disabled && !document.getElementById('show-tarot').disabled,
       "offline pet and tarot entries remain available");
+    check($("show-pet").hidden === !featureEnabled("pet") && $("show-tarot").hidden === !featureEnabled("tarot"),
+      "offline optional entries match compiled capabilities");
     const dynamicButton = document.createElement("button");
     document.body.append(dynamicButton);
     await frame();

@@ -1,6 +1,6 @@
 {
-  "recorded_at": "2026-11-04T23:55:15.4841719+08:00",
-  "version": "0.9.5.0",
+  "recorded_at": "2026-11-05T01:20:17.5038471+08:00",
+  "version": "0.9.6.0",
   "result": "PASS",
   "scope": "release validation",
   "cad_skipped": false,
@@ -80,7 +80,7 @@
     "six chart kinds, user axis ranges, reference lines and colors",
     "native customized PNG callback and verified manual _AI_Output write"
   ],
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-cc0a804214324038a952c577f0a2f5a1",
+  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-20986dd0c72344328225e0adc6fe16c3",
   "checks": [
     "weekly wizard prepare/confirm/cancel and conversation binding",
     "online inbox COM fixture",
@@ -114,7 +114,7 @@
     "Outlook folder picker, DPAPI policy and ancestor enforcement, native forged/stale selection rejection",
     "local mail coverage with 1000-message limit, no raw-body tool output, independent 50-message AI limit, branches and gaps"
   ],
-  "exe_sha256": "30538ee233def3e6bfeb01a754ce53320fbcd541909e1ab90f5646a3867d5a61",
+  "exe_sha256": "f03a81e8c53c8ad7f73219f4f3a2b48e48cb1d9f5859a4329f746c490395757f",
   "installer_built": true,
   "real_vnc_tested": false,
   "real_office_tested": true,

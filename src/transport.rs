@@ -7,6 +7,7 @@ use url::Url;
 use windows_sys::Win32::Networking::WinHttp::*;
 
 pub(crate) mod pdf;
+#[cfg(feature = "vnc")]
 pub(crate) mod vnc;
 
 pub struct HttpResponse {

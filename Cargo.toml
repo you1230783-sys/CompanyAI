@@ -1,12 +1,24 @@
 [package]
 name = "company-ai"
-version = "0.9.5"
+version = "0.9.6"
 edition = "2021"
 rust-version = "1.98"
 
 # 每個應用程式是自己的 workspace，依賴鎖定與編譯輸出不與其他專案混用。
 [workspace]
 resolver = "2"
+
+[features]
+# 正式發行維持完整功能；精簡建置使用 --no-default-features 明確選擇。
+default = ["cad", "pet", "tarot", "vnc"]
+cad = []
+pet = []
+tarot = []
+vnc = []
+
+[[example]]
+name = "vnc_smoke"
+required-features = ["vnc"]
 
 [profile.release]
 strip = "debuginfo"

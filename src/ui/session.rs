@@ -98,6 +98,7 @@ impl App {
         self.handoff = None;
         self.screenshot_command(screenshot::ScreenshotCommand::Cancel)?;
         self.projects.cancel();
+        #[cfg(feature = "vnc")]
         self.vnc.disable();
         self.mail_flow.cancel.store(true, Ordering::Relaxed);
         self.selection_popup.enabled.store(false, Ordering::Relaxed);

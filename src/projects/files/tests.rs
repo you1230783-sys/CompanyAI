@@ -1,4 +1,42 @@
 use super::*;
+
+#[test]
+#[cfg(not(feature = "cad"))]
+fn disabled_cad_rejects_cached_success_and_native_execution() {
+    let mut broker = Broker::new(
+        Project {
+            id: "disabled-cad".into(),
+            name: "停用CAD".into(),
+            root: std::env::current_dir().unwrap(),
+            imports: BTreeMap::new(),
+        },
+        "run".into(),
+    )
+    .unwrap();
+    let tool = Tool::CadInventory {};
+    let id = "a".repeat(64);
+    broker.results.insert(
+        id.clone(),
+        (serde_json::to_value(&tool).unwrap(), json!({"ok":true})),
+    );
+    assert!(broker
+        .cached_result(&id, &tool)
+        .unwrap_err()
+        .contains("未包含CAD"));
+    // 舊紀錄仍保留供檢視，不能把停用模組當成此次成功執行。
+    assert_eq!(
+        broker.recorded_operation(&id).unwrap().unwrap().1["ok"],
+        true
+    );
+    let cancel = AtomicBool::new(false);
+    assert!(crate::cad::inventory(&cancel)
+        .unwrap_err()
+        .contains("未包含CAD"));
+    assert!(crate::cad::execute(json!({}), &cancel)
+        .unwrap_err()
+        .contains("未包含CAD"));
+    assert!(crate::cad::cleanup::obsolete_runtimes().is_err());
+}
 #[test]
 fn work_log_outcome_keeps_failure_before_large_request_pages() {
     let failed = json!({"ok":false,"error":"收到101項operations，上限100"});

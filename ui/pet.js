@@ -175,6 +175,7 @@ window.PetUI = (() => {
     command({ action: "copy_prompt", text: prompt.value });
   };
   $("show-pet").onclick = () => {
+    if (!featureEnabled("pet")) return;
     if (!dialog.open) dialog.showModal();
     command({ action: "state" });
   };

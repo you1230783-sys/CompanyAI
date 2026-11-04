@@ -173,6 +173,13 @@ impl Onboarding {
             .collect();
         let tutorials: Vec<_> = tutorial_catalog()
             .into_iter()
+            .filter(|entry| {
+                let id = entry["id"].as_str().unwrap_or_default();
+                (!id.starts_with("projects.cad.") || cfg!(feature = "cad"))
+                    && (!id.starts_with("vnc.") || cfg!(feature = "vnc"))
+                    && (id != "settings.pet" || cfg!(feature = "pet"))
+                    && (id != "settings.tarot" || cfg!(feature = "tarot"))
+            })
             .map(|mut entry| {
                 let id = entry["id"].as_str().unwrap_or("");
                 let revision = entry["revision"].as_u64().unwrap_or(1);

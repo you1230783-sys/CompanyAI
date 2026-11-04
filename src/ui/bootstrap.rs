@@ -135,6 +135,7 @@ pub(super) unsafe extern "system" fn window_proc(
                         app.restore_window();
                         return 0;
                     }
+                    #[cfg(feature = "pet")]
                     crate::pet::MESSAGE => {
                         match wparam {
                             1 => app.restore_window(),
@@ -469,6 +470,7 @@ pub(super) fn run_with_local(
                 && session.as_ref().is_some_and(|s| s.valid_for(&config)),
             Ordering::Relaxed,
         );
+        #[cfg(feature = "pet")]
         let pet = crate::pet::Pet::new(window, &root, smoke || local.is_some())?;
         let mut app = App {
             panic_probe: panic_probe.is_some(),
@@ -480,10 +482,13 @@ pub(super) fn run_with_local(
             handoff: None,
             workspace_import: None,
             document_export: Default::default(),
+            #[cfg(feature = "pet")]
             pet,
+            #[cfg(feature = "tarot")]
             tarot: crate::tarot::Round::default(),
             onboarding: onboarding::Onboarding::load(smoke || local.is_some()),
             projects: projects::ProjectRuntime::load(&root),
+            #[cfg(feature = "vnc")]
             vnc: vnc::VncRuntime::default(),
             site: site::SiteRuntime::default(),
             mail_flow: mail_batch::MailRuntime::default(),

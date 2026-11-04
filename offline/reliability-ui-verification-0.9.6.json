@@ -1,0 +1,23 @@
+{
+  "result": "PASS",
+  "checks": [
+    "ordinary chat always shows folder boundary",
+    "copy obtains native error without accepting injected text",
+    "toolbar requests minimal preview, not save",
+    "diagnostics opens read-only preview",
+    "preview is exact inert text",
+    "preview does not save automatically",
+    "confirm submits only native snapshot id",
+    "save disabled until native result",
+    "cancelled save remains reviewable",
+    "closing clears private preview and revokes snapshot",
+    "diagnostics accessible without login",
+    "offline diagnostics does not bypass ordinary command authorization",
+    "first startup announcement opens before login",
+    "unknown previous version is explicitly unknown",
+    "release versions use numeric ordering",
+    "acknowledgment uses dedicated release topic",
+    "acknowledged release does not reopen",
+    "diagnostics preview fits desktop and narrow viewport"
+  ]
+}

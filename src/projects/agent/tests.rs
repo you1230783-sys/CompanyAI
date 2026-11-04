@@ -403,7 +403,10 @@ fn catalog_is_portable_and_nullable_fields_restore_original_defaults() {
             .map(|tool| tool["function"]["name"].as_str().unwrap().to_owned())
             .collect()
     };
-    let expected = names(source["tools"].as_array().unwrap());
+    let mut expected = names(source["tools"].as_array().unwrap());
+    if !cfg!(feature = "cad") {
+        expected.retain(|name| !name.starts_with("cad_") && name != "export_cad_comparison");
+    }
     assert!(!expected.is_empty());
     assert_eq!(tools.len(), expected.len());
     assert_eq!(names(&tools), expected);

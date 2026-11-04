@@ -126,7 +126,7 @@ impl Broker {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "cad"))]
 mod tests {
     use super::*;
 

@@ -196,14 +196,20 @@ impl App {
         // 先保存送出記錄，避免重開後每次重播。Windows是否顯示仍由通知／勿擾設定決定。
         self.reminders.store = Ok(next);
         self.work.tray_restore_only = true;
-        let pet = self.pet.settings();
-        let delivered =
-            if entry.channel == Channel::Pet && pet.notice_seconds > 0 && pet.bubble_opacity > 0 {
-                self.desktop_notice(&format!("提醒：{}", entry.title));
-                true
-            } else {
-                windows_notice(self.window, &entry.title)
-            };
+        #[cfg(feature = "pet")]
+        let pet_available = {
+            let pet = self.pet.settings();
+            pet.notice_seconds > 0 && pet.bubble_opacity > 0
+        };
+        // 精簡版保留舊提醒資料，原桌寵通知改由Windows呈現，不遺失提醒。
+        #[cfg(not(feature = "pet"))]
+        let pet_available = false;
+        let delivered = if entry.channel == Channel::Pet && pet_available {
+            self.desktop_notice(&format!("提醒：{}", entry.title));
+            true
+        } else {
+            windows_notice(self.window, &entry.title)
+        };
         if !delivered {
             // Shell拒絕接收時保留未送出狀態，稍後再試；不可一直每50ms重試。
             if previous.save(&self.root).is_ok() {

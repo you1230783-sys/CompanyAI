@@ -33,7 +33,9 @@ impl App {
             Event::Work(generation, event) if generation == self.generation => {
                 self.work_event(event)?
             }
+            #[cfg(feature = "vnc")]
             Event::VncSearch(id, result) => self.vnc_search_result(id, result)?,
+            #[cfg(feature = "vnc")]
             Event::VncSync(id, result) => self.vnc_sync_result(id, result),
             Event::Services(generation, version, models) if generation == self.generation => {
                 self.services_loading = false;

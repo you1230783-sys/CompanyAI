@@ -96,6 +96,13 @@ END
             .expect("UI relative path")
             .to_string_lossy()
             .replace('\\', "/");
+        // 共用JS／CSS仍存在，避免精簡版頁面載入失敗；大型選用圖像不編入EXE。
+        if (env::var_os("CARGO_FEATURE_PET").is_none() && name.starts_with("pets/"))
+            || (env::var_os("CARGO_FEATURE_TAROT").is_none()
+                && (name.starts_with("tarot/") || name == "tarot-data.json"))
+        {
+            continue;
+        }
         generated.push_str(&format!(
             "({:?}, include_bytes!({:?})),\n",
             format!("/{name}"),

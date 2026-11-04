@@ -26,7 +26,7 @@ window.ReminderUI = (() => {
     editing = null; workflow = null; repeat.value="0"; workflowHint.textContent="";
     find("[data-title]").value = "";
     find("[data-time]").value = localDate(Math.floor(Date.now()/1000) + 3600);
-    find("[data-channel]").value = "pet";
+    find("[data-channel]").value = featureEnabled("pet") ? "pet" : "windows";
     find("[data-save]").textContent = "新增提醒";
   }
   function controls() {
@@ -77,7 +77,13 @@ window.ReminderUI = (() => {
     }
     transmit({action:"save",id:editing,title,due_at,channel:find("[data-channel]").value,repeat_days:Number(repeat.value),workflow});
   };
-  function open() { if (!dialog.open) dialog.showModal(); transmit({action:"state"}); }
+  function open() {
+    const petOption = find('[data-channel] option[value="pet"]');
+    petOption.textContent = featureEnabled("pet") ? "桌寵" : "桌寵（此建置改用Windows通知）";
+    if (!editing && !featureEnabled("pet")) find("[data-channel]").value = "windows";
+    if (!dialog.open) dialog.showModal();
+    transmit({action:"state"});
+  }
   $("show-reminders").onclick = open;
   reset(); controls();
   return {open, schedule(flow,conversation) { reset();workflow={conversation,template:flow.id};find("[data-title]").value=`準備執行：${flow.name}`.slice(0,180);workflowHint.textContent="到期只通知。載入時核對帳號、專案及流程版本；填入本次參數後由您送出。";open(); }, receive(message) {

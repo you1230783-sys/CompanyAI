@@ -10,13 +10,17 @@ impl Command {
     ) -> AppResult<()> {
         let offline = matches!(
             self,
-            Command::Pet { .. }
-                | Command::Reminder { .. }
+            Command::Reminder { .. }
                 | Command::ExportDiagnostics { .. }
                 | Command::SaveDiagnostics { .. }
                 | Command::CancelDiagnostics
                 | Command::CopyError
-        ) || matches!(self, Command::Tarot { command } if !matches!(command, super::tarot::TarotCommand::Analyze { .. }));
+        );
+        #[cfg(feature = "pet")]
+        let offline = offline || matches!(self, Command::Pet { .. });
+        #[cfg(feature = "tarot")]
+        let offline = offline
+            || matches!(self, Command::Tarot { command } if !matches!(command, super::tarot::TarotCommand::Analyze { .. }));
         let login_flow = matches!(self, Self::Login | Self::CancelLogin | Self::ReopenLogin);
         let lifecycle = matches!(self, Self::Ready | Self::Exit | Self::SelfTestResult { .. })
             || matches!(self, Self::OnboardingAck { topic } if topic == "release");
@@ -86,6 +90,7 @@ mod tests {
             Command::ReadMail,
             Command::ReadMailBody,
             Command::NewChat,
+            #[cfg(feature = "vnc")]
             Command::Vnc {
                 command: super::super::vnc::VncCommand::Open,
             },
@@ -118,6 +123,29 @@ mod tests {
         };
         assert!(command.check_access(false, false, false).is_ok());
         assert!(command.check_access(false, true, false).is_ok());
+    }
+
+    #[test]
+    fn compiled_commands_reject_disabled_modules_before_dispatch() {
+        for (name, enabled, action) in [
+            ("pet", cfg!(feature = "pet"), "state"),
+            ("tarot", cfg!(feature = "tarot"), "state"),
+            ("vnc", cfg!(feature = "vnc"), "cancel_sync"),
+        ] {
+            let input = serde_json::json!({"type":name,"command":{"action":action}});
+            assert_eq!(
+                serde_json::from_value::<Command>(input).is_ok(),
+                enabled,
+                "{name}"
+            );
+        }
+        // 停用娛樂／遠端模組不應關閉核心登入與提醒。
+        for input in [
+            serde_json::json!({"type":"login"}),
+            serde_json::json!({"type":"reminder","command":{"action":"state"}}),
+        ] {
+            assert!(serde_json::from_value::<Command>(input).is_ok());
+        }
     }
 
     #[test]

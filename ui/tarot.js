@@ -139,6 +139,7 @@ window.TarotUI = (() => {
     call({ action: "analyze", id: round.id, question });
   };
   $("show-tarot").onclick = () => {
+    if (!featureEnabled("tarot")) return;
     if (!dialog.open) dialog.showModal();
     call({ action: "state" });
   };

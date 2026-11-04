@@ -116,6 +116,7 @@ impl App {
             self.cancelled.store(true, Ordering::Relaxed);
             self.socket_cancel.store(true, Ordering::Relaxed);
             self.mail_flow.cancel.store(true, Ordering::Relaxed);
+            #[cfg(feature = "vnc")]
             self.vnc.cancel_sync();
             for cancel in self.work.cancellations.values() {
                 cancel.store(true, Ordering::Relaxed);

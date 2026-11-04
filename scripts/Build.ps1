@@ -1,6 +1,10 @@
 ﻿[CmdletBinding()]
-param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$BasicValidation, [switch]$TestVnc, [switch]$TestOffice, [switch]$TestCadComparison, [string]$NetworkTestRoot, [switch]$BuildOnly, [switch]$SkipCad)
+param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$BasicValidation, [switch]$TestVnc, [switch]$TestOffice, [switch]$TestCadComparison, [string]$NetworkTestRoot, [switch]$BuildOnly, [switch]$SkipCad,
+    [switch]$NoDefaultFeatures, [ValidateSet('cad','pet','tarot','vnc')][string[]]$Features = @())
 $ErrorActionPreference = 'Stop'
+# 選用模組先提供開發建置。正式更新與NSIS仍只有完整版本，避免更新後改變功能集合。
+$customFeatures = $NoDefaultFeatures -or $Features.Count -gt 0
+if ($customFeatures -and -not $BuildOnly) { throw 'Custom features require BuildOnly; release validation and installers use the complete default feature set.' }
 # 明確允許完整非CAD驗證或含安裝包的非CAD發行；不可與局部驗證混用。
 # 安裝包仍保留既有CAD依賴，安裝測試只核對套件，不啟動CAD圖面。
 if ($SkipCad -and ($BasicValidation -or $TestCadComparison -or $BuildOnly -or (-not $ValidateOnly -and -not $IncludeInstaller))) { throw 'SkipCad requires full ValidateOnly or IncludeInstaller; CAD validation remains pending.' }
@@ -80,9 +84,16 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     # 供使用者先看介面的本機候選：沿用 v142 與離線 vendor，但不執行測試、
     # 不覆寫 dist／驗證報告或簽署清單，也不將單純編譯記成正式驗收。
     if ($BuildOnly) {
-        & cargo build --workspace --release --frozen
+        $previewArguments = @('build', '--workspace', '--release', '--frozen')
+        if ($customFeatures) {
+            # 與正式target分開，不能覆蓋待發行EXE或誤用精簡版封裝。
+            $env:CARGO_TARGET_DIR = Join-Path $projectRoot '.build\feature-preview-target'
+            if ($NoDefaultFeatures) { $previewArguments += '--no-default-features' }
+            if ($Features.Count -gt 0) { $previewArguments += @('--features', ($Features -join ',')) }
+        }
+        & cargo @previewArguments
         if ($LASTEXITCODE -ne 0) { throw 'Local preview build failed.' }
-        $previewExe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\release\company-ai.exe'
+        $previewExe = Join-Path $env:CARGO_TARGET_DIR 'x86_64-pc-windows-msvc\release\company-ai.exe'
         [ordered]@{
             recorded_at = (Get-Date -Format o)
             result = 'BUILD_ONLY'
@@ -90,6 +101,8 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
             compiler_report = $compilerReport
             linker = $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER
             empty_cargo_cache = [bool]$EmptyCargoCache
+            default_features = -not [bool]$NoDefaultFeatures
+            requested_features = @($Features)
             exe = $previewExe
             exe_sha256 = (Get-FileHash -LiteralPath $previewExe -Algorithm SHA256).Hash.ToLowerInvariant()
             tests_run = $false

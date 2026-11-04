@@ -3,12 +3,13 @@
  */
 "use strict";
 window.ProjectTutorial = (() => {
-  const catalog = [
+  const fullCatalog = [
     {id:"projects.practice.create", group:"專案操作", title:"建立專案", description:"命名、選擇資料夾，開始第一個專案對話。", steps:6},
     {id:"projects.practice.files", group:"專案操作", title:"認識檔案清單", description:"辨識資料夾、README 與程式碼，確認來源範圍。", steps:6},
     {id:"projects.practice.request", group:"專案操作", title:"提出讀檔要求", description:"說清楚閱讀範圍與交付內容，查看示範回覆。", steps:5},
     ...(window.InteractiveLessons || []),
   ];
+  let catalog = fullCatalog;
   const sampleRoot = "D:\\教學範例\\訂單小工具";
   const samplePrompt = "請先閱讀 README.md，再參考 src/main.cpp，整理主要流程與來源行號。只需要架構總覽，不必逐行閱讀，也不要修改原始檔案。";
   const readme = "# 訂單小工具\n\n用途：讀取訂單、檢查數量，計算總價。\n\n資料夾架構\n  README.md      使用說明\n  src/main.cpp   主要流程\n  data/orders.csv 範例訂單\n\n主要流程：輸入訂單 → 檢查數量 → 計算總價 → 顯示結果。";
@@ -56,6 +57,15 @@ window.ProjectTutorial = (() => {
   }
   function close() { if (host?.open) host.close(); }
   function open(settings = {}) {
+    // 獨立教學預覽保留完整目錄；正式介面依原生建置能力過濾。
+    catalog = fullCatalog.filter(item => {
+      if (typeof featureEnabled !== "function") return true;
+      const feature = item.id.startsWith("projects.cad.") ? "cad"
+        : item.id.startsWith("vnc.") ? "vnc"
+        : item.id === "settings.pet" ? "pet"
+        : item.id === "settings.tarot" ? "tarot" : null;
+      return feature == null || featureEnabled(feature);
+    });
     ensureHost();
     if (host.open) return;
     previousFocus = document.activeElement;

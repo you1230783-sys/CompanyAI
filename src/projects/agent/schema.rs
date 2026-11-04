@@ -48,6 +48,11 @@ pub(super) fn definitions(strict: bool) -> AppResult<Vec<Value>> {
         .as_array()
         .ok_or("內建工具目錄遺失。")?
         .iter()
+        .filter(|tool| {
+            tool["function"]["name"]
+                .as_str()
+                .is_some_and(crate::build_features::tool_available)
+        })
         .map(|tool| {
             let note = tool["function"]["parameters"]["properties"]["progress_note"].clone();
             let mut tool = tool.clone();
@@ -533,6 +538,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "cad")]
     fn cad_read_accepts_a_note_with_the_next_page() {
         let tools = definitions(false).unwrap();
         let schema = &tools
@@ -683,6 +689,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "cad")]
     fn cad_optional_line_style_uses_null_on_wire_and_is_omitted_for_original_tool() {
         let old=restore_optional("cad_draw",json!({"name":"old.dwg","version":"Icad.Application.1","operations":[{"kind":"line","color":7,"start":[0,0],"end":[10,0],"line_style":null}]})).unwrap();
         assert!(old["operations"][0].get("line_style").is_none());

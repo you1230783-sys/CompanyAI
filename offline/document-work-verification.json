@@ -10,8 +10,8 @@
     "native answer export DOCX/PDF with Chinese text, table, code, URL, embedded PNG and readback"
   ],
   "company_encryption_tested": false,
-  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\abaef59e208105a3ea6807d425f1e9fd",
+  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\975731423a956047fbe167cd5d0c3b49",
   "real_model_tested": false,
   "result": "PASS",
-  "version": "0.9.5"
+  "version": "0.9.6"
 }

@@ -264,6 +264,7 @@ window.WorkbenchUI = (() => {
       const text=$("prompt").value;
       const image=/圖片|照片|截圖|\.(png|jpe?g|bmp|tiff?)\b/i.test(text);
       const detail=image&&state.config.model!=="quality" ? "這個專案模型不支援圖片閱讀；請在模型選單切換品質模型後送出。"
+        : /CAD|dwg|圖面/i.test(text) && !featureEnabled("cad") ? "此建置未包含CAD，無法讀取或修改圖面。請使用包含CAD功能的版本。"
         : /Word|Excel|報告|docx|xlsx/i.test(text) ? "可直接使用內建 Word／Excel 工具；實際 Office 可用性在執行時檢查。"
         : /Python|分析|計算/i.test(text) ? "資料分析使用隨程式提供的 Python 環境；可用套件以工具回報為準。"
         : "可指定輸出格式；多份成果會以交付清單追蹤。";

@@ -4,6 +4,10 @@
 
 ## 保留版本與驗證
 
+- [0.9.6：Cargo選用模組](VALIDATION_0_9_6.md)
+- [Cargo選用模組與建置矩陣](CARGO_FEATURES.md)
+- [0.9.4：可靠度小修與純搬移拆分](VALIDATION_0_9_4.md)
+
 - [0.9.5：Windows COM邊界整理](VALIDATION_0_9_5.md)
 - [Windows綁定分工與COM生命週期](WINDOWS_BINDINGS.md)
 

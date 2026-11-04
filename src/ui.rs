@@ -55,9 +55,11 @@ mod reminders;
 mod retry;
 mod screenshot;
 mod site;
+#[cfg(feature = "tarot")]
 mod tarot;
 mod templates;
 mod tutorial_preview;
+#[cfg(feature = "vnc")]
 mod vnc;
 mod window_behavior;
 mod work;
@@ -67,6 +69,9 @@ const TRAY_MESSAGE: u32 = WM_APP + 4;
 /// 明確列舉介面命令，不提供任意檔案、程式或任意 API 執行入口。
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+// 停用VNC後次大variant縮小，但Project命令仍只有312 bytes。
+// 保留既有按值派送，避免單為變體比例增加每個專案命令的堆積配置。
+#[cfg_attr(not(feature = "vnc"), allow(clippy::large_enum_variant))]
 enum Command {
     DocumentExport {
         command: document_export::ExportCommand,
@@ -86,9 +91,11 @@ enum Command {
     Reminder {
         command: reminders::ReminderCommand,
     },
+    #[cfg(feature = "pet")]
     Pet {
         command: pet::PetCommand,
     },
+    #[cfg(feature = "tarot")]
     Tarot {
         command: tarot::TarotCommand,
     },
@@ -99,6 +106,7 @@ enum Command {
     Project {
         command: projects::ProjectCommand,
     },
+    #[cfg(feature = "vnc")]
     Vnc {
         command: vnc::VncCommand,
     },
@@ -224,7 +232,9 @@ enum Event {
     Screenshot(String, AppResult<Vec<u8>>),
     SmokePng(AppResult<()>),
     Project(projects::ProjectEvent),
+    #[cfg(feature = "vnc")]
     VncSync(String, crate::vnc::sync::SessionEvent),
+    #[cfg(feature = "vnc")]
     VncSearch(String, AppResult<PathBuf>),
     Site(u64, site::SiteEvent),
     MailBatch(u64, u64, mail_batch::MailEvent),
@@ -255,10 +265,13 @@ struct App {
     handoff: Option<handoff::Pending>,
     workspace_import: Option<workspace::Pending>,
     document_export: document_export::Runtime,
+    #[cfg(feature = "pet")]
     pet: crate::pet::Pet,
+    #[cfg(feature = "tarot")]
     tarot: crate::tarot::Round,
     onboarding: onboarding::Onboarding,
     projects: projects::ProjectRuntime,
+    #[cfg(feature = "vnc")]
     vnc: vnc::VncRuntime,
     site: site::SiteRuntime,
     mail_flow: mail_batch::MailRuntime,
@@ -324,6 +337,7 @@ impl Drop for App {
             );
         }
         self.projects.cancel();
+        #[cfg(feature = "vnc")]
         self.vnc.shutdown();
         let _ = self.preserve_draft();
         self.mail_flow.cancel.store(true, Ordering::Relaxed);
@@ -392,7 +406,7 @@ impl App {
                         .cmp(&b["notification_key"].as_str())
                 })
         });
-        let _=self.view.post(&json!({"type":"state","state":{
+        let mut state_payload = json!({"type":"state","state":{
             "update_available":self.versions.known.as_ref().is_some_and(|info| info.available()),
             "update_status":self.update_status,"update_ready":self.update_ready.is_some(),"update_busy":self.update_busy,
             "update_kind":self.update_ready.as_ref().map(|ready|ready.artifact.kind.as_str()),
@@ -403,7 +417,10 @@ impl App {
             "notifications":events,"notification_status":self.notification_status,"unread_count":self.inbox.events.iter().filter(|e| e.visible_ai()&&!e.dismissed&&!e.expired()&&e.read_at.is_none()&&!crate::projects::events::internal(&self.root,e.resource_id.as_deref())).count()+self.site.cache.unread_count.saturating_sub(self.site.cache.items.iter().filter(|e|!e.is_read&&crate::projects::events::internal(&self.root,e.resource_id.as_deref())).count()),"site_status":self.site.status,"site_loading":self.site.loading,"site_mutating":self.site.mutating,"notifications_loading":self.notifications_loading,
             "mail":self.mail,"mail_busy":self.mail_busy,"mail_batch":self.mail_batch_state(),"history_error":self.history_error,
             "work":self.work_state(),"vnc":self.vnc_state(),"version_status":self.version_status,"login_code":self.grant.as_ref().map(|g|&g.user_code)
-        }}));
+        }});
+        // 額外能力以獨立欄位加入，避免大型json!巨集超過展開深度。
+        state_payload["state"]["build_features"] = crate::build_features::state();
+        let _ = self.view.post(&state_payload);
         self.focus_draft = false;
     }
     fn fail(&mut self, error: String) {
@@ -590,5 +607,12 @@ impl App {
                 ));
             });
         }
+    }
+}
+
+#[cfg(not(feature = "vnc"))]
+impl App {
+    fn vnc_state(&self) -> serde_json::Value {
+        json!({"available":false,"enabled":false})
     }
 }

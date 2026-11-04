@@ -1,0 +1,46 @@
+{
+  "version": "0.9.6",
+  "result": "PASS",
+  "checked_at": "2026-11-04T16:30:34.5376270Z",
+  "toolset": "14.29.30133",
+  "compiler_report": [
+    "v142.c",
+    "Verified _MSC_FULL_VER=192930159 x64"
+  ],
+  "empty_cargo_cache_frozen": true,
+  "features": [],
+  "exe_bytes": 60303872,
+  "exe_sha256": "0569299bb0971bd8924486a371b9df9daf4d03fb1351090f713b5a22808f76a0",
+  "native": [
+    {
+      "name": "screenshot",
+      "cases": 10,
+      "result": "PASS"
+    },
+    {
+      "name": "composer",
+      "cases": 14,
+      "result": "PASS"
+    },
+    {
+      "name": "workspace",
+      "cases": 13,
+      "result": "PASS"
+    },
+    {
+      "name": "handoff",
+      "cases": 9,
+      "result": "PASS"
+    },
+    {
+      "name": "task-tracking",
+      "cases": 6,
+      "result": "PASS"
+    }
+  ],
+  "cad_self_check_rejected": true,
+  "cad_cleanup_rejected": true,
+  "custom_release_rejections": 2,
+  "scope": "Core development EXE only; formal default installer is verified separately.",
+  "cad_cli_disabled_reason_verified": true
+}

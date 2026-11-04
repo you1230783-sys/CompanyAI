@@ -52,6 +52,9 @@ impl Broker {
         self.outlook.check_policy()?;
         crate::jobs::validate_id(id)?;
         let request = serde_json::to_value(tool).map_err(|e| e.to_string())?;
+        if !crate::build_features::tool_available(request["tool"].as_str().unwrap_or_default()) {
+            return Err("此建置未包含CAD功能，不能重播CAD操作或沿用其成功結果。".into());
+        }
         if (self.cad_session.stopped() || self.cad_failed)
             && request["tool"]
                 .as_str()
@@ -155,6 +158,10 @@ impl Broker {
         notify: &mut dyn FnMut(&str),
     ) -> AppResult<Value> {
         crate::projects::runner::check_cancel(cancel)?;
+        let request = serde_json::to_value(tool).map_err(|e| e.to_string())?;
+        if !crate::build_features::tool_available(request["tool"].as_str().unwrap_or_default()) {
+            return Err("此建置未包含CAD功能，尚未執行或重播CAD操作。".into());
+        }
         self.reauthorize_outlook(cancel, self.chart_deadline)?;
         crate::jobs::validate_id(id)?;
         // 連重播舊工具結果都先經本次同意；授權不隨 checkpoint 恢復。
@@ -171,7 +178,6 @@ impl Broker {
                 json!({"ok":true,"result":{"declined":true,"executed":false,"message":"使用者未確認 Outlook 使用範圍；資料夾名稱僅在本機預覽，未讀取郵件或交給 AI。"}}),
             );
         }
-        let request = serde_json::to_value(tool).map_err(|e| e.to_string())?;
         if (self.cad_session.stopped() || self.cad_failed)
             && request["tool"]
                 .as_str()

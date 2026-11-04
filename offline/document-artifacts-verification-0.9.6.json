@@ -1,0 +1,43 @@
+{
+  "version": "0.9.6",
+  "result": "PASS",
+  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\975731423a956047fbe167cd5d0c3b49",
+  "checks": [
+    "styled copy keeps original embedded image bytes",
+    "styled copy keeps nonempty header text and table count",
+    "export DOCX contains one real table and original PNG bytes"
+  ],
+  "source_structure": {
+    "media": [
+      "48f3269d7394134f568d08d8e1a444a608ae89c250b7d2da4a64aaf3927bc8a7"
+    ],
+    "headers": [
+      "UNCHANGED HEADER"
+    ],
+    "tables": 1
+  },
+  "export_structure": {
+    "media": [
+      "48f3269d7394134f568d08d8e1a444a608ae89c250b7d2da4a64aaf3927bc8a7"
+    ],
+    "headers": [],
+    "tables": 1
+  },
+  "scope": "OOXML package checks; empty header XML names may be normalized by Word. Not a full layout or translation-quality test.",
+  "visual_review": {
+    "result": "PASS",
+    "renderer": "Windows.Data.Pdf",
+    "pages": 1,
+    "pdf_sha256": "32f9b5d7ccb0188b31f50c7dff715c37eb2795f9001c0bed0f4512001a1af292",
+    "checks": [
+      "Chinese title and body readable",
+      "Real table has visible borders and values",
+      "Code, source URL and embedded image remain readable with no clipping",
+      "Export scope notice visible"
+    ],
+    "limitations": [
+      "Basic export retains Markdown fences, link notation and image label as text; not full Markdown layout fidelity.",
+      "Fixed synthetic fixture only; not arbitrary document or translation-quality acceptance."
+    ]
+  }
+}

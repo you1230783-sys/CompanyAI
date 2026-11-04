@@ -1,0 +1,120 @@
+{
+  "result": "PASS",
+  "checked_at": "2026-11-04T16:24:58.0143897Z",
+  "toolset": "14.29.30133",
+  "matrix": [
+    {
+      "features": [],
+      "result": "PASS"
+    },
+    {
+      "features": [
+        "cad"
+      ],
+      "result": "PASS"
+    },
+    {
+      "features": [
+        "pet"
+      ],
+      "result": "PASS"
+    },
+    {
+      "features": [
+        "cad",
+        "pet"
+      ],
+      "result": "PASS"
+    },
+    {
+      "features": [
+        "tarot"
+      ],
+      "result": "PASS"
+    },
+    {
+      "features": [
+        "cad",
+        "tarot"
+      ],
+      "result": "PASS"
+    },
+    {
+      "features": [
+        "pet",
+        "tarot"
+      ],
+      "result": "PASS"
+    },
+    {
+      "features": [
+        "cad",
+        "pet",
+        "tarot"
+      ],
+      "result": "PASS"
+    },
+    {
+      "features": [
+        "vnc"
+      ],
+      "result": "PASS"
+    },
+    {
+      "features": [
+        "cad",
+        "vnc"
+      ],
+      "result": "PASS"
+    },
+    {
+      "features": [
+        "pet",
+        "vnc"
+      ],
+      "result": "PASS"
+    },
+    {
+      "features": [
+        "cad",
+        "pet",
+        "vnc"
+      ],
+      "result": "PASS"
+    },
+    {
+      "features": [
+        "tarot",
+        "vnc"
+      ],
+      "result": "PASS"
+    },
+    {
+      "features": [
+        "cad",
+        "tarot",
+        "vnc"
+      ],
+      "result": "PASS"
+    },
+    {
+      "features": [
+        "pet",
+        "tarot",
+        "vnc"
+      ],
+      "result": "PASS"
+    },
+    {
+      "features": [
+        "cad",
+        "pet",
+        "tarot",
+        "vnc"
+      ],
+      "result": "PASS"
+    }
+  ],
+  "core_tests": "test result: ok. 453 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.76s",
+  "scope": "All 16 combinations: frozen Clippy all-targets with denied warnings; core Rust tests. Full default build, native smoke and installer are separate."
+}

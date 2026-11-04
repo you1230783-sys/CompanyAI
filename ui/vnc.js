@@ -127,6 +127,7 @@
   }
 
   $("show-vnc").onclick = () => {
+    if (!featureEnabled("vnc")) return;
     if (!state.config.vnc_enabled || !state.logged_in) return;
     showView("vnc");
     if (!state.vnc?.loaded) command({ action: "open" });
@@ -224,8 +225,8 @@
   window.VncUI = {
     render() {
       window.VncSyncUI?.render();
-      const enabled = !!state.config.vnc_enabled && !!state.logged_in;
-      $("show-vnc").hidden = !state.config.vnc_enabled;
+      const enabled = featureEnabled("vnc") && !!state.config.vnc_enabled && !!state.logged_in;
+      $("show-vnc").hidden = !featureEnabled("vnc") || !state.config.vnc_enabled;
       $("show-vnc").disabled = !enabled;
       if (!enabled) {
         if (activeView === "vnc") showView("chat");

@@ -1,5 +1,6 @@
 //! 桌寵偏好與圖片匯入只由使用者介面發起；模型沒有此命令。
 use super::*;
+#[cfg(feature = "pet")]
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(super) enum PetCommand {
@@ -24,12 +25,14 @@ pub(super) enum PetCommand {
     },
 }
 impl App {
+    #[cfg(feature = "pet")]
     pub(super) fn desktop_notice(&mut self, message: &str) {
         if !self.smoke {
             self.pet.typography(self.config.ui_font);
             self.pet.notify(message);
         }
     }
+    #[cfg(feature = "pet")]
     pub(super) fn pet_command(&mut self, command: PetCommand) -> AppResult<()> {
         let result = (|| {
             let mut include_images = true;
@@ -96,6 +99,7 @@ impl App {
         }
         result
     }
+    #[cfg(feature = "pet")]
     pub(super) fn tick_pet(&mut self) {
         self.pet.typography(self.config.ui_font);
         let active = self.work.store.tasks.iter().any(|t| t.active());
@@ -117,6 +121,7 @@ impl App {
         let _ = self.pet.tick(phase);
     }
 }
+#[cfg(feature = "pet")]
 fn choose_png(owner: HWND) -> AppResult<Option<PathBuf>> {
     use windows::{
         core::w,
@@ -158,4 +163,11 @@ fn choose_png(owner: HWND) -> AppResult<Option<PathBuf>> {
         CoTaskMemFree(Some(value.0.cast()));
         Ok(Some(PathBuf::from(path.map_err(|e| e.to_string())?)))
     }
+}
+
+// 核心通知中心仍保存通知；未編入桌寵時不建立透明視窗或載入角色圖片。
+#[cfg(not(feature = "pet"))]
+impl App {
+    pub(super) fn desktop_notice(&mut self, _message: &str) {}
+    pub(super) fn tick_pet(&mut self) {}
 }

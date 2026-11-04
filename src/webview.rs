@@ -372,3 +372,19 @@ fn mime_type(path: &str) -> &'static str {
         _ => "application/octet-stream",
     }
 }
+
+#[cfg(test)]
+mod feature_tests {
+    #[test]
+    fn compiled_assets_keep_core_ui_and_exclude_disabled_images() {
+        let contains = |prefix: &str| {
+            super::ASSETS
+                .iter()
+                .any(|(path, _)| path.starts_with(prefix))
+        };
+        assert!(contains("/index.html") && contains("/app.js") && contains("/fonts/"));
+        assert_eq!(contains("/pets/"), cfg!(feature = "pet"));
+        assert_eq!(contains("/tarot/"), cfg!(feature = "tarot"));
+        assert_eq!(contains("/tarot-data.json"), cfg!(feature = "tarot"));
+    }
+}

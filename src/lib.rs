@@ -1,6 +1,11 @@
 //! LM_AI：將通訊、登入、儲存與 Windows 介面分開，方便逐步擴充。
 pub mod attachments;
 pub mod auth;
+pub mod build_features;
+#[cfg(feature = "cad")]
+pub mod cad;
+#[cfg(not(feature = "cad"))]
+#[path = "cad_disabled.rs"]
 pub mod cad;
 pub mod calendar;
 mod com_apartment;
@@ -16,6 +21,7 @@ pub mod jobs;
 pub mod local_test;
 pub mod notifications;
 pub mod outlook;
+#[cfg(feature = "pet")]
 pub mod pet;
 mod png_preview;
 pub mod projects;
@@ -29,10 +35,12 @@ pub mod service;
 pub mod single_instance;
 pub mod site_notifications;
 pub mod storage;
+#[cfg(feature = "tarot")]
 pub mod tarot;
 pub mod templates;
 pub mod transport;
 pub mod ui;
+#[cfg(feature = "vnc")]
 pub mod vnc;
 mod webview;
 

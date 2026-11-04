@@ -618,6 +618,9 @@ unsafe extern "system" fn window_proc(window: HWND, message: u32, w: WPARAM, l: 
                                 (4, "桌寵設定"),
                                 (5, "隱藏桌寵"),
                             ] {
+                                if id == 3 && !cfg!(feature = "tarot") {
+                                    continue;
+                                }
                                 AppendMenuW(menu, MF_STRING, id, wide(label).as_ptr());
                             }
                             let mut cursor = POINT::default();

@@ -100,7 +100,7 @@
 
   window.VncSyncUI = {
     render() {
-      const enabled = !!state.config.vnc_enabled && !!state.logged_in;
+      const enabled = featureEnabled("vnc") && !!state.config.vnc_enabled && !!state.logged_in;
       const data = state.vnc || {};
       const settings = data.sync_settings;
       $("vnc-sync-open").disabled = !enabled || !!data.closing;
