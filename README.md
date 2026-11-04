@@ -1,70 +1,36 @@
-<!-- 開頭版本公告最多保留最新 3 個版本；較早版本依 docs/ARCHIVE_POLICY.md 封存。 -->
-**0.8.79：本機提醒與桌寵文字。** 新增可選桌寵或Windows通知的本機提醒；通知沿用一般字型、加強對話框文字欄位，成功安裝後清理已知舊CAD環境。[本版驗證](docs/VALIDATION_0_8_79.md)
-
-**0.8.78：桌寵泡泡與塔羅續問。** 三款可調泡泡、桌寵即時設定、角色提示詞複製、塔羅延續抽牌及進階功能入口，新增兩項互動教學。[本版驗證](docs/VALIDATION_0_8_78.md)
-
-**0.8.77：桌寵、離線塔羅與工作操作。** 可替換透明PNG桌寵、78張離線塔羅與一般聊天解析、自動重連、Excel自訂公式與Office寫入擴充，以及既有普通圓圖塊修改。[本版驗證與限制](docs/VALIDATION_0_8_77.md)
-
 # LM_AI — Windows 工作助理
 
-CompanyAI 是 LM_AI 的原始碼專案。LM_AI 連接公司 AI 服務，提供日常問答、文件整理、專案副本修訂與 Classic Outlook 郵件分析。
+LM_AI 連接公司 AI 服務，協助問答、文件整理、Office 副本修訂、Python 分析與 Classic Outlook 郵件分析。支援 Windows 11 x64。
 
-**目前 EXE／NSIS：0.8.79** · Windows 11 x64 · [版本更新紀錄](CHANGELOG.md)
+**目前版本：0.9.0。已完成本機編譯、封裝與必要驗證；公司實機驗收仍有缺項。**
 
-## 下載與開始使用
+成品校驗：[SHA256](dist/SHA256SUMS.txt) · [驗證紀錄](docs/VALIDATION_0_9_0.md)。請使用下方的完整安裝包。
 
-1. [下載 0.8.79 完整 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從系統托盤選「離開」，再以一般權限安裝至 `C:\largan\LM_AI`；Python 會放在旁邊的 `python` 子目錄。驗證範圍請見[本版紀錄](docs/VALIDATION_0_8_79.md)；公司服務與真實 CAD 圖面仍需公司實機確認。
-2. 開啟程式，按「登入」，在瀏覽器核對短碼並允許授權。
-3. 選擇模型後開始對話；需要讀取或修改資料夾內的文件時，先建立「專案」。
+## 下載與安裝
 
-執行需要 WebView2 Runtime，不需安裝 Rust、Node 或 Python。若啟動時提示缺少 WebView2，請依 [離線安裝說明](dist/WEBVIEW2-OFFLINE.md) 處理。正式功能需要公司服務連線與桌面帳號權限。
+1. [下載 LM_AI_Setup.exe](https://media.githubusercontent.com/media/you1230783-sys/CompanyAI/main/dist/LM_AI_Setup.exe)。先從托盤離開程式，以一般權限安裝到 `C:\largan\LM_AI`。
+2. 開啟程式，按「登入」，在瀏覽器核對短碼並授權。
+3. 一般提問可直接對話；處理資料夾文件時建立專案。
 
-目前交付的 EXE 與 NSIS 都是 **0.8.79**。Python 分析需要完整安裝目錄，請不要只下載或移動 EXE。歷史完整離線包已依[封存政策](docs/ARCHIVE_POLICY.md)移出目前目錄；`python-inputs.zip` 僅供開發者離線重建 Python 環境。
+安裝包內含 Python，請保留完整安裝目錄。WebView2 Runtime 另依 [離線說明](dist/WEBVIEW2-OFFLINE.md) 安裝。使用者不需安裝 Rust 或 Node。
 
-## 可以做什麼
+程式內更新仍從公司伺服器取得並驗證簽章與同源網址。GitHub僅為目前手動下載入口。公司模型、真實Outlook及公司加密文件仍須公司環境驗收；請查看 [0.9.0驗證紀錄](docs/VALIDATION_0_9_0.md)。
 
-| 功能 | 用途 |
-| --- | --- |
-| 假資料互動教學 | 57 個主題，分類、搜尋、逐步操作與重看，不呼叫 AI 或正式工具。 |
-| 桌寵通知 | 貓／狗與六種動作，可自行生成並匯入透明 PNG；壓縮後每張小於 500KB。 |
-| 本機提醒事項 | 指定時間與內容，以桌寵或Windows提示；本機加密保存，退出期間到期項目下次啟動補送。 |
-| 離線塔羅 | 78 張牌背自行抽單張／三張，正逆位中文解讀；填問題後送一般聊天解析。 |
-| Excel 自訂公式 | 寫入任意合法 A1 公式並由 Excel 計算讀回，與來源資料分開寫入。 |
-| 一般對話與附件 | 問答、翻譯、摘要、潤飾、解釋，支援串流與背景處理。 |
-| 專案文件工作 | 支援本機、映射磁碟及 UNC；預設建立在個人資料夾的 LM_AI_Projects，成果可點擊定位。 |
-| 專案圖片閱讀 | JPG／PNG／BMP／TIFF／GIF 本機轉 JPEG，每任務100張；單張5 MB、可同時比較雙圖合計8 MB，後續保留文字重點；快速模型不支援。 |
-| 生成週報 | 建立素材資料夾、設定日期與補充、再次確認後整理文件及授權郵件；可參考上週格式。 |
-| 專案技能與圖表 | 論文證據、週報增量、Excel 抽取、跨文件搜尋、批次 Office、離線圖表與快速模型摘要委派。 |
-| 專案 Mermaid | 流程／狀態等圖形、原始碼複製、MMD／SVG／PNG、版本保留與下一輪修改。 |
-| CAD 圖面 | 讀取索引、條件查詢、原生幾何／尺寸／圖層／基本圖塊、有限 2D 修改與同圖分段新建；2008／2022 的操作與概念圖仍須人工核對。 |
-| Python 原始碼（試用） | 分段修訂 .py 並更新同一草稿，依需求核對實際成果、語法及隔離功能測試；明列模擬依賴與未驗證範圍。 |
-| Python 分析 | 本機 pandas 分組、合併、事件分析；輸出追蹤 CSV 及多工作表 XLSX，模型只接收精簡結論。 |
-| LOG 分析 | 支援只有時間的紀錄；以近似時間定位事件，分批回讀前後文並附來源行號。 |
-| 執行中傳送 | 主輸入框選下一輪提示、停止後新任務或完成後新任務；待送訊息可取消。 |
-| 本地 CSV 畫圖 | Excel／LOG 批次保存 CSV，對話只帶首尾預覽，直接引用檔案作圖及更正欄位。 |
-| 主動整理上下文 | 保存交接筆記與失效結論，移出舊工具原文，完整紀錄按需查回。 |
-| 累積閱讀筆記 | 實際區段與來源版本綁定，跨壓縮保留；概要先看README與目錄，缺細節再定向補讀。 |
-| 成果與流程 | 跨對話成果、版本／來源變更提示、ZIP交付；保存參數化流程並逐步重跑。 |
-| 報告數值綁定 | Python同次結果填入Word／Excel指定欄位，交付前檢查來源與綁定數字。 |
-| 即時進度筆記 | 執行時顯示工作摘要，結束後收進工具紀錄，保持最終答案清楚。 |
-| 長任務與專案記憶 | 每段最長 24 小時，工作筆記、加密 checkpoint、工具計數與原始結果按需回讀。 |
-| Outlook 助理與專案 | 本機勾選可用資料夾，最多1000封前文比對、AI最多50封，優先最新信與必要補讀，專案快速入口可整理待辦、回覆與追蹤事項，也可接續生成週報。 |
-| 選字快捷鍵 | 在其他程式選取文字，帶入 LM_AI 草稿後再送出。 |
-| VNC 快速連線 | 選用功能，管理機台清單並啟動已安裝的 UltraVNC Viewer。 |
+## 主要功能
 
-專案列出所有副檔名；INI、BAT、CMD、PS1及未知純文字可依內容閱讀／另存副本，Word、Excel、PowerPoint、PDF、MSG、CAD及圖片仍使用專用工具。各格式的可讀取／可修改範圍，請見 [使用指南](docs/USER_GUIDE.md)。
+- 一般對話、附件與圖片分析。
+- 授權資料夾閱讀、Office／文字副本修改及可追溯成果。
+- Python／LOG分析、圖表、流程圖與週報。
+- Classic Outlook唯讀分析、有限CAD操作及選用VNC入口。
 
-## 文件導覽
+完整範圍見 [功能表](docs/FEATURES.md)；操作見 [使用指南](docs/USER_GUIDE.md)。
 
-| 想了解的內容 | 文件 |
-| --- | --- |
-| 安裝、登入、對話與各項功能怎麼用 | [使用指南](docs/USER_GUIDE.md) |
-| 每個版本改了什麼 | [版本更新紀錄](CHANGELOG.md) |
-| 環境設定、編譯、測試與程式碼位置 | [開發說明](docs/DEVELOPMENT.md) |
-| 後端契約、提示詞、驗證與歷史文件 | [技術文件索引](docs/README.md) |
+![0.9.0候選的診斷預覽介面，使用合成測試資料](docs/images/diagnostics-preview.png)
 
-## 開發概況
+## 文件與維護
 
-使用 Rust、Windows API 與內嵌 WebView2 介面；前端資源隨 EXE 提供，不依賴 CDN。編譯基準為 Rust 1.98.1、MSVC v142 x64 與 Windows SDK 10.0.19041.0。
+- [更新紀錄](CHANGELOG.md) · [分版實作計畫](docs/IMPLEMENTATION_PLAN.md)
+- [開發說明](docs/DEVELOPMENT.md) · [技術索引](docs/README.md)
+- [錯誤與診斷](docs/ERROR_CODES.md) · [核心回歸清單](docs/CORE_REGRESSION.md)
 
-維護前請閱讀 [AGENTS.md](AGENTS.md)，編譯與交付方式見 [開發說明](docs/DEVELOPMENT.md)。
+本機介面資源隨EXE提供，不依賴CDN。建置固定Rust工具鏈與MSVC v142 x64；依賴附Cargo.lock、vendor與專案.cargo設定。維護前請讀 [AGENTS.md](AGENTS.md)。

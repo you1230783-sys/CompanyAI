@@ -1,54 +1,13 @@
 # CompanyAI 專案指引
 
-## 0.8.79必要驗證與封裝完成（2026-11-03）
+## 目前工作
 
-- R3正式流程退出0；v142 14.29.30133／cl192930159 x64、空Cargo快取frozen、fmt／Clippy、471 Rust、101 CAD契約、原生WebView2基本檢查、44相關UI／57教學／20對話框通過，另行Test-Installer完整生命週期通過。依使用者要求未重跑公司模型、Office或CAD圖面整體驗證。
-- CAD清理另以已載入DLL反例補強預檢，7項Rust案例及實際Git歷史環境的成功清理／失敗回復／占用保留通過。原生字型共用既有內嵌資源。
-- EXE bc0cde24a49f5ec04e73a7904bc48659ae5d3678458474da9b9c80b07105eea5；Setup 31bdcc5783f2d735fe5be93db9a0033d46f5182965107f31650429eb2121a836。證據offline/*-verification-0.8.79.json；Git交付以實際遠端main及.build/git-delivery-0.8.79.json核對為準。
-
-## 最新授權：0.8.79發行（2026-11-03）
-
-- 使用者已授權本機提醒、桌寵通知共用一般字型、對話框文字欄位改善，完成後進版編譯、必要驗證、NSIS與推送Git；此授權取代下方CAD清理的先不編譯指示，將待測清理一起交付。
-- 使用Build.ps1 -EmptyCargoCache -BasicValidation -IncludeInstaller，另核對提醒／字型／清理Rust測試、44項相關UI、登入門檻與Test-Installer.ps1生命週期。跳過Office、CAD實際改圖與真模型整體驗證，不冒稱完整驗收。
-- 提醒以DPAPI保存、單次本機時間、200項上限；未登入可用、縮到托盤仍提醒、完全退出後下次啟動補送。0秒／全透明桌寵泡泡改用Windows。提醒不用AI或新增公司資料技能。
-
-## 本輪：CAD舊執行環境清理（2026-11-03，來源修改）
-
-- 使用者回報C:\largan\LM_AI\cad-*累積，確認為安裝包內的CAD Python環境；目前版必需，舊版原本為回復而保留，不是任務反覆輸出的程式碼。
-- 已授權在安裝成功後清理已知舊版本；最新明確要求先不編譯，等使用者目前測試結果再決定。本輪不進版、編譯、執行原生測試、打包、Git提交／推送或清理真實安裝目錄，維持已發行0.8.78成品。
-- 新增src/cad/cleanup.rs、CLI --cleanup-old-cad-runtimes及NSIS .onInstSuccess掛接；只有新版runtime完整性核對成功，才清理非目前版且manifest雜湊在assets/cad-runtime-history.json中的目錄。歷史19指紋從實際Git發行清單核對產生，工具tools/update_cad_runtime_history.py。
-- 所有候選先鎖住目錄與檔案、核對清單及內容；拒絕連結、占用、唯讀、未知／修改／額外項目，以已驗證handle刪除，不遞迴掃刪cad-*。清理放在成功提交後、重啟前，失敗保留並不回復新版本；manifest最後刪除以支援中斷重試。
-- 已補原生單元案例及NSIS未知目錄保護案例，僅寫入來源尚未執行。已做rustfmt、PowerShell語法及歷史清單來源核對；下次授權建置時必須跑新增Rust測試、Junction／使用中反例及實際已知舊環境更新／失敗回復／移除驗證，不把靜態檢查當成通過。
-
-## 桌寵插畫追加（本版0.8.78）
-
-- 使用者打包中追加要求精細貓／狗圖畫。已使用內建image_gen生成各一張3×2透明圖集，保存assets/pet-illustrations；Create-PetDefaults.ps1只負責固定分格與縮至256PNG，保留原alpha，不以程式繪製代替AI插畫。
-- 本版舊素材建置R1已在release編譯階段停止，未當成正式通過；新12動作及輕量偏好回覆需重新編譯／驗證後再NSIS與Git。精細圖僅在初次、換角色／匯入時傳預覽，滑桿回覆只帶設定，避免放大傳輸成本。
-
-## 0.8.78正式建置完成（2026-11-03 11:04）
-
-- R2正式流程退出0；v142 14.29.30133／cl192930159 x64、空快取frozen、基本原生／WebView2、456 Rust、101 CAD契約、28新UI／57教學／20對話框通過，另行Test-Installer.ps1完整生命週期通過。這不是Office／CAD改圖／公司模型整體重測。
-- EXE 243160e18547b127afe5d16affe7c4f3a968dd1efaa83b60f1d309c561904349，Setup 21159f57d3fc332cbe68fc8acb8f1f42e8e246be3213153a54323dff1fa82f72；版本報告offline/*-verification-0.8.78.json。Git交付以實際main及.build/git-delivery-0.8.78.json核對為準，不能僅憑本段假設推送完成。
-
-## 最新發行授權（2026-11-03）
-
-- 使用者要求本批打包後上傳既有Git。進版0.8.78，以Build.ps1 -EmptyCargoCache -BasicValidation -IncludeInstaller完成相關基本建置，另跑全部Rust及Test-Installer.ps1完整NSIS生命週期；UI27項、57教學與20對話框核對依本版再驗證。
-- 本輪是桌寵／塔羅／入口UI相關驗證，不重跑Office、CAD改圖或真模型對話，不以基本PASS冒稱整體驗收。封裝成功才提交並推送main，核對遠端commit與固定提交LFS成品雜湊。保留歷史證據與本機封存，不提交私有資料。
-
-## 本輪：桌寵與塔羅體驗調整（2026-11-03）
-
-- 使用者要求實作三款可調顏色／透明度的聊天泡泡、桌寵偏好即時保存、0～5秒通知（0為不顯示）、可編輯／複製的角色生成提示詞對話框。
-- 塔羅加長78牌正逆位牌義，同一副牌支援續抽、歷次問題／牌面、不重複牌及同普通聊天續問；洗牌才清空。牌桌於當次應用程式執行期間保留，不宣稱跨重開保存。
-- 左側以進階功能整合桌寵／塔羅／Outlook／VNC，保留登入門檻；新增兩項假資料互動教學，總57項。
-- 最終R4候選已於11/3 10:23驗證退出0：v142 14.29.30133／cl192930159 x64、空Cargo快取frozen、fmt／Clippy、456 Rust、101 CAD契約、原生WebView2與來源唯讀核對通過；27項新UI／57教學／20對話框門檻通過。證據.build/pet-tarot-followup-verification.json；未重跑真模型、Office或CAD改圖，不冒稱完整驗收。
-- 本輪維持0.8.77候選，使用v142空Cargo快取frozen及相關原生／UI回歸；不覆寫dist、不進版或NSIS、不提交／推送。歷史封存規則不限制這次新功能實作。
-
-## 目前狀態與授權
-
-- 上一個發行版為 **0.8.77**，提交 `fa2833f641694554aac25483979becc17cb5c59d`；EXE／NSIS 已推送並以固定提交下載核對。驗證範圍與限制見 docs/VALIDATION_0_8_77.md。
-- 2026-11-03 使用者授權整理本機及 Git：0.8.74 及以前的版本專屬成品與歷史紀錄移至 `Y:\Rust\舊版留存\CompanyAI\`，不提交封存內容；保留 0.8.75～0.8.77、現行規格及建置依賴。
-- 本次只整理檔案與文件，提交／推送既有 origin/main；不進版、不編譯、不重製 EXE／NSIS，也不操作使用者正在測試的應用程式。Git 歷史不改寫，整理政策見 docs/ARCHIVE_POLICY.md。
-- 使用者正在實測。後續待討論事項是多成果任務進度、工具識別資訊及 CAD 未存檔成果的完成判定；本次未授權實作這些功能。
+- 2026-11-04 使用者授權依 docs/IMPLEMENTATION_PLAN.md 分版實作、驗證、進版與封裝；目前只交付 0.9.0 範圍，後續功能逐版進行。
+- 0.9.0本機驗證包已用v142空快取完成全Rust／原生整合與NSIS生命週期驗證；VNC入口、桌寵字級／描邊已納入。本輪已獲授權推送GitHub main；公司環境與桌寵人工DPI缺項見docs/VALIDATION_0_9_0.md。
+- 完整建置與必要封裝、相關驗證成功才可稱完成；公司實機缺項如實記錄。不能把舊發行授權當作本輪測試通過證據。
+- 安裝路徑 C:\largan\LM_AI、公司HTTP、machines.json明文格式與匯入匯出、公司更新同源與簽章檢查均不變。GitHub Releases、LFS策略、CI、LTO與漏洞檢查延後。
+- 大檔案純搬移延後至獨立commit；不混入功能變更。
+- 歷史授權與驗證已移至 docs/history/AGENTS_BEFORE_0_9_0.md；逐段對照見 docs/AGENTS_MIGRATION.md。
 
 ## 專案界線與程式碼風格
 
