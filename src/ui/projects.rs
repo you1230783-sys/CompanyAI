@@ -1226,6 +1226,9 @@ impl App {
             self.preserve_draft()?;
         }
         store.projects.retain(|project| project.id != id);
+        if store.default_workspace.as_deref() == Some(id) {
+            store.default_workspace = None;
+        }
         store.collapsed.remove(id);
         store.conversations.retain(|_, project| project != id);
         store.save(&self.root)?;
@@ -1238,7 +1241,7 @@ impl App {
         Ok(())
     }
 
-    fn new_project_chat(&mut self, project_id: &str) -> AppResult<()> {
+    pub(super) fn new_project_chat(&mut self, project_id: &str) -> AppResult<()> {
         if self.busy != "none" || self.work.incoming.is_some() {
             return Err("請先完成目前操作。".into());
         }

@@ -64,6 +64,8 @@ pub struct Project {
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Store {
+    #[serde(default)]
+    pub default_workspace: Option<String>,
     pub projects: Vec<Project>,
     pub conversations: BTreeMap<String, String>,
     /// 純介面偏好；不改變目前對話、專案權限或正在執行的任務。

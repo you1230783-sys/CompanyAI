@@ -6,14 +6,14 @@ let taskSignature = "";
 function workCommand(command) {
   send({ type: "work", command });
 }
-function fileStep(command) {
+function fileStep(command, type = "work") {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       fileWaiter = null;
       reject(new Error("附件接收逾時，請重新選取。"));
     }, 30000);
     fileWaiter = { resolve, reject, timer };
-    workCommand(command);
+    send({type, command});
   });
 }
 function receiveFile(message) {
@@ -49,11 +49,52 @@ const workLabels = {
   cancelled: "已取消",
   stopped: "已停止追蹤",
 };
+async function chooseFileDestination() {
+  return new Promise(resolve=>{
+    const dialog=document.createElement("dialog"),heading=document.createElement("h2"),notice=document.createElement("p");
+    const project=state.conversations.some(c=>c.id===state.active_id&&c.project_id);
+    heading.textContent="選擇檔案處理位置";
+    notice.textContent="網站附件會上傳到公司網站。本機處理會複製到授權資料夾，原檔不變；送出任務後，必要內容仍會傳給公司模型。圖片分析仍受模型能力與每任務100張上限限制。";
+    dialog.append(heading,notice);
+    for(const [value,label] of [["work","上傳給公司網站"],["workspace",project?"複製到目前專案":"複製到我的工作區"],[null,"取消"]]){
+      const button=document.createElement("button");button.textContent=label;
+      if(value==="work")button.disabled=project||!state.work?.rules?.enabled||state.work?.mode==="sync";
+      button.onclick=()=>{resolve(value);dialog.close();};dialog.append(button);
+    }
+    dialog.onclose=()=>{resolve(null);dialog.remove();};document.body.append(dialog);dialog.showModal();
+  });
+}
+async function addLocalFiles(files) {
+  if(files.length>20||files.some(f=>!f.size||f.size>50000000)||files.reduce((n,f)=>n+f.size,0)>100000000){toast("一次最多20個檔案，單檔50MB、合計100MB，不能空白。");return;}
+  let id;
+  try {
+    const response=await fileStep({action:"open"},"workspace");
+    for(const file of files){
+      const ack=await fileStep({action:"file_begin",conversation:response.conversation,name:file.name,size:file.size},"workspace");id=ack.id;
+      for(let offset=0;offset<file.size;offset+=192*1024){
+        const bytes=new Uint8Array(await file.slice(offset,offset+192*1024).arrayBuffer());let binary="";
+        for(const byte of bytes)binary+=String.fromCharCode(byte);
+        await fileStep({action:"file_chunk",id,offset,data:btoa(binary)},"workspace");
+      }
+      await fileStep({action:"file_finish",id},"workspace");id=null;
+    }
+    toast("檔案已複製到本機資料夾並加入草稿，尚未送給模型。");
+  } catch(error){if(id)send({type:"workspace",command:{action:"file_abort",id}});toast(error.message);}
+}
 async function addFiles(files) {
   if (fileBatchBusy) {
     toast("正在接收上一批附件，請稍候。");
     return;
   }
+  if (!files.length || !state.logged_in) return;
+  fileBatchBusy=true;renderWork();
+  const destination=await chooseFileDestination();
+  if(destination!=="work") {
+    try {if(destination==="workspace")await addLocalFiles(files);}
+    finally {fileBatchBusy=false;$("attachment-input").value="";renderWork();}
+    return;
+  }
+  fileBatchBusy=false;renderWork();
   const work = state.work || {},
     rules = work.rules;
   if (!state.logged_in || !rules?.enabled || work.mode === "sync") {
@@ -161,13 +202,13 @@ function renderWork() {
     tasks = work.tasks || [],
     rules = work.rules;
   const projectChat = state.conversations.some(c => c.id === state.active_id && c.project_id);
-  const available = state.logged_in && rules?.enabled && work.mode !== "sync" && !projectChat;
+  const available = state.logged_in;
   $("add-attachment").disabled =
     !available || fileBatchBusy || work.pending || state.update_required;
-  $("attachment-input").accept = rules?.allowed_extensions?.join(",") || "";
+  $("attachment-input").accept = "";
   $("attachment-rules").textContent = rules?.enabled
     ? `最多 ${Math.min(20, rules.max_count)} 個 · 單檔 ${bytesLabel(Math.min(rules.max_file_bytes, 0xffffffff))} · 合計 ${bytesLabel(rules.max_total_bytes)} · ${rules.allowed_extensions.join("、")}`
-    : "網站尚未啟用附件，仍可使用純文字聊天。";
+    : "網站尚未啟用附件；仍可選擇複製到本機工作區。";
   for (const mode of ["stream", "background"]) {
     $("execution-" + mode).hidden = !(work.modes || []).includes(mode);
     $("execution-" + mode).classList.toggle("selected", work.mode === mode);

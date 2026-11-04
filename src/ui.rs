@@ -34,6 +34,7 @@ use windows_sys::Win32::{
 };
 mod access;
 mod diagnostics;
+mod document_export;
 mod handoff;
 mod mail_batch;
 mod onboarding;
@@ -49,12 +50,19 @@ mod tutorial_preview;
 mod vnc;
 mod window_behavior;
 mod work;
+mod workspace;
 const TRAY_MESSAGE: u32 = WM_APP + 4;
 
 /// 明確列舉介面命令，不提供任意檔案、程式或任意 API 執行入口。
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Command {
+    DocumentExport {
+        command: document_export::ExportCommand,
+    },
+    Workspace {
+        command: workspace::WorkspaceCommand,
+    },
     Handoff {
         command: handoff::HandoffCommand,
     },
@@ -201,6 +209,7 @@ enum Command {
     },
 }
 enum Event {
+    DocumentExport(String, u64, AppResult<serde_json::Value>),
     Screenshot(String, AppResult<Vec<u8>>),
     SmokePng(AppResult<()>),
     Project(projects::ProjectEvent),
@@ -233,6 +242,8 @@ struct App {
     templates: templates::TemplateRuntime,
     screenshot: screenshot::Runtime,
     handoff: Option<handoff::Pending>,
+    workspace_import: Option<workspace::Pending>,
+    document_export: document_export::Runtime,
     pet: crate::pet::Pet,
     tarot: crate::tarot::Round,
     onboarding: onboarding::Onboarding,
@@ -634,6 +645,8 @@ impl App {
         }
     }
     fn logout(&mut self) -> AppResult<()> {
+        self.document_export.cancel();
+        self.workspace_import = None;
         self.handoff = None;
         self.screenshot_command(screenshot::ScreenshotCommand::Cancel)?;
         self.projects.cancel();
@@ -746,6 +759,14 @@ impl App {
         Ok(())
     }
     fn command(&mut self, command: Command) -> AppResult<()> {
+        if self.workspace_import.is_some()
+            && !matches!(
+                command,
+                Command::Workspace { .. } | Command::Draft { .. } | Command::Exit | Command::Logout
+            )
+        {
+            return Err("正在匯入本機檔案，請等待完成後再切換對話或送出。".into());
+        }
         if crate::reliability::faulted()
             && !matches!(
                 command,
@@ -761,6 +782,8 @@ impl App {
         }
         command.check_access(self.logged_in(), self.versions.blocked(), self.smoke)?;
         match command {
+            Command::DocumentExport { command } => self.export_command(command)?,
+            Command::Workspace { command } => self.workspace_command(command)?,
             Command::Reminder { command } => self.reminder_command(command)?,
             Command::Template { command } => self.template_command(command)?,
             Command::Screenshot { command } => self.screenshot_command(command)?,
@@ -887,6 +910,10 @@ impl App {
                             return Ok(());
                         }
                         if let Err(error) = self.verify_handoff_flow() {
+                            self.smoke_result = Some(Err(error));
+                            return Ok(());
+                        }
+                        if let Err(error) = self.verify_workspace_flow() {
                             self.smoke_result = Some(Err(error));
                             return Ok(());
                         }
@@ -1406,6 +1433,7 @@ impl App {
             && !matches!(
                 event,
                 Event::Project(..)
+                    | Event::DocumentExport(..)
                     | Event::Services(..)
                     | Event::UpdateReady(..)
                     | Event::Grant(..)
@@ -1416,6 +1444,9 @@ impl App {
             return Ok(());
         }
         match event {
+            Event::DocumentExport(id, generation, result) => {
+                self.export_event(id, generation, result)?
+            }
             Event::Screenshot(id, result) => self.screenshot_event(id, result)?,
             Event::Site(generation, event) if generation == self.generation => {
                 self.site_event(event)?
@@ -2393,6 +2424,8 @@ fn run_with_local(
             templates: templates::TemplateRuntime::load(&root),
             screenshot: screenshot::Runtime::default(),
             handoff: None,
+            workspace_import: None,
+            document_export: Default::default(),
             pet,
             tarot: crate::tarot::Round::default(),
             onboarding: onboarding::Onboarding::load(smoke || local.is_some()),

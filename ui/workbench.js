@@ -83,6 +83,7 @@ window.WorkbenchUI = (() => {
     settingsDialog.showModal(); command({action:"work_settings",conversation:owner,request_id:settingsRequest});
   }
   function receive(message) {
+    if(exportReceive(message))return;
     if (message.type !== "work_settings" || message.request_id !== settingsRequest || !settingsDialog?.open || message.conversation !== owner || owner !== state.active_id) return;
     settingsBusy = false; scope.disabled = false; conditionInput.disabled = false;
     preferenceForm.querySelectorAll('input,select,textarea').forEach(element=>element.disabled=false);
@@ -121,6 +122,7 @@ window.WorkbenchUI = (() => {
     $("prompt").focus();
   }
   function attachReply(tools, message, index, content) {
+    if(message.role==="assistant") {const exportButton=make("button","匯出 Word／PDF");exportButton.onclick=()=>exportDialog(index);tools.append(exportButton);}
     if (!isProject() || message.role !== "assistant") return;
     const conversation = state.active_id;
     const change = make("button","修改選取文字"); change.onmousedown = event => event.preventDefault();
@@ -192,7 +194,63 @@ window.WorkbenchUI = (() => {
     };
     dialog.append(status,add);dialog.showModal();
   }
+  let exportView=null,exportStatus=null,exportSave=null,exportName=null,exportId=null;
+  function exportDialog(index=null){
+    if(exportView?.open)exportView.close();
+    const conversation=state.active_id;exportView=modal(index===null?"匯出整段對話":"匯出這則回答");
+    const format=field(exportView,"格式",select([["docx","Word"],["pdf","PDF"]],"docx"));
+    exportName=field(exportView,"副本檔名",input("對話匯出.docx",180));
+    exportStatus=make("p","先預覽匯出範圍。直接使用已保存內容，不經AI重寫。標題、表格、程式碼與本機PNG支援；其他Markdown語法原字保留。來源引用文字會保留。互動圖表、遠端圖片與附件本身不自動嵌入。");
+    const preview=make("button","預覽匯出範圍");exportSave=make("button","確認匯出副本");exportSave.disabled=true;exportId=null;
+    format.onchange=()=>{exportName.value="對話匯出."+format.value;exportId=null;exportSave.disabled=true;};
+    preview.onclick=()=>{exportSave.disabled=true;exportStatus.textContent="核對內容中…";send({type:"document_export",command:{action:"preview",conversation,index,pdf:format.value==="pdf"}});};
+    exportSave.onclick=()=>{if(!exportId)return;exportSave.disabled=true;preview.disabled=true;format.disabled=true;exportStatus.textContent="正在產生副本及讀回驗證…";send({type:"document_export",command:{action:"save",id:exportId,name:exportName.value}});exportId=null;};
+    exportView.addEventListener("close",()=>send({type:"document_export",command:{action:"cancel"}}));
+    exportView.append(exportStatus,preview,exportSave);exportView.showModal();
+  }
+  function exportReceive(message){
+    if(!message.type?.startsWith("document_export_"))return false;
+    if(message.type==="document_export_preview"&&exportView?.open&&message.conversation===state.active_id){exportId=message.id;exportSave.disabled=false;exportStatus.textContent=`${message.messages}則訊息、${message.blocks}個內容區塊。輸出位置：${message.folder}。同名檔案自動改名。${(message.warnings||[]).join("；")}`;}
+    if(message.type==="document_export_done"){const text=`已匯出並讀回驗證：${message.result.path}。${message.result.notice}`;if(exportStatus)exportStatus.textContent=text;toast(text);}
+    if(message.type==="document_export_error"){if(exportStatus)exportStatus.textContent=message.message;toast(message.message);}
+    return true;
+  }
+  const exportAll=make("button","匯出整段對話 Word／PDF");$("project-tools-menu").append(exportAll);exportAll.onclick=()=>exportDialog();
+  const documentButton=make("button","翻譯／比較／新建 Markdown");$("project-tools-menu").append(documentButton);
+  documentButton.onclick=()=>{
+    if(!isProject()){toast("請先選擇專案或我的工作區。");return;}
+    const conversation=state.active_id,dialog=modal("文件工作");
+    const mode=field(dialog,"工作",select([["translate","Word翻譯成新文件"],["styled","保留原樣式的DOCX副本翻譯"],["compare","Word／Excel差異比較"],["markdown","新建Markdown文件"]],"translate"));
+    const source=field(dialog,"來源相對路徑（新建Markdown可空白）",input("",500));
+    const second=field(dialog,"比較的第二份相對路徑",input("",500));
+    const language=field(dialog,"翻譯目標語言",input("繁體中文",80));
+    const name=field(dialog,"輸出副本檔名",input("翻譯.docx",180));
+    const glossary=field(dialog,"專有名詞表：每行 原文=譯名",make("textarea"));glossary.maxLength=12000;
+    const key=field(dialog,"Excel唯一鍵欄（可空白，例如A；第一列為標題）",input("",3));
+    const details=field(dialog,"補充需求／Markdown文件內容",make("textarea"));details.maxLength=12000;
+    const configureFields=()=>{
+      const translating=["translate","styled"].includes(mode.value),comparing=mode.value==="compare",markdown=mode.value==="markdown";
+      source.parentElement.hidden=markdown;second.parentElement.hidden=!comparing;language.parentElement.hidden=!translating;
+      name.parentElement.hidden=comparing;glossary.parentElement.hidden=!translating;key.parentElement.hidden=!comparing;
+      if(markdown&&name.value==="翻譯.docx")name.value="新文件.md";
+      if(translating&&name.value==="新文件.md")name.value="翻譯.docx";
+    };mode.onchange=configureFields;configureFields();
+    dialog.append(make("p","檔案和名詞表視為資料。原樣式翻譯涵蓋正文／表格的可編輯文字；特殊欄位、圖片段落、頁首頁尾、文字方塊等保持原樣，文字長度可能造成重排。比較以可讀範圍為準。新建Markdown仍遵守受保護資料不得轉存的限制。"));
+    const add=make("button","加入草稿，檢查後送出");add.onclick=()=>{
+      try{
+        let prompt;
+        if(mode.value==="markdown")prompt=`請載入text-edit，新建Markdown文件（create_working_copy的source為null），編輯後儲存副本並讀回驗證；遵守受保護資料轉存限制。檔名：${JSON.stringify(name.value.toLowerCase().endsWith(".md")?name.value:name.value+".md")}。內容需求：\n${details.value}`;
+        else if(mode.value==="compare"){if(!source.value||!second.value)throw new Error("請填兩份文件路徑");prompt=`請載入office-edit，使用document_task compare比較以下文件，逐項引用location、原值／新值及原生範圍，列明未比較與截斷項目。${JSON.stringify({left:source.value,right:second.value,key_column:key.value.trim().toUpperCase()||null})}\n${details.value}`;}
+        else{if(!source.value||!language.value)throw new Error("請填來源與目標語言");const terms=glossary.value.split(/\r?\n/).filter(v=>v.trim()).map(v=>{const i=v.indexOf("=");if(i<=0||!v.slice(i+1).trim())throw new Error("名詞表每行需為原文=譯名");return {source:v.slice(0,i).trim(),target:v.slice(i+1).trim()};});prompt=`請載入office-edit，使用document_task逐段翻譯、分頁及核對revision，所有可譯區段完成後才finish_translation，列出未涵蓋區域與人工校對需求。prepare_translation參數：${JSON.stringify({path:source.value,language:language.value,mode:mode.value==="styled"?"preserve_styles":"new_document",terms})}；輸出檔名：${JSON.stringify(name.value)}。\n${details.value}`;}
+        if(appendDraft(prompt,conversation))dialog.close();
+      }catch(error){toast(error.message);}
+    };dialog.append(add);dialog.showModal();
+  };
+  const workspaceButton=make("button","我的工作區");$("project-tools-menu").append(workspaceButton);
+  workspaceButton.onclick=async()=>{if(fileBatchBusy)return;fileBatchBusy=true;try{await fileStep({action:"open_default"},"workspace");}catch(error){toast(error.message);}finally{fileBatchBusy=false;renderWork();}};
   function sync() {
+    exportAll.disabled=!state.logged_in||!state.active_id;
+    documentButton.disabled=!state.logged_in||!isProject();workspaceButton.disabled=!state.logged_in;
     $("work-settings-open").hidden=!state.logged_in||!state.active_id;
     for(const dialog of dialogs) if(dialog.dataset.conversation!==state.active_id||!state.logged_in)dialog.close();
     const hint=$("project-capability-hint");hint.hidden=false;

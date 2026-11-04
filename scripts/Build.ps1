@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$BasicValidation, [switch]$TestVnc, [switch]$TestOffice, [switch]$TestCadComparison, [string]$NetworkTestRoot, [switch]$BuildOnly, [switch]$SkipCad)
 $ErrorActionPreference = 'Stop'
 # 明確允許完整非CAD驗證或含安裝包的非CAD發行；不可與局部驗證混用。
@@ -169,6 +169,8 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     if (Test-Path -LiteralPath $composerReport) { Remove-Item -LiteralPath $composerReport }
     $screenshotReport = Join-Path ([IO.Path]::GetTempPath()) 'CompanyAI-ui-smoke\screenshot-verification.json'
     if (Test-Path -LiteralPath $screenshotReport) { Remove-Item -LiteralPath $screenshotReport }
+    $workspaceReport = Join-Path ([IO.Path]::GetTempPath()) 'CompanyAI-ui-smoke\workspace-verification.json'
+    if (Test-Path -LiteralPath $workspaceReport) { Remove-Item -LiteralPath $workspaceReport }
     $handoffReport = Join-Path ([IO.Path]::GetTempPath()) 'CompanyAI-ui-smoke\handoff-verification.json'
     if (Test-Path -LiteralPath $handoffReport) { Remove-Item -LiteralPath $handoffReport }
     $trackingReport = Join-Path ([IO.Path]::GetTempPath()) 'CompanyAI-ui-smoke\task-tracking-verification.json'
@@ -193,6 +195,8 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     $screenshotReport = Join-Path ([IO.Path]::GetTempPath()) 'CompanyAI-ui-smoke\screenshot-verification.json'
     $screenshotCheck = Get-Content -LiteralPath $screenshotReport -Raw | ConvertFrom-Json
     if ($screenshotCheck.result -ne 'PASS' -or $screenshotCheck.cases.Count -lt 10) { throw 'Native screenshot flow verification failed.' }
+    $workspaceCheck = Get-Content -LiteralPath $workspaceReport -Raw | ConvertFrom-Json
+    if ($workspaceCheck.result -ne 'PASS' -or $workspaceCheck.cases.Count -lt 13) { throw 'Native workspace/export/reminder verification failed.' }
     $handoffCheck = Get-Content -LiteralPath $handoffReport -Raw | ConvertFrom-Json
     if ($handoffCheck.result -ne 'PASS' -or $handoffCheck.cases.Count -lt 9) { throw 'Native conversation handoff verification failed.' }
     $composerCheck = Get-Content -LiteralPath $composerReport -Raw | ConvertFrom-Json
@@ -251,6 +255,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         Copy-Item -LiteralPath $composerReport -Destination (Join-Path $projectRoot 'offline\composer-verification.json') -Force
         Copy-Item -LiteralPath $screenshotReport -Destination (Join-Path $projectRoot 'offline\screenshot-verification.json') -Force
         Copy-Item -LiteralPath $handoffReport -Destination (Join-Path $projectRoot 'offline\handoff-verification.json') -Force
+        Copy-Item -LiteralPath $workspaceReport -Destination (Join-Path $projectRoot 'offline\workspace-verification.json') -Force
         Copy-Item -LiteralPath $trackingReport -Destination (Join-Path $projectRoot 'offline\task-tracking-verification.json') -Force
         $basic | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $projectRoot 'offline\exe-verification.json') -Encoding UTF8
         @("Scope: basic validation; full validation pending", "MSVC: $env:VCToolsVersion", "Compiler: $compiler", $compilerReport, "Linker: $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER", "SDK: $env:WindowsSDKVersion", "Cargo home: $env:CARGO_HOME", (& rustc -vV), (& cargo -V), $dependencies) | Set-Content -LiteralPath (Join-Path $projectRoot 'offline\environment.txt') -Encoding UTF8
@@ -293,6 +298,12 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         $powerShellExe = (Get-Process -Id $PID).Path
         & $powerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Test-Office.ps1') -Exe $exe -Probe $officeProbe
         if ($LASTEXITCODE -ne 0) { throw 'Isolated native Office verification failed.' }
+        & cargo build --example document_work_smoke --frozen
+        if ($LASTEXITCODE -ne 0) { throw 'Document work harness build failed.' }
+        & (Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\document_work_smoke.exe') $exe (Join-Path $projectRoot '.build')
+        if ($LASTEXITCODE -ne 0) { throw 'Document translation/comparison/export verification failed.' }
+        Copy-Item -LiteralPath (Join-Path $projectRoot '.build\document-work-verification.json') -Destination (Join-Path $projectRoot 'offline\document-work-verification.json') -Force
+
         & cargo build --example office_images --frozen
         if ($LASTEXITCODE -ne 0) { throw 'Office image harness build failed.' }
         $imageProbe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\office_images.exe'
@@ -412,6 +423,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     Copy-Item -LiteralPath $composerReport -Destination (Join-Path $projectRoot 'offline\composer-verification.json') -Force
     Copy-Item -LiteralPath $screenshotReport -Destination (Join-Path $projectRoot 'offline\screenshot-verification.json') -Force
     Copy-Item -LiteralPath $handoffReport -Destination (Join-Path $projectRoot 'offline\handoff-verification.json') -Force
+    Copy-Item -LiteralPath $workspaceReport -Destination (Join-Path $projectRoot 'offline\workspace-verification.json') -Force
     Copy-Item -LiteralPath (Join-Path $projectRoot '.build\project-smoke\log-verification.json') -Destination (Join-Path $projectRoot 'offline\log-verification.json') -Force
     # 0.8.1 起僅交付 LM_AI.exe；移除已停用的相容檔名，不再產生第二份主程式。
     $legacyExe = Join-Path $dist 'CompanyAI.exe'

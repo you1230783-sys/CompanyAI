@@ -456,7 +456,13 @@ window.runSelfTest = async (structuredFixture) => {
       bubbles: true,
       cancelable: true,
     });
+    const chooseWebsiteForTest=async()=>{
+      await frame();
+      const choice=[...document.querySelectorAll('dialog[open] button')].find(button=>button.textContent==='上傳給公司網站');
+      check(choice&&!choice.disabled,'attachment destination offers company website');choice.click();await frame();
+    };
     document.getElementById("prompt").dispatchEvent(pasteImage);
+    await chooseWebsiteForTest();
     await frame();
     check(pasteImage.defaultPrevented, "image paste is routed to attachments");
     check(
@@ -492,7 +498,8 @@ window.runSelfTest = async (structuredFixture) => {
       selection.items.add(sampleFile);
       const picker = document.getElementById("attachment-input");
       picker.files = selection.files;
-      await picker.onchange({target: picker});
+      const selectedFiles=picker.onchange({target:picker});
+      await chooseWebsiteForTest();await selectedFiles;
       check(fileCommands.map(command => command.action).join(",") === "file_begin,file_chunk,file_chunk,file_finish",
         "selecting attachment in existing conversation completes native handoff");
       const chunks = fileCommands.filter(command => command.action === "file_chunk");
@@ -507,14 +514,14 @@ window.runSelfTest = async (structuredFixture) => {
         "file reception restores controls without waiting for state push");
       rejectFileAction = "file_chunk";
       fileCommands.length = 0;
-      await WorkUI.addFiles([sampleFile]);
+      {const upload=WorkUI.addFiles([sampleFile]);await chooseWebsiteForTest();await upload;}
       check(fileCommands.map(command => command.action).join(",") === "file_begin,file_chunk,file_abort" &&
         !WorkUI.getFileBusy() && !document.getElementById("add-attachment").disabled &&
         document.getElementById("toast").textContent.includes("模擬附件接收失敗"),
         "failed reception aborts partial file and unlocks picker");
       rejectFileAction = null;
       fileCommands.length = 0;
-      await WorkUI.addFiles([sampleFile]);
+      {const upload=WorkUI.addFiles([sampleFile]);await chooseWebsiteForTest();await upload;}
       check(fileCommands.at(-1).action === "file_finish" && !WorkUI.getFileBusy(),
         "same attachment can be selected again after failure");
     } finally { send = attachmentSend; }
