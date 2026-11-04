@@ -104,6 +104,7 @@ def verify(manifest):
     data = json.loads(Path(manifest).read_text(encoding='utf-8'))
     sources = {}
     checked = 0
+    moved = {}
     for entry in data['functions']:
         key = (data['source_commit'], entry['from'])
         if key not in sources:
@@ -121,7 +122,19 @@ def verify(manifest):
         target = candidates[0]
         assert formatted_digest(expected)==formatted_digest(new[target['body']:target['end']]), (entry, '函式本體不符')
         checked += 1
-    print(json.dumps({'result':'PASS','manifest':str(manifest),'functions':checked},ensure_ascii=False))
+        moved.setdefault(entry['from'],set()).add((entry['name'],entry['line']))
+    retained = 0
+    for (_, path), old in sources.items():
+        current=Path(path).read_text(encoding='utf-8')
+        remaining=[f for f in functions(old) if (f['name'],f['line']) not in moved[path]]
+        assert len(functions(current))==len(remaining), (path,'父模組有未列明的新增／刪除函式')
+        for previous in remaining:
+            targets=[f for f in functions(current) if f['name']==previous['name'] and f['indent']==previous['indent']]
+            assert len(targets)==1, (path,previous['name'])
+            target=targets[0]
+            assert formatted_digest(old[previous['body']:previous['end']])==formatted_digest(current[target['body']:target['end']]), (path,previous['name'],'留在父模組的函式被改動')
+            retained += 1
+    print(json.dumps({'result':'PASS','manifest':str(manifest),'functions':checked,'retained_functions':retained},ensure_ascii=False))
 
 
 if __name__ == '__main__':
