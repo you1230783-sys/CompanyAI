@@ -3,7 +3,7 @@ param()
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Audit-Policy.ps1')
 $fixture = @'
-{"database":{"last-commit":"test-revision"},"lockfile":{"dependency-count":125},"settings":{"ignore":[],"target_arch":[],"target_os":[]},"vulnerabilities":{"found":false,"count":0},"warnings":{}}
+{"database":{"last-commit":"test-revision"},"lockfile":{"dependency-count":125},"settings":{"ignore":[],"target_arch":[],"target_os":[],"severity":null,"informational_warnings":["unmaintained","unsound","notice"]},"vulnerabilities":{"found":false,"count":0},"warnings":{}}
 '@
 $notice = '{"package":{"name":"ttf-parser","version":"0.25.1"},"advisory":{"id":"RUSTSEC-2026-0192"}}'
 $cases = @(
@@ -30,4 +30,12 @@ $filtered.settings.ignore = @('RUSTSEC-2026-0192')
 $rejected = $false
 try { Get-DependencyAuditDecision -Report $filtered -ToolExitCode 0 | Out-Null } catch { $rejected = $true }
 if (-not $rejected) { throw 'Hidden advisory filtering was accepted.' }
-Write-Host 'PASS audit policy: 10 cases, including expiry, new warnings, tool failure and incomplete data.'
+foreach ($filter in @('severity', 'informational_warnings')) {
+    $filtered = $fixture | ConvertFrom-Json
+    if ($filter -eq 'severity') { $filtered.settings.severity = 'critical' }
+    else { $filtered.settings.informational_warnings = @('notice') }
+    $rejected = $false
+    try { Get-DependencyAuditDecision -Report $filtered -ToolExitCode 0 | Out-Null } catch { $rejected = $true }
+    if (-not $rejected) { throw "Hidden advisory filtering was accepted: $filter" }
+}
+Write-Host 'PASS audit policy: 12 cases, including expiry, new warnings, tool failure and advisory filtering.'

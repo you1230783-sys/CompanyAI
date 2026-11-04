@@ -9,7 +9,9 @@ function Get-DependencyAuditDecision {
     if (-not $Report.database.'last-commit' -or $Report.lockfile.'dependency-count' -lt 1 -or
         $null -eq $Report.vulnerabilities.found -or $null -eq $Report.warnings -or
         $null -eq $Report.settings -or @($Report.settings.ignore).Count -ne 0 -or
-        @($Report.settings.target_arch).Count -ne 0 -or @($Report.settings.target_os).Count -ne 0) {
+        @($Report.settings.target_arch).Count -ne 0 -or @($Report.settings.target_os).Count -ne 0 -or
+        $null -ne $Report.settings.severity -or
+        @('unmaintained', 'unsound', 'notice' | Where-Object { $_ -notin $Report.settings.informational_warnings }).Count -ne 0) {
         throw 'Incomplete audit report or unexpected advisory filtering.'
     }
     $passed = $ToolExitCode -eq 0 -and -not $Report.vulnerabilities.found -and $Report.vulnerabilities.count -eq 0
