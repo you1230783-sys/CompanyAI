@@ -323,9 +323,28 @@ mod tests {
 
     #[test]
     fn loaded_dll_preserves_whole_tree_even_after_loader_closed_file_handles() {
+        // DLL loader狀態是程序共用的；WIC／COM平行測試也會載入系統DLL。
+        // 使用獨立測試程序，並核對實際載入的路徑，避免誤測另一個已載入模組。
+        const CHILD: &str = "LM_AI_DLL_CLEANUP_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "cad::cleanup::tests::loaded_dll_preserves_whole_tree_even_after_loader_closed_file_handles", "--nocapture"])
+                .env(CHILD, "1")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
         use windows_sys::Win32::{
             Foundation::FreeLibrary,
-            System::LibraryLoader::{LoadLibraryExW, DONT_RESOLVE_DLL_REFERENCES},
+            System::LibraryLoader::{
+                GetModuleFileNameW, LoadLibraryExW, DONT_RESOLVE_DLL_REFERENCES,
+            },
         };
         let system =
             PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/version.dll");
@@ -339,6 +358,14 @@ mod tests {
             )
         };
         assert!(!module.is_null());
+        let mut name = vec![0u16; 32768];
+        let length = unsafe { GetModuleFileNameW(module, name.as_mut_ptr(), name.len() as u32) };
+        assert!(length > 0 && (length as usize) < name.len());
+        let actual = PathBuf::from(String::from_utf16(&name[..length as usize]).unwrap());
+        assert_eq!(
+            fs::canonicalize(actual).unwrap(),
+            fs::canonicalize(fixture.old.join("runtime/library.py")).unwrap()
+        );
         let report = fixture.clean();
         unsafe {
             FreeLibrary(module);
