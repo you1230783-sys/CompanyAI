@@ -62,6 +62,8 @@ pub struct Message {
     #[serde(default)]
     pub project_paused: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_overview: Option<crate::projects::overview::Overview>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retry_settings: Option<RetrySettings>,
     /// 重試仍使用首次提問之前的上下文，畫面則保留每次嘗試。
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -85,6 +87,7 @@ impl Message {
             project_diagrams: Vec::new(),
             project_chart_styles: Default::default(),
             project_paused: false,
+            project_overview: None,
             retry_settings: None,
             retry_context_index: None,
         }
@@ -105,6 +108,7 @@ impl Message {
             project_diagrams: Vec::new(),
             project_chart_styles: Default::default(),
             project_paused: false,
+            project_overview: None,
             retry_settings: None,
             retry_context_index: None,
         }

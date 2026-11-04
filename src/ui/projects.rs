@@ -467,6 +467,7 @@ impl App {
             message.local_time = projects::runner::recover_local_time(&self.root, &id);
             message.project_paused = projects::runner::paused_available(&self.root, &id);
             message.project_analysis = projects::runner::recover_analysis(&self.root, &id);
+            message.project_overview = projects::runner::recover_overview(&self.root, &id);
             message.project_activity =
                 projects::runner::recover_activity(&self.root, &id).unwrap_or_default();
             message.project_charts = projects::runner::recover_charts(&self.root, &id);
@@ -1851,6 +1852,7 @@ impl App {
                 message.project_paused = paused;
                 message.project_activity = activity;
                 message.project_analysis = final_analysis;
+                message.project_overview = projects::runner::recover_overview(&self.root, &id);
                 message.project_charts = projects::runner::recover_charts(&self.root, &id);
                 message.project_diagrams = projects::runner::recover_diagrams(&self.root, &id);
                 message.request_id = Some(id.clone());

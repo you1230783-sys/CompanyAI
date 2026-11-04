@@ -1548,6 +1548,13 @@ fn run_for(
     record["charts"] = json!(broker.charts());
     record["outputs"] = json!(broker.published());
     record["result"] = json!(result);
+    // 在操作原文封存後仍使用完整索引，避免80筆日誌裁切造成總覽漏列。
+    // 總覽失敗只標示不可用，不推翻已完成的寫入，也不觸發重播。
+    let operations = broker.operation_history();
+    record["overview"] = json!(match &operations {
+        Ok(rows) => super::overview::Overview::from_operations(rows, broker.published(), state),
+        Err(_) => super::overview::Overview::unavailable(state),
+    });
     checkpoint(&journal, &record)?;
     let saved_memory = broker
         .memory()?
@@ -1563,9 +1570,7 @@ fn run_for(
             broker
                 .memory()?
                 .store_delivery(&run.id, &broker.analysis.deliverables)?;
-            broker
-                .memory()?
-                .save_operations(&run.id, &broker.operation_history()?)
+            broker.memory()?.save_operations(&run.id, &operations?)
         });
     if let Err(error) = saved_memory {
         // 摘要保存失败不能推翻已核對的交付；完整結果仍在本機對話及 DPAPI 任務紀錄。
@@ -1785,6 +1790,18 @@ pub fn recover_analysis(root: &Path, id: &str) -> Option<super::analysis::State>
     }
     let record: Value = serde_json::from_slice(&storage::protect(&bytes, false).ok()?).ok()?;
     serde_json::from_value(record["analysis"].clone()).ok()
+}
+
+/// 舊紀錄或未寫完的終態不猜測結果，由畫面顯示「沒有總覽紀錄」。
+pub fn recover_overview(root: &Path, id: &str) -> Option<super::overview::Overview> {
+    jobs::validate_id(id).ok()?;
+    let path = root.join("project-runs").join(format!("{id}.dpapi"));
+    if std::fs::metadata(&path).ok()?.len() > 64_000_000 {
+        return None;
+    }
+    let data = storage::protect(&std::fs::read(path).ok()?, false).ok()?;
+    let record: Value = serde_json::from_slice(&data).ok()?;
+    serde_json::from_value(record["overview"].clone()).ok()
 }
 
 /// 只有舊任務實際保存的時間可恢復；沒有欄位的版本顯示空白。

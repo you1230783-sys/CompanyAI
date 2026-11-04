@@ -1134,6 +1134,11 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         0..=2 => {
             let answer = result?;
             assert!(answer.contains("已完成原生工具修訂"), "{answer}");
+            let overview = runner::recover_overview(&root.join("native-app"), &id)
+                .ok_or("原生工具完成後缺少任務總覽")?;
+            assert!(!overview.unavailable && overview.operations >= 3);
+            assert_eq!(overview.outputs.len(), 1);
+            assert!(workspace.join(&overview.outputs[0]).is_file());
             assert_eq!(posts, if case == 1 { 7 } else { 6 });
             assert_eq!(
                 activity
