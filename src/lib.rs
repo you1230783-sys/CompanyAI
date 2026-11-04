@@ -17,6 +17,7 @@ pub mod local_test;
 pub mod notifications;
 pub mod outlook;
 pub mod pet;
+mod png_preview;
 pub mod projects;
 pub mod protocol;
 pub mod reliability;

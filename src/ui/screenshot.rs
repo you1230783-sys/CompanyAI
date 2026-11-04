@@ -445,7 +445,7 @@ impl App {
             self.screenshot_context(&id)?;
             self.screenshot_check(bytes.len())?;
             // 僅在本機WebView顯示預覽，不呼叫公司網站。
-            let url = crate::pet::png::data_url(&bytes)?.replacen("image/png", "image/jpeg", 1);
+            let url = crate::png_preview::data_url(&bytes)?.replacen("image/png", "image/jpeg", 1);
             self.view
                 .post(&json!({"type":"screenshot_preview","id":id,"url":url}))?;
             self.screenshot

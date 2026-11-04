@@ -1,0 +1,14 @@
+{
+  "source_commit": "69241fa5f02b586dd4740eecb23ee977b0935896",
+  "scope": "One function moved without behavior changes; screenshot reference updated, original pet::png::data_url remains publicly reexported.",
+  "functions": [
+    {
+      "name": "data_url",
+      "from": "src/pet/png.rs",
+      "line": 116,
+      "to": "src/png_preview.rs",
+      "body_sha256": "953cefbc6fb60c206a6fda9c680fe675712148d762295d863c896289dcb34f5c",
+      "path_rewrites": []
+    }
+  ]
+}
