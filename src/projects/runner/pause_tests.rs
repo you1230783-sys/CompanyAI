@@ -1,4 +1,3 @@
-
 use super::*;
 #[test]
 fn activity_keeps_early_entries_and_restores_more_than_one_page() {
