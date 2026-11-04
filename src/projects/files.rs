@@ -22,6 +22,7 @@ mod diagram_sources;
 pub mod diagrams;
 mod documents;
 mod drafts;
+pub mod export;
 mod mail_notes;
 mod output;
 pub use output::conversation_folder_name;

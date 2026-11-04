@@ -13,6 +13,7 @@ use windows::{
 
 mod authoring;
 pub mod excel;
+pub mod export;
 pub mod images;
 pub mod translation;
 pub use authoring::{render, Action, Format};
@@ -20,6 +21,8 @@ pub use authoring::{render, Action, Format};
 mod fixtures;
 #[cfg(debug_assertions)]
 pub use fixtures::create as create_test_fixtures;
+#[cfg(debug_assertions)]
+pub use fixtures::translation as create_translation_fixture;
 
 const MAX_BLOCKS: usize = 2000;
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

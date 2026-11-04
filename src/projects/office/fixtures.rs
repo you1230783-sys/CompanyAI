@@ -1,6 +1,83 @@
 //! 僅 debug 驗收程式使用的固定資料建立器；不提供給模型，release 不包含此入口。
 use super::*;
 
+/// 只供文件工作回歸：混合字型、表格、頁首與圖片均留在測試資料夾。
+pub fn translation(folder: &Path) -> AppResult<()> {
+    let image = folder.join("chart.png");
+    std::fs::write(
+        &image,
+        include_bytes!("../../../examples/fixtures/vision.png"),
+    )
+    .map_err(|e| e.to_string())?;
+    let actions = vec![
+        Action::WordParagraph {
+            before: None,
+            text: "Alpha Beta".into(),
+            format: Format {
+                font: Some("Arial".into()),
+                ..Default::default()
+            },
+        },
+        Action::WordParagraph {
+            before: None,
+            text: "Second paragraph".into(),
+            format: Default::default(),
+        },
+        Action::WordTable {
+            before: None,
+            rows: vec![
+                vec!["Column A".into(), "Column B".into()],
+                vec!["Value one".into(), "Value two".into()],
+            ],
+        },
+        Action::InsertImage {
+            path: image.to_string_lossy().into_owned(),
+            target: images::Placement::Word { before: None },
+            width: 240.,
+            sha256: Some({
+                use sha2::{Digest, Sha256};
+                format!(
+                    "{:x}",
+                    Sha256::digest(std::fs::read(&image).map_err(|e| e.to_string())?)
+                )
+            }),
+        },
+    ];
+    let plain = folder.join("plain.docx");
+    render(
+        None,
+        Path::new("plain.docx"),
+        None,
+        &actions,
+        Some(&plain),
+        &AtomicBool::new(false),
+    )?;
+    // SAFETY: 測試專用STA，COM物件先於Apartment釋放；只開剛產生的副本。
+    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }.map_err(|e| e.to_string())?;
+    let _apartment = Apartment;
+    let session = Session::open(&plain)?;
+    let range = obj(invoke(
+        session.document()?,
+        "Range",
+        vec![0i32.into(), 5i32.into()],
+        false,
+    )?)?;
+    set(&child(&range, "Font")?, "Bold", (-1i32).into())?;
+    let section = item(&child(session.document()?, "Sections")?, 1)?;
+    let header = item(&child(&section, "Headers")?, 1)?;
+    set(&child(&header, "Range")?, "Text", "UNCHANGED HEADER".into())?;
+    invoke(
+        session.document()?,
+        "SaveAs2",
+        vec![
+            folder.join("source.docx").to_string_lossy().as_ref().into(),
+            12i32.into(),
+        ],
+        false,
+    )?;
+    Ok(())
+}
+
 pub fn create(folder: &Path) -> AppResult<()> {
     unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }.map_err(|e| e.to_string())?;
     let _apartment = Apartment;
