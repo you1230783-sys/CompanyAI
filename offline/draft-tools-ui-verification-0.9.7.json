@@ -1,0 +1,23 @@
+{
+  "result": "PASS",
+  "checks": [
+    "opening syncs original draft",
+    "opening requests native template state",
+    "untrusted template title is inert text",
+    "preview substitutes parameters once",
+    "use binds originating conversation",
+    "template does not send chat or execute tools",
+    "successful use closes dialog",
+    "capture begins with native precheck",
+    "destination shown before capture",
+    "begin uses native snapshot identity",
+    "stale preview is ignored",
+    "capture requires explicit preview acceptance",
+    "preview never accepts automatically",
+    "one-shot accept disables button",
+    "closing clears screenshot preview",
+    "capture does not send question",
+    "unsupported model error prevents capture",
+    "template editor fits desktop and narrow viewport"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "recorded_at": "2026-11-05T06:59:52.8571650+08:00",
+  "result": "PASS_CI_SCOPE",
+  "msvc": "14.29.30133",
+  "compiler_report": [
+    "v142.c",
+    "Verified _MSC_FULL_VER=192930159 x64"
+  ],
+  "empty_cargo_cache": true,
+  "lock_sha256": "92deba5227bed1f4eb3ad82a5caef6ee6a16c8c339278952b110b06be0e93b29",
+  "checks": [
+    "v142 x64 release build --frozen",
+    "fmt",
+    "default/core all-targets Clippy -D warnings",
+    "default/core workspace Rust tests"
+  ],
+  "excluded_interactive_tests": [],
+  "not_validated": [
+    "Office integration",
+    "company models/mailbox/network",
+    "NSIS lifecycle",
+    "interactive desktop/DPI"
+  ],
+  "installer_built": false
+}
