@@ -7,6 +7,7 @@
 - 完整建置與必要封裝、相關驗證成功才可稱完成；公司實機缺項如實記錄。不能把舊發行授權當作本輪測試通過證據。
 - 安裝路徑 C:\largan\LM_AI、公司HTTP、machines.json明文格式與匯入匯出、公司更新同源與簽章檢查均不變。使用者於0.9.1授權GitHub Releases與歷史清理：安裝包及更新JSON移至Releases，Git不再使用LFS；CI、LTO與漏洞檢查仍延後。
 - 大檔案純搬移延後至獨立commit；不混入功能變更。
+- main歷史已以0.8.75的`9f8febc`重建，後續原始碼保留至0.9.1；對照見offline/history-cleanup-0.9.1.json。不要將本機備份、舊clone或改寫前提交merge／force-push回main。
 - 歷史授權與驗證已移至 docs/history/AGENTS_BEFORE_0_9_0.md；逐段對照見 docs/AGENTS_MIGRATION.md。
 
 ## 專案界線與程式碼風格

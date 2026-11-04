@@ -53,11 +53,15 @@
 
 ## 發行與歷史整理
 
-待完成：NSIS與更新JSON上傳、Release下載雜湊核對、main重建為0.8.75起點、移除舊應用分支引用、重新clone核對。
+0.9.1原始碼先推送main，NSIS、兩份更新JSON、驗證JSON及SHA256SUMS上傳Release草稿，逐一核對GitHub回傳的SHA256與大小。正式入口為[0.9.1 Release](https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.1)，標籤在歷史整理紀錄提交後固定；公開下載與重新clone的獨立核對於發行收尾執行，紀錄留在本機`.build/release-download-verification-0.9.1.json`與`.build/publication-verification-0.9.1.json`。
+
+main已重建為`9f8febc57e119de30a5b37183f48c0a8878f8e41`（0.8.75）起點，保留15個原始提交，再加入整理紀錄。0.9.1重建前後檔案樹完全一致；保留歷史沒有LFS指標或EXE／ZIP等建置包。仍連到舊應用歷史的`release/lm-ai-0.8.1-exe`已刪除，獨立NSIS測試分支／標籤保留。逐提交對照及核對結果見[歷史整理JSON](../offline/history-cleanup-0.9.1.json)。
 
 改寫前的本機備份包含完整Git bundle與190個LFS物件（10,470,665,103 bytes）；此數字是本機備份量，不代表GitHub已回收的容量。獨立NSIS相容性測試分支／Release不含舊應用祖先，保留。
 
 GitHub伺服器LFS清除可能需要GitHub支援，不刪除整個儲存庫。不能把force-push或一般Git垃圾回收當作LFS額度已釋放。
+
+已有clone請重新clone；不要將舊歷史merge或推回main。需要平台回收舊LFS時，可使用[空間清理說明及支援申請文字](GITHUB_STORAGE_CLEANUP.md)。
 
 ## 尚需人工／公司實機確認
 
