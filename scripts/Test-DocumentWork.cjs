@@ -57,6 +57,8 @@ const delay = milliseconds => new Promise(resolve => setTimeout(resolve, millise
       check(!button('翻譯／比較／新建 Markdown').disabled,'專案可開啟文件工作');
       button('翻譯／比較／新建 Markdown').click();let dialog=document.querySelector('.workbench-dialog[open]');
       const inputs=dialog.querySelectorAll('input'),mode=dialog.querySelector('select');
+      mode.value='compare';mode.dispatchEvent(new Event('change'));
+      check([...dialog.querySelectorAll('p')].some(p=>!p.hidden&&p.textContent.includes('不代表整份文件都被改寫')),'Word位置比較限制在送出前直接顯示');
       mode.value='styled';inputs[0].value='source.docx';inputs[2].value='English';inputs[3].value='translated.docx';
       dialog.querySelector('textarea').value='LM=LM system';button('加入草稿，檢查後送出').click();
       check($('prompt').value.includes('preserve_styles')&&$('prompt').value.includes('LM system'),'格式翻譯與名詞表只填入可編輯草稿');

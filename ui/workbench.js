@@ -228,10 +228,12 @@ window.WorkbenchUI = (() => {
     const glossary=field(dialog,"專有名詞表：每行 原文=譯名",make("textarea"));glossary.maxLength=12000;
     const key=field(dialog,"Excel唯一鍵欄（可空白，例如A；第一列為標題）",input("",3));
     const details=field(dialog,"補充需求／Markdown文件內容",make("textarea"));details.maxLength=12000;
+    const comparisonNotice=make("p","Word目前依段落位置比較；前方新增或刪除段落，可能使後續段落出現大量差異，不代表整份文件都被改寫。Excel仍依儲存格座標或指定唯一鍵欄對應。");dialog.append(comparisonNotice);
     const configureFields=()=>{
       const translating=["translate","styled"].includes(mode.value),comparing=mode.value==="compare",markdown=mode.value==="markdown";
       source.parentElement.hidden=markdown;second.parentElement.hidden=!comparing;language.parentElement.hidden=!translating;
       name.parentElement.hidden=comparing;glossary.parentElement.hidden=!translating;key.parentElement.hidden=!comparing;
+      comparisonNotice.hidden=!comparing;
       if(markdown&&name.value==="翻譯.docx")name.value="新文件.md";
       if(translating&&name.value==="新文件.md")name.value="翻譯.docx";
     };mode.onchange=configureFields;configureFields();
