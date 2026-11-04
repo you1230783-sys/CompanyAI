@@ -11,10 +11,24 @@ pub(super) enum ReminderCommand {
         title: String,
         due_at: u64,
         channel: Channel,
+        #[serde(default)]
+        repeat_days: u32,
+        #[serde(default)]
+        workflow: Option<WorkflowRequest>,
+    },
+    LoadWorkflow {
+        id: u64,
     },
     Delete {
         id: u64,
     },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct WorkflowRequest {
+    conversation: String,
+    template: String,
 }
 
 pub(super) struct ReminderRuntime {
@@ -33,6 +47,9 @@ impl ReminderRuntime {
 impl App {
     pub(super) fn reminder_command(&mut self, command: ReminderCommand) -> AppResult<()> {
         let result = (|| {
+            if let ReminderCommand::LoadWorkflow { id } = command {
+                return self.load_reminder_workflow(id);
+            }
             let store = self.reminders.store.as_ref().map_err(Clone::clone)?;
             let mut next = store.clone();
             let changed = match command {
@@ -42,14 +59,22 @@ impl App {
                     title,
                     due_at,
                     channel,
+                    repeat_days,
+                    workflow,
                 } => {
+                    let target = workflow
+                        .as_ref()
+                        .map(|request| self.reminder_target(request))
+                        .transpose()?;
                     next.upsert(id, &title, due_at, channel, crate::unix_now())?;
+                    next.configure(id, repeat_days, target)?;
                     true
                 }
                 ReminderCommand::Delete { id } => {
                     next.delete(id)?;
                     true
                 }
+                ReminderCommand::LoadWorkflow { .. } => unreachable!(),
             };
             if changed {
                 next.save(&self.root)?;
@@ -63,6 +88,80 @@ impl App {
                 .post(&json!({"type":"reminder_error", "message":error}));
         }
         result
+    }
+
+    fn reminder_target(
+        &self,
+        request: &WorkflowRequest,
+    ) -> AppResult<crate::reminders::WorkflowTarget> {
+        if !self.logged_in() || self.versions.blocked() || self.work.store.principal_id.is_empty() {
+            return Err("請先登入並完成能力同步後設定流程提醒。".into());
+        }
+        let project = self
+            .projects
+            .store
+            .project_for(&request.conversation)
+            .ok_or("原專案對話已不存在。")?;
+        let memory = crate::projects::memory::Memory::open(project.clone(), &request.conversation)?;
+        let flow = memory.load_workflow(&request.template)?;
+        Ok(crate::reminders::WorkflowTarget {
+            conversation: request.conversation.clone(),
+            project: project.id.clone(),
+            principal: self.work.store.principal_id.clone(),
+            root_identity: crate::projects::files::directory_identity(&project.root)?,
+            template: flow.id.clone(),
+            revision: crate::projects::text::revision(
+                &serde_json::to_string(&flow).map_err(|e| e.to_string())?,
+            ),
+        })
+    }
+
+    fn load_reminder_workflow(&mut self, id: u64) -> AppResult<()> {
+        if self.busy != "none" || self.work.incoming.is_some() || self.projects.is_running() {
+            return Err("請先等待目前操作結束，再載入流程。".into());
+        }
+        let target = self
+            .reminders
+            .store
+            .as_ref()
+            .map_err(Clone::clone)?
+            .entries
+            .iter()
+            .find(|e| e.id == id)
+            .and_then(|e| e.workflow.clone())
+            .ok_or("此提醒沒有流程。")?;
+        let current = self.reminder_target(&WorkflowRequest {
+            conversation: target.conversation.clone(),
+            template: target.template.clone(),
+        })?;
+        if current.project != target.project
+            || current.principal != target.principal
+            || current.root_identity != target.root_identity
+            || current.revision != target.revision
+        {
+            return Err("帳號、專案位置或流程範本已變更，請從成果中心重新設定提醒。".into());
+        }
+        let project = self
+            .projects
+            .store
+            .project_for(&target.conversation)
+            .ok_or("專案已不存在。")?
+            .clone();
+        let data = crate::projects::memory::Memory::open(project, &target.conversation)?
+            .list_workflows()?;
+        let flow = data["workflows"]
+            .as_array()
+            .and_then(|flows| flows.iter().find(|f| f["id"] == target.template))
+            .ok_or("流程已不存在。")?;
+        self.command(Command::SelectChat {
+            id: target.conversation.clone(),
+        })?;
+        if self.active_id.as_deref() != Some(&target.conversation) {
+            return Err("無法切換原對話，未載入流程。".into());
+        }
+        self.publish();
+        self.view
+            .post(&json!({"type":"reminder_flow","conversation":target.conversation,"flow":flow}))
     }
 
     fn publish_reminders(&self, acknowledgement: bool) -> AppResult<()> {

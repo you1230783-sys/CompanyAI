@@ -14,13 +14,16 @@ window.ReminderUI = (() => {
     <p data-status role="status" aria-live="polite"></p><div data-list class="reminder-list"></div>`;
   document.body.append(dialog);
   const find = selector => dialog.querySelector(selector);
-  let entries = [], editing = null, pending = null, ready = false;
+  let entries = [], editing = null, pending = null, ready = false, workflow = null;
+  const repeat=document.createElement("select"); repeat.innerHTML='<option value="0">單次</option><option value="1">每24小時</option><option value="7">每7天</option>';
+  const repeatLabel=document.createElement("label");repeatLabel.textContent="重複週期（固定間隔，夏令時間變更後請重新設定）";repeatLabel.append(repeat);find("[data-form]").prepend(repeatLabel);
+  const workflowHint=document.createElement("p");find("[data-form]").prepend(workflowHint);
   function localDate(value) {
     const d = new Date(value * 1000), pad = v => String(v).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
   function reset() {
-    editing = null;
+    editing = null; workflow = null; repeat.value="0"; workflowHint.textContent="";
     find("[data-title]").value = "";
     find("[data-time]").value = localDate(Math.floor(Date.now()/1000) + 3600);
     find("[data-channel]").value = "pet";
@@ -47,7 +50,7 @@ window.ReminderUI = (() => {
       subtitle.textContent = `${new Date(entry.due_at*1000).toLocaleString()} · ${entry.channel === "pet" ? "桌寵" : "Windows"} · ${entry.notified_at != null ? "已送出提醒" : "等待提醒"}`;
       details.append(title,subtitle);
       for (const [label, action] of [["編輯", () => {
-        editing = entry.id;
+        editing = entry.id; repeat.value=String(entry.repeat_days||0);workflow=entry.workflow?{conversation:entry.workflow.conversation,template:entry.workflow.template}:null;workflowHint.textContent=workflow?"流程提醒：只通知，不自動執行；載入後填入參數與確認。":"";
         find("[data-title]").value = entry.title;
         find("[data-time]").value = localDate(entry.due_at);
         find("[data-channel]").value = entry.channel;
@@ -57,6 +60,7 @@ window.ReminderUI = (() => {
       }], ["刪除", () => transmit({action:"delete",id:entry.id})]]) {
         const button = document.createElement("button"); button.type = "button"; button.textContent = label; button.onclick = action; actions.append(button);
       }
+      if(entry.workflow){const load=document.createElement("button");load.textContent="載入流程草稿";load.onclick=()=>transmit({action:"load_workflow",id:entry.id});actions.append(load);}
       row.append(details,actions); list.append(row);
     }
   }
@@ -71,12 +75,13 @@ window.ReminderUI = (() => {
     if (!title || !Number.isFinite(timestamp) || localDate(due_at) !== input || timestamp <= Date.now()) {
       find("[data-status]").textContent = "請填寫內容並選擇有效的未來時間。"; return;
     }
-    transmit({action:"save",id:editing,title,due_at,channel:find("[data-channel]").value});
+    transmit({action:"save",id:editing,title,due_at,channel:find("[data-channel]").value,repeat_days:Number(repeat.value),workflow});
   };
   function open() { if (!dialog.open) dialog.showModal(); transmit({action:"state"}); }
   $("show-reminders").onclick = open;
   reset(); controls();
-  return {open, receive(message) {
+  return {open, schedule(flow,conversation) { reset();workflow={conversation,template:flow.id};find("[data-title]").value=`準備執行：${flow.name}`.slice(0,180);workflowHint.textContent="到期只通知。載入時核對帳號、專案及流程版本；填入本次參數後由您送出。";open(); }, receive(message) {
+    if(message.type==="reminder_flow"){pending=null;controls();dialog.close();window.WorkbenchUI?.workflow(message.flow,message.conversation);return true;}
     if (message.type === "reminder_error") {
       pending = null; find("[data-status]").textContent = message.message; controls(); return true;
     }

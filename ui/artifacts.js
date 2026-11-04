@@ -112,6 +112,7 @@ window.ArtifactUI = (() => {
     for(const flow of data.workflows||[]){
       const button=make("button",`${flow.name}（${flow.steps} 步）`);
       button.onclick=()=>window.WorkbenchUI?.workflow(flow,conversation);flows.append(button);
+      const schedule=make("button","設定流程提醒");schedule.onclick=()=>window.ReminderUI?.schedule(flow,conversation);flows.append(schedule);
     }
   }
   function sync(){

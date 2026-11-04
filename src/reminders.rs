@@ -21,6 +21,21 @@ pub struct Entry {
     pub due_at: u64,
     pub channel: Channel,
     pub notified_at: Option<u64>,
+    #[serde(default)]
+    pub repeat_days: u32,
+    #[serde(default)]
+    pub workflow: Option<WorkflowTarget>,
+}
+
+/// 只保存範本身分，不保存參數、Token或上一次操作授權。
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct WorkflowTarget {
+    pub conversation: String,
+    pub project: String,
+    pub principal: String,
+    pub root_identity: [u32; 3],
+    pub template: String,
+    pub revision: String,
 }
 
 #[derive(Clone, Default, Deserialize, Serialize)]
@@ -66,6 +81,15 @@ impl Store {
                     || valid_title(&entry.title).is_err()
                     || entry.due_at == 0
                     || entry.due_at > 253_402_300_799
+                    || !matches!(entry.repeat_days, 0 | 1 | 7)
+                    || entry.workflow.as_ref().is_some_and(|w| {
+                        crate::jobs::validate_id(&w.conversation).is_err()
+                            || crate::jobs::validate_id(&w.project).is_err()
+                            || crate::jobs::validate_id(&w.template).is_err()
+                            || w.principal.is_empty()
+                            || w.principal.len() > 200
+                            || w.revision.len() != 64
+                    })
             })
         {
             return Err("提醒事項內容不完整，既有資料已保留。".into());
@@ -104,6 +128,8 @@ impl Store {
                 due_at,
                 channel,
                 notified_at: None,
+                repeat_days: 0,
+                workflow: None,
             });
             self.entries.last_mut().ok_or("無法建立提醒事項。")?
         };
@@ -140,7 +166,36 @@ impl Store {
             .find(|entry| entry.id == id)
             .ok_or("找不到此提醒事項。")?;
         entry.notified_at = Some(now);
+        if entry.repeat_days > 0 {
+            let interval = u64::from(entry.repeat_days) * 86400;
+            // 長時間關閉／休眠只補一則，下一次推進到現在之後，不逐日補發。
+            let skipped = now.saturating_sub(entry.due_at) / interval + 1;
+            entry.due_at = entry
+                .due_at
+                .checked_add(skipped * interval)
+                .ok_or("提醒時間溢位。")?;
+            entry.notified_at = None;
+        }
         Ok(())
+    }
+
+    pub fn configure(
+        &mut self,
+        id: Option<u64>,
+        repeat_days: u32,
+        workflow: Option<WorkflowTarget>,
+    ) -> AppResult<()> {
+        if !matches!(repeat_days, 0 | 1 | 7) {
+            return Err("提醒週期只接受單次、每24小時或每7天。".into());
+        }
+        let entry = self
+            .entries
+            .iter_mut()
+            .find(|e| e.id == id.unwrap_or(self.next_id))
+            .ok_or("提醒不存在。")?;
+        entry.repeat_days = repeat_days;
+        entry.workflow = workflow;
+        self.validate()
     }
 }
 
@@ -155,6 +210,39 @@ fn valid_title(title: &str) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn repeat_coalesces_sleep_and_keeps_template_identity_without_execution() {
+        let mut store = Store::default();
+        store
+            .upsert(None, "週報", 200, Channel::Windows, 100)
+            .unwrap();
+        store
+            .configure(
+                None,
+                7,
+                Some(WorkflowTarget {
+                    conversation: "chat".into(),
+                    project: "project".into(),
+                    principal: "employee".into(),
+                    root_identity: [1, 2, 3],
+                    template: "flow".into(),
+                    revision: "a".repeat(64),
+                }),
+            )
+            .unwrap();
+        let now = 200 + 20 * 86400;
+        store.mark_notified(1, now).unwrap();
+        assert!(store.next_due(now).is_none());
+        assert_eq!(store.entries[0].due_at, 200 + 21 * 86400);
+        let restored: Store =
+            serde_json::from_str(&serde_json::to_string(&store).unwrap()).unwrap();
+        assert_eq!(
+            restored.entries[0].workflow.as_ref().unwrap().template,
+            "flow"
+        );
+        assert_eq!(restored.next_due(200 + 21 * 86400).unwrap().id, 1);
+        assert!(store.configure(Some(1), 2, None).is_err());
+    }
     #[test]
     fn overdue_reminders_are_ordered_and_not_replayed() {
         let mut store = Store::default();
