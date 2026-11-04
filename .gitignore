@@ -33,3 +33,16 @@ outlook-folders.dpapi
 
 # 本機舊版留存，不納入 Git。
 /舊版留存/
+
+# 0.9.1 起：Git 僅保存原始碼／素材；NSIS與更新JSON放GitHub Releases。
+/dist/*.exe
+/dist/update-manifest*.json
+/dist/SHA256SUMS.txt
+/offline/*.zip
+/installer/nsis-*.zip
+templates.dpapi
+
+# 開發機私有內容，與發行原始碼分開。
+/.codex/
+/dist/onboarding-state.json
+/icon.png
