@@ -327,14 +327,6 @@ pub(super) unsafe extern "system" fn window_proc(
         unsafe { DefWindowProcW(window, message, wparam, lparam) }
     })
 }
-pub(super) struct ComApartment;
-impl Drop for ComApartment {
-    fn drop(&mut self) {
-        unsafe {
-            windows::Win32::System::Com::CoUninitialize();
-        }
-    }
-}
 /// 自我檢查使用隔離資料夾，實際載入 WebView2 與 Markdown DOM，不連公司服務。
 pub fn run(demo: Option<&DemoServer>, smoke: bool) -> AppResult<()> {
     run_with_local(demo, smoke, None, None, None)
@@ -386,15 +378,7 @@ pub(super) fn run_with_local(
     } else {
         None
     };
-    unsafe {
-        windows::Win32::System::Com::CoInitializeEx(
-            None,
-            windows::Win32::System::Com::COINIT_APARTMENTTHREADED,
-        )
-        .ok()
-    }
-    .map_err(|_| "無法初始化桌面介面。")?;
-    let _apartment = ComApartment;
+    let _apartment = crate::com_apartment::Apartment::sta().map_err(|_| "無法初始化桌面介面。")?;
     let root = if let Some((_, root)) = panic_probe {
         root.to_path_buf()
     } else if let Some(local) = &local {

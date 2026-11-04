@@ -170,9 +170,7 @@ fn received_date(days: f64) -> AppResult<NaiveDate> {
         .ok_or("郵件日期超出範圍。".into())
 }
 pub(super) fn connect() -> AppResult<(ComApartment, IDispatch)> {
-    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }
-        .map_err(|_| "無法初始化 Outlook COM。")?;
-    let apartment = ComApartment;
+    let apartment = ComApartment::sta().map_err(|_| "無法初始化 Outlook COM。")?;
     let class = unsafe { CLSIDFromProgID(PCWSTR(wide("Outlook.Application").as_ptr())) }
         .map_err(|_| "找不到 Classic Outlook。")?;
     let mut active = None;

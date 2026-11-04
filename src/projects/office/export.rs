@@ -6,8 +6,7 @@ pub fn pdf(source: &Path, output: &Path, cancel: &AtomicBool) -> AppResult<()> {
         return Err("PDF輸出已存在或工作已取消。".into());
     }
     // SAFETY: 背景執行緒的STA只在本函式存活；Session先關閉文件，再釋放Apartment。
-    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }.map_err(|e| e.to_string())?;
-    let _apartment = Apartment;
+    let _apartment = Apartment::sta().map_err(|e| e.to_string())?;
     let session = Session::open(source)?;
     invoke(
         session.document()?,

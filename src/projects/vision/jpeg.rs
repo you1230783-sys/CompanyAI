@@ -3,7 +3,7 @@ use crate::AppResult;
 use windows::{
     core::{w, PWSTR},
     Win32::{
-        Foundation::{HGLOBAL, RPC_E_CHANGED_MODE},
+        Foundation::HGLOBAL,
         Graphics::Imaging::*,
         System::{
             Com::{StructuredStorage::*, *},
@@ -19,22 +19,10 @@ pub struct Jpeg {
     pub frames: u32,
 }
 
-struct Apartment(bool);
-impl Drop for Apartment {
-    fn drop(&mut self) {
-        if self.0 {
-            unsafe { CoUninitialize() };
-        }
-    }
-}
-
 pub fn convert(bytes: &[u8], extension: &str) -> AppResult<Jpeg> {
     // 若呼叫執行緒已在 STA，沿用其 apartment；只平衡本次成功的初始化。
-    let status = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
-    if status.is_err() && status != RPC_E_CHANGED_MODE {
-        return Err(format!("無法初始化圖片轉檔：{status:?}"));
-    }
-    let _apartment = Apartment(status.is_ok());
+    let _apartment = crate::com_apartment::Apartment::for_imaging()
+        .map_err(|e| format!("無法初始化圖片轉檔：{:?}", e.code()))?;
     unsafe { convert_inner(bytes, extension) }.map_err(|e| format!("圖片轉 JPG 失敗：{e}"))
 }
 

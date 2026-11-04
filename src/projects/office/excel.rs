@@ -253,8 +253,7 @@ pub fn inspect(
     if !(1..=100).contains(&column_count) || start + column_count - 1 > 16384 {
         return Err("表頭每次限 1–100 欄，且不可超出 XFD。".into());
     }
-    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }.map_err(|e| e.to_string())?;
-    let _apartment = Apartment;
+    let _apartment = Apartment::sta().map_err(|e| e.to_string())?;
     let session = session(path)?;
     let worksheets = child(session.document()?, "Worksheets")?;
     let total = integer(&worksheets, "Count")?;
@@ -302,8 +301,7 @@ fn read_bounded(
     limit: usize,
 ) -> AppResult<Page> {
     check_cancel(cancel)?;
-    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }.map_err(|e| e.to_string())?;
-    let _apartment = Apartment;
+    let _apartment = Apartment::sta().map_err(|e| e.to_string())?;
     let session = session(path)?;
     let sheet = worksheet(&session, selection.sheet)?;
     let used_range = bounds(&sheet)?;

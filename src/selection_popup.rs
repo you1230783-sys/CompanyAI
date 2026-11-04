@@ -116,9 +116,9 @@ impl Popup {
         let stop = Arc::new(AtomicBool::new(false));
         let (on, end, own) = (enabled.clone(), stop.clone(), owner as usize);
         thread::spawn(move || unsafe {
-            if CoInitializeEx(None, COINIT_MULTITHREADED).is_err() {
+            let Ok(_apartment) = crate::com_apartment::Apartment::mta() else {
                 return;
-            }
+            };
             let automation: windows::core::Result<IUIAutomation> =
                 CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER);
             if let Ok(automation) = automation {
@@ -153,7 +153,6 @@ impl Popup {
                     thread::sleep(Duration::from_millis(350));
                 }
             }
-            CoUninitialize();
         });
         Ok(Self {
             window,

@@ -53,8 +53,7 @@ pub fn translation(folder: &Path) -> AppResult<()> {
         &AtomicBool::new(false),
     )?;
     // SAFETY: 測試專用STA，COM物件先於Apartment釋放；只開剛產生的副本。
-    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }.map_err(|e| e.to_string())?;
-    let _apartment = Apartment;
+    let _apartment = Apartment::sta().map_err(|e| e.to_string())?;
     let session = Session::open(&plain)?;
     let range = obj(invoke(
         session.document()?,
@@ -79,8 +78,7 @@ pub fn translation(folder: &Path) -> AppResult<()> {
 }
 
 pub fn create(folder: &Path) -> AppResult<()> {
-    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }.map_err(|e| e.to_string())?;
-    let _apartment = Apartment;
+    let _apartment = Apartment::sta().map_err(|e| e.to_string())?;
     for (kind, formats) in [
         ("docx", vec!["docx", "doc", "docm"]),
         ("xlsx", vec!["xlsx", "xls", "xlsm", "xlsb"]),

@@ -7,6 +7,7 @@ pub mod privacy;
 pub mod process;
 pub mod project;
 mod table;
+use crate::com_apartment::Apartment as ComApartment;
 use crate::{wide, AppResult};
 use serde::Serialize;
 use windows::{
@@ -30,15 +31,6 @@ pub struct MailPreview {
     // Outlook 內部 ID 只用於確認正文仍來自同一封信，不傳給網頁或 AI。
     #[serde(skip)]
     pub entry_id: String,
-}
-
-struct ComApartment;
-impl Drop for ComApartment {
-    fn drop(&mut self) {
-        unsafe {
-            CoUninitialize();
-        }
-    }
 }
 
 /// 統一限制為讀取屬性或呼叫無副作用的方法；參數依 COM 規則反向排列。
@@ -90,9 +82,7 @@ fn text(item: &IDispatch, name: &str, maximum: usize) -> AppResult<String> {
 
 /// 必須由背景工作執行緒呼叫。讀正文前再次比對 EntryID，避免選取變動造成誤送。
 pub fn read_selected(expected_id: Option<&str>, include_body: bool) -> AppResult<MailPreview> {
-    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }
-        .map_err(|_| "無法初始化 Outlook COM 連線。")?;
-    let _apartment = ComApartment;
+    let _apartment = ComApartment::sta().map_err(|_| "無法初始化 Outlook COM 連線。")?;
     let class = unsafe { CLSIDFromProgID(PCWSTR(wide("Outlook.Application").as_ptr())) }
         .map_err(|_| "找不到 Classic Outlook，請先安裝並開啟它。")?;
     let mut active: Option<IUnknown> = None;

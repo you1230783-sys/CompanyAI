@@ -1060,8 +1060,7 @@ pub fn render(
     output: Option<&Path>,
     cancel: &AtomicBool,
 ) -> AppResult<Snapshot> {
-    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }.map_err(|e| e.to_string())?;
-    let _apartment = Apartment;
+    let _apartment = Apartment::sta().map_err(|e| e.to_string())?;
     let session = Session::start(source.unwrap_or(name), source.is_none())?;
     if let Some(expected) = original {
         let actual = session.snapshot(cancel)?.0;

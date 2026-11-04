@@ -141,8 +141,7 @@ fn check_source(source: &Path) -> AppResult<()> {
 pub fn inspect(source: &Path, cancel: &AtomicBool) -> AppResult<Snapshot> {
     check_source(source)?;
     // SAFETY: 本次背景執行緒獨立初始化STA，所有COM物件在Apartment之前釋放。
-    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }.map_err(|e| e.to_string())?;
-    let _apartment = Apartment;
+    let _apartment = Apartment::sta().map_err(|e| e.to_string())?;
     // 明確綁定Session，確保它先於Apartment釋放；不能把COM暫存物件放在尾端運算式。
     let session = Session::open(source)?;
     snapshot(&session, cancel)

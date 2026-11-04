@@ -1,5 +1,6 @@
 //! Office 的固定 COM 介面。處理 Word 正文段落、Excel 儲存格、PowerPoint 一般文字框。
 //! 模型拿到區塊 ID，不可指定 COM 方法。原件以唯讀開啟，套用經核對的修改後另存。
+use crate::com_apartment::Apartment;
 use crate::{wide, AppResult};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -198,12 +199,6 @@ fn missing() -> VARIANT {
         (*value.Anonymous.Anonymous).Anonymous.scode = 0x80020004u32 as i32;
     }
     value
-}
-struct Apartment;
-impl Drop for Apartment {
-    fn drop(&mut self) {
-        unsafe { CoUninitialize() };
-    }
 }
 
 struct Session {
@@ -568,8 +563,7 @@ pub fn process(
     desired: Option<&Snapshot>,
     cancel: &AtomicBool,
 ) -> AppResult<Snapshot> {
-    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }.map_err(|e| e.to_string())?;
-    let _apartment = Apartment;
+    let _apartment = Apartment::sta().map_err(|e| e.to_string())?;
     let session = Session::open(source)?;
     let (current, targets) = session.snapshot(cancel)?;
     if let Some(expected) = expected {

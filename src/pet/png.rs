@@ -140,18 +140,7 @@ mod tests {
     use super::*;
     #[test]
     fn png_reencoding_strips_padding_preserves_alpha_and_limits_size() {
-        unsafe {
-            CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok().unwrap();
-        }
-        struct Apartment;
-        impl Drop for Apartment {
-            fn drop(&mut self) {
-                unsafe {
-                    CoUninitialize();
-                }
-            }
-        }
-        let _apartment = Apartment;
+        let _apartment = crate::com_apartment::Apartment::sta().unwrap();
         let mut source = include_bytes!("../../ui/pets/cat_idle.png").to_vec();
         source.extend(vec![0; 600_000]);
         let (encoded, decoded) = normalize(&source).unwrap();

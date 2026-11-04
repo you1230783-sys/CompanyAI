@@ -3,6 +3,7 @@ pub mod attachments;
 pub mod auth;
 pub mod cad;
 pub mod calendar;
+mod com_apartment;
 mod com_error;
 pub mod config;
 pub mod demo;

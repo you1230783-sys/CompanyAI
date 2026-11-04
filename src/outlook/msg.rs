@@ -16,8 +16,7 @@ pub fn read(path: &Path, cancel: &AtomicBool) -> AppResult<String> {
     if cancel.load(Ordering::Relaxed) {
         return Err("MSG 讀取已取消。".into());
     }
-    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }.map_err(|e| e.to_string())?;
-    let _apartment = ComApartment;
+    let _apartment = ComApartment::sta().map_err(|e| e.to_string())?;
     let class = unsafe { CLSIDFromProgID(PCWSTR(wide("Outlook.Application").as_ptr())) }
         .map_err(|_| "MSG 需要已安裝的 Classic Outlook。")?;
     // Outlook 為共用桌面程式；不變更安全設定，也不 Quit 使用者的 Outlook。

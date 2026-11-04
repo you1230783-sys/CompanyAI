@@ -38,15 +38,7 @@ unsafe extern "system" fn window_proc(
 }
 
 pub(super) fn run() -> AppResult<()> {
-    unsafe {
-        windows::Win32::System::Com::CoInitializeEx(
-            None,
-            windows::Win32::System::Com::COINIT_APARTMENTTHREADED,
-        )
-        .ok()
-    }
-    .map_err(|_| "無法初始化教學預覽。")?;
-    let _apartment = super::ComApartment;
+    let _apartment = crate::com_apartment::Apartment::sta().map_err(|_| "無法初始化教學預覽。")?;
     unsafe {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         let instance = GetModuleHandleW(ptr::null());

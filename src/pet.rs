@@ -657,7 +657,6 @@ unsafe extern "system" fn window_proc(window: HWND, message: u32, w: WPARAM, l: 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
 
     #[test]
     fn legacy_preferences_gain_bubble_defaults_and_reject_invalid_values() {
@@ -689,14 +688,7 @@ mod tests {
     /// 不向使用者視窗送輸入，也不依賴截圖外觀代替Win32狀態核對。
     #[test]
     fn native_notification_visibility_and_settings_survive_restart() {
-        unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok().unwrap() };
-        struct Apartment;
-        impl Drop for Apartment {
-            fn drop(&mut self) {
-                unsafe { CoUninitialize() };
-            }
-        }
-        let _apartment = Apartment;
+        let _apartment = crate::com_apartment::Apartment::sta().unwrap();
         let root =
             std::env::temp_dir().join(format!("company-ai-pet-{}", crate::jobs::new_id().unwrap()));
         std::fs::create_dir(&root).unwrap();

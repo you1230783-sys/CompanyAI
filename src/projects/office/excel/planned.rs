@@ -24,8 +24,7 @@ pub fn read(
     if let Some(window) = window {
         window.bounds(&proposal.time_mode)?;
     }
-    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }.map_err(|e| e.to_string())?;
-    let _apartment = Apartment;
+    let _apartment = Apartment::sta().map_err(|e| e.to_string())?;
     let session = session(path)?;
     let sheet = worksheet(&session, proposal.sheet)?;
     let used_range = bounds(&sheet)?;
