@@ -2,6 +2,7 @@
 
 ## 目前工作
 
+- 0.9.3的F01～F07已完成本機實作、v142空快取完整建置、Office與NSIS驗證；證據見docs/VALIDATION_0_9_3.md。公司模型翻譯品質與公司實機仍待驗。後續0.9.4依實作計畫處理維護工作，不混入已移除的Authenticode待辦。
 - 2026-11-04 使用者調整並授權0.9.3一次完成F01～F07：匯出、Word翻譯、文件比較、流程定時提醒、預設工作區、Word原樣式副本翻譯及新建Markdown；逐功能提交，完整驗證封裝後推送main與Releases。0.9.2已發行，證據見docs/VALIDATION_0_9_2.md。0.9.4才做純搬移拆分、Windows綁定／Cargo features、CI、LTO與漏洞檢查；以docs/IMPLEMENTATION_PLAN.md最新順序為準。
 - 0.9.0本機驗證包已用v142空快取完成全Rust／原生整合與NSIS生命週期驗證；VNC入口、桌寵字級／描邊已納入。本輪已獲授權推送GitHub main；公司環境與桌寵人工DPI缺項見docs/VALIDATION_0_9_0.md。
 - 完整建置與必要封裝、相關驗證成功才可稱完成；公司實機缺項如實記錄。不能把舊發行授權當作本輪測試通過證據。

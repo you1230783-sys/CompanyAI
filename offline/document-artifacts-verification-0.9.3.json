@@ -1,0 +1,41 @@
+{
+  "version": "0.9.3",
+  "result": "PASS",
+  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\18eca5219d73c1040c47d70d9a7a8ea3",
+  "checks": [
+    "styled copy keeps original embedded image bytes",
+    "styled copy keeps nonempty header text and table count",
+    "export DOCX contains one real table and original PNG bytes"
+  ],
+  "source_structure": {
+    "media": [
+      "48f3269d7394134f568d08d8e1a444a608ae89c250b7d2da4a64aaf3927bc8a7"
+    ],
+    "headers": [
+      "UNCHANGED HEADER"
+    ],
+    "tables": 1
+  },
+  "export_structure": {
+    "media": [
+      "48f3269d7394134f568d08d8e1a444a608ae89c250b7d2da4a64aaf3927bc8a7"
+    ],
+    "headers": [],
+    "tables": 1
+  },
+  "scope": "OOXML package checks; empty header XML names may be normalized by Word. Not a full layout or translation-quality test.",
+  "visual_review": {
+    "result": "PASS",
+    "renderer": "Windows.Data.Pdf",
+    "pages_reviewed": 1,
+    "pdf_sha256": "9662a2feb46d620c5948e0602855e010586f86ac92dd04e149d433aa864c89bb",
+    "checks": [
+      "Chinese heading legible",
+      "table and code retained",
+      "source URL retained",
+      "red/blue PNG visible without clipping",
+      "incomplete-answer notice visible"
+    ],
+    "scope": "Manual inspection of this fixed fixture only; not general document layout certification."
+  }
+}
