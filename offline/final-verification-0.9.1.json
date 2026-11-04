@@ -1,0 +1,39 @@
+{
+  "result": "PASS",
+  "version": "0.9.1",
+  "msvc": "14.29.30133",
+  "frozen_empty_cache": true,
+  "final_native_screenshot_cases": [
+    "fast-model precheck",
+    "preview has no disk/network side effect",
+    "conversation binding",
+    "attachment without chat",
+    "one-shot acceptance",
+    "project copy and draft preservation",
+    "byte readback and source preservation",
+    "account generation binding",
+    "root replacement rejected before write",
+    "timeout clears pending state"
+  ],
+  "final_exe_sha256": "c9313eb1b993dee1d24ba15b7c628bde1a81e09d281a6dafca8368d2ed3bfc73",
+  "final_setup_sha256": "279146a89eb5860aef62c1232aad8ffa9e749c6217a280e21dff8d4737ac5d58",
+  "full_integration_baseline_exe_sha256": "fc4f1a2f92924dc5845d996332d03a306587b1d792b23cb539e5da3591582698",
+  "final_checks": [
+    "fmt",
+    "clippy all targets",
+    "all workspace tests",
+    "v142 x64 probe",
+    "empty Cargo cache frozen release build",
+    "native WebView2 and screenshot 10 cases",
+    "panic subprocesses",
+    "draft tools UI",
+    "auth UI",
+    "reliability UI",
+    "workbench UI",
+    "settings UI",
+    "NSIS install/update/rollback/uninstall",
+    "native update signature/package verification"
+  ],
+  "manual_desktop_rectangle_tested": false,
+  "company_service_tested": false
+}

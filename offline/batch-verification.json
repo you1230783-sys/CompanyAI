@@ -5,7 +5,7 @@
     "notice": "每項獨立成功或失敗；成功項目不重做，只另提失敗項目。不能把整批已回傳當作每項均成功。",
     "tasks": [
       {
-        "finished_local": "2026-11-04 13:07:57",
+        "finished_local": "2026-11-04 14:34:11",
         "outcome": {
           "ok": true,
           "operation_id": "274cfd6b2a8cae8f16cb9072c469a7d570af3363311406388b2be891e9a84cda",
@@ -16,12 +16,12 @@
             "displayed_in_conversation": true
           }
         },
-        "started_local": "2026-11-04 13:07:57",
+        "started_local": "2026-11-04 14:34:11",
         "task_id": "chart",
         "tool": "chart_dataset"
       },
       {
-        "finished_local": "2026-11-04 13:07:57",
+        "finished_local": "2026-11-04 14:34:11",
         "outcome": {
           "ok": true,
           "operation_id": "68f15359d0e85383ff44e484d27f933e1e25c193112a43c1f7a3044524d2341a",
@@ -38,7 +38,7 @@
             "working_copy": false
           }
         },
-        "started_local": "2026-11-04 13:07:57",
+        "started_local": "2026-11-04 14:34:11",
         "task_id": "read",
         "tool": "read_file"
       }
@@ -51,11 +51,11 @@
     "notice": "每項獨立成功或失敗；成功項目不重做，只另提失敗項目。不能把整批已回傳當作每項均成功。",
     "tasks": [
       {
-        "finished_local": "2026-11-04 13:07:57",
+        "finished_local": "2026-11-04 14:34:11",
         "outcome": {
           "ok": true,
           "operation_id": "32b6f00c1a6937d31536dfc3a2838c7dc50bdb9298cb1e3e42e3bcae3d6fa0c1",
-          "progress_identity": "973982d57ec4be693a37a6885eddfeb1eb70164ca093109a7c061c7af33cb5b7",
+          "progress_identity": "0178db245929d5b583d69790e6e2f60c4580d46f6a8b56ae445c0e87a7f992e5",
           "result": {
             "artifacts": [
               {
@@ -144,13 +144,13 @@
             ],
             "code_sha256": "613897890247d372a81b3dd6282033a70e706f74683b70953d5d0b05dcde1d22",
             "execution": "本機 AppContainer，無網路，原檔唯讀；衍生資料非原始列的一對一副本。",
-            "progress_identity": "973982d57ec4be693a37a6885eddfeb1eb70164ca093109a7c061c7af33cb5b7",
+            "progress_identity": "0178db245929d5b583d69790e6e2f60c4580d46f6a8b56ae445c0e87a7f992e5",
             "purpose": "並行A",
             "sources": [],
             "stdout": "",
             "summary": {
-              "end": 1793768877.3553214,
-              "start": 1793768869.3545263,
+              "end": 1793774051.461681,
+              "start": 1793774043.4603508,
               "value": 42
             },
             "versions": {
@@ -161,16 +161,16 @@
             }
           }
         },
-        "started_local": "2026-11-04 13:07:46",
+        "started_local": "2026-11-04 14:34:00",
         "task_id": "a",
         "tool": "run_python"
       },
       {
-        "finished_local": "2026-11-04 13:07:57",
+        "finished_local": "2026-11-04 14:34:11",
         "outcome": {
           "ok": true,
           "operation_id": "4741e9f1c15440acaff49b1587a45dfa55cd00b2312a1073683fad0e48cdbf62",
-          "progress_identity": "00f0ea567e6d17ac799da446db886b46f42f60a896e15a903a2ce0ebe9c8642c",
+          "progress_identity": "e616c6ab2d2d5202730f672a82b5a9a38609dbebbbf8ff29065f420663273f8c",
           "result": {
             "artifacts": [
               {
@@ -243,13 +243,13 @@
             ],
             "code_sha256": "5a4579b61d16df7d2fcd25fefe6bdf78e9cf45d303ed25cc0cf68026516544ce",
             "execution": "本機 AppContainer，無網路，原檔唯讀；衍生資料非原始列的一對一副本。",
-            "progress_identity": "00f0ea567e6d17ac799da446db886b46f42f60a896e15a903a2ce0ebe9c8642c",
+            "progress_identity": "e616c6ab2d2d5202730f672a82b5a9a38609dbebbbf8ff29065f420663273f8c",
             "purpose": "並行B",
             "sources": [],
             "stdout": "",
             "summary": {
-              "end": 1793768877.3608215,
-              "start": 1793768869.3584323,
+              "end": 1793774051.4564316,
+              "start": 1793774043.4556646,
               "value": 84
             },
             "versions": {
@@ -260,7 +260,7 @@
             }
           }
         },
-        "started_local": "2026-11-04 13:07:46",
+        "started_local": "2026-11-04 14:34:00",
         "task_id": "b",
         "tool": "run_python"
       }
@@ -273,19 +273,19 @@
     "notice": "每項獨立成功或失敗；成功項目不重做，只另提失敗項目。不能把整批已回傳當作每項均成功。",
     "tasks": [
       {
-        "finished_local": "2026-11-04 13:08:00",
+        "finished_local": "2026-11-04 14:34:14",
         "outcome": {
           "error": "Python 分析失敗：Traceback (most recent call last):\n  File \"Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\examples\\python\\lm_worker.py\", line 181, in main\n    response = analyze(json.loads(payload))\n  File \"Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\examples\\python\\lm_worker.py\", line 161, in analyze\n    exec(compile(request[\"code\"], \"<company-ai-analysis>\", \"exec\"), scope)\n    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<company-ai-analysis>\", line 1, in <module>\nValueError: fixture\n",
           "ok": false,
           "operation_id": "85fe8d42006e24dc7e792234d70498413e899c8d49eb327292b508797c844af1",
           "retry_same_operation": false
         },
-        "started_local": "2026-11-04 13:07:57",
+        "started_local": "2026-11-04 14:34:11",
         "task_id": "fail",
         "tool": "run_python"
       },
       {
-        "finished_local": "2026-11-04 13:08:00",
+        "finished_local": "2026-11-04 14:34:14",
         "outcome": {
           "ok": true,
           "operation_id": "1f246b7c021f66ae1ebe505583bd43f07cbd70f35bcd74304d5e249de999d0cb",
@@ -309,7 +309,7 @@
             }
           }
         },
-        "started_local": "2026-11-04 13:07:57",
+        "started_local": "2026-11-04 14:34:11",
         "task_id": "valid",
         "tool": "run_python"
       }

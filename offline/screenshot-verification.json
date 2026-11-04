@@ -1,0 +1,18 @@
+{
+  "cases": [
+    "fast-model precheck",
+    "preview has no disk/network side effect",
+    "conversation binding",
+    "attachment without chat",
+    "one-shot acceptance",
+    "project copy and draft preservation",
+    "byte readback and source preservation",
+    "account generation binding",
+    "root replacement rejected before write",
+    "timeout clears pending state"
+  ],
+  "company_service_tested": false,
+  "real_desktop_capture_tested": false,
+  "result": "PASS",
+  "version": "0.9.1"
+}
