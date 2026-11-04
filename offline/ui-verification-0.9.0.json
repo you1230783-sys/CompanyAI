@@ -1,0 +1,151 @@
+{
+  "version": "0.9.0",
+  "scope": "source UI using synthetic fixtures; separate from native WebView2 tests",
+  "pet": {
+    "result": "PASS",
+    "checks": [
+      "offline entries enabled",
+      "advanced menu frees sidebar rows",
+      "opens native local round",
+      "78 separate card backs",
+      "card back image survives shared dialog button styles",
+      "selected position sent without card identity",
+      "complete round prevents fourth pick",
+      "reversed image rotates 180 degrees without a second asset",
+      "three text fronts with normal and reversed cards",
+      "question required",
+      "offline analysis does not send",
+      "offline round remains open during auth render",
+      "explicit AI button sends exact question and round",
+      "sent round cannot be submitted again",
+      "continue uses existing deck",
+      "previous picks disabled and history retained",
+      "unused cards remain available",
+      "character first and reminder in AI generation prompt",
+      "six independently replaceable poses",
+      "PNG transparency and compression guidance",
+      "no apply button",
+      "size saves immediately",
+      "rapid edits coalesce without losing the latest preferences",
+      "old acknowledgment does not revert current controls",
+      "settings-only reply retains the six image previews",
+      "pet font size saves immediately",
+      "pet preview applies independent size and contrasting outline",
+      "pet font size leaves main interface unchanged",
+      "editable character prompt in modal",
+      "copy sends the edited prompt",
+      "upload targets one pose",
+      "generator textarea has visible border and larger editing area",
+      "offline reminders open through advanced features",
+      "reminders IPC available without company login",
+      "empty reminders guidance",
+      "reminder text input has a clear border",
+      "past reminder is rejected before sending",
+      "local date and selected notification channel sent exactly",
+      "pending save prevents double submission",
+      "timer updates do not acknowledge pending saves",
+      "saved list uses text nodes and resets form",
+      "existing reminder can be edited",
+      "background delivery updates retain edit draft",
+      "editing uses stable reminder ID",
+      "failed persistence retains draft for retry",
+      "delete sends exact reminder ID",
+      "offline auth render preserves reminders dialog"
+    ]
+  },
+  "settings": {
+    "result": "PASS",
+    "checks": [
+      "settings tabs, Other preferences, selected task, export default, round navigation and stale replies",
+      {
+        "name": "diagnostics-light",
+        "width": 1180,
+        "scroll": 1180,
+        "left": 110,
+        "right": 1070,
+        "top": 17,
+        "bottom": 783
+      },
+      {
+        "name": "advanced-light",
+        "width": 1180,
+        "scroll": 1180,
+        "left": 270,
+        "right": 910,
+        "top": 71.5,
+        "bottom": 728.5
+      },
+      {
+        "name": "advanced-dark",
+        "width": 1180,
+        "scroll": 1180,
+        "left": 270,
+        "right": 910,
+        "top": 71.5,
+        "bottom": 728.5
+      },
+      {
+        "name": "advanced-narrow",
+        "width": 520,
+        "scroll": 520,
+        "left": 20,
+        "right": 500,
+        "top": 71.5,
+        "bottom": 728.5
+      },
+      {
+        "name": "tutorials-narrow",
+        "width": 520,
+        "scroll": 520,
+        "left": 20,
+        "right": 500,
+        "top": 71.5,
+        "bottom": 728.5
+      },
+      {
+        "name": "tutorial-card-narrow",
+        "width": 520,
+        "scroll": 520,
+        "left": 16,
+        "right": 504,
+        "top": 16,
+        "bottom": 784
+      },
+      {
+        "name": "release-history-narrow",
+        "width": 520,
+        "scroll": 520,
+        "left": 20,
+        "right": 500,
+        "top": 24,
+        "bottom": 776
+      },
+      "all 57 tutorials completed in real browser; input/select/checkbox gates, focus, isolation and search",
+      {
+        "name": "operations-narrow",
+        "width": 520,
+        "scroll": 520,
+        "left": 20,
+        "right": 500,
+        "top": 71.5,
+        "bottom": 728.5
+      },
+      {
+        "name": "general-light",
+        "width": 1180,
+        "scroll": 1180,
+        "left": 270,
+        "right": 910,
+        "top": 71.5,
+        "bottom": 728.5
+      },
+      "real ECharts PNG with two parameter reference lines"
+    ]
+  },
+  "tutorials": {
+    "result": "PASS",
+    "topics": 57,
+    "native_commands_added": 0,
+    "draft_unchanged": true
+  }
+}
