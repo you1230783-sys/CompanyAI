@@ -2,6 +2,10 @@
 
 ## 目前工作
 
+- 0.9.5已完成本機v142空快取、495項Rust、Office與NSIS驗證，COM生命週期統一、Windows綁定分工保留；證據見docs/VALIDATION_0_9_5.md及docs/WINDOWS_BINDINGS.md。發布後接續0.9.6，後續仍逐版驗證／封裝／推送。
+
+- 最新授權：依待辦順序逐版修改、完整驗證、封裝、推送main及Releases，再接續下一版，直到可完成項目結束。先前「本輪不提前開始」只屬0.9.4歷史範圍；本輪可繼續0.9.5之後版本。缺少公司後端／實機的項目如實記錄並詢問必要資訊，不宣稱完成，不動NAS備份。
+
 - 0.9.4本機修改、純搬移核對與完整v142空快取／Office／NSIS驗證已完成（494項Rust）；證據見docs/VALIDATION_0_9_4.md及docs/REFACTOR_0_9_4.md。後續Windows綁定、features、CI／漏洞、LTO依計畫分版，本輪不提前開始；Word內容對齊固定排在LTO之後的下一版。
 
 - 2026-11-04本輪授權0.9.4：先修正批次panic保護一致性與Word位置比較提示，再純搬移拆分files.rs／ui.rs／runner.rs；每個拆分commit列出函式原位置→新位置及必要可見性／路徑調整。完整v142驗證、封裝後推送main及Releases。Windows綁定、Cargo features、CI／漏洞、LTO分開後續版本；Word內容對齊排在LTO之後的下一版。NAS備份由使用者自行處理。

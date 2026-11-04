@@ -1,5 +1,12 @@
 # 版本更新紀錄
 
+## 0.9.5 — Windows COM邊界整理
+
+- 統一COM初始化／釋放，守衛不能跨執行緒；S_FALSE巢狀初始化與WIC借用STA分別處理。
+- UI Automation正常離開、提前返回及unwind沿用共同釋放邊界，保留既有panic保護。
+- 評估後保留windows與windows-sys的現行分工，詳見[Windows綁定說明](docs/WINDOWS_BINDINGS.md)；沒有宣稱移除依賴或減少EXE體積。
+- 驗證與公司待驗範圍見[0.9.5紀錄](docs/VALIDATION_0_9_5.md)。
+
 ## 0.9.4 — 2026-11-04
 
 - 修正批次panic的錯誤分類、取消與提交邊界；一般單項錯誤可繼續，內部panic要求重啟，已完成操作不重播。

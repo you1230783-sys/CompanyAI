@@ -1,0 +1,34 @@
+{
+  "version": "0.9.5",
+  "result": "PASS",
+  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\abaef59e208105a3ea6807d425f1e9fd",
+  "checks": [
+    "styled copy keeps original embedded image bytes",
+    "styled copy keeps nonempty header text and table count",
+    "export DOCX contains one real table and original PNG bytes"
+  ],
+  "source_structure": {
+    "media": [
+      "48f3269d7394134f568d08d8e1a444a608ae89c250b7d2da4a64aaf3927bc8a7"
+    ],
+    "headers": [
+      "UNCHANGED HEADER"
+    ],
+    "tables": 1
+  },
+  "export_structure": {
+    "media": [
+      "48f3269d7394134f568d08d8e1a444a608ae89c250b7d2da4a64aaf3927bc8a7"
+    ],
+    "headers": [],
+    "tables": 1
+  },
+  "scope": "OOXML package checks; empty header XML names may be normalized by Word. Not a full layout or translation-quality test.",
+  "visual_review": {
+    "result": "PASS",
+    "pages": 1,
+    "engine": "Windows.Data.Pdf",
+    "pdf_sha256": "b8b061c71f8e3a271a0d616a047ec520d3ac45255e2f3f55d6facf46bd358851",
+    "checked": "Chinese heading, table, literal code fences and URL, embedded red/blue PNG and scope notice readable; no clipping in fixed fixture. Basic export retains some Markdown syntax."
+  }
+}

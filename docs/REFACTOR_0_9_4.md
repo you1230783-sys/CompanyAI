@@ -2,6 +2,8 @@
 
 前置修正：91a1797（批次panic）、b0a7374（Word位置比較提示）。下列搬移不包含這兩項行為修改。
 
+此對照只驗證v0.9.4的來源。後續版本會在拆分後的檔案繼續修改功能；重新核對本表時，請在v0.9.4標籤的獨立checkout執行，不能把最新main與0.9.4基準不同直接判成當時搬移失敗。
+
 核對方式：先執行scripts/Enter-DevShell.ps1，再執行`python scripts/Verify-SourceMoves.py docs/refactors/0.9.4-files.json docs/refactors/0.9.4-ui.json docs/refactors/0.9.4-runner.json`。工具以固定rustfmt正規化後比較詞元，保留字串與註解；不是以刪除所有空白或逗號放寬比對。
 
 三份JSON保存搬移前提交、來源行號、本體SHA256與必要路徑替換。父模組保留的98個函式也核對原文；87個搬移函式在對照內逐一列出。可見性、公開重匯出、型別與模組宣告仍需搭配git diff審查，不能只憑本體雜湊宣稱所有行為已證明相同。

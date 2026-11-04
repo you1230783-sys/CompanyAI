@@ -1,0 +1,20 @@
+{
+  "version": "0.9.5",
+  "result": "PASS",
+  "bindings_retained": [
+    "windows 0.62.2",
+    "windows-sys 0.61.2"
+  ],
+  "initializer_sources": [
+    "src/com_apartment.rs"
+  ],
+  "isolated_real_com_cases": [
+    "S_FALSE nested initialization balanced",
+    "mode conflict retains STA owner",
+    "imaging borrows STA without uninitializing owner",
+    "new and nested MTA balanced",
+    "unwind balances initialization"
+  ],
+  "thread_bound": "PhantomData<Rc<()>>; no Send/Sync or Clone/Default implementation",
+  "scope": "Unified COM lifetime boundary; not removal of either Windows binding crate. Native UI/Office regression reported separately."
+}

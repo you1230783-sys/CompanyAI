@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.9.5",
+    "section": "Windows COM可靠度整理",
+    "items": [
+      "統一Office、Outlook、桌面介面與圖片處理的COM生命週期，避免跨執行緒釋放或初始化次數不平衡。",
+      "保留既有Windows介面與公司更新機制；本版不改文件比較、功能開關或模型行為。"
+    ]
+  },
+  {
     "version": "0.9.4",
     "section": "批次異常處理與維護整理",
     "items": [

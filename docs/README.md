@@ -4,6 +4,9 @@
 
 ## 保留版本與驗證
 
+- [0.9.5：Windows COM邊界整理](VALIDATION_0_9_5.md)
+- [Windows綁定分工與COM生命週期](WINDOWS_BINDINGS.md)
+
 - [0.9.3：文件工作、工作區與流程提醒](VALIDATION_0_9_3.md)
 - [0.9.2：對話交接、統一清單與任務總覽](VALIDATION_0_9_2.md)
 - [0.9.1：指令範本、截圖與Releases](VALIDATION_0_9_1.md)
