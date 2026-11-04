@@ -1,5 +1,12 @@
 # 版本更新紀錄
 
+## 0.9.7 — CI與依賴維護
+
+- 固定v142 x64／SDK及Rust的Windows CI，線上準備vendor後以空Cargo快取frozen建置。
+- 完整／核心配置的fmt、Clippy與Rust測試，Hosted互動桌面限制明確記錄。
+- RustSec資料庫持續檢查，修補撤回的yoke-derive；ttf-parser維護公告保留有期限的精確評估。
+- [檢查政策](docs/CI_AND_DEPENDENCIES.md)、[驗證紀錄](docs/VALIDATION_0_9_7.md)。
+
 ## 0.9.6 — Cargo選用模組
 
 - CAD、桌寵、塔羅與VNC獨立features，預設全部啟用；核心PNG預覽先以純搬移commit分離。

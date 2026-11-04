@@ -1,0 +1,42 @@
+name: Windows v142 and dependency audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 2 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned v142 and prepare locked vendor
+        if: github.event_name != 'schedule'
+        run: ./scripts/Initialize-CI.ps1
+      - name: Empty-cache frozen build, lint and Rust tests
+        if: github.event_name != 'schedule'
+        run: ./scripts/Test-CI.ps1 -HostedRunner
+      - name: Check current RustSec advisories
+        if: ${{ !cancelled() }}
+        run: ./scripts/Test-DependencyAudit.ps1
+      - name: Upload explicit public reports only
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-verification
+          path: .build/ci/reports/*.json
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7

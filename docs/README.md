@@ -4,6 +4,9 @@
 
 ## 保留版本與驗證
 
+- [0.9.7：CI與依賴檢查](VALIDATION_0_9_7.md)
+- [CI與依賴政策](CI_AND_DEPENDENCIES.md)
+
 - [0.9.6：Cargo選用模組](VALIDATION_0_9_6.md)
 - [Cargo選用模組與建置矩陣](CARGO_FEATURES.md)
 - [0.9.4：可靠度小修與純搬移拆分](VALIDATION_0_9_4.md)

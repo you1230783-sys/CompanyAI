@@ -2,19 +2,19 @@
 
 LM_AI 連接公司 AI 服務，協助問答、文件整理、Office 副本修訂、Python 分析與 Classic Outlook 郵件分析。支援 Windows 11 x64。
 
-**目前版本：0.9.6。建置與驗證結果見本版紀錄；公司環境另行驗收。**
+**目前版本：0.9.7。建置與驗證結果見本版紀錄；公司環境另行驗收。**
 
-成品校驗：[Releases與SHA256](https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.6) · [驗證紀錄](docs/VALIDATION_0_9_6.md)。請使用下方的完整安裝包。
+成品校驗：[Releases與SHA256](https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.7) · [驗證紀錄](docs/VALIDATION_0_9_7.md)。請使用下方的完整安裝包。
 
 ## 下載與安裝
 
-1. [下載 LM_AI_Setup.exe](https://github.com/you1230783-sys/CompanyAI/releases/download/v0.9.6/LM_AI_Setup.exe)。先從托盤離開程式，以一般權限安裝到 `C:\largan\LM_AI`。
+1. [下載 LM_AI_Setup.exe](https://github.com/you1230783-sys/CompanyAI/releases/download/v0.9.7/LM_AI_Setup.exe)。先從托盤離開程式，以一般權限安裝到 `C:\largan\LM_AI`。
 2. 開啟程式，按「登入」，在瀏覽器核對短碼並授權。
 3. 一般提問可直接對話；處理文件時選擇「我的工作區」或建立專案。
 
 安裝包內含 Python，請保留完整安裝目錄。WebView2 Runtime 另依 [離線說明](dist/WEBVIEW2-OFFLINE.md) 安裝。使用者不需安裝 Rust 或 Node。
 
-程式內更新仍從公司伺服器取得並驗證簽章與同源網址。GitHub僅為目前手動下載入口。公司模型、真實Outlook及公司加密文件仍須公司環境驗收；請查看 [0.9.6驗證紀錄](docs/VALIDATION_0_9_6.md)。
+程式內更新仍從公司伺服器取得並驗證簽章與同源網址。GitHub僅為目前手動下載入口。公司模型、真實Outlook及公司加密文件仍須公司環境驗收；請查看 [0.9.7驗證紀錄](docs/VALIDATION_0_9_7.md)。
 
 ## 主要功能
 
