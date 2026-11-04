@@ -1,6 +1,7 @@
 """核對0.9.4搬移的函式本體；只允許空白與已列明的模組路徑調整。
 
-不需要第三方Python套件。字串／字元／註解保留原文，避免忽略字串內空白變更。
+不需要第三方Python套件；請先載入Enter-DevShell，使用專案固定的rustfmt。
+字串／字元／註解保留原文，避免忽略字串內空白變更。
 這是搬移輔助檢查，不能取代編譯、可見性審查及實際回歸。
 """
 from pathlib import Path
@@ -90,6 +91,15 @@ def digest(body):
     return hashlib.sha256(json.dumps([t for t, _, _ in tokens(body)],ensure_ascii=False).encode('utf-8')).hexdigest()
 
 
+@lru_cache(maxsize=512)
+def formatted_digest(body):
+    # 相同包裝與格式器正規化兩邊；允許rustfmt的換行／尾逗號，
+    # 不直接刪除逗號，因為(x)與(x,)的型別與行為不同。
+    source='fn moved_body_check() '+body+'\n'
+    output=subprocess.run(['rustfmt','--emit','stdout','--edition','2021'],input=source.encode('utf-8'),stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True).stdout.decode('utf-8')
+    return digest(output)
+
+
 def verify(manifest):
     data = json.loads(Path(manifest).read_text(encoding='utf-8'))
     sources = {}
@@ -109,7 +119,7 @@ def verify(manifest):
         candidates = [f for f in functions(new) if f['name']==entry['name']]
         assert len(candidates)==1, (entry, '目標名稱重複或遺失')
         target = candidates[0]
-        assert digest(expected)==digest(new[target['body']:target['end']]), (entry, '函式本體不符')
+        assert formatted_digest(expected)==formatted_digest(new[target['body']:target['end']]), (entry, '函式本體不符')
         checked += 1
     print(json.dumps({'result':'PASS','manifest':str(manifest),'functions':checked},ensure_ascii=False))
 
