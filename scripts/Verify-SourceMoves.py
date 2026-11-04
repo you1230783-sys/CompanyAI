@@ -5,6 +5,7 @@
 """
 from pathlib import Path
 import hashlib
+from functools import lru_cache
 import json
 import re
 import subprocess
@@ -61,6 +62,7 @@ def tokens(source):
         yield source[start:index], start, index
 
 
+@lru_cache(maxsize=32)
 def functions(source):
     """本次搬移僅包含有實體函式本體的項目，不處理macro產生的函式。"""
     result = []
