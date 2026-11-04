@@ -40,8 +40,10 @@ mod pet;
 mod projects;
 mod reminders;
 mod retry;
+mod screenshot;
 mod site;
 mod tarot;
+mod templates;
 mod tutorial_preview;
 mod vnc;
 mod window_behavior;
@@ -52,6 +54,12 @@ const TRAY_MESSAGE: u32 = WM_APP + 4;
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Command {
+    Template {
+        command: templates::TemplateCommand,
+    },
+    Screenshot {
+        command: screenshot::ScreenshotCommand,
+    },
     Reminder {
         command: reminders::ReminderCommand,
     },
@@ -189,6 +197,7 @@ enum Command {
     },
 }
 enum Event {
+    Screenshot(String, AppResult<Vec<u8>>),
     SmokePng(AppResult<()>),
     Project(projects::ProjectEvent),
     VncSync(String, crate::vnc::sync::SessionEvent),
@@ -217,6 +226,8 @@ struct App {
     panic_fault: bool,
     diagnostic_preview: Option<(String, Vec<u8>)>,
     reminders: reminders::ReminderRuntime,
+    templates: templates::TemplateRuntime,
+    screenshot: screenshot::Runtime,
     pet: crate::pet::Pet,
     tarot: crate::tarot::Round,
     onboarding: onboarding::Onboarding,
@@ -278,6 +289,13 @@ struct App {
 }
 impl Drop for App {
     fn drop(&mut self) {
+        // SAFETY: 固定識別碼只屬於本視窗；尚未註冊或視窗已銷毀時呼叫會安全失敗。
+        unsafe {
+            windows_sys::Win32::UI::Input::KeyboardAndMouse::UnregisterHotKey(
+                self.window,
+                crate::screenshot::HOTKEY_ID,
+            );
+        }
         self.projects.cancel();
         self.vnc.shutdown();
         let _ = self.preserve_draft();
@@ -453,10 +471,16 @@ impl App {
         Ok(())
     }
     fn apply_hotkey(&mut self, value: String) -> AppResult<()> {
-        let next = Hotkey::parse(&value)?;
         if self.recording_since.is_some() {
             self.stop_recording()?;
         }
+        self.unregister_screenshot_hotkey();
+        let result = self.apply_selection_hotkey(value);
+        self.sync_screenshot_hotkey();
+        result
+    }
+    fn apply_selection_hotkey(&mut self, value: String) -> AppResult<()> {
+        let next = Hotkey::parse(&value)?;
         selection::unregister(self.window);
         if let Err(e) = if self.config.hotkey_enabled && self.logged_in() {
             selection::register(self.window, next)
@@ -489,6 +513,7 @@ impl App {
             return Err("請等目前操作完成後再錄製快捷鍵。".into());
         }
         selection::unregister(self.window);
+        self.unregister_screenshot_hotkey();
         self.recording_since = Some(Instant::now());
         self.view.set_recording(true);
         self.view
@@ -510,6 +535,7 @@ impl App {
                 return Err(format!("錄製已結束，但原快捷鍵無法恢復：{e}"));
             }
         }
+        self.sync_screenshot_hotkey();
         Ok(())
     }
     fn refresh_services(&mut self) {
@@ -603,6 +629,7 @@ impl App {
         }
     }
     fn logout(&mut self) -> AppResult<()> {
+        self.screenshot_command(screenshot::ScreenshotCommand::Cancel)?;
         self.projects.cancel();
         self.vnc.disable();
         self.mail_flow.cancel.store(true, Ordering::Relaxed);
@@ -729,6 +756,8 @@ impl App {
         command.check_access(self.logged_in(), self.versions.blocked(), self.smoke)?;
         match command {
             Command::Reminder { command } => self.reminder_command(command)?,
+            Command::Template { command } => self.template_command(command)?,
+            Command::Screenshot { command } => self.screenshot_command(command)?,
             Command::Pet { command } => self.pet_command(command)?,
             Command::Tarot { command } => self.tarot_command(command)?,
             Command::OnboardingAck { topic } => self.onboarding.acknowledge(&topic)?,
@@ -836,6 +865,10 @@ impl App {
                             return Ok(());
                         }
                         if let Err(error) = self.verify_task_tracking() {
+                            self.smoke_result = Some(Err(error));
+                            return Ok(());
+                        }
+                        if let Err(error) = self.verify_screenshot_flow() {
                             self.smoke_result = Some(Err(error));
                             return Ok(());
                         }
@@ -1365,6 +1398,7 @@ impl App {
             return Ok(());
         }
         match event {
+            Event::Screenshot(id, result) => self.screenshot_event(id, result)?,
             Event::Site(generation, event) if generation == self.generation => {
                 self.site_event(event)?
             }
@@ -2081,6 +2115,15 @@ unsafe extern "system" fn window_proc(
                         app.view.resize(rect.right, rect.bottom);
                         return 0;
                     }
+                    WM_HOTKEY if wparam == crate::screenshot::HOTKEY_ID as usize => {
+                        if let Err(error) =
+                            app.screenshot_command(screenshot::ScreenshotCommand::Prepare)
+                        {
+                            app.fail(error);
+                            app.publish();
+                        }
+                        return 0;
+                    }
                     WM_HOTKEY if wparam == selection::HOTKEY_ID as usize => {
                         app.capture();
                         return 0;
@@ -2329,6 +2372,8 @@ fn run_with_local(
             panic_fault: false,
             diagnostic_preview: None,
             reminders: reminders::ReminderRuntime::load(&root),
+            templates: templates::TemplateRuntime::load(&root),
+            screenshot: screenshot::Runtime::default(),
             pet,
             tarot: crate::tarot::Round::default(),
             onboarding: onboarding::Onboarding::load(smoke || local.is_some()),

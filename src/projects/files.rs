@@ -467,6 +467,82 @@ pub fn save_user_chart(project: &Project, conversation: &str, bytes: &[u8]) -> A
     }
     Ok(path)
 }
+/// 預覽只記錄根目錄的檔案身分，不長時間鎖住整條路徑而妨礙其他本機保存。
+pub(crate) fn directory_identity(path: &Path) -> AppResult<[u32; 3]> {
+    pinned_directory_identity(&pin(path)?)
+}
+fn pinned_directory_identity(guards: &[File]) -> AppResult<[u32; 3]> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+    };
+    let directory = guards.last().ok_or("無法識別專案根目錄。")?;
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: 目錄handle仍由guards持有，info為完整可寫結構。
+    if unsafe { GetFileInformationByHandle(directory.as_raw_handle(), &mut info) } == 0 {
+        return Err("無法取得專案目錄身分，這次不保存截圖。".into());
+    }
+    if info.nFileIndexHigh == 0 && info.nFileIndexLow == 0 {
+        return Err("此檔案系統未提供穩定目錄身分，這次不保存截圖。".into());
+    }
+    Ok([
+        info.dwVolumeSerialNumber,
+        info.nFileIndexHigh,
+        info.nFileIndexLow,
+    ])
+}
+
+/// 預覽確認後保存原生截圖；固定輸出目錄、不可覆寫、讀回核對。
+pub fn save_user_screenshot(
+    project: &Project,
+    conversation: &str,
+    expected_root: [u32; 3],
+    bytes: &[u8],
+) -> AppResult<String> {
+    if bytes.len() > super::vision::input::MAX_BYTES || !bytes.starts_with(&[255, 216]) {
+        return Err("截圖必須為5 MB以內的JPEG。".into());
+    }
+    // 先以WIC確認實際圖片，不能只相信副檔名或JPEG開頭。
+    super::vision::jpeg::convert(bytes, "jpg")?;
+    validate_root(&project.root)?;
+    let root_guards = pin(&project.root)?;
+    if pinned_directory_identity(&root_guards)? != expected_root {
+        return Err("專案根目錄已被替換，請重新開始截圖。".into());
+    }
+    let base = project.root.join("_AI_Output");
+    match fs::create_dir(&base) {
+        Ok(()) => (),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => (),
+        Err(e) => return Err(e.to_string()),
+    }
+    let _base = pin(&base)?;
+    let folder_name = conversation_folder_name(conversation)?;
+    ensure_output_folder(&base, &folder_name)?;
+    let folder = base.join(&folder_name);
+    let _folder = pin(&folder)?;
+    let name = format!("截圖_{}.jpg", crate::jobs::new_id()?);
+    let path = format!("_AI_Output/{folder_name}/{name}");
+    let mut file = OpenOptions::new()
+        .create_new(true)
+        .read(true)
+        .write(true)
+        .open(folder.join(&name))
+        .map_err(|e| e.to_string())?;
+    file.write_all(bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|e| format!("可能部分寫入 {path}，未完成：{e}"))?;
+    file.rewind().map_err(|e| e.to_string())?;
+    let mut check = Vec::new();
+    Read::by_ref(&mut file)
+        .take((super::vision::input::MAX_BYTES + 1) as u64)
+        .read_to_end(&mut check)
+        .map_err(|e| e.to_string())?;
+    if check != bytes {
+        return Err(format!("{path} 讀回不一致，請核對現有圖片。"));
+    }
+    Ok(path)
+}
+
 fn create_output_folder(base: &Path) -> AppResult<String> {
     let mut time = windows_sys::Win32::Foundation::SYSTEMTIME::default();
     unsafe { windows_sys::Win32::System::SystemInformation::GetLocalTime(&mut time) };

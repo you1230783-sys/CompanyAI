@@ -44,7 +44,7 @@ impl WebView {
         profile: &Path,
         messages: mpsc::Sender<String>,
     ) -> AppResult<Self> {
-        Self::create_inner(HWND(window), profile, messages, PAGE).map_err(|e| format!("無法啟動 LM_AI 介面：{e}。若尚未安裝 WebView2，請執行隨附的 MicrosoftEdgeWebView2RuntimeInstallerX64.exe，再重新開啟 LM_AI。"))
+        Self::create_inner(HWND(window), profile, messages, PAGE).map_err(|e| format!("無法啟動 LM_AI 介面：{e}。若尚未安裝 WebView2，請向 IT 取得，或至 https://developer.microsoft.com/en-us/microsoft-edge/webview2/ 下載 x64 Evergreen Standalone Installer（MicrosoftEdgeWebView2RuntimeInstallerX64.exe）並執行，再重新開啟 LM_AI。"))
     }
     /// 獨立教學預覽只載入固定內嵌頁；沒有正式 App 接收器或公司連線。
     pub fn create_tutorial_preview(

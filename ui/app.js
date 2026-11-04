@@ -935,6 +935,7 @@ function receive(next) {
     resizePrompt();
   }
   renderHistory();
+  window.DraftTools?.sync();
   window.ProjectUI?.render();
   window.ArtifactUI?.sync();
   window.WorkbenchUI?.sync();
@@ -1361,6 +1362,7 @@ if (bridge) {
         window.TarotUI?.receive(event.data);
         window.PetUI?.receive(event.data);
         window.ReminderUI?.receive(event.data);
+        window.DraftTools?.receive(event.data);
         window.SettingsUI?.receive(event.data);
         window.ProjectUI?.receive(event.data);
         window.ArtifactUI?.receive(event.data);

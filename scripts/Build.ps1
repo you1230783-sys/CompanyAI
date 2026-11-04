@@ -167,6 +167,8 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     }
     $composerReport = Join-Path ([IO.Path]::GetTempPath()) 'CompanyAI-ui-smoke\composer-verification.json'
     if (Test-Path -LiteralPath $composerReport) { Remove-Item -LiteralPath $composerReport }
+    $screenshotReport = Join-Path ([IO.Path]::GetTempPath()) 'CompanyAI-ui-smoke\screenshot-verification.json'
+    if (Test-Path -LiteralPath $screenshotReport) { Remove-Item -LiteralPath $screenshotReport }
     $trackingReport = Join-Path ([IO.Path]::GetTempPath()) 'CompanyAI-ui-smoke\task-tracking-verification.json'
     if (Test-Path -LiteralPath $trackingReport) { Remove-Item -LiteralPath $trackingReport }
     # GUI 程式以隱藏的自我檢查模式驗證控制項，避免編譯腳本停在主視窗。
@@ -186,6 +188,9 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         if ($smokeCheck.ExitCode -ne 0) { throw ('Executable UI smoke check failed: ' + $smokeCheck.StandardError.ReadToEnd()) }
     } finally { $smokeCheck.Dispose() }
     # 此檔由本次 EXE 原生控制器自檢產生；缺檔或失敗不能沿用舊驗證紀錄。
+    $screenshotReport = Join-Path ([IO.Path]::GetTempPath()) 'CompanyAI-ui-smoke\screenshot-verification.json'
+    $screenshotCheck = Get-Content -LiteralPath $screenshotReport -Raw | ConvertFrom-Json
+    if ($screenshotCheck.result -ne 'PASS' -or $screenshotCheck.cases.Count -lt 10) { throw 'Native screenshot flow verification failed.' }
     $composerCheck = Get-Content -LiteralPath $composerReport -Raw | ConvertFrom-Json
     if ($composerCheck.result -ne 'PASS' -or $composerCheck.cases.Count -lt 14) {
         throw 'Native project composer verification failed.'
@@ -240,6 +245,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
             $basic.checks += 'NSIS packaging and native signed manifest/package verification'
         }
         Copy-Item -LiteralPath $composerReport -Destination (Join-Path $projectRoot 'offline\composer-verification.json') -Force
+        Copy-Item -LiteralPath $screenshotReport -Destination (Join-Path $projectRoot 'offline\screenshot-verification.json') -Force
         Copy-Item -LiteralPath $trackingReport -Destination (Join-Path $projectRoot 'offline\task-tracking-verification.json') -Force
         $basic | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $projectRoot 'offline\exe-verification.json') -Encoding UTF8
         @("Scope: basic validation; full validation pending", "MSVC: $env:VCToolsVersion", "Compiler: $compiler", $compilerReport, "Linker: $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER", "SDK: $env:WindowsSDKVersion", "Cargo home: $env:CARGO_HOME", (& rustc -vV), (& cargo -V), $dependencies) | Set-Content -LiteralPath (Join-Path $projectRoot 'offline\environment.txt') -Encoding UTF8
@@ -399,6 +405,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     New-Item -ItemType Directory -Path $dist -Force | Out-Null
     Copy-Item -LiteralPath $exe -Destination (Join-Path $dist 'LM_AI.exe') -Force
     Copy-Item -LiteralPath $composerReport -Destination (Join-Path $projectRoot 'offline\composer-verification.json') -Force
+    Copy-Item -LiteralPath $screenshotReport -Destination (Join-Path $projectRoot 'offline\screenshot-verification.json') -Force
     Copy-Item -LiteralPath (Join-Path $projectRoot '.build\project-smoke\log-verification.json') -Destination (Join-Path $projectRoot 'offline\log-verification.json') -Force
     # 0.8.1 起僅交付 LM_AI.exe；移除已停用的相容檔名，不再產生第二份主程式。
     $legacyExe = Join-Path $dist 'CompanyAI.exe'

@@ -10,7 +10,12 @@ impl App {
             .unwrap_or("");
         crate::errors::report(&self.root, stage, error, &[token])
     }
-    fn export_error_file(&self, bytes: &[u8]) -> AppResult<bool> {
+    pub(super) fn save_json_file(
+        &self,
+        title: &str,
+        filename: &str,
+        bytes: &[u8],
+    ) -> AppResult<bool> {
         use windows::{
             core::{w, HSTRING},
             Win32::{
@@ -28,14 +33,14 @@ impl App {
                 CoCreateInstance(&FileSaveDialog, None, CLSCTX_INPROC_SERVER)
                     .map_err(|e| e.to_string())?;
             dialog
-                .SetTitle(w!("匯出錯誤診斷檔"))
+                .SetTitle(&HSTRING::from(title))
                 .map_err(|e| e.to_string())?;
             dialog
                 .SetOptions(FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST | FOS_OVERWRITEPROMPT)
                 .map_err(|e| e.to_string())?;
             dialog
                 .SetFileTypes(&[COMDLG_FILTERSPEC {
-                    pszName: w!("診斷 JSON"),
+                    pszName: w!("JSON"),
                     pszSpec: w!("*.json"),
                 }])
                 .map_err(|e| e.to_string())?;
@@ -43,10 +48,7 @@ impl App {
                 .SetDefaultExtension(w!("json"))
                 .map_err(|e| e.to_string())?;
             dialog
-                .SetFileName(&HSTRING::from(format!(
-                    "LM_AI_Diagnostics_{}.json",
-                    crate::unix_now()
-                )))
+                .SetFileName(&HSTRING::from(filename))
                 .map_err(|e| e.to_string())?;
             if let Err(error) = dialog.Show(Some(WinHwnd(self.window))) {
                 if error.code() == windows::core::HRESULT::from_win32(ERROR_CANCELLED.0) {
@@ -93,7 +95,11 @@ impl App {
         if id != preview_id {
             return Err("診斷預覽已過期，請重新預覽。".into());
         }
-        let text = match self.export_error_file(bytes) {
+        let text = match self.save_json_file(
+            "匯出錯誤診斷檔",
+            &format!("LM_AI_Diagnostics_{}.json", crate::unix_now()),
+            bytes,
+        ) {
             Ok(true) => "錯誤診斷檔已儲存；可將此 JSON 交給維護者。".into(),
             Ok(false) => "已取消匯出。".into(),
             Err(error) => self.friendly_error("diagnostics_export", &error),

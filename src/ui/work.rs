@@ -268,7 +268,7 @@ impl App {
             && !self.work.store.pending(self.active_id.as_deref())
             && self.check_draft_files().is_ok()
     }
-    fn ensure_local_conversation(&mut self) -> AppResult<String> {
+    pub(super) fn ensure_local_conversation(&mut self) -> AppResult<String> {
         if self.active_id.is_none() {
             self.save_history()?;
         }
