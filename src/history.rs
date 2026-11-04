@@ -41,6 +41,9 @@ pub struct Conversation {
     pub title_manual: bool,
     #[serde(default)]
     pub draft: String,
+    /// 只供本機導覽；不複製來源附件、請求ID、暫停點或任何權限。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff_source: Option<String>,
     pub created_at: u64,
     pub updated_at: u64,
     pub messages: Vec<Message>,
@@ -97,6 +100,7 @@ impl Archive {
             pinned: false,
             title_manual: false,
             draft: String::new(),
+            handoff_source: None,
             created_at: unix_now(),
             updated_at: unix_now(),
             messages,
@@ -146,6 +150,10 @@ impl Archive {
                 || !ids.insert(&conversation.id)
                 || conversation.title.chars().count() > 100
                 || conversation.draft.encode_utf16().count() > 16_000
+                || conversation
+                    .handoff_source
+                    .as_ref()
+                    .is_some_and(|id| crate::jobs::validate_id(id).is_err())
                 || conversation.messages.len() > 1000
                 || conversation.messages.iter().any(|m| {
                     !matches!(m.role.as_str(), "user" | "assistant") || m.content.len() > 1_048_576

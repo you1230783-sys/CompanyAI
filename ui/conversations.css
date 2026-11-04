@@ -1,0 +1,13 @@
+#handoff-dialog { width:min(860px,calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; box-sizing:border-box; }
+#handoff-dialog label { display:block; margin:12px 0; }
+#handoff-dialog textarea,#handoff-dialog select { display:block; width:100%; box-sizing:border-box; margin-top:6px; }
+#handoff-dialog [data-destination],.task-overview li { overflow-wrap:anywhere; }
+.task-overview { margin:12px 0; padding:12px; border:1px solid var(--border); border-radius:10px; }
+.task-overview details { margin:6px 0; }
+.task-overview ul { max-height:240px; overflow:auto; padding-left:22px; }
+.conversation-tag { display:block; font-size:11px; opacity:.75; overflow:hidden; text-overflow:ellipsis; }
+#history-filter { width:100%; box-sizing:border-box; margin:5px 0; }
+#handoff-source { text-align:left; overflow-wrap:anywhere; }
+.project-tools-menu { border:1px solid var(--border); border-radius:8px; padding:6px 10px; }
+.project-tools-menu summary { cursor:pointer; }
+.project-tools-menu p { font-size:12px; }

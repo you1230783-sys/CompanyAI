@@ -642,6 +642,7 @@ function renderMessages() {
       content.append(details);
     }
     content.append(bubble);
+    window.ConversationUI?.overview(content,message,!!state.conversations.find(c=>c.id===state.active_id)?.project_id);
     if(message.request_id)window.ReviewUI?.attach(bubble,{conversation:state.active_id,message_index:index,request_id:message.request_id});
     if (message.project_analysis) {
       const analysis = node("div");
@@ -714,14 +715,24 @@ function renderMessages() {
   }
 }
 let historySignature = "";
+let historyFilter = "all";
+function filterHistory(value) {
+  historyFilter=value;historySignature="";renderHistory();
+}
+$("history-filter").onchange=()=>filterHistory($("history-filter").value);
 function renderHistory() {
   const list = $("history-list");
-  const signature = JSON.stringify([state.conversations, state.active_id, state.busy]);
+  const projects=state.projects?.items||[];
+  if(!["all","general","projects"].includes(historyFilter) && !projects.some(p=>`project:${p.id}`===historyFilter))historyFilter="all";
+  const signature = JSON.stringify([state.conversations, state.active_id, state.busy,projects,historyFilter]);
   // 背景進度推播不重建相同清單，保留鍵盤焦點與滑鼠所在的操作列。
   if (signature === historySignature) return;
   historySignature = signature;
   list.replaceChildren();
-  const conversations = state.conversations.filter(c => !c.project_id).sort(
+  const selector=$("history-filter");selector.replaceChildren();
+  for(const [value,label] of [["all","全部對話"],["general","一般對話"],["projects","所有專案對話"],...projects.map(p=>[`project:${p.id}`,p.name])])selector.add(new Option(label,value));
+  selector.value=historyFilter;
+  const conversations = state.conversations.filter(c => historyFilter==="all" || (historyFilter==="general" ? !c.project_id : historyFilter==="projects" ? !!c.project_id : `project:${c.project_id}`===historyFilter)).sort(
     (a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.updated_at - a.updated_at,
   );
   for (const c of conversations) {
@@ -731,6 +742,8 @@ function renderHistory() {
       "history-item",
       c.title,
     );
+    const projectName=projects.find(p=>p.id===c.project_id)?.name;
+    button.append(node("span","conversation-tag",c.project_id ? `專案：${projectName||"已移除"}` : "一般對話"));
     button.title = (c.pinned ? "已置頂 · " : "") + c.title;
     button.dataset.id = c.id;
     button.disabled = state.busy !== "none";
@@ -892,6 +905,7 @@ function receive(next) {
   for (const [section, label, list] of [["projects", "專案", "project-list"], ["recent", "最近對話", "history-list"]]) {
     const collapsed = !!state.config[section + "_collapsed"];
     $(list).hidden = collapsed;
+    if(section==="recent")$("history-filter").parentElement.hidden=collapsed;
     $("collapse-" + section).textContent = (collapsed ? "▸ " : "▾ ") + label;
     $("collapse-" + section).setAttribute("aria-expanded", String(!collapsed));
   }
@@ -937,6 +951,7 @@ function receive(next) {
   renderHistory();
   window.DraftTools?.sync();
   window.ProjectUI?.render();
+  window.ConversationUI?.sync();
   window.ArtifactUI?.sync();
   window.WorkbenchUI?.sync();
   window.WeeklyUI?.render();
@@ -1363,6 +1378,7 @@ if (bridge) {
         window.PetUI?.receive(event.data);
         window.ReminderUI?.receive(event.data);
         window.DraftTools?.receive(event.data);
+        window.ConversationUI?.receive(event.data);
         window.SettingsUI?.receive(event.data);
         window.ProjectUI?.receive(event.data);
         window.ArtifactUI?.receive(event.data);

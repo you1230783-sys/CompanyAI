@@ -57,15 +57,13 @@ const delay = milliseconds => new Promise(resolve => setTimeout(resolve, millise
       fixture.conversations.push({id:'chat-two',title:'第二個對話',project_id:'project-two',updated_at:1});
       LMUI.receive(fixture);
       document.querySelector('.project-title-toggle').click();
-      check(testCommands.at(-1).command.action==='set_collapsed' && testCommands.at(-1).command.id==='project',
-        '點擊專案名稱只要求收合指定專案');
-      fixture.projects.items[0].collapsed=true;LMUI.receive(fixture);
-      check(!document.querySelector('#project-list .history-item[data-id="test-chat"]') &&
-        !!document.querySelector('#project-list .history-item[data-id="chat-two"]') && LMUI.getState().active_id==='test-chat',
-        '單一專案收合保留其他專案及目前對話');
+      check($('history-filter').value==='project:project' && !!document.querySelector('#history-list .history-item[data-id="test-chat"]'),
+        '點擊專案名稱篩選統一對話清單');
+      check(!document.querySelector('#project-list .history-item') && !document.querySelector('#history-list .history-item[data-id="chat-two"]') && LMUI.getState().active_id==='test-chat',
+        '篩選不重複列出對話也不切換目前對話');
       fixture.projects.running=true;LMUI.receive(fixture);
-      check(!document.querySelector('.project-title-toggle').disabled,'執行任務時仍可收合專案');
-      fixture.projects.running=false;fixture.projects.items[0].collapsed=false;LMUI.receive(fixture);
+      check(!document.querySelector('.project-title-toggle').disabled,'執行任務時仍可篩選對話');
+      fixture.projects.running=false;LMUI.receive(fixture);filterHistory('all');
 
       const history=document.createElement('details');history.open=true;document.body.append(history);
       const events=Array.from({length:350},(_,index)=>({at:'2026-11-02 13:00:00',text:'紀錄 '+index}));

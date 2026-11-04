@@ -34,6 +34,7 @@ use windows_sys::Win32::{
 };
 mod access;
 mod diagnostics;
+mod handoff;
 mod mail_batch;
 mod onboarding;
 mod pet;
@@ -54,6 +55,9 @@ const TRAY_MESSAGE: u32 = WM_APP + 4;
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Command {
+    Handoff {
+        command: handoff::HandoffCommand,
+    },
     Template {
         command: templates::TemplateCommand,
     },
@@ -228,6 +232,7 @@ struct App {
     reminders: reminders::ReminderRuntime,
     templates: templates::TemplateRuntime,
     screenshot: screenshot::Runtime,
+    handoff: Option<handoff::Pending>,
     pet: crate::pet::Pet,
     tarot: crate::tarot::Round,
     onboarding: onboarding::Onboarding,
@@ -349,7 +354,7 @@ impl App {
             .archive
             .conversations
             .iter()
-            .map(|c| json!({"id":c.id,"title":c.title,"updated_at":c.updated_at,"pinned":c.pinned,"project_id":self.projects.store.conversations.get(&c.id)}))
+            .map(|c| json!({"id":c.id,"title":c.title,"updated_at":c.updated_at,"pinned":c.pinned,"project_id":self.projects.store.conversations.get(&c.id),"handoff_source":c.handoff_source}))
             .collect();
         let mut events:Vec<serde_json::Value>=self.inbox.events.iter().filter(|e|!e.expired()&&!e.dismissed&&e.visible_ai()&&!crate::projects::events::internal(&self.root,e.resource_id.as_deref())).map(|e|json!({
             "id":e.id,"source":"ai","type":e.kind,"title":e.title,"summary":e.summary,"created_at":e.created_at,"read_at":e.read_at,"notification_key":format!("ai:{}",e.id)
@@ -629,6 +634,7 @@ impl App {
         }
     }
     fn logout(&mut self) -> AppResult<()> {
+        self.handoff = None;
         self.screenshot_command(screenshot::ScreenshotCommand::Cancel)?;
         self.projects.cancel();
         self.vnc.disable();
@@ -758,6 +764,14 @@ impl App {
             Command::Reminder { command } => self.reminder_command(command)?,
             Command::Template { command } => self.template_command(command)?,
             Command::Screenshot { command } => self.screenshot_command(command)?,
+            Command::Handoff { command } => {
+                let id = command.correlation().to_owned();
+                if let Err(error) = self.handoff_command(command) {
+                    self.view
+                        .post(&json!({"type":"handoff_error","id":id,"message":error}))?;
+                    return Err(error);
+                }
+            }
             Command::Pet { command } => self.pet_command(command)?,
             Command::Tarot { command } => self.tarot_command(command)?,
             Command::OnboardingAck { topic } => self.onboarding.acknowledge(&topic)?,
@@ -869,6 +883,10 @@ impl App {
                             return Ok(());
                         }
                         if let Err(error) = self.verify_screenshot_flow() {
+                            self.smoke_result = Some(Err(error));
+                            return Ok(());
+                        }
+                        if let Err(error) = self.verify_handoff_flow() {
                             self.smoke_result = Some(Err(error));
                             return Ok(());
                         }
@@ -2374,6 +2392,7 @@ fn run_with_local(
             reminders: reminders::ReminderRuntime::load(&root),
             templates: templates::TemplateRuntime::load(&root),
             screenshot: screenshot::Runtime::default(),
+            handoff: None,
             pet,
             tarot: crate::tarot::Round::default(),
             onboarding: onboarding::Onboarding::load(smoke || local.is_some()),

@@ -1207,15 +1207,15 @@ window.runSelfTest = async (structuredFixture) => {
       check(document.getElementById("vnc-sync-controls").hidden && document.getElementById("vnc-sync-user").value === "" &&
         document.getElementById("vnc-import-preview").hidden, "VNC disabling hides synchronization and clears credentials in UI");
     } finally { send = vncSend; }
-    // 0.8.16：專案與一般對話分區，更新入口只在有新版時出現。
+    // 0.9.2：最近對話統一呈現，專案區保留管理入口；更新入口依舊有新版才顯示。
     const savedConversations = fixture.conversations;
     fixture.projects = {items:[{id:"project-test",name:"測試專案",root:"C:\\測試",import_count:0}],running:false,status:""};
     fixture.conversations = [...savedConversations, {id:"project-chat",project_id:"project-test",title:"專案標題",updated_at:1}];
     fixture.update_available = true;
     LMUI.receive(fixture);
     check(!$("update-shortcut").hidden, "update arrow appears for available release");
-    check($("project-list").textContent.includes("專案標題"), "project conversation appears inside project");
-    check(!$("history-list").textContent.includes("專案標題"), "project conversation excluded from recent list");
+    check(!$("project-list").textContent.includes("專案標題") && $("project-list").textContent.includes("測試專案"), "project area contains management entries without duplicate conversations");
+    check($("history-list").textContent.includes("專案標題") && $("history-list").textContent.includes("專案：測試專案"), "project conversation is included and labelled in recent list");
     check($("sidebar").contains($("show-vnc")) && !$("advanced-dialog").contains($("show-vnc")), "VNC has a direct sidebar entry");
     check(!!($("show-vnc").compareDocumentPosition($("project-list")) & Node.DOCUMENT_POSITION_FOLLOWING), "projects follow advanced functions and VNC entries");
     check(!!($("project-list").compareDocumentPosition($("history-list")) & Node.DOCUMENT_POSITION_FOLLOWING), "projects precede recent history");

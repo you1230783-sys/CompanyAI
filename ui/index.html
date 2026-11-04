@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="vendor/texmath.css" />
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="draft-tools.css" />
+    <link rel="stylesheet" href="conversations.css" />
     <link rel="stylesheet" href="tarot.css" />
     <link rel="stylesheet" href="project-tutorial.css" />
   </head>
@@ -45,6 +46,7 @@
               <span data-icon="plus"></span><span class="nav-label">新對話</span>
             </button>
           </div>
+          <label class="nav-label"><select id="history-filter" aria-label="篩選最近對話"><option value="all">全部對話</option><option value="general">一般對話</option><option value="projects">所有專案對話</option></select></label>
           <div id="history-list" class="nav-label" aria-label="本機對話"></div>
         </div>
         <div class="sidebar-bottom">
@@ -108,15 +110,19 @@
                 <summary>本次任務的補充指示</summary>
                 <div id="project-supplement-list"></div>
               </details>
-              <div class="draft-tools"><button id="show-templates" type="button">指令範本</button><button id="screenshot-start" type="button" title="Ctrl+Alt+S">截圖提問</button></div>
+              <button id="handoff-source" class="text-button" hidden></button>
+              <div class="draft-tools"><button id="show-templates" type="button">指令範本</button><button id="screenshot-start" type="button" title="Ctrl+Alt+S">截圖提問</button><button id="handoff-start" type="button">帶入專案繼續</button></div>
+              <p id="handoff-path-hint" class="muted" hidden>需要處理這個本機路徑時，可按「帶入專案繼續」；一般對話不會直接存取資料夾。</p>
               <div class="quick-actions">
               <p id="project-capability-hint" class="muted" role="status" hidden></p>
               <button id="project-stop" hidden>停止專案任務</button>
+              <details id="project-tools-menu" class="project-tools-menu"><summary>專案工具</summary><p id="project-tools-hint"></p>
               <button id="weekly-start" hidden>生成週報</button>
                 <button id="project-methods" hidden>重用分析方法</button>
                 <button id="project-artifacts" hidden>成果與流程</button>
                 <button id="work-settings-open" hidden>工作偏好與條件</button>
               <button id="project-outlook-start" hidden title="查看您選擇的 Outlook 信件，整理需要您處理、回覆或追蹤的事項。">Outlook 助理</button>
+              </details>
               <button data-action="translate">
                 <span data-icon="languages"></span>翻譯</button
               ><button data-action="summarize">
@@ -750,6 +756,7 @@
     <script src="pet.js"></script>
     <script src="reminders.js"></script>
     <script src="draft-tools.js"></script>
+    <script src="conversations.js"></script>
     <script src="work.js"></script>
     <script src="mail.js"></script>
     <script src="behavior.js"></script>
