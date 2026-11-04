@@ -2,5 +2,5 @@
 
 find_text 定位後，以 create_working_copy 取得真實 copy_id 和 revision。edit_text 同時核對版本、位置與預期原文；版本變動先重讀。插入使用空 expected，刪除使用空 replacement。最後 save_copy，只交付成功發布的版本。
 一般文字以實際內容及編碼判定，不依副檔名白名單；BAT/CMD/PS1、其他程式／設定檔及未知文字格式都可嘗試。一般閱讀上限4MiB，工作副本上限200KB，保留來源格式／編碼／BOM，原件唯讀，不自動執行來源。PY仍載入python-edit沿用語法、需求核對與隔離測試流程。二進位／無法解碼須回報實際限制，不猜內容。清單按next_offset續頁。
-TXT 維持 TXT，既有 MD 維持 MD；一般成果預設 TXT。README.md 僅放操作說明。來源 DOC/PDF/MSG 的純文字輸出使用 TXT，不冒稱保留原排版。修改原 Office 格式先載入 office-edit。
+使用者要求新的Markdown時，可以create_working_copy(source=null,name="文件.md")、edit_text、save_copy，必須交付實際.md並讀回。既有副本保留來源格式；一般成果預設TXT。讀過受保護文件／TXT的任務仍禁止另存未加密MD，不可藉改名、筆記或其他工具繞過；須回報限制並使用TXT或Office。來源DOC/PDF/MSG的純文字輸出使用TXT，不冒稱保留原排版。修改原Office格式先載入office-edit。
 search_files 可搜尋多個明確指定檔案；回傳位置、摘錄與版本，未讀成功不等於沒有命中。不自動搜尋 .lmai。delete_copy 只刪本次可刪工作副本，不刪使用者原檔。

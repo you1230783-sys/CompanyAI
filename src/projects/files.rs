@@ -3537,9 +3537,9 @@ impl Broker {
                             office::render(None, &rel, None, &[], None, cancel)?.serialize()?,
                             Encoding::Utf8(true),
                         )
-                    } else if office::supported(&rel) || ext == "md" {
+                    } else if office::supported(&rel) {
                         return Err(
-                            "舊版 Office 與 MD 請從來源建立副本；新文件可用 TXT、一般文字格式或 DOCX／XLSX／PPTX。"
+                            "舊版 Office 請從來源建立副本；新文件可用 Markdown、TXT、一般文字格式或 DOCX／XLSX／PPTX。"
                                 .into(),
                         );
                     } else {
