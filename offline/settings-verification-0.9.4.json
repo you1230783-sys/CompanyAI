@@ -1,0 +1,89 @@
+{
+  "result": "PASS",
+  "checks": [
+    "settings tabs, Other preferences, selected task, export default, round navigation and stale replies",
+    {
+      "name": "diagnostics-light",
+      "width": 1180,
+      "scroll": 1180,
+      "left": 110,
+      "right": 1070,
+      "top": 17,
+      "bottom": 783
+    },
+    {
+      "name": "advanced-light",
+      "width": 1180,
+      "scroll": 1180,
+      "left": 270,
+      "right": 910,
+      "top": 71.5,
+      "bottom": 728.5
+    },
+    {
+      "name": "advanced-dark",
+      "width": 1180,
+      "scroll": 1180,
+      "left": 270,
+      "right": 910,
+      "top": 71.5,
+      "bottom": 728.5
+    },
+    {
+      "name": "advanced-narrow",
+      "width": 520,
+      "scroll": 520,
+      "left": 20,
+      "right": 500,
+      "top": 71.5,
+      "bottom": 728.5
+    },
+    {
+      "name": "tutorials-narrow",
+      "width": 520,
+      "scroll": 520,
+      "left": 20,
+      "right": 500,
+      "top": 71.5,
+      "bottom": 728.5
+    },
+    {
+      "name": "tutorial-card-narrow",
+      "width": 520,
+      "scroll": 520,
+      "left": 16,
+      "right": 504,
+      "top": 16,
+      "bottom": 784
+    },
+    {
+      "name": "release-history-narrow",
+      "width": 520,
+      "scroll": 520,
+      "left": 20,
+      "right": 500,
+      "top": 24,
+      "bottom": 776
+    },
+    "all 57 tutorials completed in real browser; input/select/checkbox gates, focus, isolation and search",
+    {
+      "name": "operations-narrow",
+      "width": 520,
+      "scroll": 520,
+      "left": 20,
+      "right": 500,
+      "top": 71.5,
+      "bottom": 728.5
+    },
+    {
+      "name": "general-light",
+      "width": 1180,
+      "scroll": 1180,
+      "left": 270,
+      "right": 910,
+      "top": 71.5,
+      "bottom": 728.5
+    },
+    "real ECharts PNG with two parameter reference lines"
+  ]
+}

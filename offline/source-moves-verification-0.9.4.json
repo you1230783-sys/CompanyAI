@@ -1,0 +1,25 @@
+{
+  "version": "0.9.4",
+  "result": "PASS",
+  "checks": [
+    {
+      "result": "PASS",
+      "manifest": "docs/refactors/0.9.4-files.json",
+      "functions": 41,
+      "retained_functions": 63
+    },
+    {
+      "result": "PASS",
+      "manifest": "docs/refactors/0.9.4-ui.json",
+      "functions": 27,
+      "retained_functions": 17
+    },
+    {
+      "result": "PASS",
+      "manifest": "docs/refactors/0.9.4-runner.json",
+      "functions": 19,
+      "retained_functions": 18
+    }
+  ],
+  "scope": "Function-body verification; visibility/API review and full native regression are separate."
+}

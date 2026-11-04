@@ -2,10 +2,10 @@
   "mixed": {
     "execution": "parallel_compute_serial_commit",
     "max_parallel": 2,
-    "notice": "每項獨立成功或失敗；成功項目不重做，只另提失敗項目。不能把整批已回傳當作每項均成功。",
+    "notice": "一般工具錯誤為單項失敗，成功項目不重做；內部panic則停止批次並進入全域保護，須核對成果後重啟。不能把整批已回傳當作每項均成功。",
     "tasks": [
       {
-        "finished_local": "2026-11-04 19:14:34",
+        "finished_local": "2026-11-04 21:54:43",
         "outcome": {
           "ok": true,
           "operation_id": "274cfd6b2a8cae8f16cb9072c469a7d570af3363311406388b2be891e9a84cda",
@@ -16,12 +16,12 @@
             "displayed_in_conversation": true
           }
         },
-        "started_local": "2026-11-04 19:14:34",
+        "started_local": "2026-11-04 21:54:43",
         "task_id": "chart",
         "tool": "chart_dataset"
       },
       {
-        "finished_local": "2026-11-04 19:14:34",
+        "finished_local": "2026-11-04 21:54:43",
         "outcome": {
           "ok": true,
           "operation_id": "68f15359d0e85383ff44e484d27f933e1e25c193112a43c1f7a3044524d2341a",
@@ -38,7 +38,7 @@
             "working_copy": false
           }
         },
-        "started_local": "2026-11-04 19:14:34",
+        "started_local": "2026-11-04 21:54:43",
         "task_id": "read",
         "tool": "read_file"
       }
@@ -48,14 +48,14 @@
   "parallel": {
     "execution": "parallel_compute_serial_commit",
     "max_parallel": 2,
-    "notice": "每項獨立成功或失敗；成功項目不重做，只另提失敗項目。不能把整批已回傳當作每項均成功。",
+    "notice": "一般工具錯誤為單項失敗，成功項目不重做；內部panic則停止批次並進入全域保護，須核對成果後重啟。不能把整批已回傳當作每項均成功。",
     "tasks": [
       {
-        "finished_local": "2026-11-04 19:14:34",
+        "finished_local": "2026-11-04 21:54:43",
         "outcome": {
           "ok": true,
           "operation_id": "32b6f00c1a6937d31536dfc3a2838c7dc50bdb9298cb1e3e42e3bcae3d6fa0c1",
-          "progress_identity": "bd194d04e72ab5f2e0340217041fe92c0fa391333638551dd9c39ac092a4ecfa",
+          "progress_identity": "a8a560a82aaa94b815472c3e8d5f029b89572f48bd070f89c1beaa21c54b0220",
           "result": {
             "artifacts": [
               {
@@ -144,13 +144,13 @@
             ],
             "code_sha256": "613897890247d372a81b3dd6282033a70e706f74683b70953d5d0b05dcde1d22",
             "execution": "本機 AppContainer，無網路，原檔唯讀；衍生資料非原始列的一對一副本。",
-            "progress_identity": "bd194d04e72ab5f2e0340217041fe92c0fa391333638551dd9c39ac092a4ecfa",
+            "progress_identity": "a8a560a82aaa94b815472c3e8d5f029b89572f48bd070f89c1beaa21c54b0220",
             "purpose": "並行A",
             "sources": [],
             "stdout": "",
             "summary": {
-              "end": 1793790873.943472,
-              "start": 1793790865.9425025,
+              "end": 1793800482.9737945,
+              "start": 1793800474.97249,
               "value": 42
             },
             "versions": {
@@ -161,16 +161,16 @@
             }
           }
         },
-        "started_local": "2026-11-04 19:14:22",
+        "started_local": "2026-11-04 21:54:32",
         "task_id": "a",
         "tool": "run_python"
       },
       {
-        "finished_local": "2026-11-04 19:14:34",
+        "finished_local": "2026-11-04 21:54:43",
         "outcome": {
           "ok": true,
           "operation_id": "4741e9f1c15440acaff49b1587a45dfa55cd00b2312a1073683fad0e48cdbf62",
-          "progress_identity": "0fb447b40f69223c857557ac0c8a71e34771c997e268a9aca0503d2f3319380a",
+          "progress_identity": "fc5ff744aee15e9066d44d5630657ec7234ff4b92c99e0c6726f537fff8b3b7d",
           "result": {
             "artifacts": [
               {
@@ -243,13 +243,13 @@
             ],
             "code_sha256": "5a4579b61d16df7d2fcd25fefe6bdf78e9cf45d303ed25cc0cf68026516544ce",
             "execution": "本機 AppContainer，無網路，原檔唯讀；衍生資料非原始列的一對一副本。",
-            "progress_identity": "0fb447b40f69223c857557ac0c8a71e34771c997e268a9aca0503d2f3319380a",
+            "progress_identity": "fc5ff744aee15e9066d44d5630657ec7234ff4b92c99e0c6726f537fff8b3b7d",
             "purpose": "並行B",
             "sources": [],
             "stdout": "",
             "summary": {
-              "end": 1793790873.98637,
-              "start": 1793790865.984521,
+              "end": 1793800482.974057,
+              "start": 1793800474.9729128,
               "value": 84
             },
             "versions": {
@@ -260,7 +260,7 @@
             }
           }
         },
-        "started_local": "2026-11-04 19:14:22",
+        "started_local": "2026-11-04 21:54:32",
         "task_id": "b",
         "tool": "run_python"
       }
@@ -270,22 +270,22 @@
   "python_partial": {
     "execution": "parallel_compute_serial_commit",
     "max_parallel": 2,
-    "notice": "每項獨立成功或失敗；成功項目不重做，只另提失敗項目。不能把整批已回傳當作每項均成功。",
+    "notice": "一般工具錯誤為單項失敗，成功項目不重做；內部panic則停止批次並進入全域保護，須核對成果後重啟。不能把整批已回傳當作每項均成功。",
     "tasks": [
       {
-        "finished_local": "2026-11-04 19:14:37",
+        "finished_local": "2026-11-04 21:54:46",
         "outcome": {
           "error": "Python 分析失敗：Traceback (most recent call last):\n  File \"Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\examples\\python\\lm_worker.py\", line 181, in main\n    response = analyze(json.loads(payload))\n  File \"Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\examples\\python\\lm_worker.py\", line 161, in analyze\n    exec(compile(request[\"code\"], \"<company-ai-analysis>\", \"exec\"), scope)\n    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<company-ai-analysis>\", line 1, in <module>\nValueError: fixture\n",
           "ok": false,
           "operation_id": "85fe8d42006e24dc7e792234d70498413e899c8d49eb327292b508797c844af1",
           "retry_same_operation": false
         },
-        "started_local": "2026-11-04 19:14:34",
+        "started_local": "2026-11-04 21:54:43",
         "task_id": "fail",
         "tool": "run_python"
       },
       {
-        "finished_local": "2026-11-04 19:14:37",
+        "finished_local": "2026-11-04 21:54:46",
         "outcome": {
           "ok": true,
           "operation_id": "1f246b7c021f66ae1ebe505583bd43f07cbd70f35bcd74304d5e249de999d0cb",
@@ -309,7 +309,7 @@
             }
           }
         },
-        "started_local": "2026-11-04 19:14:34",
+        "started_local": "2026-11-04 21:54:43",
         "task_id": "valid",
         "tool": "run_python"
       }

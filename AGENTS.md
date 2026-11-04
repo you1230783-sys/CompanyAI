@@ -2,6 +2,8 @@
 
 ## 目前工作
 
+- 0.9.4本機修改、純搬移核對與完整v142空快取／Office／NSIS驗證已完成（494項Rust）；證據見docs/VALIDATION_0_9_4.md及docs/REFACTOR_0_9_4.md。後續Windows綁定、features、CI／漏洞、LTO依計畫分版，本輪不提前開始；Word內容對齊固定排在LTO之後的下一版。
+
 - 2026-11-04本輪授權0.9.4：先修正批次panic保護一致性與Word位置比較提示，再純搬移拆分files.rs／ui.rs／runner.rs；每個拆分commit列出函式原位置→新位置及必要可見性／路徑調整。完整v142驗證、封裝後推送main及Releases。Windows綁定、Cargo features、CI／漏洞、LTO分開後續版本；Word內容對齊排在LTO之後的下一版。NAS備份由使用者自行處理。
 - 0.9.3的F01～F07已完成本機實作、v142空快取完整建置、Office與NSIS驗證；證據見docs/VALIDATION_0_9_3.md。公司模型翻譯品質與公司實機仍待驗。後續0.9.4依實作計畫處理維護工作，不混入已移除的Authenticode待辦。
 - 2026-11-04 使用者調整並授權0.9.3一次完成F01～F07：匯出、Word翻譯、文件比較、流程定時提醒、預設工作區、Word原樣式副本翻譯及新建Markdown；逐功能提交，完整驗證封裝後推送main與Releases。0.9.2已發行，證據見docs/VALIDATION_0_9_2.md。0.9.4才做純搬移拆分、Windows綁定／Cargo features、CI、LTO與漏洞檢查；以docs/IMPLEMENTATION_PLAN.md最新順序為準。
