@@ -26,7 +26,8 @@ pub(super) fn system_prompt_for(model: &str) -> AppResult<String> {
             !matches!(
                 t["function"]["name"].as_str(),
                 Some(
-                    "write_excel_formulas"
+                    "document_task"
+                        | "write_excel_formulas"
                         | "record_reading_notes"
                         | "read_reading_notes"
                         | "register_report_values"
@@ -801,6 +802,7 @@ mod tests {
             ("execute_workflow_step",json!({"execution_id":"run","step_index":0})),
             ("link_diagram_sources",json!({"diagram_index":0,"revision":"r","nodes":[{"node_id":"A","operation_id":"read-1","first_line":1,"last_line":5,"block_id":null,"detail_diagram_index":null}]})),
             ("export_cad_comparison",json!({"source_operation":"cad-edit","name":"修改比較.txt"})),
+            ("document_task",json!({"command":{"action":"compare","left":"a.docx","right":"b.docx","key_column":null}})),
         ]);
         let definitions: Value = serde_json::from_str(DEFINITIONS).unwrap();
         assert_eq!(

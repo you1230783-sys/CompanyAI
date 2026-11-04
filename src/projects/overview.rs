@@ -70,6 +70,21 @@ impl Overview {
                 }
                 continue;
             }
+            if tool == "document_task" {
+                for key in ["path", "left", "right"] {
+                    if let Some(path) = request["command"][key].as_str() {
+                        if summary.reads.len() < 200 {
+                            summary.reads.push(Access {
+                                tool: tool.into(),
+                                path: short(path),
+                                range: "原生Word／Excel快照；範圍外元素未讀取，詳工具紀錄".into(),
+                            });
+                        } else {
+                            summary.truncated = true;
+                        }
+                    }
+                }
+            }
             if matches!(
                 tool,
                 "read_file"

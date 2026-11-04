@@ -6,6 +6,11 @@ use serde_json::{json, Value};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Action {
+    /// 僅由文件翻譯工具建立；不接受一般office_action提供此內部操作。
+    TranslateRuns {
+        snapshot: Box<Snapshot>,
+        items: Vec<super::super::documents::Translated>,
+    },
     /// 圖片來源只能是專案相對 PNG；sha256 由 broker 填入，模型不能自行指定。
     InsertImage {
         path: String,
@@ -406,7 +411,7 @@ fn apply_format(target: &IDispatch, family: &str, format: &Format) -> AppResult<
 }
 
 /// 可重讀的格式快照；Office 的混合值／Null 保留為 null，不臆測。
-fn scalar(object: &IDispatch, property: &str) -> AppResult<Value> {
+pub(super) fn scalar(object: &IDispatch, property: &str) -> AppResult<Value> {
     let v = get(object, property)?;
     let vt = unsafe { v.Anonymous.Anonymous.vt };
     Ok(match vt {
@@ -552,6 +557,9 @@ impl Session {
         }
         let doc = self.document()?;
         match action {
+            Action::TranslateRuns { snapshot, items } if self.collection == "Documents" => {
+                super::translation::apply(self, snapshot, items, cancel)?;
+            }
             Action::InsertImage {
                 path,
                 target,

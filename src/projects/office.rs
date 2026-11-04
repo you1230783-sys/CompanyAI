@@ -14,6 +14,7 @@ use windows::{
 mod authoring;
 pub mod excel;
 pub mod images;
+pub mod translation;
 pub use authoring::{render, Action, Format};
 #[cfg(debug_assertions)]
 mod fixtures;

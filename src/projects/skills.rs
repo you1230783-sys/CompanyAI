@@ -310,7 +310,7 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
         "edit_text" => has("text-edit") || has("python-edit"),
         // 公式工作也需要輸入來源數字，保留資料寫入入口，避免兩個技能來回切換。
         "office_action" | "office_batch" => has("office-edit") || has("excel-formulas"),
-        "edit_office" => has("office-edit"),
+        "edit_office" | "document_task" => has("office-edit"),
         "search_files" => has("research") || has("text-edit") || has("python-edit"),
         "list_document_sections" | "read_document_section" | "summarize_document" => {
             has("research")

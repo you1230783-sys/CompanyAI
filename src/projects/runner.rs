@@ -600,6 +600,13 @@ fn run_for(
                 );
             }
             let datasets = broker.dataset_index();
+            let translations = broker.translation_index()?;
+            if translations
+                .as_array()
+                .is_some_and(|items| !items.is_empty())
+            {
+                messages.push(super::agent::Message::user(&format!("原生文件翻譯進度（不從摘要重建；用translation_page取得區段、保留已完成譯文及交付結果）：{translations}")));
+            }
             let python_artifacts = broker.python_artifact_index();
             let cad_artifacts = broker.cad_artifact_index();
             let cad_snapshot = broker.cad_snapshot_index();

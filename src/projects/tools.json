@@ -3,6 +3,210 @@
     {
       "type": "function",
       "function": {
+        "name": "document_task",
+        "description": "Word逐段翻譯及Word/Excel原生差異比對。先準備、分頁、按原文及revision提交譯文，全部完成才能交付DOCX；保留樣式限DOCX。比較可指定Excel唯一鍵欄A/B等，回報文字/公式/值/格式及結構，不等同完整視覺或語義比較。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "prepare_translation"
+                      ]
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "language": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "new_document",
+                        "preserve_styles"
+                      ]
+                    },
+                    "terms": {
+                      "type": "array",
+                      "maxItems": 100,
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "source": {
+                            "type": "string"
+                          },
+                          "target": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "source",
+                          "target"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "path",
+                    "language",
+                    "mode",
+                    "terms"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "translation_page"
+                      ]
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "id",
+                    "offset"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "apply_translation"
+                      ]
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 20,
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "translation": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "source",
+                          "translation"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "id",
+                    "revision",
+                    "items"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "finish_translation"
+                      ]
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "id",
+                    "name"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "compare"
+                      ]
+                    },
+                    "left": {
+                      "type": "string"
+                    },
+                    "right": {
+                      "type": "string"
+                    },
+                    "key_column": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "left",
+                    "right",
+                    "key_column"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "簡短記錄目標、新進展及下一步。"
+            }
+          },
+          "required": [
+            "command",
+            "progress_note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
         "name": "update_deliverables",
         "description": "保存檔案或多成果任務的交付清單，增量更新、不刪除舊項目。先用target=null記待辦，建立後綁實際copy_id或成果路徑；保存狀態由桌面決定。條件版本更動須一次核對全部既有項目。無法完成需blocked_reason，結尾明示部分完成。",
         "parameters": {

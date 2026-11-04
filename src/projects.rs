@@ -12,6 +12,7 @@ pub mod deliverables;
 pub mod diagnostics;
 pub mod diagram_sources;
 pub mod diagrams;
+pub mod documents;
 pub mod events;
 pub mod excel_plan;
 pub mod files;
@@ -128,6 +129,10 @@ impl Store {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "tool", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Tool {
+    /// 原生逐段翻譯與可追溯文件比較，沿用副本和操作去重契約。
+    DocumentTask {
+        command: documents::Command,
+    },
     /// 保存預計交付項目；target 使用實際 copy_id 或已產生的成果路徑。
     UpdateDeliverables {
         items: Vec<deliverables::Item>,
@@ -736,6 +741,7 @@ impl Tool {
             Self::AskPreference { .. } => "詢問可選偏好並繼續工作",
             Self::SearchFiles { .. } => "跨文件搜尋",
             Self::WriteExcelFormulas { .. } => "寫入並計算Excel公式",
+            Self::DocumentTask { .. } => "翻譯／比較文件",
             Self::OfficeBatch { .. } => "批次編輯 Office",
             Self::CreateMermaid { .. } => "產生並驗證 Mermaid 圖形",
             Self::InspectMermaid { .. } => "讀取 Mermaid 原始碼與版本",
