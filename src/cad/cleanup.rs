@@ -367,13 +367,29 @@ mod tests {
             fs::canonicalize(fixture.old.join("runtime/library.py")).unwrap()
         );
         let report = fixture.clean();
-        unsafe {
-            FreeLibrary(module);
-        }
+        assert_ne!(unsafe { FreeLibrary(module) }, 0);
         assert_eq!(report.kept.len(), 1);
         assert!(report.removed.is_empty());
         assert_eq!(fs::read(fixture.old.join("worker.py")).unwrap(), b"worker");
-        assert_eq!(fixture.clean().removed.len(), 1);
+        // FreeLibrary成功不保證image檔案的延後刪除已完成；平行測試時可能
+        // 暫時收到ERROR_DIR_NOT_EMPTY。正式清理本就保留manifest供下次重試，
+        // 此處只容許這個已辨識的Windows結果，且最多等兩秒，其他錯誤立即失敗。
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let mut after_unload = fixture.clean();
+        while after_unload.removed.is_empty()
+            && after_unload.kept.len() == 1
+            && after_unload.kept[0].reason.ends_with("(os error 145)")
+            && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            after_unload = fixture.clean();
+        }
+        assert_eq!(
+            after_unload.removed.len(),
+            1,
+            "卸載後仍保留的原因：{}",
+            serde_json::to_string(&after_unload).unwrap()
+        );
     }
 
     #[test]
