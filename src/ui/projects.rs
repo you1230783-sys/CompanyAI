@@ -1937,45 +1937,14 @@ impl App {
                     self.work_save()?;
                 }
                 if self.logged_in() && !cancelled {
-                    let waiting = self.projects.status == "等待你的補充。";
-                    let notice = crate::notifications::Notification {
-                        id: format!("project_{id}"),
-                        kind: if paused {
-                            "project.paused"
-                        } else if waiting {
-                            "project.waiting_user"
-                        } else if succeeded {
-                            "project.completed"
-                        } else {
-                            "project.failed"
-                        }
-                        .into(),
-                        title: self.projects.status.clone(),
-                        summary: final_text.chars().take(50).collect(),
-                        created_at: crate::notifications::now_text(),
-                        expires_at: None,
-                        resource_id: Some(id.clone()),
-                        read_at: if self.is_foreground() {
-                            Some(crate::notifications::now_text())
-                        } else {
-                            None
-                        },
-                        dismissed: false,
-                    };
-                    self.inbox.merge(crate::notifications::EventPage {
-                        events: vec![notice],
-                        next_cursor: None,
-                        has_more: false,
-                    })?;
-                    crate::notifications::save(&self.root, &self.inbox)?;
-                    self.toast(&self.projects.status.clone());
-                    if self.config.notification_popups && !self.is_foreground() {
-                        self.projects.attention_conversation =
-                            waiting.then(|| conversation.clone());
-                        self.work.tray_restore_only = false;
-                        self.work.task_balloon = true;
-                        self.desktop_notice(&self.projects.status.clone());
-                    }
+                    self.project_finished_notice(
+                        &id,
+                        &conversation,
+                        &final_text,
+                        paused,
+                        self.projects.status == "等待你的補充。",
+                        succeeded,
+                    )?;
                 }
                 let completed =
                     succeeded && !paused && !cancelled && self.projects.status != "等待你的補充。";

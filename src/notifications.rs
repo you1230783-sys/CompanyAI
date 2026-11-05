@@ -60,11 +60,12 @@ impl Notification {
         }
         Ok(())
     }
-    /// AI 只呈現成功回覆／失敗；其他事件仍合併游標供工作喚醒使用。
+    /// AI 呈現完成／失敗及需要使用者接續的暫停；其他事件仍合併游標。
     pub fn visible_ai(&self) -> bool {
         matches!(
             self.kind.as_str(),
             "project.completed"
+                | "project.paused"
                 | "project.failed"
                 | "project.waiting_user"
                 | "chat.completed"

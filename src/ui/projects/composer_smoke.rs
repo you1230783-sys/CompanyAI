@@ -78,6 +78,53 @@ impl App {
         });
         let mut cases = vec![];
 
+        // 實際隱藏視窗、通知保存與 SelectChat；M5 暫停判定另外由原生 HTTP 案例 28 驗證。
+        verify(!self.is_foreground(), "通知測試必須使用背景視窗")?;
+        for popups in [false, true] {
+            let (chat, old) = self.composer_fixture()?;
+            self.projects.running = None;
+            self.projects.status = "專案已暫停，可按繼續。".into();
+            self.config.notification_popups = popups;
+            self.inbox = crate::notifications::Inbox::for_session(
+                self.session.as_ref().ok_or("缺少測試登入")?,
+            );
+            self.project_finished_notice(
+                &old,
+                &chat,
+                "連續兩次截斷，進度已保存。",
+                true,
+                false,
+                true,
+            )?;
+            let saved = crate::notifications::load(
+                &self.root,
+                self.session.as_ref().ok_or("缺少測試登入")?,
+            )?;
+            verify(
+                saved.events.iter().any(|notice| {
+                    notice.kind == "project.paused"
+                        && notice.visible_ai()
+                        && notice.read_at.is_none()
+                }),
+                "暫停通知可見且已保存",
+            )?;
+            verify(
+                self.projects.attention_conversation.as_deref() == popups.then_some(chat.as_str()),
+                "尊重彈出偏好",
+            )?;
+            verify(self.work.store.tasks.is_empty(), "暫停不建立完成卡片")?;
+            if popups {
+                self.active_id = None;
+                verify(
+                    self.open_project_attention()? && self.active_id.as_deref() == Some(&chat),
+                    "點通知開啟暫停對話",
+                )?;
+                verify(!self.open_project_attention()?, "通知導向消耗一次")?;
+            }
+        }
+        self.config.notification_popups = false;
+        cases.push("paused notice: persisted and visible, popup preference, click selects resumable conversation once; delivery suppressed in self-check");
+
         let (chat, old) = self.composer_fixture()?;
         let instruction = self.compose_project_message(
             &chat,
