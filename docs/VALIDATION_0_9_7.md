@@ -1,6 +1,6 @@
 # 0.9.7 驗證與發行紀錄
 
-狀態：修正首次GitHub CI揭露的目錄鎖與跨語系測試問題後，本機v142空快取、完整回歸、Office與NSIS已重新通過；以下為r2新成品。遠端同提交CI及公開下載結果隨Release留存。
+狀態：修正首次GitHub CI揭露的目錄鎖與跨語系測試問題後，本機v142空快取、完整回歸、Office與NSIS已重新通過；以下為r2新成品。發行提交的GitHub CI及五項Release公開下載SHA256已核對通過。
 
 本版 D02a：v142 Windows CI、空快取 frozen 契約與依賴檢查，詳見 [CI 與依賴政策](CI_AND_DEPENDENCIES.md)。唯一應用相依更新為已撤回的 yoke-derive 0.8.3 → 0.8.4。
 
@@ -21,7 +21,7 @@
 
 修正後已重新執行本機完整／核心CI及正式Office／NSIS流程，舊r1成品不發布。遠端重驗連結隨Release留存。
 
-修正提交`05b10eb85821ef809cb952a2e411f1a8105d4363`的[遠端重驗](https://github.com/you1230783-sys/CompanyAI/actions/runs/41939340270)已通過：Windows Server 2022上的記憶替換及跨語系案例成功，未新增略過項目；下載CI報告確認v142 14.29.30133、實際192930159 x64、空快取frozen與依賴政策。本機r2已通過；最終提交CI於發布前另外核對。
+修正提交`05b10eb85821ef809cb952a2e411f1a8105d4363`的[遠端重驗](https://github.com/you1230783-sys/CompanyAI/actions/runs/41939340270)已通過：Windows Server 2022上的記憶替換及跨語系案例成功，未新增略過項目；下載CI報告確認v142 14.29.30133、實際192930159 x64、空快取frozen與依賴政策。本機r2及[最終發行提交CI](https://github.com/you1230783-sys/CompanyAI/actions/runs/41945624630)均已通過。
 
 Test-CI.ps1在本機以空Cargo快取完成v142 release、fmt、完整／核心all-targets Clippy及499／455項Rust。本機沒有排除通知測試。Hosted模式的兩項排除見政策；實際遠端結果以對應提交的Actions執行為準。
 
@@ -62,3 +62,5 @@ RustSec資料庫掃描無已公告漏洞、無撤回版本；保留ttf-parser精
 | LM_AI.exe | 69511168 | `06d748324f32de32c82d0db86229cea5adb616289619ed325e4ff2ae48399907` |
 
 公司更新仍為`/lm_server/desktop/releases/LM_AI_Setup.exe`，未部署公司伺服器。公開下載核對記於本機`.build/release-download-verification-0.9.7.json`。
+
+發行完成：`v0.9.7`固定於`5fb110822ca461d92df867da48e57cd4c93a9751`；NSIS、兩份更新JSON、verification.json及SHA256SUMS.txt皆已用無授權標頭的公開下載重新核對大小與SHA256。之後main僅更新進度／交接文件，未重新編譯或更換成品。依使用者要求本輪到此停止。

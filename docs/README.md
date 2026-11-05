@@ -4,6 +4,7 @@
 
 ## 保留版本與驗證
 
+- [0.9.7 完成後交接與停止點](HANDOFF_AFTER_0_9_7.md)
 - [0.9.7：CI與依賴檢查](VALIDATION_0_9_7.md)
 - [CI與依賴政策](CI_AND_DEPENDENCIES.md)
 
