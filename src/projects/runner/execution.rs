@@ -636,6 +636,9 @@ pub(super) fn run_for(
                         agent.parent = Some(id.clone());
                     }
                     let status = task.remote.as_ref().ok_or("原生任務缺少結果。")?;
+                    if let Some(response) = status.result.as_ref() {
+                        progress_state.received_output(response);
+                    }
                     let raw = status
                         .result
                         .as_ref()
@@ -665,7 +668,11 @@ pub(super) fn run_for(
                             if output_exhausted {
                                 broker.archive_results()?;
                                 let budget = agent_caps.as_ref().map(|c| c.output_budget());
-                                let label = match progress_state.retry_output_limit(budget) {
+                                let label = match progress_state.retry_output_limit(
+                                    budget,
+                                    status.result.as_ref().ok_or("截斷回覆缺少結果。")?,
+                                    broker.cad_task_active(),
+                                ) {
                                     Ok(label) => label,
                                     Err(reason) => {
                                         return pause(&reason, &broker, &progress_state, None)

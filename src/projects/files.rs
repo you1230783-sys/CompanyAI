@@ -1101,6 +1101,9 @@ pub struct Broker {
     chart_palette: Vec<String>,
 }
 impl Broker {
+    pub(in crate::projects) fn cad_task_active(&self) -> bool {
+        self.loaded_skills.iter().any(|id| id.starts_with("cad-"))
+    }
     /// 新任務啟用批後閱讀成果契約；舊checkpoint不隱式變更協定。
     pub fn enable_reading_notes(&mut self) {
         self.reading.enabled = true;

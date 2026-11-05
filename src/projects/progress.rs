@@ -148,6 +148,9 @@ pub(super) struct Progress {
     /// 與格式修復分開計數；checkpoint 保留，讀指南不能刷新這項預算。
     #[serde(default)]
     output_limit_retries: usize,
+    /// 僅保存上一輪空白截斷的服務實際輸入數；缺值不推算，舊checkpoint預設無紀錄。
+    #[serde(default)]
+    empty_limit_prompt: Option<u64>,
 }
 impl Progress {
     pub fn new(base: Vec<Message>) -> Self {
@@ -188,6 +191,7 @@ impl Progress {
             other_failures: 0,
             last_tool_failure: None,
             output_limit_retries: 0,
+            empty_limit_prompt: None,
         }
     }
     pub fn calendar_context(&self) -> AppResult<String> {
@@ -213,6 +217,7 @@ impl Progress {
     /// 使用者主動續接才重設每段計數；去重紀錄仍由 broker 保留。
     pub fn resume_segment(&mut self) {
         self.output_limit_retries = 0;
+        self.empty_limit_prompt = None;
         self.total_repairs = 0;
         self.consecutive_repairs = 0;
         self.no_progress = 0;
@@ -391,7 +396,38 @@ impl Progress {
 
     /// 已收到確定的 length 終態且沒有可執行指令，才建立新的推論輪次。
     /// 不動 broker 的計畫、去重紀錄或寫入權限；第五次續接仍失敗就暫停。
-    pub fn retry_output_limit(&mut self, advertised_budget: Option<u64>) -> AppResult<String> {
+    pub fn retry_output_limit(
+        &mut self,
+        advertised_budget: Option<u64>,
+        response: &Value,
+        cad_task: bool,
+    ) -> AppResult<String> {
+        let message = &response["choices"][0]["message"];
+        let empty = (message["content"].is_null()
+            || message["content"]
+                .as_str()
+                .is_some_and(|s| s.trim().is_empty()))
+            && message["tool_calls"].as_array().is_none_or(Vec::is_empty)
+            && message["function_call"].is_null();
+        let usage = super::context::actual(response);
+        let prompt = usage["prompt_tokens"]
+            .as_u64()
+            .or_else(|| usage["input_tokens"].as_u64())
+            .filter(|n| *n > 0);
+        let repeated = empty
+            && self
+                .empty_limit_prompt
+                .zip(prompt)
+                .is_some_and(|(previous, current)| {
+                    u128::from(previous.abs_diff(current)) * 100 < u128::from(previous)
+                });
+        self.empty_limit_prompt = if empty { prompt } else { None };
+        if repeated {
+            let reasoning = usage["reasoning_tokens"]
+                .as_u64()
+                .map_or(String::new(), |n| format!("本輪服務回報推理 tokens：{n}。"));
+            return Err(format!("模型在產生可見內容前耗盡輸出上限（可能為推理耗盡），並非報告內容太長；連續兩次空白截斷且實際輸入差異小於1%，已保存進度並暫停。{reasoning}可按繼續重試，或調整模型推理設定；不重播成功操作。"));
+        }
         if self.output_limit_retries >= 5 {
             return Err(
                 "模型輸出額度耗盡，已自動續接 5 次仍未取得有效進展；已保存進度，請按繼續接續。"
@@ -403,11 +439,23 @@ impl Progress {
             || "本輪輸出額度".to_owned(),
             |n| format!("本輪輸出額度（服務公告預設 {n} tokens，實際用量以服務紀錄為準）"),
         );
-        self.repair = Some(format!("上一輪因達到{budget}而被強制中止，沒有執行任何工具。這是自動續接第 {}/5 次。沿用原始需求、確切 CAD 版本、plan_id、最新 plan_revision 與已保存區段，不重建計畫或重送成功操作。只處理下一個最小步驟並立即呼叫工具；CAD 尺寸／引線先拆成每段 1–3 項，不在單輪規劃或輸出整張圖。保持原需求，不以刪減需求或宣稱完成避開額度。", self.output_limit_retries));
+        let cad = if cad_task {
+            "CAD任務沿用確切版本、plan_id及最新plan_revision；尺寸／引線先拆成每段 1–3 項。"
+        } else {
+            ""
+        };
+        self.repair = Some(format!("上一輪因達到{budget}而被強制中止，截斷內容未執行。這是自動續接第 {}/5 次。沿用原始需求與已保存成果，只處理下一個最小步驟並立即呼叫工具，不重送成功操作。{cad}保持原需求，不以刪減需求或宣稱完成避開額度。", self.output_limit_retries));
         Ok(format!(
             "輸出額度已用盡，正在縮小步驟並自動續接（{}/5）",
             self.output_limit_retries
         ))
+    }
+
+    /// 任何非截斷模型回覆都打斷連續空白計數；工具失敗不代表上一輪也是截斷。
+    pub fn received_output(&mut self, response: &Value) {
+        if response["choices"][0]["finish_reason"] != "length" {
+            self.empty_limit_prompt = None;
+        }
     }
 
     /// 只計算真正新增的閱讀區間或工具結果；重播與重讀不會重設恢復上限。
@@ -917,7 +965,11 @@ mod tests {
         let mut state = Progress::new(vec![Message::user("保留原始尺寸")]);
         for n in 1..=5 {
             assert!(state
-                .retry_output_limit(Some(20_000))
+                .retry_output_limit(
+                    Some(20_000),
+                    &json!({"choices":[{"message":{"content":"partial"}}]}),
+                    true
+                )
                 .unwrap()
                 .contains(&format!("{n}/5")));
             state = serde_json::from_value(serde_json::to_value(&state).unwrap()).unwrap();
@@ -929,7 +981,13 @@ mod tests {
                 &json!({"ok":true,"result":{"text":"guide"}}),
             );
         }
-        assert!(state.retry_output_limit(None).is_err());
+        assert!(state
+            .retry_output_limit(
+                None,
+                &json!({"choices":[{"message":{"content":"partial"}}]}),
+                true
+            )
+            .is_err());
         let tool = Tool::CadPlanPart {
             plan_id: "plan-1".into(),
             plan_revision: 0,
@@ -943,7 +1001,11 @@ mod tests {
             &json!({"ok":true,"result":{"plan_revision":1,"saved":true}})
         ));
         assert!(state
-            .retry_output_limit(Some(20_000))
+            .retry_output_limit(
+                Some(20_000),
+                &json!({"choices":[{"message":{"content":"partial"}}]}),
+                true
+            )
             .unwrap()
             .contains("1/5"));
         assert!(state
@@ -1646,5 +1708,53 @@ mod tests {
                 .count(),
             90_000
         );
+    }
+}
+
+#[cfg(test)]
+mod empty_limit_tests {
+    use super::*;
+    fn empty(tokens: u64) -> Value {
+        json!({"choices":[{"finish_reason":"length","message":{"content":"","tool_calls":[]}}],"usage":{"prompt_tokens":tokens,"completion_tokens":20000,"completion_tokens_details":{"reasoning_tokens":19990}}})
+    }
+    #[test]
+    fn second_near_identical_empty_truncation_pauses_and_resume_resets() {
+        let mut state = Progress::new(vec![]);
+        assert!(state
+            .retry_output_limit(Some(32000), &empty(26036), false)
+            .is_ok());
+        assert!(!state.repair.as_ref().unwrap().contains("CAD"));
+        let mut state: Progress =
+            serde_json::from_value(serde_json::to_value(&state).unwrap()).unwrap();
+        let error = state
+            .retry_output_limit(Some(32000), &empty(26040), false)
+            .unwrap_err();
+        assert!(error.contains("19990") && error.contains("連續兩次") && error.contains("繼續"));
+        assert_eq!(state.output_limit_retries, 1);
+        state.resume_segment();
+        assert!(state.retry_output_limit(None, &empty(26036), false).is_ok());
+        state.received_output(&json!({"choices":[{"finish_reason":"stop"}]}));
+        assert!(state.retry_output_limit(None, &empty(26036), false).is_ok());
+    }
+    #[test]
+    fn changed_input_visible_text_tools_and_missing_usage_do_not_early_pause() {
+        let mut state = Progress::new(vec![]);
+        state
+            .retry_output_limit(None, &empty(10000), false)
+            .unwrap();
+        state
+            .retry_output_limit(None, &empty(11000), false)
+            .unwrap();
+        let mut visible = empty(11000);
+        visible["choices"][0]["message"]["content"] = json!("partial");
+        state.retry_output_limit(None, &visible, true).unwrap();
+        assert!(state.repair.as_ref().unwrap().contains("1–3 項"));
+        let mut tools = empty(11000);
+        tools["choices"][0]["message"]["tool_calls"] = json!([{"id":"incomplete"}]);
+        state.retry_output_limit(None, &tools, false).unwrap();
+        let mut missing = empty(11000);
+        missing.as_object_mut().unwrap().remove("usage");
+        state.retry_output_limit(None, &missing, false).unwrap();
+        assert_eq!(state.output_limit_retries, 5);
     }
 }
