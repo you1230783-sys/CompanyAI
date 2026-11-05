@@ -282,7 +282,10 @@ impl Broker {
         if result["ok"] == false
             && matches!(
                 tool,
-                Tool::UpdateDeliverables { .. } | Tool::RecordReadingNotes { .. }
+                Tool::UpdateDeliverables { .. }
+                    | Tool::RecordReadingNotes { .. }
+                    | Tool::BindDeliverable { .. }
+                    | Tool::SupersedeArtifact { .. }
             )
         {
             result["error_kind"] = json!("contract");

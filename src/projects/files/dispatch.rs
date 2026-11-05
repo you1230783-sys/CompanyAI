@@ -44,6 +44,12 @@ impl Broker {
             } => self.export_cad_comparison(source_operation, name),
             Tool::SaveWorkflow { name, steps } => self.save_workflow(name, steps),
             Tool::UpdateDeliverables { items } => self.update_deliverables(items),
+            Tool::BindDeliverable { bindings } => self.bind_deliverable(bindings),
+            Tool::SupersedeArtifact {
+                path,
+                replaced_by,
+                reason,
+            } => self.supersede_artifact(path, replaced_by, reason),
             Tool::ListWorkflows {} => self.memory()?.list_workflows(),
             Tool::ReadWorkflow {
                 workflow_id,

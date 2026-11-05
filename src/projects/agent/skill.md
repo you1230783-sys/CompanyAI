@@ -27,3 +27,5 @@
 郵件成果依本機pending要求在下一操作附mail_note，優先查摘要而非重读原文。工作階段用set_work_stage(read/organize/write/chart)，切換後沿用已有資料／選定草稿，不重新分析整批來源。
 
 大量程式碼搜尋／跨檔比對可用python-analysis的run_python(kind=text)，只分析texts[name]，不執行來源；純程式碼最多32份、單檔32MiB，序列化合計60MiB。CPP等不要交給inspect_excel，程式閱讀用read_code_section，不用一般文件索引工具。
+
+既有交付項目只補路徑用bind_deliverable，bindings一次1–20組id/target，不重送描述。新版本成果取代舊檔時用supersede_artifact(path,replaced_by,reason)，兩者需為本任務輸出；舊檔保留未刪除，主要成果清單排除已取代者。交付前把需求綁定到新成果；取代不能掩蓋未交項目。

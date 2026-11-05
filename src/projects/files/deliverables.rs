@@ -64,6 +64,59 @@ impl Broker {
         self.sync_delivery();
         Ok(self.analysis.deliverables.clone())
     }
+
+    pub(super) fn bind_deliverable(
+        &mut self,
+        bindings: &[super::super::deliverables::Binding],
+    ) -> AppResult<Value> {
+        for binding in bindings {
+            if !self.copies.contains_key(&binding.target) && !self.known_output(&binding.target) {
+                return Err(format!("交付目標尚不存在：{}。", binding.target));
+            }
+        }
+        self.delivery_plan
+            .bind(bindings, self.condition_revision())?;
+        self.sync_delivery();
+        Ok(self.analysis.deliverables.clone())
+    }
+
+    pub(super) fn supersede_artifact(
+        &mut self,
+        path: &str,
+        replaced_by: &str,
+        reason: &str,
+    ) -> AppResult<Value> {
+        if !self.known_output(path) || !self.known_output(replaced_by) {
+            return Err("取代雙方必須都是本任務原生登記的輸出路徑，不接受原件或未知路徑。".into());
+        }
+        self.delivery_plan
+            .supersede(super::super::deliverables::Superseded {
+                path: path.into(),
+                replaced_by: replaced_by.into(),
+                reason: reason.into(),
+            })?;
+        self.sync_delivery();
+        Ok(json!({"superseded":self.delivery_plan.superseded,"deleted":false}))
+    }
+
+    /// 所有舊成果仍先讀回核對；只在呈現清單時排除取代者，綁定成果排在前面。
+    pub(super) fn primary_delivery_paths(&self, paths: Vec<String>) -> Vec<String> {
+        let snapshot = self.delivery_snapshot();
+        let preferred: Vec<_> = snapshot["items"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|i| i["path"].as_str())
+            .collect();
+        let mut active: Vec<_> = paths
+            .into_iter()
+            .filter(|p| !self.delivery_plan.superseded.iter().any(|s| &s.path == p))
+            .collect();
+        active.sort_by_key(|p| preferred.iter().position(|v| *v == p).unwrap_or(usize::MAX));
+        let mut seen = std::collections::BTreeSet::new();
+        active.retain(|p| seen.insert(p.clone()));
+        active
+    }
     /// saved 僅代表原生曾保存該版；finish 仍會逐檔讀回驗證，不能據此跳過交付檢查。
     pub(in crate::projects) fn delivery_snapshot(&self) -> Value {
         let changed = self.delivery_plan.conditions_revision != self.condition_revision();
@@ -82,7 +135,7 @@ impl Broker {
             json!({"id":item.id,"description":item.description,"kind":item.kind,"target":item.target,
                 "status":status,"path":path,"blocked_reason":item.blocked_reason,"review_required":changed})
         }).collect();
-        json!({"items":items,"conditions":self.work_context.as_ref().map(|c|&c.conditions),
+        json!({"items":items,"superseded":self.delivery_plan.superseded,"conditions":self.work_context.as_ref().map(|c|&c.conditions),
             "review_required":changed,"notice":"已保存由原生工具紀錄判定；交付時再讀回核對。文字回答與內容正確性需另行確認。"})
     }
     pub(in crate::projects) fn sync_delivery(&mut self) {
@@ -164,6 +217,71 @@ mod tests {
         deliverables::Item,
         work_settings::{Conditions, Snapshot},
     };
+
+    #[test]
+    fn superseded_files_stay_on_disk_and_still_require_valid_hashes() {
+        use sha2::{Digest, Sha256};
+        let root = std::env::current_dir()
+            .unwrap()
+            .join(".build")
+            .join(format!("delivery-{}", crate::jobs::new_id().unwrap()));
+        let folder = root.join("_AI_Output").join("fixture");
+        fs::create_dir_all(&folder).unwrap();
+        let mut broker = Broker::new(
+            Project {
+                id: "p".into(),
+                name: "p".into(),
+                root: root.clone(),
+                imports: BTreeMap::new(),
+            },
+            "r".into(),
+        )
+        .unwrap();
+        let old = "_AI_Output/fixture/v1.png";
+        let new = "_AI_Output/fixture/v2.png";
+        // 模擬原生已驗證的輸出索引；此測試針對交付雜湊與清單，PNG解碼另有測試。
+        for path in [old, new] {
+            fs::write(root.join(path), b"registered bytes").unwrap();
+            broker
+                .python_artifacts
+                .push(crate::projects::python::Artifact {
+                    path: path.into(),
+                    sha256: format!("{:x}", Sha256::digest(b"registered bytes")),
+                });
+        }
+        broker
+            .update_deliverables(&[Item {
+                id: "figure".into(),
+                description: "最終圖".into(),
+                kind: "file".into(),
+                target: Some(old.into()),
+                blocked_reason: None,
+            }])
+            .unwrap();
+        broker.supersede_artifact(old, new, "重算").unwrap();
+        assert!(
+            broker.finish(&[]).is_err(),
+            "不能用取代標記掩蓋仍綁定舊成果的需求"
+        );
+        broker
+            .bind_deliverable(&[super::super::super::deliverables::Binding {
+                id: "figure".into(),
+                target: new.into(),
+            }])
+            .unwrap();
+        assert_eq!(broker.finish(&[]).unwrap(), vec![new.to_string()]);
+        assert!(root.join(old).exists());
+        assert!(broker
+            .supersede_artifact("original.csv", new, "未知來源")
+            .is_err());
+        fs::write(root.join(old), b"tampered").unwrap();
+        assert!(broker.finish(&[]).is_err(), "已取代成果仍保留既有雜湊檢查");
+        drop(broker);
+        // 只刪除本測試建立的已知檔案，不遞迴刪除任何目錄。
+        for path in [old, new] {
+            fs::remove_file(root.join(path)).unwrap();
+        }
+    }
 
     #[test]
     fn pending_and_changed_conditions_cannot_finish_but_explicit_blockers_are_visible() {

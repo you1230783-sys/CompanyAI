@@ -103,6 +103,7 @@ impl Broker {
             self.verify_chart_export(export)?;
             paths.push(export.path.clone());
         }
+        let paths = self.primary_delivery_paths(paths);
         self.verify_deliverables(&paths)?;
         Ok(paths)
     }

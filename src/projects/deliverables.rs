@@ -19,8 +19,82 @@ pub struct Plan {
     pub items: Vec<Item>,
     #[serde(default)]
     pub conditions_revision: u64,
+    /// 只保存成果取代關係；舊檔案及原生來源紀錄永遠保留。
+    #[serde(default)]
+    pub superseded: Vec<Superseded>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Binding {
+    pub id: String,
+    pub target: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Superseded {
+    pub path: String,
+    pub replaced_by: String,
+    pub reason: String,
 }
 impl Plan {
+    /// 單批全部驗證後才更新 target；描述、類型及受阻原因均不變。
+    pub fn bind(&mut self, bindings: &[Binding], revision: u64) -> AppResult<()> {
+        if bindings.is_empty() || bindings.len() > 20 || self.conditions_revision != revision {
+            return Err("每次綁定1–20項；條件變更時先update_deliverables核對所有項目。".into());
+        }
+        let mut next = self.clone();
+        let mut ids = BTreeSet::new();
+        for binding in bindings {
+            if !ids.insert(&binding.id) || binding.target.is_empty() || binding.target.len() > 1000
+            {
+                return Err("綁定ID不可重複，target需為已建立成果且不超過1000 bytes。".into());
+            }
+            let item = next
+                .items
+                .iter_mut()
+                .find(|i| i.id == binding.id)
+                .ok_or("交付項目ID不存在。")?;
+            if item.kind != "file" {
+                return Err("只有file項目可以綁定成果路徑。".into());
+            }
+            item.target = Some(binding.target.clone());
+        }
+        *self = next;
+        Ok(())
+    }
+
+    /// 路徑由 Broker 核對所有權；此處拒絕循環、覆寫關係及無界累積。
+    pub fn supersede(&mut self, entry: Superseded) -> AppResult<()> {
+        if entry.path == entry.replaced_by
+            || entry.reason.trim().is_empty()
+            || entry.reason.chars().count() > 500
+        {
+            return Err("取代需不同的已產生成果及1–500字原因；不刪除任何檔案。".into());
+        }
+        if let Some(old) = self.superseded.iter().find(|s| s.path == entry.path) {
+            return if old == &entry {
+                Ok(())
+            } else {
+                Err("此成果已有取代紀錄，不可覆寫。".into())
+            };
+        }
+        let mut target = entry.replaced_by.as_str();
+        for _ in 0..=self.superseded.len() {
+            if target == entry.path {
+                return Err("成果取代關係不可形成循環。".into());
+            }
+            match self.superseded.iter().find(|s| s.path == target) {
+                Some(next) => target = &next.replaced_by,
+                None => break,
+            }
+        }
+        if self.superseded.len() >= 100 {
+            return Err("本任務最多100項取代紀錄。".into());
+        }
+        self.superseded.push(entry);
+        Ok(())
+    }
     /// 採增量更新。相同需求 ID 的類型及描述保持不變，避免用改名掩蓋缺交項目。
     pub fn update(&mut self, items: &[Item], conditions_revision: u64) -> AppResult<()> {
         if items.is_empty() || items.len() > 20 {
@@ -61,7 +135,7 @@ impl Plan {
                     && self.conditions_revision == conditions_revision
                 {
                     return Err(
-                        "既有需求不可直接改名或改類型；條件變更後重新核對，或另加一項。".into(),
+                        "既有需求不可直接改名或改類型；只需綁定路徑請改用bind_deliverable。條件變更後重新核對，或另加一項。".into(),
                     );
                 }
                 *old = item.clone();
@@ -131,5 +205,69 @@ mod tests {
         let mut renamed = item;
         renamed.kind = "answer".into();
         assert!(plan.update(&[renamed], 0).is_err());
+    }
+}
+
+#[cfg(test)]
+mod binding_tests {
+    use super::*;
+    #[test]
+    fn binds_six_in_one_atomic_request_without_rewriting_descriptions() {
+        let mut plan = Plan::default();
+        let items: Vec<_> = (0..6)
+            .map(|i| Item {
+                id: format!("item-{i}"),
+                description: format!("需求{i}"),
+                kind: "file".into(),
+                target: None,
+                blocked_reason: None,
+            })
+            .collect();
+        plan.update(&items, 0).unwrap();
+        let bindings: Vec<_> = (0..6)
+            .map(|i| Binding {
+                id: format!("item-{i}"),
+                target: format!("v2-{i}.csv"),
+            })
+            .collect();
+        plan.bind(&bindings, 0).unwrap();
+        for (i, item) in plan.items.iter().enumerate() {
+            assert_eq!(item.description, items[i].description);
+            assert_eq!(item.target.as_deref(), Some(bindings[i].target.as_str()));
+        }
+        let before = serde_json::to_value(&plan).unwrap();
+        assert!(plan
+            .bind(
+                &[
+                    Binding {
+                        id: "item-0".into(),
+                        target: "new.csv".into()
+                    },
+                    Binding {
+                        id: "missing".into(),
+                        target: "bad.csv".into()
+                    }
+                ],
+                0
+            )
+            .is_err());
+        assert_eq!(serde_json::to_value(&plan).unwrap(), before);
+        assert!(plan.bind(&bindings, 1).is_err());
+    }
+    #[test]
+    fn supersession_survives_checkpoint_and_rejects_cycles() {
+        let mut plan = Plan::default();
+        let entry = |a: &str, b: &str| Superseded {
+            path: a.into(),
+            replaced_by: b.into(),
+            reason: "重新計算".into(),
+        };
+        plan.supersede(entry("v1", "v2")).unwrap();
+        plan.supersede(entry("v2", "v3")).unwrap();
+        assert!(plan.supersede(entry("v3", "v1")).is_err());
+        let restored: Plan = serde_json::from_value(serde_json::to_value(&plan).unwrap()).unwrap();
+        assert_eq!(restored.superseded.len(), 2);
+        let old: Plan = serde_json::from_value(serde_json::json!({"items":[]})).unwrap();
+        assert!(old.superseded.is_empty());
     }
 }

@@ -12772,6 +12772,68 @@
           "additionalProperties": false
         }
       }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "bind_deliverable",
+        "description": "只更新既有file交付項目的target，不改描述／類型／受阻原因；bindings一次1–20項，可一次綁定6個成果。target需為本任務副本ID或原生輸出路徑。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "bindings": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "target": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "target"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "bindings"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "supersede_artifact",
+        "description": "將本任務舊成果標成已取代（保留未刪除），主要成果清單不列舊檔。兩條路徑皆需已產生，先把需求綁定新成果；不接受原件、未知路徑或循環。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "replaced_by": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "replaced_by",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      }
     }
   ]
 }

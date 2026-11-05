@@ -262,6 +262,8 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
         | "run_batch"
         | "record_reading_notes"
         | "update_deliverables"
+        | "bind_deliverable"
+        | "supersede_artifact"
         | "read_reading_notes" => true,
         "register_report_values" | "export_report_values" => {
             has("python-analysis") || has("office-edit") || has("dataset-charts")

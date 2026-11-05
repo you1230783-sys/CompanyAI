@@ -26,7 +26,9 @@ pub(super) fn system_prompt_for(model: &str) -> AppResult<String> {
             !matches!(
                 t["function"]["name"].as_str(),
                 Some(
-                    "document_task"
+                    "bind_deliverable"
+                        | "supersede_artifact"
+                        | "document_task"
                         | "write_excel_formulas"
                         | "record_reading_notes"
                         | "read_reading_notes"

@@ -71,3 +71,5 @@ Excel分析必須依excel-read技能先plan_excel_analysis，再export_planned_e
 大量程式碼搜尋／跨檔比對可用python-analysis的run_python(kind=text)，只分析texts[name]，不執行來源；純程式碼最多32份、單檔32MiB，序列化合計60MiB。CPP等不要交給inspect_excel，程式閱讀用read_code_section，不用一般文件索引工具。
 
 檔案或多成果要求先update_deliverables列出需求，每項用穩定id、description及kind(file/answer)，尚無成果時target=null。建立後綁copy_id或原生匯出路徑；保存狀態由程式判定，不能改名或省略未完成項目。確實受阻時填blocked_reason並明說部分完成。使用者條件卡及本次明確指示優先於偏好；條件更新後核對全部交付項目再更新清單。
+
+既有交付項目只補路徑用bind_deliverable，bindings一次1–20組id/target，不重送描述。新版本成果取代舊檔時用supersede_artifact(path,replaced_by,reason)，兩者需為本任務輸出；舊檔保留未刪除，主要成果清單排除已取代者。交付前把需求綁定到新成果；取代不能掩蓋未交項目。

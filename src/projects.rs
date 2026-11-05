@@ -137,6 +137,14 @@ pub enum Tool {
         command: documents::Command,
     },
     /// 保存預計交付項目；target 使用實際 copy_id 或已產生的成果路徑。
+    BindDeliverable {
+        bindings: Vec<deliverables::Binding>,
+    },
+    SupersedeArtifact {
+        path: String,
+        replaced_by: String,
+        reason: String,
+    },
     UpdateDeliverables {
         items: Vec<deliverables::Item>,
     },
@@ -689,6 +697,8 @@ impl Tool {
     /// 使用者可讀的操作名稱，避免將 JSON 或文件全文當進度訊息。
     pub fn label(&self) -> &'static str {
         match self {
+            Self::BindDeliverable { .. } => "綁定交付路徑",
+            Self::SupersedeArtifact { .. } => "標記已取代成果（保留未刪除）",
             Self::UpdateDeliverables { .. } => "更新交付清單",
             Self::CadActiveRead { .. } => "讀取 CAD 目前圖面",
             Self::CadSnapshot { .. } => "建立 CAD 本機圖面索引",
