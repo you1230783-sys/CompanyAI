@@ -73,9 +73,7 @@ pub fn actual(response: &Value) -> Value {
         .filter_map(|key| value.get(*key))
         .find_map(|v| usage(v, depth + 1))
     }
-    let Some(usage) = usage(response, 0) else {
-        return Value::Null;
-    };
+    let usage = usage(response, 0).unwrap_or(&Value::Null);
     let mut result = serde_json::Map::new();
     for key in [
         "prompt_tokens",
@@ -96,7 +94,36 @@ pub fn actual(response: &Value) -> Value {
             result.insert(key.into(), json!(n));
         }
     }
-    Value::Object(result)
+    if let Some(reason) = finish_reason(response, 0) {
+        result.insert("finish_reason".into(), json!(reason));
+    }
+    if result.is_empty() {
+        Value::Null
+    } else {
+        Value::Object(result)
+    }
+}
+
+/// 沿用服務回覆封裝，限制深度與字串大小；不從錯誤描述推測結束原因。
+fn finish_reason(value: &Value, depth: usize) -> Option<&str> {
+    if depth > 4 {
+        return None;
+    }
+    if let Some(reason) = value["choices"][0]["finish_reason"]
+        .as_str()
+        .filter(|s| !s.is_empty() && s.len() <= 64 && !s.chars().any(char::is_control))
+    {
+        return Some(reason);
+    }
+    [
+        "result",
+        "response_payload_json",
+        "response",
+        "model_response",
+    ]
+    .iter()
+    .filter_map(|key| value.get(*key))
+    .find_map(|v| finish_reason(v, depth + 1))
 }
 
 /// 已封存的舊工具結果按整組移出本輪請求，保留最後一組及使用者原文。

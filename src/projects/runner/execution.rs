@@ -510,6 +510,7 @@ pub(super) fn run_for(
                 &id,
                 &task.request,
                 None,
+                None,
                 run.config.debug_mode,
             )?;
             checkpoint(&journal, &record)?;
@@ -537,6 +538,7 @@ pub(super) fn run_for(
             );
             batch_replies += 1;
             turn += 1;
+            let wait_started = Instant::now();
             let received = crate::projects::model::receive(
                 &run,
                 &mut task,
@@ -580,6 +582,12 @@ pub(super) fn run_for(
                 &id,
                 &task.request,
                 response_json.as_ref(),
+                // checkpoint續接只觀測到剩餘等待，不冒充整輪耗時，也不從建立時間推算。
+                if lookup_only {
+                    None
+                } else {
+                    Some(wait_started.elapsed().as_secs_f64())
+                },
                 run.config.debug_mode,
             )?;
             if let Some(entry) = record["requests"].as_array_mut().and_then(|a| a.last_mut()) {

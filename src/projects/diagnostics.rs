@@ -12,6 +12,7 @@ pub fn save_turn(
     request_id: &str,
     request: &Value,
     response: Option<&Value>,
+    wait_seconds: Option<f64>,
     debug: bool,
 ) -> AppResult<()> {
     jobs::validate_id(run)?;
@@ -19,7 +20,13 @@ pub fn save_turn(
     let directory = root.join("project-runs").join(format!("{run}.debug"));
     std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
     let estimate = super::context::measure(request);
-    let usage = response.map(super::context::actual).unwrap_or(Value::Null);
+    let mut usage = response.map(super::context::actual).unwrap_or(Value::Null);
+    if let Some(seconds) = wait_seconds.filter(|s| s.is_finite() && *s >= 0.0) {
+        if usage.is_null() {
+            usage = serde_json::json!({});
+        }
+        usage["wait_seconds"] = serde_json::json!(seconds);
+    }
     let expected = estimate["estimated_input_tokens"].as_f64();
     let actual = usage["prompt_tokens"]
         .as_f64()
@@ -66,9 +73,15 @@ fn read_json(path: &Path, limit: u64) -> AppResult<Value> {
 /// 簡短用量只投影服務端實際數值。缺少任何欄位時保留「未取得」，
 /// 不使用估算或將缺值當零；合計明示各欄位取得的輪數。
 pub fn short_usage(turns: &[Value]) -> String {
-    let mut lines = vec!["輪次\t實際輸入\t實際輸出\t實際合計".to_owned()];
+    let mut lines = vec![
+        "輪次\t實際輸入\t實際輸出\t實際合計\t等待耗時（秒）\t結束原因\t推理 tokens\t快取 tokens"
+            .to_owned(),
+    ];
     let mut sums = [0u128; 3];
     let mut counts = [0usize; 3];
+    let mut truncated = 0;
+    let mut timed_truncations = 0;
+    let mut truncated_seconds = 0.0;
     for (index, turn) in turns.iter().enumerate() {
         let actual = &turn["actual"];
         let values = [
@@ -97,7 +110,29 @@ pub fn short_usage(turns: &[Value]) -> String {
             .as_u64()
             .filter(|n| *n > 0)
             .unwrap_or(index as u64 + 1);
-        lines.push(format!("{number}\t{}", fields.join("\t")));
+        let seconds = actual["wait_seconds"]
+            .as_f64()
+            .filter(|s| s.is_finite() && *s >= 0.0);
+        if actual["finish_reason"] == "length" {
+            truncated += 1;
+            if let Some(seconds) = seconds {
+                timed_truncations += 1;
+                truncated_seconds += seconds;
+            }
+        }
+        let duration = seconds.map_or("未取得".to_owned(), |s| format!("{s:.3}"));
+        let reason = actual["finish_reason"].as_str().unwrap_or("未取得");
+        let tokens = |key: &str| {
+            actual[key]
+                .as_u64()
+                .map_or("未取得".to_owned(), |n| n.to_string())
+        };
+        lines.push(format!(
+            "{number}\t{}\t{duration}\t{reason}\t{}\t{}",
+            fields.join("\t"),
+            tokens("reasoning_tokens"),
+            tokens("cached_tokens")
+        ));
     }
     lines.push(String::new());
     for (index, label) in ["輸入合計", "輸出合計", "實際總計"].iter().enumerate() {
@@ -112,6 +147,12 @@ pub fn short_usage(turns: &[Value]) -> String {
             turns.len()
         ));
     }
+    let duration = if timed_truncations == 0 {
+        "未取得".to_owned()
+    } else {
+        format!("{truncated_seconds:.3} 秒")
+    };
+    lines.push(format!("截斷輪數：{truncated}；截斷等待總耗時：{duration}（已取得 {timed_truncations}/{truncated} 輪）"));
     lines.join("\n")
 }
 
@@ -350,7 +391,7 @@ mod tests {
         .unwrap();
         for turn in 0..12 {
             let request = serde_json::json!({"context":{"turn_index":turn},"messages":[{"role":"user","content":"PRIVATE_FILENAME.xlsx"}],"tools":[]});
-            save_turn(&root,"run",&format!("request{turn}"),&request,Some(&serde_json::json!({"result":{"usage":{"prompt_tokens":10,"completion_tokens":2}}})),true).unwrap();
+            save_turn(&root,"run",&format!("request{turn}"),&request,Some(&serde_json::json!({"result":{"usage":{"prompt_tokens":10,"completion_tokens":2}}})),None,true).unwrap();
         }
         let report: Value =
             serde_json::from_str(&read_reports(&root, "run", "chat", true, Some(0)).unwrap())
@@ -391,5 +432,36 @@ mod tests {
         assert!(reports(&root, "run", "other", true, None, Some(&card)).is_err());
         let encrypted = std::fs::read(root.join("project-runs/run.debug/request0.dpapi")).unwrap();
         assert!(!String::from_utf8_lossy(&encrypted).contains("PRIVATE_FILENAME"));
+    }
+}
+
+#[cfg(test)]
+mod duration_tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn usage_keeps_missing_values_and_counts_only_measured_truncations() {
+        let report = short_usage(&[
+            json!({"actual":{"prompt_tokens":100,"completion_tokens":20000,"total_tokens":20100,"wait_seconds":60.25,"finish_reason":"length","reasoning_tokens":19990,"cached_tokens":0}}),
+            json!({"actual":{"finish_reason":"length"}}),
+            json!({"actual":{"wait_seconds":1.5,"finish_reason":"stop"}}),
+        ]);
+        assert!(report.contains("60.250\tlength\t19990\t0"));
+        assert!(report.contains("未取得\tlength\t未取得\t未取得"));
+        assert!(report.contains("截斷輪數：2；截斷等待總耗時：60.250 秒（已取得 1/2 輪）"));
+        assert!(report.contains("實際總計：20100（已取得 1/3 輪）"));
+    }
+    #[test]
+    fn finish_reason_is_retained_even_without_token_usage() {
+        let actual = crate::projects::context::actual(
+            &json!({"result":{"response_payload_json":{"choices":[{"finish_reason":"length"}]}}}),
+        );
+        assert_eq!(actual["finish_reason"], "length");
+        assert!(actual["prompt_tokens"].is_null());
+        let actual = crate::projects::context::actual(
+            &json!({"result":{"choices":[{"finish_reason":"stop"}],"usage":{"prompt_tokens_details":{"cached_tokens":12},"completion_tokens_details":{"reasoning_tokens":42}}}}),
+        );
+        assert_eq!(actual["reasoning_tokens"], 42);
+        assert_eq!(actual["cached_tokens"], 12);
     }
 }
