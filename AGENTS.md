@@ -2,7 +2,11 @@
 
 ## 目前工作
 
-- **0.9.11已完成本機來源整合驗證：v142／空快取frozen、非CAD456項／核心472項Rust、14組前端、Python科學套件與版本串接、Office Markdown格式讀回、排程Excel占用安全略過。詳見docs/VALIDATION_0_9_11.md，列有分段接續、兩個EXE雜湊與PDF彩色emoji文字抽取限制。本輪交付Git來源與證據，不含0.9.11安裝包／Release；公司EIS／DRT長任務仍待實測。**
+- **0.9.11 已發布：Release／標籤指向來源提交 01bbda6cf36031a113e1b63fc1c01206e93d4611，同提交 CI 42003106319 通過。相同 EXE 再次以 v142 空快取 frozen 核對後完成 NSIS 安裝／更新／回復／解除安裝及 Python／CAD 安裝後自檢，五項公開下載 SHA256 通過。證據見 offline/release-verification-0.9.11.json、offline/release-download-verification-0.9.11.json；公司 EIS／DRT 仍待實測，不自行進版。後續只有文件與驗證收據提交，不移動已發布標籤。**
+
+- **2026-11-05 後續授權：使用者明確要求發布 0.9.11 安裝包到 Release。接續已通過的來源驗證，封裝前以 v142／空快取 frozen 核對相同 EXE，補做 NSIS 生命週期、同來源提交 GitHub CI 與公開下載 SHA256；先前「不含安裝包／Release」僅描述來源交付階段，不再是禁止發布。**
+
+- **來源交付階段紀錄：0.9.11已完成本機來源整合驗證：v142／空快取frozen、非CAD456項／核心472項Rust、14組前端、Python科學套件與版本串接、Office Markdown格式讀回、排程Excel占用安全略過。詳見docs/VALIDATION_0_9_11.md，列有分段接續、兩個EXE雜湊與PDF彩色emoji文字抽取限制。當時交付Git來源與證據，尚未封裝；後續發布已完成，見上項。**
 
 - **2026-11-05追加授權：使用者已回報一般功能大致正常，要求完成0.9.11全部待辦與Python科學計算串接修正，完成驗證後提交推送Git；不再等待公司端測試才開始實作。持續保留v142與離線驗證規則。**
 

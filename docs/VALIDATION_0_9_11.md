@@ -1,6 +1,6 @@
 # 0.9.11 原始碼交付驗證
 
-本輪依使用者公司實測回饋實作並推送 Git；沒有產生 0.9.11 安裝包或 Release。安裝、升級及公司 EIS／DRT 長任務不能沿用前一版本的 PASS。變更對照見 [實作清單](IMPLEMENTATION_0_9_11.md)。
+來源交付階段依使用者公司實測回饋實作並推送 Git，當時沒有產生 0.9.11 安裝包或 Release。後續使用者另行授權發布安裝包，封裝紀錄於下方追加；公司 EIS／DRT 長任務不能沿用前一版本的 PASS。變更對照見 [實作清單](IMPLEMENTATION_0_9_11.md)。
 
 ## 重跑入口
 
@@ -49,4 +49,15 @@
 - 專案後端目前輪詢模型完成回覆；桌寵在取得第一份非空模型回覆時切成工作，並非服務端尚未暴露的串流 token 即時事件。一般對話依實際收到的文字切換。
 - PDF 中被 Office 圖像化的彩色 emoji 可能無法通過完整文字讀回，程式會保留已產生檔案並提示未完成，不靜默當成成功。此情況可使用 DOCX 並人工確認 PDF；不能把本輪可抽取文字 PDF 的 PASS 當成所有字型／符號皆受支援。
 - 原生通知受 Windows 通知設定、程式通知偏好及桌寵開關影響；公司端托盤通知點擊、多螢幕 DPI、休眠／鎖屏仍需實測。
-- 本輪沒有新測 CAD、公司 VNC／SMB／Outlook 信箱、加密文件或 NSIS 安裝生命週期；沒有宣稱公司伺服器已部署，也沒有發布 0.9.11 Release。
+- 來源交付階段沒有新測 CAD、公司 VNC／SMB／Outlook 信箱、加密文件或 NSIS 安裝生命週期；後續封裝的安裝測試另列。沒有宣稱公司伺服器已部署。
+
+## 後續授權封裝與發布（2026-11-05）
+
+使用者在來源推送後另行要求發布安裝包。此次接續前述證據，沒有將封裝記為重跑所有長流程：`Build.ps1 -BuildOnly -EmptyCargoCache` 再次核對 v142 x64，EXE SHA256 與最終來源驗證相同；接著 `Build-Installer.ps1`、`Test-Installer.ps1` 全部通過。
+
+- 真正 NSIS 安裝、固定路徑、更新 PID 交接、重新啟動、鎖定檔案／Python 初始化失敗回復、損壞套件修復、沿用 runtime、舊 CAD 清理與未知使用者資料保留、解除安裝通過。正式 Setup 安裝後的 WebView2／Python／CAD 自檢也通過；這不等同新做 CAD 圖面互動驗收。[安裝證據](../offline/installer-verification-0.9.11.json)。
+- [GitHub CI 42003106319](https://github.com/you1230783-sys/CompanyAI/actions/runs/42003106319) 對來源提交 `01bbda6cf36031a113e1b63fc1c01206e93d4611` 通過。下載 CI artifact 再核對 v142、空快取、default／core lint 與測試、依賴政策；Hosted 僅沿用兩個互動通知案例排除。[CI 證據](../offline/github-ci-verification-0.9.11.json)。
+- [v0.9.11 Release](https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.11) 與標籤指向同一來源提交。安裝包、兩份相同的簽署更新清單、verification.json、SHA256SUMS.txt 五項均經無憑證公開下載核對雜湊。[封裝證據](../offline/release-verification-0.9.11.json) · [下載證據](../offline/release-download-verification-0.9.11.json)。
+- `LM_AI_Setup.exe`：89,898,691 bytes；SHA256 `f96055a4dfb7176f6b9dc8b8ea494a762348b69caf797a477210a430e4edf247`。更新清單仍使用既有公司同源路徑與 RSA／SHA256 校驗，沒有部署公司伺服器。
+
+發布後 main 只追加文件及驗證收據，沒有修改應用程式或移動 Release 標籤。前述來源階段 JSON 中的 `installer_built: false` 保留其當時範圍；不能與此次封裝證據混用。

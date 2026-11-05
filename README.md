@@ -2,17 +2,17 @@
 
 LM_AI 連接公司 AI 服務，協助問答、文件整理、Office 副本修訂、Python 分析與 Classic Outlook 郵件分析。支援 Windows 11 x64。
 
-**原始碼版本：0.9.11。此次交付介面、排程與 Python 分析修正；正式安裝包仍為 0.9.10，尚未發布 0.9.11 Release。**
+**目前版本：0.9.11。介面、排程與 Python 分析修正已包含於正式安裝包，新增 SciPy／Matplotlib。**
 
 [0.9.11改動](docs/IMPLEMENTATION_0_9_11.md) · [0.9.11驗證紀錄](docs/VALIDATION_0_9_11.md) · [固定流程排程](docs/SCHEDULED_WORKFLOWS.md)。
 
 [0.9.9原始碼改動與待驗項目](docs/IMPLEMENTATION_0_9_9.md)。
 
-成品校驗：[Releases與SHA256](https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.10) · [驗證紀錄](docs/VALIDATION_0_9_10.md)。下方安裝包尚未包含 0.9.11 修正。
+成品校驗：[Releases與SHA256](https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.11) · [驗證紀錄](docs/VALIDATION_0_9_11.md)。
 
 ## 下載與安裝
 
-1. [下載 LM_AI_Setup.exe](https://github.com/you1230783-sys/CompanyAI/releases/download/v0.9.10/LM_AI_Setup.exe)。先從托盤離開程式，以一般權限安裝到 `C:\largan\LM_AI`。
+1. [下載 LM_AI_Setup.exe](https://github.com/you1230783-sys/CompanyAI/releases/download/v0.9.11/LM_AI_Setup.exe)。先從托盤離開程式，以一般權限安裝到 `C:\largan\LM_AI`。
 2. 開啟程式，按「登入」，在瀏覽器核對短碼並授權。
 3. 一般提問可直接對話；處理文件時選擇「我的工作區」或建立專案。
 
