@@ -82,15 +82,7 @@ impl Broker {
             Tool::ExportReportValues { name, metric_ids } => {
                 self.export_values(name, metric_ids, cancel)
             }
-            Tool::RecordReadingNotes { notes } => {
-                let mut resolved = notes.clone();
-                for note in &mut resolved {
-                    note.operation_id = self.references.resolve(&note.operation_id)?;
-                }
-                let mut result = self.reading.accept(&resolved)?;
-                self.references.project(&mut result);
-                Ok(result)
-            }
+            Tool::RecordReadingNotes { notes } => self.record_reading_notes(notes),
             Tool::ReadReadingNotes {
                 path,
                 offset,

@@ -1,6 +1,7 @@
 # Python 分析入口
 
 run_python在本機無網路AppContainer分析；原件唯讀，不可open、連網、啟動程序或執行來源程式。不需先讀所有參考頁。
+讀原文、確認格式用read_file，再record_reading_notes；run_python用於計算，kind=text的衍生輸出不是閱讀來源，不拿Python操作ID記閱讀筆記。
 inputs填name/path/kind；revision用read_file.source_revision或成功Python的sources.revision。read_file.revision是解碼文字雜湊，BOM等差異不能混用；版本不符先重新核對，不改null繞過。dataset沿用inspect_dataset版本。
 csv/dataset在tables[name]；text在texts[name]；生成xlsx在tables['name/工作表']；來源資訊在metadata[name]。CSV初始欄為文字，明確轉數字；原始Office先用excel-read經COM匯出CSV。
 已附np/pd/openpyxl/io/scipy/plt及標準re/json等，不需探測或pip安裝。from scipy.optimize import nnls可用；核對方法假設、收斂與殘差，不臨時自寫未驗證求解器。
