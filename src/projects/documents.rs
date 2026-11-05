@@ -4,6 +4,7 @@ use crate::AppResult;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
+mod word;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -314,6 +315,15 @@ pub fn compare(
     }
     if !excel && key_column.is_some() {
         return Err("鍵欄對應只適用Excel。".into());
+    }
+    if !excel {
+        let mut comparison = word::changes(left, right)?;
+        comparison["structure_changed"] = json!(left.structure != right.structure);
+        comparison["before_structure"] = left.structure.clone();
+        comparison["after_structure"] = right.structure.clone();
+        comparison["before_scope"] = json!(left.scope);
+        comparison["after_scope"] = json!(right.scope);
+        return Ok(comparison);
     }
     let rows = |s: &office::Snapshot| -> AppResult<BTreeMap<String, Value>> {
         if excel {

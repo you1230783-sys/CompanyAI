@@ -2,7 +2,8 @@
 //! 不是 tokenizer；只用於整理提示，不作為拒絕任務的硬上限。
 use serde_json::{json, Value};
 
-pub const TARGET_TOKENS: usize = 12_000;
+pub const TARGET_TOKENS: usize = 50_000;
+pub const COMPACT_TARGET_TOKENS: usize = 40_000;
 
 fn chars(value: &Value) -> usize {
     value
@@ -47,7 +48,8 @@ pub fn measure(request: &Value) -> Value {
         json!({"block":"tools","count":request["tools"].as_array().map_or(0, Vec::len),
         "characters":tool_chars,"estimated_tokens":estimate(tool_chars)}),
     );
-    json!({"estimator":"characters-v1","coefficient":0.48,"target_input_tokens":[8000,TARGET_TOKENS],
+    json!({"estimator":"characters-v1","coefficient":0.48,"target_input_tokens":[COMPACT_TARGET_TOKENS,TARGET_TOKENS],
+        "soft_target_input_tokens":TARGET_TOKENS,"compact_target_input_tokens":COMPACT_TARGET_TOKENS,
         "characters":total,"estimated_input_tokens":estimate(total),"blocks":blocks,
         "notice":"估算未含服務端模板或額外上下文；僅供同模型對照，實際以 API usage 為準。"})
 }
@@ -99,30 +101,39 @@ pub fn actual(response: &Value) -> Value {
 
 /// 已封存的舊工具結果按整組移出本輪請求，保留最後一組及使用者原文。
 /// 不改 checkpoint、已提交請求與工具去重表，也不裁斷 JSON 工具參數。
-pub fn fit(request: &mut Value) {
-    while measure(request)["estimated_input_tokens"]
+pub fn fit(request: &mut Value, candidates: &[usize]) -> Vec<usize> {
+    let mut estimated = measure(request)["estimated_input_tokens"]
         .as_u64()
-        .unwrap_or(0)
-        > TARGET_TOKENS as u64
-    {
+        .unwrap_or(0);
+    if estimated <= TARGET_TOKENS as u64 {
+        return vec![];
+    }
+    let mut removed = Vec::new();
+    // 候選位置由 Progress 的實際歷史投影產生，不以可能重複的 call ID 對應。
+    for &original in candidates {
+        if estimated <= COMPACT_TARGET_TOKENS as u64 {
+            break;
+        }
+        let Some(index) = original.checked_sub(removed.len() * 2) else {
+            break;
+        };
         let Some(messages) = request["messages"].as_array_mut() else {
             break;
         };
-        let pairs: Vec<_> = messages
-            .windows(2)
-            .enumerate()
-            .filter_map(|(i, p)| {
-                (p[0]["role"] == "assistant"
-                    && p[0]["tool_calls"].is_array()
-                    && p[1]["role"] == "tool")
-                    .then_some(i)
-            })
-            .collect();
-        if pairs.len() <= 1 {
+        if index + 1 >= messages.len()
+            || messages[index]["role"] != "assistant"
+            || !messages[index]["tool_calls"].is_array()
+            || messages[index + 1]["role"] != "tool"
+        {
             break;
         }
-        messages.drain(pairs[0]..pairs[0] + 2);
+        messages.drain(index..index + 2);
+        removed.push(original);
+        estimated = measure(request)["estimated_input_tokens"]
+            .as_u64()
+            .unwrap_or(0);
     }
+    removed
 }
 
 #[cfg(test)]
@@ -142,8 +153,28 @@ mod tests {
         );
     }
     #[test]
+    fn budget_waits_until_fifty_thousand_then_leaves_headroom() {
+        let mut messages = vec![json!({"role":"user","content":"要求"})];
+        for i in 0..8 {
+            messages.push(json!({"role":"assistant","tool_calls":[{"id":i.to_string()}]}));
+            messages.push(json!({"role":"tool","content":"a".repeat(14000)}));
+        }
+        let mut request = json!({"messages":messages,"tools":[]});
+        let removed = fit(&mut request, &[1, 3, 5, 7, 9, 11, 13]);
+        assert!(!removed.is_empty());
+        assert!(
+            measure(&request)["estimated_input_tokens"]
+                .as_u64()
+                .unwrap()
+                <= 40_000
+        );
+        let retained = request.clone();
+        assert!(fit(&mut request, &[1, 3]).is_empty());
+        assert_eq!(request, retained);
+    }
+    #[test]
     fn soft_budget_keeps_latest_pair_and_never_cuts_user_requirements() {
-        let mut messages = vec![json!({"role":"user","content":"條件".repeat(20000)})];
+        let mut messages = vec![json!({"role":"user","content":"條件".repeat(60000)})];
         for i in 0..3 {
             messages.push(json!({"role":"assistant","tool_calls":[{"id":i.to_string()}]}));
             messages.push(
@@ -151,15 +182,15 @@ mod tests {
             );
         }
         let mut request = json!({"messages":messages,"tools":[]});
-        fit(&mut request);
+        fit(&mut request, &[1, 3]);
         assert_eq!(request["messages"].as_array().unwrap().len(), 3);
         assert_eq!(request["messages"][2]["tool_call_id"], "2");
-        assert_eq!(request["messages"][0]["content"], "條件".repeat(20000));
+        assert_eq!(request["messages"][0]["content"], "條件".repeat(60000));
         assert!(
             measure(&request)["estimated_input_tokens"]
                 .as_u64()
                 .unwrap()
-                > 12000
+                > TARGET_TOKENS as u64
         );
     }
     #[test]

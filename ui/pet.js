@@ -2,7 +2,12 @@
 "use strict";
 window.AdvancedUI = (() => {
   const menu = $("advanced-dialog");
+  const outlook = $("show-outlook");
+  // 移動既有按鈕，沿用事件與 active 狀態，不建立重複 ID。
+  const outlookHome = document.createComment("Outlook 原進階功能位置");
+  outlook.before(outlookHome);
   $("show-advanced").onclick = () => {
+    if (!state.config.extra_features_enabled) return;
     $("show-outlook").disabled = !state.logged_in;
     menu.showModal();
   };
@@ -20,6 +25,19 @@ window.AdvancedUI = (() => {
     },
     true,
   );
+  return {render() {
+    const enabled = !!state.config.extra_features_enabled;
+    $("show-advanced").hidden = !enabled;
+    if (enabled) outlookHome.after(outlook);
+    else $("show-advanced").before(outlook);
+    outlook.disabled = !state.logged_in;
+    if (!enabled) {
+      for (const id of ["advanced-dialog", "pet-dialog", "pet-generator-dialog", "tarot-dialog"]) {
+        const dialog = $(id);
+        if (dialog?.open) dialog.close();
+      }
+    }
+  }};
 })();
 window.PetUI = (() => {
   const actions = {
@@ -175,7 +193,7 @@ window.PetUI = (() => {
     command({ action: "copy_prompt", text: prompt.value });
   };
   $("show-pet").onclick = () => {
-    if (!featureEnabled("pet")) return;
+    if (!state.config.extra_features_enabled || !featureEnabled("pet")) return;
     if (!dialog.open) dialog.showModal();
     command({ action: "state" });
   };

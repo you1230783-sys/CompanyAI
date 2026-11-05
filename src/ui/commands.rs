@@ -328,6 +328,7 @@ impl App {
                 quick_actions_fast,
                 always_new_chat,
                 vnc_enabled,
+                extra_features_enabled,
             } => {
                 let previous = self.config.clone();
                 self.config.hotkey_enabled = hotkey_enabled;
@@ -336,6 +337,7 @@ impl App {
                 self.config.quick_actions_fast = quick_actions_fast;
                 self.config.always_new_chat = always_new_chat;
                 self.config.vnc_enabled = vnc_enabled;
+                self.config.extra_features_enabled = extra_features_enabled;
                 if let Err(e) = self.apply_hotkey(self.config.hotkey.clone()) {
                     self.config = previous;
                     let _ = self.apply_hotkey(self.config.hotkey.clone());

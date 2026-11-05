@@ -1,7 +1,7 @@
 /* 個人偏好與本機對話操作。模型提示只描述該次請求，不改掉使用者選定的模型。 */
 "use strict";
 (() => {
-  const controls = ["hotkey-enabled", "selection-icon", "enter-newline", "enter-send", "quick-fast", "quick-current", "always-new-chat", "vnc-enabled"];
+  const controls = ["hotkey-enabled", "selection-icon", "enter-newline", "enter-send", "quick-fast", "quick-current", "always-new-chat", "vnc-enabled", "extra-features-enabled"];
   for (const id of controls) $(id).onchange = () => send({
     type: "behavior",
     hotkey_enabled: $("hotkey-enabled").checked,
@@ -10,6 +10,7 @@
     quick_actions_fast: $("quick-fast").checked,
     always_new_chat: $("always-new-chat").checked,
     vnc_enabled: $("vnc-enabled").checked,
+    extra_features_enabled: $("extra-features-enabled").checked,
   });
 
   let renameId = null;
@@ -65,6 +66,8 @@
       $("quick-current").checked = c.quick_actions_fast === false;
       $("always-new-chat").checked = !!c.always_new_chat;
       $("vnc-enabled").checked = !!c.vnc_enabled;
+      $("extra-features-enabled").checked = !!c.extra_features_enabled;
+      window.AdvancedUI?.render();
       $("vnc-enabled").disabled = !featureEnabled("vnc");
       $("vnc-enabled").title = featureEnabled("vnc") ? "" : "此建置未包含VNC；原有設定仍保留。";
       // 與輸入框 keydown 使用相同的已套用設定；錄製中尚未套用的快捷鍵不顯示於此。

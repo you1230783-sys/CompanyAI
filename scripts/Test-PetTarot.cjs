@@ -33,7 +33,7 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
     const results=await evaluate(`(() => {
       const checks=[];const check=(ok,label)=>{if(!ok)throw Error(label);checks.push(label);};
       window.testCommands=[];send=command=>testCommands.push(command);
-      LMUI.receive({...LMUI.getState(),logged_in:false,busy:'none'});
+      LMUI.receive({...LMUI.getState(),config:{...LMUI.getState().config,extra_features_enabled:true},logged_in:false,busy:'none'});
       check(!$('show-tarot').disabled && !$('show-pet').disabled,'offline entries enabled');
       $('show-advanced').click();check($('advanced-dialog').open && !$('sidebar').contains($('show-pet')),'advanced menu frees sidebar rows');$('show-tarot').click();check(testCommands.at(-1).command.action==='state','opens native local round');
       const round={id:'test-round',count:3,chosen:[],sent:false,history:[],used:[],remaining:78};

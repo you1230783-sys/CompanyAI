@@ -4,6 +4,8 @@
 
 ## 保留版本與驗證
 
+- [0.9.9來源交付（未單獨驗證）](IMPLEMENTATION_0_9_9.md)
+
 - [0.9.8：發行建置最佳化](VALIDATION_0_9_8.md)
 - [建置配置量測](RELEASE_PROFILES.md)
 

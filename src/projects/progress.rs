@@ -8,8 +8,6 @@ use std::collections::{BTreeMap, BTreeSet};
 mod coverage;
 
 const SOFT_BYTES: usize = 120_000;
-const HARD_BYTES: usize = 240_000;
-const COMPACT_BYTES: usize = HARD_BYTES * 65 / 100;
 
 /// 交接資料有界且必須包含下一步；摘要不改寫使用者授權。
 pub(super) fn validate_handoff(note: &str, superseded: &[String], next: &str) -> AppResult<()> {
@@ -99,6 +97,11 @@ pub(super) struct Progress {
     history_ids: Vec<Option<String>>,
     #[serde(skip)]
     pending_history_id: Option<String>,
+    /// 僅供本輪請求對應原始歷史索引；不保存或信任模型提供的 call ID。
+    #[serde(skip)]
+    projected_history_start: usize,
+    #[serde(skip)]
+    active_copies: Value,
     readings: BTreeMap<String, Reading>,
     operations: Vec<Value>,
     #[serde(default)]
@@ -157,6 +160,8 @@ impl Progress {
             history: vec![],
             history_ids: vec![],
             pending_history_id: None,
+            projected_history_start: 0,
+            active_copies: Value::Null,
             readings: BTreeMap::new(),
             operations: vec![],
             tool_usage: BTreeMap::new(),
@@ -263,9 +268,6 @@ impl Progress {
         if self.operations.len() > 20 {
             self.operations.drain(..self.operations.len() - 20);
         }
-    }
-    pub fn needs_compaction(&self) -> bool {
-        self.history.len() >= 30 || self.history_bytes() >= COMPACT_BYTES
     }
     fn history_bytes(&self) -> usize {
         self.history
@@ -642,16 +644,89 @@ impl Progress {
         })
     }
 
+    /// 完整請求超過軟目標才移出已封存歷史；同時更新 checkpoint 的投影，形成緩衝。
+    /// 動態提示插在歷史之前或之後都無妨，必須整段內容相符才允許對應索引。
+    pub fn fit_request(&mut self, request: &mut Value) -> AppResult<usize> {
+        let start = self.projected_history_start;
+        let history = &self.history[start..];
+        if history.len() <= 1 {
+            return Ok(0);
+        }
+        let wire: Vec<_> = history
+            .iter()
+            .flat_map(|(a, b)| [a.wire(), b.wire()])
+            .collect();
+        let messages = request["messages"]
+            .as_array()
+            .ok_or("上下文缺少訊息陣列。")?;
+        let positions: Vec<_> = messages
+            .windows(wire.len())
+            .enumerate()
+            .filter_map(|(index, part)| (part == wire).then_some(index))
+            .collect();
+        if positions.len() != 1 {
+            return Err("工具歷史投影無法唯一對應；已保留原文，未提交推論。".into());
+        }
+        let offset = positions[0];
+        let candidates: Vec<_> = history
+            .iter()
+            .enumerate()
+            .take(history.len() - 1)
+            .filter(|(_, (_, result))| !self.protected_evidence(result))
+            .map(|(index, _)| offset + index * 2)
+            .collect();
+        let removed = super::context::fit(request, &candidates);
+        if removed.is_empty() {
+            return Ok(0);
+        }
+        // 由後往前刪除，避免索引漂移；操作 ID、來源閱讀範圍與失敗計數不變。
+        for position in removed.iter().rev() {
+            let index = start + (position - offset) / 2;
+            self.history.remove(index);
+            if index < self.history_ids.len() {
+                self.history_ids.remove(index);
+            }
+            if let Some(note) = self.note.as_mut() {
+                if index < note.covered {
+                    note.covered -= 1;
+                }
+            }
+        }
+        self.checkpoints += 1;
+        if self.operations.len() > 20 {
+            self.operations.drain(..self.operations.len() - 20);
+        }
+        Ok(removed.len())
+    }
+
+    /// 保護仍在分頁讀取的同版本證據及目前工作副本原文，不從筆記推定已完成。
+    /// 保護區或使用者原文過大時可超過軟目標，服務端能力仍是送出限制。
+    fn protected_evidence(&self, message: &Message) -> bool {
+        let Ok(value) = serde_json::from_str::<Value>(&message.content) else {
+            return false;
+        };
+        let info = &value["result"];
+        let reading = info["path"]
+            .as_str()
+            .and_then(|path| self.readings.get(&path.replace('\\', "/").to_lowercase()));
+        if reading.is_some_and(|reading| {
+            reading.next() < reading.total
+                && info["revision"].as_str() == Some(reading.revision.as_str())
+        }) {
+            return true;
+        }
+        self.active_copies.as_array().is_some_and(|copies| {
+            copies.iter().any(|copy| {
+                info["copy_id"].is_string()
+                    && info["copy_id"] == copy["copy_id"]
+                    && info["revision"] == copy["revision"]
+            })
+        })
+    }
+
     pub fn messages(&mut self, copies: Value) -> AppResult<Vec<Message>> {
-        let total: usize = self.base.iter().map(|m| m.content.len()).sum::<usize>()
-            + self
-                .history
-                .iter()
-                .map(|(a, b)| a.wire().to_string().len() + b.wire().to_string().len())
-                .sum::<usize>();
-        self.compact |= total > SOFT_BYTES;
-        // 送出投影保留近期最多三組；完整歷程仍在 checkpoint 及本機操作封存。
-        // 最新工具結果優先於操作前筆記，避免把尚未成功的工作當成完成。
+        self.active_copies = copies.clone();
+        // 日常保留全部歷史。只有錯誤恢復／主動交接才使用既有精簡投影。
         let start = if self.compact {
             self.note
                 .as_ref()
@@ -659,35 +734,31 @@ impl Progress {
                 .unwrap_or(0)
         } else {
             0
-        }
-        .max(self.history.len().saturating_sub(3));
+        };
+        self.projected_history_start = start;
         let mut messages = self.base.clone();
         if self.recovery_context {
             // 使用者原文、系統限制與最新補充仍保留；移除較早助理答案的送出投影。
             // 原文保存在歷史／checkpoint，必要時可依來源查回。
             messages.retain(|message| message.role != "assistant");
         }
-        // 較早助理答案可能很大；只在需要時縮減送出投影，原文仍留在歷史與 checkpoint。
+        // 較早助理答案只在明確進入精簡恢復時節錄，日常不使用額外 bytes 門檻。
         // 使用者原話及最新補充完全不裁切，避免把任務條件換成模型摘要。
-        let mut base_bytes: usize = messages.iter().map(|m| m.wire().to_string().len()).sum();
         for (index, message) in messages.iter_mut().enumerate() {
-            if base_bytes <= 60_000 && !self.lean_context {
+            if !self.lean_context {
                 break;
             }
             if message.role != "assistant" || message.content.len() <= 2000 {
                 continue;
             }
-            let original = message.content.len();
             let excerpt: String = message.content.chars().take(500).collect();
             let reference = self.base_task_ids.get(index).and_then(Option::as_deref);
             message.content=format!("較早助理回覆節錄（不是完整結果）：{excerpt}\n原文查回：{}。重要細節請查回，不憑節錄推論。",reference.map(|id|format!("read_task_result(task_id={id:?},field=\"result\",offset=0)")).unwrap_or_else(||"read_task_result；任務索引見專案記憶，若沒有紀錄請向使用者確認".into()));
-            base_bytes = base_bytes.saturating_sub(original) + message.content.len();
         }
         let resume = Message::user(&format!("本機續接資料：\n{}", self.model_snapshot(copies)));
         if self.no_progress >= 4 {
             messages.push(Message::user(&format!("進度提醒（{}/8）：{} Outlook 請查看上述 outlook_paging 的 next_cursor。可以核對原文，但不要只重讀同頁、改寫筆記或更換操作 ID；請處理未完成範圍，資料足夠時交付。",self.no_progress,self.no_progress_reason)));
         }
-        let history_start = messages.len();
         for (reply, result) in &self.history[start..] {
             messages.push(reply.clone());
             messages.push(result.clone());
@@ -714,31 +785,6 @@ impl Progress {
                 "本次任務的使用者補充指示（依提交順序，持續有效）：\n{text}"
             )));
         }
-        let bytes = |messages: &[Message]| {
-            messages
-                .iter()
-                .map(|m| m.wire().to_string().len())
-                .sum::<usize>()
-        };
-        if bytes(&messages) > HARD_BYTES {
-            let mut omitted = Vec::new();
-            let mut removed = 0;
-            // assistant/tool 成對移出這次請求；不刪除 self.history 的原始證據。
-            while bytes(&messages) > SOFT_BYTES && start + removed < self.history.len() {
-                messages.drain(history_start..history_start + 2);
-                if let Some(id) = self
-                    .history_ids
-                    .get(start + removed)
-                    .and_then(Option::as_ref)
-                {
-                    omitted.push(id.clone());
-                }
-                removed += 1;
-            }
-            if removed > 0 {
-                messages.insert(history_start,Message::user(&format!("為控制本輪文字量，{removed} 組工具原文未隨請求重送；完整結果仍保存在本機加密操作簿。可用 read_work_log(operation_id,offset) 查回，operation_id 未知時先以 offset=0 查看索引／原紀錄。被省略不代表未執行，不要重做已成功的修改；需要細節時先查證。可查回的操作：{}",json!(omitted))));
-            }
-        }
         // 文字預算只觸發整理；真正傳輸限制仍由 API capabilities 核對。
         Ok(messages)
     }
@@ -747,6 +793,81 @@ impl Progress {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn native_pair(state: &mut Progress, index: usize, size: usize) {
+        let mut reply = Message::assistant(String::new());
+        // 模型可在不同輪次重用 call ID；投影必須仍以順序及完整內容對應。
+        reply.tool_calls = vec![
+            json!({"id":"reused","function":{"name":"read_file","arguments":index.to_string()}}),
+        ];
+        state.push_native(
+            reply,
+            "reused",
+            &json!({"ok":true,"result":{"text":"a".repeat(size)}}),
+        );
+    }
+    #[test]
+    fn budget_keeps_more_than_three_pairs_and_persists_only_actual_evictions() {
+        let mut state = Progress::new(vec![Message::user("不可修改來源")]);
+        for index in 0..8 {
+            native_pair(&mut state, index, 100);
+        }
+        let messages = state.messages(json!([])).unwrap();
+        assert_eq!(messages.iter().filter(|m| m.role == "tool").count(), 8);
+        let mut request =
+            json!({"messages":messages.iter().map(Message::wire).collect::<Vec<_>>(),"tools":[]});
+        assert_eq!(state.fit_request(&mut request).unwrap(), 0);
+        for index in 8..16 {
+            native_pair(&mut state, index, 14000);
+        }
+        state.no_progress = 7;
+        state.total_repairs = 5;
+        let messages = state.messages(json!([])).unwrap();
+        let mut request =
+            json!({"messages":messages.iter().map(Message::wire).collect::<Vec<_>>(),"tools":[]});
+        request["messages"]
+            .as_array_mut()
+            .unwrap()
+            .insert(0, json!({"role":"system","content":"動態提示"}));
+        assert!(state.fit_request(&mut request).unwrap() > 0);
+        let retained = state.history.len();
+        let mut restored: Progress =
+            serde_json::from_value(serde_json::to_value(&state).unwrap()).unwrap();
+        assert_eq!(restored.history.len(), retained);
+        assert_eq!(restored.no_progress, 7);
+        assert_eq!(restored.total_repairs, 5);
+        let next = restored.messages(json!([])).unwrap();
+        let mut next =
+            json!({"messages":next.iter().map(Message::wire).collect::<Vec<_>>(),"tools":[]});
+        assert_eq!(restored.fit_request(&mut next).unwrap(), 0);
+        assert!(next.to_string().contains("不可修改來源"));
+    }
+
+    #[test]
+    fn current_copy_and_unfinished_reading_are_protected_without_trusting_notes() {
+        let mut state = Progress::new(vec![]);
+        state.readings.insert(
+            "source.txt".into(),
+            Reading {
+                revision: "v1".into(),
+                total: 100,
+                ranges: vec![(0, 10)],
+                ..Reading::default()
+            },
+        );
+        state.active_copies = json!([{"copy_id":"copy1","revision":"v2"}]);
+        assert!(state.protected_evidence(&Message::result(
+            "id",
+            &json!({"result":{"path":"source.txt","revision":"v1"}})
+        )));
+        assert!(!state.protected_evidence(&Message::result(
+            "id",
+            &json!({"result":{"path":"source.txt","revision":"old"}})
+        )));
+        assert!(state.protected_evidence(&Message::result(
+            "id",
+            &json!({"result":{"copy_id":"copy1","revision":"v2"}})
+        )));
+    }
     #[test]
     fn renamed_exports_remain_duplicates_after_checkpoint_and_new_conditions_reset_scope() {
         let mut state = Progress::new(vec![]);
@@ -1131,7 +1252,7 @@ mod tests {
         assert!(state.accept_note(Some("已確認前三十份證據；待辦：核對缺漏並寫週報")));
         state.total_repairs = 5;
         state.no_progress = 7;
-        assert!(state.needs_compaction());
+        assert!(state.history_bytes() > SOFT_BYTES);
         state.compact_batch();
         assert_eq!(state.history.len(), 2);
         assert_eq!(state.total_repairs, 5);
@@ -1228,7 +1349,7 @@ mod tests {
         assert!(state.accept_note(Some("來源及累積重點")));
         state.push_tool("new tool".into(), "尚未摘要的原文".into());
         state.repair("empty", "bad first").unwrap();
-        assert!(!state
+        assert!(state
             .messages(json!([]))
             .unwrap()
             .iter()

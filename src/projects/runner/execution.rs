@@ -259,7 +259,7 @@ pub(super) fn run_for(
                     return pause("來回次數已達到上限", &broker, &progress_state, None);
                 }
                 broker.archive_results()?;
-                progress_state.compact_batch();
+                // 換批仍保存 checkpoint 與安全計數，不因固定次數移出原文。
                 save_pause(
                     &run,
                     &caps.principal_id,
@@ -468,7 +468,11 @@ pub(super) fn run_for(
                 )?;
                 broker.restrict_tools(&mut request);
                 broker.mail_note_schema(&mut request);
-                crate::projects::context::fit(&mut request);
+                let removed = progress_state.fit_request(&mut request)?;
+                if removed > 0 {
+                    report(&mut activity, &mut progress,
+                        format!("已整理工作筆記與上下文：估算超過 50,000 tokens，移出 {removed} 組較早結果，目標約 40,000；完整原文仍可查回"));
+                }
                 request
             } else {
                 let legacy = messages
@@ -1130,27 +1134,8 @@ pub(super) fn run_for(
                                     "已保存交接筆記並精簡上下文；舊紀錄仍可查回".into(),
                                 );
                             }
-                            crate::projects::Tool::ExportLogDataset { .. }
-                            | crate::projects::Tool::ExportExcelDataset { .. }
-                            | crate::projects::Tool::ExportPlannedExcel { .. } => {
-                                progress_state.compact_now();
-                                report(
-                                    &mut activity,
-                                    &mut progress,
-                                    "CSV 已保存；後續僅帶欄位、統計與首尾預覽，已移出先前工具原文"
-                                        .into(),
-                                );
-                            }
                             _ => (),
                         }
-                    }
-                    if native && progress_state.needs_compaction() {
-                        progress_state.compact_batch();
-                        report(
-                            &mut activity,
-                            &mut progress,
-                            "已整理工作筆記與上下文；完整工具結果可按需查回".into(),
-                        );
                     }
                     save_pause(
                         &run,

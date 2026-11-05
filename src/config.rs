@@ -98,6 +98,8 @@ pub struct Config {
     pub always_new_chat: bool,
     /// 選用本機工具，預設隱藏；啟用後才允許讀取 VNC 機台設定。
     pub vnc_enabled: bool,
+    /// 額外功能入口預設關閉；與 VNC 偏好及編譯能力獨立。
+    pub extra_features_enabled: bool,
     /// DEBUG 僅保存本機加密 JSON，數字用量報表與正文分開。
     pub debug_mode: bool,
     /// 僅影響未自訂系列顏色的呈現，不傳送模型或修改來源數據。
@@ -125,6 +127,7 @@ struct Preferences {
     quick_actions_fast: Option<bool>,
     always_new_chat: bool,
     vnc_enabled: bool,
+    extra_features_enabled: bool,
     debug_mode: bool,
     chart_palette: Vec<String>,
 }
@@ -149,6 +152,7 @@ impl Serialize for Config {
             quick_actions_fast: Some(self.quick_actions_fast),
             always_new_chat: self.always_new_chat,
             vnc_enabled: self.vnc_enabled,
+            extra_features_enabled: self.extra_features_enabled,
             debug_mode: self.debug_mode,
             chart_palette: self.chart_palette.clone(),
         }
@@ -176,6 +180,7 @@ impl<'de> Deserialize<'de> for Config {
             quick_actions_fast: saved.quick_actions_fast.unwrap_or(true),
             always_new_chat: saved.always_new_chat,
             vnc_enabled: saved.vnc_enabled,
+            extra_features_enabled: saved.extra_features_enabled,
             debug_mode: saved.debug_mode,
             chart_palette: if valid_chart_palette(&saved.chart_palette) {
                 saved.chart_palette
@@ -213,6 +218,7 @@ impl Default for Config {
             quick_actions_fast: true,
             always_new_chat: false,
             vnc_enabled: false,
+            extra_features_enabled: false,
             debug_mode: false,
             chart_palette: default_chart_palette(),
         }
@@ -408,6 +414,7 @@ mod tests {
     fn behavior_preferences_round_trip_with_safe_legacy_defaults() {
         let old: Config = serde_json::from_str("{}").unwrap();
         assert!(old.hotkey_enabled);
+        assert!(!old.extra_features_enabled);
         assert!(
             !old.selection_icon && !old.enter_sends && !old.always_new_chat && !old.vnc_enabled
         );
@@ -418,10 +425,14 @@ mod tests {
             always_new_chat: true,
             quick_actions_fast: false,
             vnc_enabled: true,
+            extra_features_enabled: true,
             ..old
         };
         let saved: Config = serde_json::from_str(&serde_json::to_string(&value).unwrap()).unwrap();
         assert!(!saved.hotkey_enabled && !saved.quick_actions_fast);
+        assert!(saved.extra_features_enabled);
+        let migrated: Config = serde_json::from_str(r#"{"vnc_enabled":true}"#).unwrap();
+        assert!(migrated.vnc_enabled && !migrated.extra_features_enabled);
         assert!(
             saved.selection_icon && saved.enter_sends && saved.always_new_chat && saved.vnc_enabled
         );

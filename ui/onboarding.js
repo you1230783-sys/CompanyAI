@@ -16,10 +16,10 @@ window.OnboardingUI = (() => {
   let autoShown = false, timer = null, previousFocus = null, returnToSettings = false;
   let mode = "lesson", sequence = [], position = 0, catalogSignature = "";
   const allowed = () => state.logged_in && !state.update_required && state.onboarding?.enabled;
-  const lessons = () => state.onboarding?.tutorials || [];
+  const lessons = () => (state.onboarding?.tutorials || []).filter(item => tutorialEnabled(item.id));
 
   function beginPractice(topic, fromSettings = false, group = null) {
-    if (!allowed() || window.ProjectTutorial == null) return;
+    if (!allowed() || window.ProjectTutorial == null || (topic && !tutorialEnabled(topic))) return;
     if (fromSettings) $("settings-dialog").close();
     autoShown = true;
     // 只保存選單已提供與教學完成旗標；練習內容不進正式專案、對話或草稿。
@@ -110,6 +110,7 @@ window.OnboardingUI = (() => {
   }
 
   function beginLessons(items, fromSettings = false) {
+    items = items.filter(item => tutorialEnabled(item.id));
     if (!allowed() || !items.length) return;
     if (items[0].interactive) { beginPractice(items.length === 1 ? items[0].id : null, fromSettings, items[0].group); return; }
     mode = "lesson"; sequence = items; position = 0;
@@ -164,7 +165,7 @@ window.OnboardingUI = (() => {
   function renderCatalog() {
     const info = state.onboarding || {};
     $("onboarding-storage-status").textContent = info.error || "";
-    const signature = JSON.stringify(info.tutorials);
+    const signature = JSON.stringify(lessons());
     if (signature === catalogSignature) return;
     catalogSignature = signature;
     const catalog = $("tutorial-catalog"); catalog.replaceChildren();

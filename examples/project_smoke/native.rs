@@ -644,8 +644,11 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     }
                 } else if matches!(case, 18 | 19) {
                     assert!(
-                        body["messages"].to_string().len() < 260_000,
-                        "模型上下文應受控"
+                        company_ai::projects::context::measure(&body)["estimated_input_tokens"]
+                            .as_u64()
+                            .unwrap()
+                            <= 50_000,
+                        "固定已讀完文件的完整請求應符合新的估算軟目標"
                     );
                     assert!(messages.iter().any(|m| m["content"]
                         .as_str()

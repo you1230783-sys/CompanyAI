@@ -59,6 +59,7 @@ window.ProjectTutorial = (() => {
   function open(settings = {}) {
     // 獨立教學預覽保留完整目錄；正式介面依原生建置能力過濾。
     catalog = fullCatalog.filter(item => {
+      if (typeof tutorialEnabled === "function") return tutorialEnabled(item.id);
       if (typeof featureEnabled !== "function") return true;
       const feature = item.id.startsWith("projects.cad.") ? "cad"
         : item.id.startsWith("vnc.") ? "vnc"
@@ -66,6 +67,7 @@ window.ProjectTutorial = (() => {
         : item.id === "settings.tarot" ? "tarot" : null;
       return feature == null || featureEnabled(feature);
     });
+    if (settings.topic && !catalog.some(item => item.id === settings.topic)) return;
     ensureHost();
     if (host.open) return;
     previousFocus = document.activeElement;

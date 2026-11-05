@@ -36,7 +36,7 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
       window.testCommands=[];send=command=>testCommands.push(command);
       const fixture={...LMUI.getState(),logged_in:true,can_send:true,busy:'none',active_id:'feature-chat',
         conversations:[{id:'feature-chat',title:'測試',project_id:'project',updated_at:1}],messages:[],
-        models:[{id:'quality',label:'品質'}],config:{...LMUI.getState().config,model:'quality',vnc_enabled:true},
+        models:[{id:'quality',label:'品質'}],config:{...LMUI.getState().config,model:'quality',vnc_enabled:true,extra_features_enabled:true},
         projects:{items:[{id:'project',name:'測試',root:'C:/fixture'}],running:false,status:'',activity:[]}};
       for(let mask=0;mask<16;mask++) {
         document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());
@@ -70,6 +70,26 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
           '組合'+mask+'：教學不提供停用模組');
         ProjectTutorial.close();
       }
+      for (const extras of [false,true]) for (const vnc of [false,true]) {
+        LMUI.receive({...fixture,build_features:{cad:true,pet:true,tarot:true,vnc:true},
+          config:{...fixture.config,extra_features_enabled:extras,vnc_enabled:vnc}});
+        check($('show-advanced').hidden===!extras, '額外功能入口 '+extras+'/'+vnc);
+        check($('sidebar').contains($('show-outlook'))===!extras, 'Outlook直達與進階選單位置 '+extras+'/'+vnc);
+        check($('show-vnc').hidden===!vnc, 'VNC入口獨立 '+extras+'/'+vnc);
+        ProjectTutorial.open();
+        const menu=$('project-tutorial').textContent;
+        check(menu.includes('VNC 快速連線')===vnc, 'VNC教學隨偏好 '+extras+'/'+vnc);
+        check(tutorialEnabled('settings.pet')===extras && tutorialEnabled('settings.tarot')===extras,
+          '額外功能教學隨偏好 '+extras+'/'+vnc);
+        ProjectTutorial.close();
+        if (!extras) {
+          ProjectTutorial.open({topic:'settings.pet'});
+          check(!$('project-tutorial').open,'關閉時不能直接開啟桌寵教學');
+          $('show-advanced').click();
+          check(!$('advanced-dialog').open,'關閉時不能程式觸發進階選單');
+        }
+      }
+      LMUI.receive({...fixture,build_features:{cad:true,pet:true,tarot:true,vnc:true}});
       $('show-reminders').click();
       check(document.querySelector('#reminders-dialog [data-channel]').value==='pet',
         '完整版新增提醒沿用桌寵');

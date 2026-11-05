@@ -463,6 +463,12 @@ pub(super) fn inspect_format(target: &IDispatch, family: &str) -> AppResult<Valu
             value[name] = scalar(&paragraph, name)?;
         }
         if family == "Documents" {
+            // 原生表格範圍是比較錨點的一部分，避免正文與表格同文字交叉配對。
+            value["WordInTable"] =
+                json!(
+                    bool::try_from(&invoke(target, "Information", vec![12i32.into()], false)?)
+                        .map_err(|e| e.to_string())?
+                );
             for name in ["LineSpacingRule", "LineSpacing"] {
                 value[name] = scalar(&paragraph, name)?;
             }

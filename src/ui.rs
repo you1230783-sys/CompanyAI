@@ -156,6 +156,8 @@ enum Command {
         always_new_chat: bool,
         #[serde(default)]
         vnc_enabled: bool,
+        #[serde(default)]
+        extra_features_enabled: bool,
     },
     RenameChat {
         id: String,
@@ -420,6 +422,15 @@ impl App {
         }});
         // 額外能力以獨立欄位加入，避免大型json!巨集超過展開深度。
         state_payload["state"]["build_features"] = crate::build_features::state();
+        // 原生目錄亦套用個人偏好；前端同規則保護搜尋與直接開啟。
+        if let Some(tutorials) = state_payload["state"]["onboarding"]["tutorials"].as_array_mut() {
+            tutorials.retain(|entry| {
+                let id = entry["id"].as_str().unwrap_or_default();
+                (!id.starts_with("vnc.") || self.config.vnc_enabled)
+                    && (!matches!(id, "settings.pet" | "settings.tarot")
+                        || self.config.extra_features_enabled)
+            });
+        }
         let _ = self.view.post(&state_payload);
         self.focus_draft = false;
     }

@@ -350,6 +350,13 @@ document.fonts?.ready.then(() => {
 });
 
 // 舊測試／預覽資料沒有此欄位時沿用完整版；正式狀態由原生程式提供。
+function tutorialEnabled(id) {
+  if (id.startsWith("vnc.")) return featureEnabled("vnc") && !!state.config.vnc_enabled;
+  if (id === "settings.pet" || id === "settings.tarot") {
+    return !!state.config.extra_features_enabled && featureEnabled(id.slice(9));
+  }
+  return !id.startsWith("projects.cad.") || featureEnabled("cad");
+}
 function featureEnabled(name) {
   return state.build_features == null || state.build_features[name] === true;
 }
@@ -897,7 +904,7 @@ function receive(next) {
   window.AuthUI?.beforeRender();
   state = next;
   for (const name of ["pet", "tarot"]) {
-    $("show-" + name).hidden = !featureEnabled(name);
+    $("show-" + name).hidden = !state.config.extra_features_enabled || !featureEnabled(name);
   }
   window.SettingsUI?.render(state.config);
   document.documentElement.dataset.theme = state.config.dark_mode ? "dark" : "light";
