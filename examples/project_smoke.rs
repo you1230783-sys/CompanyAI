@@ -61,6 +61,11 @@ fn run() -> AppResult<()> {
     if args.get(3).is_some_and(|value| value == "--native-only") {
         return native::verify(&root);
     }
+    // 修正原生案例後可接續尚未執行的群組；完整建置仍走下方全部案例。
+    // 此模式不代表完整驗證，需與相同應用來源的先前結果一起核對。
+    if args.get(3).is_some_and(|value| value == "--after-native") {
+        return verify_after_native(&exe, &root);
+    }
     if args.get(3).is_some_and(|value| value == "--recovery-only") {
         pause::verify(&root)?;
         return interruption::verify(&root);
@@ -179,16 +184,20 @@ fn run() -> AppResult<()> {
     source_code::verify(&exe, &root)?;
     logs::verify(&exe, &root)?;
     native::verify(&root)?;
-    resilience::verify(&root)?;
-    vision::verify(&root)?;
-    skills::verify(&exe, &root)?;
-    roundtrip::verify(&root)?;
-    continuation::verify(&root)?;
-    pause::verify(&root)?;
-    interruption::verify(&root)?;
-    memory::verify(&exe, &root)?;
-    pdf::verify(&exe, &root)?;
-    server_pdf::verify(&exe, &root)?;
+    verify_after_native(&exe, &root)
+}
+
+fn verify_after_native(exe: &std::path::Path, root: &std::path::Path) -> AppResult<()> {
+    resilience::verify(root)?;
+    vision::verify(root)?;
+    skills::verify(exe, root)?;
+    roundtrip::verify(root)?;
+    continuation::verify(root)?;
+    pause::verify(root)?;
+    interruption::verify(root)?;
+    memory::verify(exe, root)?;
+    pdf::verify(exe, root)?;
+    server_pdf::verify(exe, root)?;
     Ok(())
 }
 fn main() {

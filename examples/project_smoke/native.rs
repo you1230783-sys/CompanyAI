@@ -521,15 +521,19 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     }
                     if posts == 4 {
                         let after = body["messages"].to_string().len();
+                        // 匯出本身不再觸發整理；這份範例未超過軟目標，應保留早期原文。
+                        assert!(body["messages"]
+                            .to_string()
+                            .contains(&"原始文字".repeat(50)));
+                        // 讀取、技能與匯出之外，既有自動筆記也會留下工具結果。
+                        assert!(messages.iter().filter(|m| m["role"] == "tool").count() >= 3);
                         assert!(
-                            !body["messages"]
-                                .to_string()
-                                .contains(&"原始文字".repeat(50)),
-                            "CSV 後只保留索引與預覽，不得帶回已封存原文"
+                            company_ai::projects::context::measure(&body)["estimated_input_tokens"]
+                                .as_u64()
+                                .unwrap()
+                                <= 50_000
                         );
-                        assert_eq!(messages.iter().filter(|m| m["role"] == "tool").count(), 1);
-                        // 軟預算可能在匯出前就已移出全文；CSV 新增索引不要求總長度繼續下降。
-                        println!("CSV native request messages: {before_csv_bytes} -> {after} bytes (raw evidence absent; 100 rows retained locally)");
+                        println!("CSV native request messages: {before_csv_bytes} -> {after} bytes (raw evidence retained within soft budget; 100 rows retained locally)");
                     }
                     match posts {
                         1 => call(&body, "read_file", json!({"path":"source.txt","offset":0})),
@@ -561,10 +565,6 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                             assert_eq!(dataset["rows"], 100);
                             assert_eq!(previous["result"]["head"].as_array().unwrap().len(), 10);
                             assert_eq!(previous["result"]["tail"].as_array().unwrap().len(), 10);
-                            assert!(
-                                !body["messages"].to_string().contains("原始文字"),
-                                "CSV 後不重送舊原文"
-                            );
                             call(
                                 &body,
                                 "chart_dataset",
@@ -1232,7 +1232,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
             assert!(result?.contains("CSV 與更正整理完成"));
             assert_eq!(posts, 11);
             assert!(transformed_seen, "轉換後的圖表必須透過 UI 事件送出");
-            assert!(activity.iter().any(|s| s.contains("CSV 已保存")));
+            // 保存與100筆內容已在工具結果核對；不再要求舊版匯出後自動整理通知。
             assert!(activity.iter().any(|s| s.contains("已保存交接筆記")));
         }
         22 | 23 => {
