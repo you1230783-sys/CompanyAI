@@ -1,5 +1,11 @@
 # 版本更新紀錄
 
+## 0.9.8 — 發行建置最佳化
+
+- 同來源、獨立輸出及空Cargo快取比較原配置與兩種ThinLTO候選。
+- 選用ThinLTO，明確保留panic unwind及MSVC v142 x64。
+- 可重跑的量測入口與範圍限制見[建置配置](docs/RELEASE_PROFILES.md)；[驗證紀錄](docs/VALIDATION_0_9_8.md)。
+
 ## 0.9.7 — CI與依賴維護
 
 - 固定v142 x64／SDK及Rust的Windows CI，線上準備vendor後以空Cargo快取frozen建置。

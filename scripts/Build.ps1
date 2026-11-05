@@ -1,10 +1,13 @@
 ﻿[CmdletBinding()]
 param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$BasicValidation, [switch]$TestVnc, [switch]$TestOffice, [switch]$TestCadComparison, [string]$NetworkTestRoot, [switch]$BuildOnly, [switch]$SkipCad,
-    [switch]$NoDefaultFeatures, [ValidateSet('cad','pet','tarot','vnc')][string[]]$Features = @())
+    [switch]$NoDefaultFeatures, [ValidateSet('cad','pet','tarot','vnc')][string[]]$Features = @(),
+    [string]$BuildTargetDirectory)
 $ErrorActionPreference = 'Stop'
 # 選用模組先提供開發建置。正式更新與NSIS仍只有完整版本，避免更新後改變功能集合。
 $customFeatures = $NoDefaultFeatures -or $Features.Count -gt 0
 if ($customFeatures -and -not $BuildOnly) { throw 'Custom features require BuildOnly; release validation and installers use the complete default feature set.' }
+# 獨立輸出僅供建置量測，不讓正式驗證／封裝誤用另一份成品。
+if ($BuildTargetDirectory -and (-not $BuildOnly -or $customFeatures)) { throw 'BuildTargetDirectory requires default-feature BuildOnly.' }
 # 明確允許完整非CAD驗證或含安裝包的非CAD發行；不可與局部驗證混用。
 # 安裝包仍保留既有CAD依賴，安裝測試只核對套件，不啟動CAD圖面。
 if ($SkipCad -and ($BasicValidation -or $TestCadComparison -or $BuildOnly -or (-not $ValidateOnly -and -not $IncludeInstaller))) { throw 'SkipCad requires full ValidateOnly or IncludeInstaller; CAD validation remains pending.' }
@@ -84,6 +87,12 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     # 供使用者先看介面的本機候選：沿用 v142 與離線 vendor，但不執行測試、
     # 不覆寫 dist／驗證報告或簽署清單，也不將單純編譯記成正式驗收。
     if ($BuildOnly) {
+        if ($BuildTargetDirectory) {
+            $resolvedTarget = [IO.Path]::GetFullPath($BuildTargetDirectory, $projectRoot)
+            $buildRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot '.build')) + [IO.Path]::DirectorySeparatorChar
+            if (-not $resolvedTarget.StartsWith($buildRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Measurement target must be inside project .build.' }
+            $env:CARGO_TARGET_DIR = $resolvedTarget
+        }
         $previewArguments = @('build', '--workspace', '--release', '--frozen')
         if ($customFeatures) {
             # 與正式target分開，不能覆蓋待發行EXE或誤用精簡版封裝。

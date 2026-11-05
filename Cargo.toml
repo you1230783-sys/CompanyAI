@@ -1,6 +1,6 @@
 [package]
 name = "company-ai"
-version = "0.9.7"
+version = "0.9.8"
 edition = "2021"
 rust-version = "1.98"
 
@@ -22,6 +22,10 @@ required-features = ["vnc"]
 
 [profile.release]
 strip = "debuginfo"
+# 實測比較與限制見 docs/RELEASE_PROFILES.md；保留回呼 panic 回復能力。
+lto = "thin"
+codegen-units = 16
+panic = "unwind"
 
 [dev-dependencies]
 # 記憶體 COM 回歸測試的 implement 巨集需要直接引用；與 windows 既有版本一致。

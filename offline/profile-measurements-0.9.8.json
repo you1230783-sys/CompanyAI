@@ -1,0 +1,63 @@
+{
+  "source_commit": "51bec02978a96333393fcd23b89c4af79f0c3ae1",
+  "source_diff": "diff --git a/scripts/Build.ps1 b/scripts/Build.ps1\r\nindex a45054a..2fdbf47 100644\r\n--- a/scripts/Build.ps1\r\n+++ b/scripts/Build.ps1\r\n@@ -1,10 +1,13 @@\r\n ﻿[CmdletBinding()]\r\n param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$BasicValidation, [switch]$TestVnc, [switch]$TestOffice, [switch]$TestCadComparison, [string]$NetworkTestRoot, [switch]$BuildOnly, [switch]$SkipCad,\r\n-    [switch]$NoDefaultFeatures, [ValidateSet('cad','pet','tarot','vnc')][string[]]$Features = @())\r\n+    [switch]$NoDefaultFeatures, [ValidateSet('cad','pet','tarot','vnc')][string[]]$Features = @(),\r\n+    [string]$BuildTargetDirectory)\r\n $ErrorActionPreference = 'Stop'\r\n # 選用模組先提供開發建置。正式更新與NSIS仍只有完整版本，避免更新後改變功能集合。\r\n $customFeatures = $NoDefaultFeatures -or $Features.Count -gt 0\r\n if ($customFeatures -and -not $BuildOnly) { throw 'Custom features require BuildOnly; release validation and installers use the complete default feature set.' }\r\n+# 獨立輸出僅供建置量測，不讓正式驗證／封裝誤用另一份成品。\r\n+if ($BuildTargetDirectory -and (-not $BuildOnly -or $customFeatures)) { throw 'BuildTargetDirectory requires default-feature BuildOnly.' }\r\n # 明確允許完整非CAD驗證或含安裝包的非CAD發行；不可與局部驗證混用。\r\n # 安裝包仍保留既有CAD依賴，安裝測試只核對套件，不啟動CAD圖面。\r\n if ($SkipCad -and ($BasicValidation -or $TestCadComparison -or $BuildOnly -or (-not $ValidateOnly -and -not $IncludeInstaller))) { throw 'SkipCad requires full ValidateOnly or IncludeInstaller; CAD validation remains pending.' }\r\n@@ -84,6 +87,12 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }\r\n     # 供使用者先看介面的本機候選：沿用 v142 與離線 vendor，但不執行測試、\r\n     # 不覆寫 dist／驗證報告或簽署清單，也不將單純編譯記成正式驗收。\r\n     if ($BuildOnly) {\r\n+        if ($BuildTargetDirectory) {\r\n+            $resolvedTarget = [IO.Path]::GetFullPath($BuildTargetDirectory, $projectRoot)\r\n+            $buildRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot '.build')) + [IO.Path]::DirectorySeparatorChar\r\n+            if (-not $resolvedTarget.StartsWith($buildRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Measurement target must be inside project .build.' }\r\n+            $env:CARGO_TARGET_DIR = $resolvedTarget\r\n+        }\r\n         $previewArguments = @('build', '--workspace', '--release', '--frozen')\r\n         if ($customFeatures) {\r\n             # 與正式target分開，不能覆蓋待發行EXE或誤用精簡版封裝。\r\n",
+  "method": "One sequential cold target build per candidate; OS filesystem cache not flushed; build timing includes environment/probe/asset checks.",
+  "results": [
+    {
+      "name": "baseline",
+      "lto": "false",
+      "codegen_units": 16,
+      "panic": "unwind",
+      "seconds": 278.663,
+      "exe_bytes": 69519360,
+      "exe_sha256": "aaeeae86a9d43fcb96a346e5cb38f64223b62d2d3225e90157226bf5b2b2b469",
+      "msvc": "14.29.30133",
+      "compiler_report": [
+        "v142.c",
+        "Verified _MSC_FULL_VER=192930159 x64"
+      ],
+      "linker": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\link.exe",
+      "empty_cargo_cache": true,
+      "tests_run": false,
+      "installer_built": false
+    },
+    {
+      "name": "thin-16",
+      "lto": "thin",
+      "codegen_units": 16,
+      "panic": "unwind",
+      "seconds": 226.34,
+      "exe_bytes": 68926976,
+      "exe_sha256": "63706d5e4fbfe8dafd4f480e996b0843a04aecdcc7ff15a1074ee82902bab6ee",
+      "msvc": "14.29.30133",
+      "compiler_report": [
+        "v142.c",
+        "Verified _MSC_FULL_VER=192930159 x64"
+      ],
+      "linker": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\link.exe",
+      "empty_cargo_cache": true,
+      "tests_run": false,
+      "installer_built": false
+    },
+    {
+      "name": "thin-1",
+      "lto": "thin",
+      "codegen_units": 1,
+      "panic": "unwind",
+      "seconds": 505.434,
+      "exe_bytes": 68356608,
+      "exe_sha256": "6f8964d4abe83dfd5c1c0d27daec0446210ea3d6141562f71c6b46e181fecfc1",
+      "msvc": "14.29.30133",
+      "compiler_report": [
+        "v142.c",
+        "Verified _MSC_FULL_VER=192930159 x64"
+      ],
+      "linker": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\link.exe",
+      "empty_cargo_cache": true,
+      "tests_run": false,
+      "installer_built": false
+    }
+  ],
+  "selected": "thin-16",
+  "selection_reason": "thin-1 saves another 570368 bytes but took 505.4 versus 226.34 seconds in this single sample; retain parallel codegen."
+}
