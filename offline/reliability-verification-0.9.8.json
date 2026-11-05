@@ -1,0 +1,30 @@
+{
+  "recorded_at": "2026-11-05T10:11:32.1265249+08:00",
+  "results": [
+    {
+      "mode": "background",
+      "exit_code": 0,
+      "records": 1,
+      "result": "PASS"
+    },
+    {
+      "mode": "callback",
+      "exit_code": 0,
+      "records": 1,
+      "result": "PASS"
+    },
+    {
+      "mode": "com",
+      "exit_code": 0,
+      "records": 1,
+      "result": "PASS"
+    },
+    {
+      "mode": "abort",
+      "exit_code": -1073740791,
+      "records": 2,
+      "result": "PASS"
+    }
+  ],
+  "scope": "native background, WndProc, WebView2, abort persistence; no company account"
+}

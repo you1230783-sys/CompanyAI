@@ -1,0 +1,27 @@
+{
+  "result": "PASS_CI_SCOPE",
+  "execution_mode": "local combined evidence; Test-CI.ps1 was not rerun",
+  "source_commit": "d9b9d1e743052f595ba3b16d13b70d1a4d3b381b",
+  "msvc": "14.29.30133",
+  "compiler_report": [
+    "v142.c",
+    "Verified _MSC_FULL_VER=192930159 x64"
+  ],
+  "empty_cargo_cache": true,
+  "lock_sha256": "74a87e49dff4940c853116a8092f515f944a43683c995ba91860b3f4a5985072",
+  "checks": [
+    "default release --frozen, fmt, all-targets Clippy and 499 Rust tests: scripts/Build.ps1 -EmptyCargoCache -IncludeInstaller -TestOffice",
+    "core all-targets Clippy -D warnings and 455 Rust tests: --no-default-features --frozen with a new empty Cargo home"
+  ],
+  "excluded_interactive_tests": [],
+  "installer_built": true,
+  "logs": [
+    ".build/build-0.9.8-full-r1.log",
+    ".build/core-098.log"
+  ],
+  "not_validated": [
+    "company models/mailbox/network",
+    "interactive DPI"
+  ],
+  "notice": "Default checks reused from the same-source completed full build; no duplicate default test run. Hosted CI is a separate release gate."
+}

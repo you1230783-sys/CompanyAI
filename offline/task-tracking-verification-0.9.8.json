@@ -1,0 +1,14 @@
+{
+  "cases": [
+    "pending POST has no GET; 413 stops, survives DPAPI reload and ignores late events",
+    "third identical 404 with healthy models stops; partial answer and stopped state persist",
+    "503 retries original ID despite healthy model list; stops after five persisted waits",
+    "confirmed transient failure schedules replacement; stopping prevents restart",
+    "changing errors and successful GET reset the consecutive failure count",
+    "SSE task ID supersedes late by-request errors without counting them"
+  ],
+  "company_service_tested": false,
+  "result": "PASS",
+  "transport": "controlled events; loopback transport tested separately",
+  "version": "0.9.8"
+}

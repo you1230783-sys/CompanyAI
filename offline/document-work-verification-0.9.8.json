@@ -1,0 +1,17 @@
+{
+  "checks": [
+    "new Markdown edit/save/readback and protected text export refusal",
+    "new Word translation, incomplete/revision gates, idempotent publish, source unchanged",
+    "Word native comparison reports changed paragraphs",
+    "styled Word translation, mixed font/table/image structure after reopen, source unchanged",
+    "Word native comparison reports changed paragraphs",
+    "real Excel comparison separates unique key, value, formula and calculated result",
+    "translation refuses source changed after prepare",
+    "native answer export DOCX/PDF with Chinese text, table, code, URL, embedded PNG and readback"
+  ],
+  "company_encryption_tested": false,
+  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\0cb8f063330a1fb51565cc29f9223e66",
+  "real_model_tested": false,
+  "result": "PASS",
+  "version": "0.9.8"
+}
