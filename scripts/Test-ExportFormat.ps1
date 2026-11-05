@@ -8,7 +8,10 @@ for ($attempt = 0; $attempt -lt 100 -and (Get-Process WINWORD,EXCEL,POWERPNT -Er
 }
 if (Get-Process WINWORD,EXCEL,POWERPNT -ErrorAction SilentlyContinue) { throw 'Close Office before export format verification.' }
 $evidence = Get-Content -LiteralPath $Report -Raw | ConvertFrom-Json
-if ($evidence.result -ne 'PASS' -or $evidence.version -ne '0.9.11') { throw 'Expected current document fixture report.' }
+# 跟隨套件版本，避免每次進版忘記更新測試；仍拒絕重用舊版證據。
+$manifest = Get-Content -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) 'Cargo.toml') -Raw
+$versionMatch = [regex]::Match($manifest, '(?m)^version\s*=\s*"([^"]+)"')
+if (-not $versionMatch.Success -or $evidence.result -ne 'PASS' -or $evidence.version -ne $versionMatch.Groups[1].Value) { throw 'Expected current document fixture report.' }
 $files = @(Get-ChildItem -LiteralPath (Join-Path $evidence.fixture '_AI_Output') -Recurse -File -Filter 'export.docx')
 if ($files.Count -ne 1) { throw 'Expected one exported Word fixture.' }
 $word = New-Object -ComObject Word.Application
