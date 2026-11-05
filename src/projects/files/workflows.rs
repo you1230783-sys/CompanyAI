@@ -36,7 +36,11 @@ impl Broker {
             json!({"saved":true,"workflow_id":template.id,"name":template.name,"steps":template.steps.len(),"notice":"已保存可執行步驟；完整內容用read_workflow分頁查看。下次先prepare_workflow替換來源／日期與必要版本，檢視計畫再逐步執行。此範本不保存權限。"}),
         )
     }
-    pub(super) fn prepare_workflow(&mut self, id: &str, parameters: &str) -> AppResult<Value> {
+    pub(in crate::projects) fn prepare_workflow(
+        &mut self,
+        id: &str,
+        parameters: &str,
+    ) -> AppResult<Value> {
         if self
             .workflow
             .as_ref()

@@ -112,6 +112,7 @@ impl App {
     /// 介面保留診斷、複製與離開；重新啟動後由原請求／成果核對機制處理未知結果。
     pub(super) fn fault_tick(&mut self) {
         if !self.panic_fault {
+            self.schedules.cancel();
             self.panic_fault = true;
             self.cancelled.store(true, Ordering::Relaxed);
             self.socket_cancel.store(true, Ordering::Relaxed);

@@ -1397,6 +1397,7 @@ if (bridge) {
         window.ProjectUI?.receive(event.data);
         window.ArtifactUI?.receive(event.data);
         window.WorkbenchUI?.receive(event.data);
+        window.ScheduleUI?.receive(event.data);
         window.ChartUI?.receive(event.data);
         window.DiagramUI?.receive(event.data);
       window.WeeklyUI?.receive(event.data);

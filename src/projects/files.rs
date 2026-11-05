@@ -478,7 +478,7 @@ pub fn save_user_chart(project: &Project, conversation: &str, bytes: &[u8]) -> A
     Ok(path)
 }
 /// 預覽只記錄根目錄的檔案身分，不長時間鎖住整條路徑而妨礙其他本機保存。
-pub(crate) fn directory_identity(path: &Path) -> AppResult<[u32; 3]> {
+pub fn directory_identity(path: &Path) -> AppResult<[u32; 3]> {
     pinned_directory_identity(&pin(path)?)
 }
 fn pinned_directory_identity(guards: &[File]) -> AppResult<[u32; 3]> {

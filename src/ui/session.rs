@@ -93,6 +93,7 @@ impl App {
         }
     }
     pub(super) fn logout(&mut self) -> AppResult<()> {
+        self.schedules.cancel();
         self.document_export.cancel();
         self.workspace_import = None;
         self.handoff = None;

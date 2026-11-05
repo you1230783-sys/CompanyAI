@@ -1121,20 +1121,18 @@ pub(super) fn run_for(
                     // 寫入結果與副本版本都已核對，才能重新提供可恢復 checkpoint。
                     broker.archive_results()?;
                     if result["ok"] == true {
-                        match &request {
-                            crate::projects::Tool::CompactContext {
-                                working_note,
-                                superseded,
-                                next_step,
-                            } => {
-                                progress_state.handoff(working_note, superseded, next_step);
-                                report(
-                                    &mut activity,
-                                    &mut progress,
-                                    "已保存交接筆記並精簡上下文；舊紀錄仍可查回".into(),
-                                );
-                            }
-                            _ => (),
+                        if let crate::projects::Tool::CompactContext {
+                            working_note,
+                            superseded,
+                            next_step,
+                        } = &request
+                        {
+                            progress_state.handoff(working_note, superseded, next_step);
+                            report(
+                                &mut activity,
+                                &mut progress,
+                                "已保存交接筆記並精簡上下文；舊紀錄仍可查回".into(),
+                            );
                         }
                     }
                     save_pause(

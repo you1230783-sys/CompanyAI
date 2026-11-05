@@ -16,6 +16,14 @@ impl Command {
                 | Command::CancelDiagnostics
                 | Command::CopyError
         );
+        let offline = offline
+            || matches!(
+                self,
+                Command::Schedule {
+                    command: super::schedules::ScheduleCommand::State
+                        | super::schedules::ScheduleCommand::Stop
+                }
+            );
         #[cfg(feature = "pet")]
         let offline = offline || matches!(self, Command::Pet { .. });
         #[cfg(feature = "tarot")]

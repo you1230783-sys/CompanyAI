@@ -466,7 +466,8 @@ mod tests {
         assert_eq!(config.model, "quality");
         assert_eq!(config.hotkey, "Ctrl+Shift+F8");
         let saved = serde_json::to_value(&config).unwrap();
-        assert_eq!(saved.as_object().unwrap().len(), 19);
+        assert_eq!(saved.as_object().unwrap().len(), 20);
+        assert_eq!(saved["extra_features_enabled"], false);
         assert!(saved.get("ui_font").is_some());
         assert!(saved.get("interface_scale").is_some());
         assert!(saved.get("server_url").is_none());

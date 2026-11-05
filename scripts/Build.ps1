@@ -337,6 +337,11 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         $deliveryProbe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\delivery_smoke.exe'
         & $deliveryProbe $exe (Join-Path $projectRoot ('.build\delivery-smoke-' + [guid]::NewGuid().ToString('N')))
         if ($LASTEXITCODE -ne 0) { throw 'Bound values, workflow rerun and artifact export verification failed.' }
+        & cargo build --example schedule_smoke --frozen
+        if ($LASTEXITCODE -ne 0) { throw 'Scheduled workflow harness build failed.' }
+        $scheduleProbe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\schedule_smoke.exe'
+        & $scheduleProbe $exe (Join-Path $projectRoot ('.build\schedule-smoke-' + [guid]::NewGuid().ToString('N')))
+        if ($LASTEXITCODE -ne 0) { throw 'Scheduled workflow durable execution verification failed.' }
     }
     if ($TestCadComparison) {
         # 僅新建獨立圖面：核對兩版CAD的實際差異與固定尺寸文字警告。

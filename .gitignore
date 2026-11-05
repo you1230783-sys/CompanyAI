@@ -41,6 +41,8 @@ outlook-folders.dpapi
 /offline/*.zip
 /installer/nsis-*.zip
 templates.dpapi
+workflow-schedules.dpapi
+workflow-executions/
 
 # 開發機私有內容，與發行原始碼分開。
 /.codex/

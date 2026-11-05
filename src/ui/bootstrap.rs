@@ -477,6 +477,7 @@ pub(super) fn run_with_local(
             panic_fault: false,
             diagnostic_preview: None,
             reminders: reminders::ReminderRuntime::load(&root),
+            schedules: schedules::Runtime::load(&root),
             templates: templates::TemplateRuntime::load(&root),
             screenshot: screenshot::Runtime::default(),
             handoff: None,

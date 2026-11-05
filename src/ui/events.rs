@@ -310,6 +310,7 @@ impl App {
         }
         self.tick_pet();
         self.tick_reminders();
+        self.tick_schedules();
         let mut changed = false;
         // 先處理到期，再接受 UI 命令或背景結果，不能因本機工作忙碌而繼續使用過期授權。
         if !self.smoke && self.session.is_some() && !self.logged_in() && self.busy != "login" {

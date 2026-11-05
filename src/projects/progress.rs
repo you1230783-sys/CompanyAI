@@ -1552,21 +1552,24 @@ mod tests {
         }
     }
     #[test]
-    fn oversized_results_are_referenced_without_destroying_original_evidence() {
+    fn oversized_native_results_are_trimmed_as_pairs_after_full_request() {
         let mut state = Progress::new(vec![Message::user("original")]);
-        for _ in 0..5 {
-            state.push_tool("tool".into(), "x".repeat(60_000));
+        for index in 0..5 {
+            native_pair(&mut state, index, 60_000);
         }
         let messages = state.messages(json!([])).unwrap();
-        assert!(messages.iter().any(|m| m.content.contains("read_work_log")));
+        assert_eq!(messages.iter().filter(|m| m.role == "tool").count(), 5);
+        let mut request =
+            json!({"messages":messages.iter().map(Message::wire).collect::<Vec<_>>(),"tools":[]});
+        assert_eq!(state.fit_request(&mut request).unwrap(), 4);
+        assert_eq!(state.history.len(), 1);
+        assert!(request.to_string().contains("original"));
         assert!(
-            messages
-                .iter()
-                .map(|m| m.wire().to_string().len())
-                .sum::<usize>()
-                < HARD_BYTES
+            super::super::context::measure(&request)["estimated_input_tokens"]
+                .as_u64()
+                .unwrap()
+                <= 40_000
         );
-        assert_eq!(state.history.len(), 5);
     }
     #[test]
     fn resume_with_two_large_results_does_not_repeat_the_budget_pause() {
@@ -1578,7 +1581,7 @@ mod tests {
             status: "sent".into(),
         }]);
         for i in 0..3 {
-            state.push_tool(format!("call{i}"), "中".repeat(80_000));
+            native_pair(&mut state, i, 80_000);
         }
         state.resume_segment();
         let mut restored: Progress =
@@ -1587,15 +1590,16 @@ mod tests {
             let messages = restored.messages(json!([])).unwrap();
             assert!(messages.iter().any(|m| m.content == "保留原始要求"));
             assert!(messages.iter().any(|m| m.content.contains("只看 A01-01")));
+            let mut request = json!({"messages":messages.iter().map(Message::wire).collect::<Vec<_>>(),"tools":[]});
+            restored.fit_request(&mut request).unwrap();
             assert!(
-                messages
-                    .iter()
-                    .map(|m| m.wire().to_string().len())
-                    .sum::<usize>()
-                    < HARD_BYTES
+                super::super::context::measure(&request)["estimated_input_tokens"]
+                    .as_u64()
+                    .unwrap()
+                    <= 40_000
             );
         }
-        assert_eq!(restored.history.len(), 2);
+        assert_eq!(restored.history.len(), 1);
     }
     #[test]
     fn prior_final_answers_have_task_references_and_user_requirements_stay_exact() {
@@ -1613,6 +1617,14 @@ mod tests {
             Some("task-two".into()),
             None,
         ]);
+        assert_eq!(
+            state.messages(json!([])).unwrap()[1]
+                .content
+                .chars()
+                .count(),
+            80_000
+        );
+        state.compact_now();
         let messages = state.messages(json!([])).unwrap();
         for requirement in ["要求一", "要求二", "第三輪請繼續"] {
             assert!(messages.iter().any(|m| m.content == requirement));

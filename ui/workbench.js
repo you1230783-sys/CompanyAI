@@ -174,8 +174,7 @@ window.WorkbenchUI = (() => {
     }
     const plan=make("details");plan.append(make("summary",`檢視 ${flow.steps} 個步驟`),make("pre",(flow.plan||[]).map(s=>`${s.id}：${s.tool}${s.output_name?` → ${s.output_name}`:""}`).join("\n")));dialog.append(plan);
     const status=make("p");status.setAttribute("role","status");const add=make("button","加入提問草稿");
-    add.onclick=()=>{
-      try {
+    function readParameters() {
         const parameters=Object.create(null);
         for(const [parameter,control] of fields) {
           if(!control.value.trim())throw new Error(`請填寫 ${parameter.name}`);
@@ -189,10 +188,17 @@ window.WorkbenchUI = (() => {
           }
           parameters[parameter.name]=value;
         }
+        return parameters;
+    }
+    add.onclick=()=>{
+      try {
+        const parameters=readParameters();
         if(appendDraft(`請重跑工作流程「${flow.name}」（workflow_id=${flow.id}）。載入notes，檢視範本後，以以下參數prepare_workflow，核對來源及計畫，再逐步執行；保留已成功結果。\n本次參數：${JSON.stringify(parameters)}`,conversation)){dialog.close();closeSourceDialogs();}
       } catch(error) { status.textContent=error.message; }
     };
-    dialog.append(status,add);dialog.showModal();
+    const schedule=make("button","設定排程");schedule.id="workflow-schedule";
+    schedule.onclick=()=>{try {const parameters=readParameters();dialog.close();window.ScheduleUI.open(flow,conversation,parameters);}catch(error){status.textContent=error.message;}};
+    dialog.append(status,add,schedule);dialog.showModal();
   }
   let exportView=null,exportStatus=null,exportSave=null,exportName=null,exportId=null;
   function exportDialog(index=null){

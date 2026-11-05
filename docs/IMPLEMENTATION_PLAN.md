@@ -21,7 +21,7 @@
 - 最新交付：[0.9.7 Release](https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.7)、[本機驗證](VALIDATION_0_9_7.md)、[發行提交 CI](https://github.com/you1230783-sys/CompanyAI/actions/runs/41945624630)。完整499／核心455項Rust、v142空快取、Office及NSIS通過；五項Release資產公開下載SHA256核對一致。
 - 0.9.8／D02b已發布：ThinLTO／16 units，保留panic unwind；完整本機及同提交CI、公開下載核對通過，見[驗證與發布收據](VALIDATION_0_9_8.md)。下一版0.9.9只提交來源。
 - 新增待辦：**C01／輸入預算與原文保留策略**，已確認50,000 tokens軟目標及約40,000整理後目標；已排入0.9.9與F08／F09同版，詳見下方專節。
-- 0.9.9／F08＋F09＋C01來源與待驗案例已寫入，依指示未建置／未驗證；見[來源交付紀錄](IMPLEMENTATION_0_9_9.md)。接續0.9.10／D03，僅程式開啟／托盤執行，最後合併驗證。
+- 0.9.9／F08＋F09＋C01來源與待驗案例已寫入，依指示未建置／未驗證；見[來源交付紀錄](IMPLEMENTATION_0_9_9.md)。0.9.10／D03已寫入，僅程式開啟／托盤執行，正在合併驗證；見[排程契約](SCHEDULED_WORKFLOWS.md)與[驗證進度](VALIDATION_0_9_10.md)。
 - 擱置：M02使用評價與統計。跨專案知識庫不在目前排程；Authenticode已移除待辦。NAS同步由使用者處理。
 
 ### 待公司實機／外部追蹤（不冒充功能已驗收）

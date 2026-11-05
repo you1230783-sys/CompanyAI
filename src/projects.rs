@@ -33,6 +33,7 @@ pub mod report_values;
 pub mod review;
 pub mod runner;
 pub mod sandbox;
+pub mod schedule;
 mod server_pdf;
 pub mod setup;
 mod skills;

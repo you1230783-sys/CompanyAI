@@ -911,6 +911,9 @@ impl App {
         Ok(())
     }
     pub(super) fn poll_work(&mut self, force: bool) {
+        if self.schedules.active() {
+            return;
+        }
         if let Err(error) = self.resume_chat_retries() {
             self.status = error;
         }

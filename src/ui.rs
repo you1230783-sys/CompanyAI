@@ -53,6 +53,7 @@ mod pet;
 mod projects;
 mod reminders;
 mod retry;
+mod schedules;
 mod screenshot;
 mod site;
 #[cfg(feature = "tarot")]
@@ -73,6 +74,9 @@ const TRAY_MESSAGE: u32 = WM_APP + 4;
 // 保留既有按值派送，避免單為變體比例增加每個專案命令的堆積配置。
 #[cfg_attr(not(feature = "vnc"), allow(clippy::large_enum_variant))]
 enum Command {
+    Schedule {
+        command: schedules::ScheduleCommand,
+    },
     DocumentExport {
         command: document_export::ExportCommand,
     },
@@ -262,6 +266,7 @@ struct App {
     panic_fault: bool,
     diagnostic_preview: Option<(String, Vec<u8>)>,
     reminders: reminders::ReminderRuntime,
+    schedules: schedules::Runtime,
     templates: templates::TemplateRuntime,
     screenshot: screenshot::Runtime,
     handoff: Option<handoff::Pending>,
@@ -339,6 +344,7 @@ impl Drop for App {
             );
         }
         self.projects.cancel();
+        self.schedules.cancel();
         #[cfg(feature = "vnc")]
         self.vnc.shutdown();
         let _ = self.preserve_draft();
@@ -363,6 +369,7 @@ impl App {
         !crate::reliability::faulted()
             && self.logged_in()
             && self.busy == "none"
+            && !self.schedules.active()
             && !self.projects.active(self.active_id.as_deref())
             && self.work_ready()
             && !self.versions.blocked()
@@ -374,6 +381,7 @@ impl App {
     fn publish(&mut self) {
         if !self.logged_in() || self.versions.blocked() {
             self.projects.cancel();
+            self.schedules.cancel();
         }
         if !self.ready {
             return;
@@ -422,6 +430,7 @@ impl App {
         }});
         // 額外能力以獨立欄位加入，避免大型json!巨集超過展開深度。
         state_payload["state"]["build_features"] = crate::build_features::state();
+        state_payload["state"]["schedule_running"] = json!(self.schedules.active());
         // 原生目錄亦套用個人偏好；前端同規則保護搜尋與直接開啟。
         if let Some(tutorials) = state_payload["state"]["onboarding"]["tutorials"].as_array_mut() {
             tutorials.retain(|entry| {

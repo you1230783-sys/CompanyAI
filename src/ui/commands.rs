@@ -3,6 +3,24 @@ use super::*;
 
 impl App {
     pub(super) fn command(&mut self, command: Command) -> AppResult<()> {
+        // 固定排程不接受模型補充或並行操作；草稿仍可編輯，停止／登出／離開可隨時使用。
+        if self.schedules.active()
+            && !matches!(
+                command,
+                Command::Schedule { .. }
+                    | Command::Draft { .. }
+                    | Command::Exit
+                    | Command::Logout
+                    | Command::CopyError
+                    | Command::ExportDiagnostics { .. }
+                    | Command::SaveDiagnostics { .. }
+                    | Command::CancelDiagnostics
+                    | Command::Ready
+                    | Command::Copy { .. }
+            )
+        {
+            return Err("固定流程排程執行中；請先在設定＞進階功能＞流程排程停止，再操作其他工作。草稿可繼續編輯。".into());
+        }
         if self.workspace_import.is_some()
             && !matches!(
                 command,
@@ -26,6 +44,7 @@ impl App {
         }
         command.check_access(self.logged_in(), self.versions.blocked(), self.smoke)?;
         match command {
+            Command::Schedule { command } => self.schedule_command(command)?,
             Command::DocumentExport { command } => self.export_command(command)?,
             Command::Workspace { command } => self.workspace_command(command)?,
             Command::Reminder { command } => self.reminder_command(command)?,

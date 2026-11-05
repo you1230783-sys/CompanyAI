@@ -1288,6 +1288,9 @@ impl App {
         resume_id: Option<String>,
         queued_id: Option<&str>,
     ) -> AppResult<()> {
+        if self.schedules.active() {
+            return Err("固定流程排程執行中，未啟動另一個專案工作。".into());
+        }
         if self.history_error.is_some() {
             return Err("本機對話尚未恢復保存，請先處理紀錄錯誤。".into());
         }

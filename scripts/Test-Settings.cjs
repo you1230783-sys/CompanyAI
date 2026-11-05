@@ -40,7 +40,7 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
         version:'0.8.47',models:[{id:'quality',label:'品質'}],notifications:[],
         onboarding:{enabled:true,tutorials:${JSON.stringify(tutorials)},release_notes:${JSON.stringify(releases)},version:${JSON.stringify(releases.at(-1).version)}},
         conversations:[{id:'review-settings',title:'設定來源檢查',updated_at:1}],
-        config:{...LMUI.getState().config,debug_mode:true,model:'quality'},
+        config:{...LMUI.getState().config,debug_mode:true,model:'quality',extra_features_enabled:true,vnc_enabled:true},
         messages:[{role:'assistant',request_id:'old-run',content:'早先任務'},{role:'user',request_id:'latest-run',content:'目前任務'}],
         projects:{items:[],running:true,running_id:'latest-run',running_conversation:'review-settings',status:'資料核對中',
           activity:['讀取檔案'],preferences:[{id:'q',question:'這兩個時間段如何繪圖？',options:['同一張圖，加入參考線區隔','分開各張圖'],default:'同一張圖，加入參考線區隔',state:'pending'}]}};
