@@ -1543,6 +1543,7 @@ window.runSelfTest = async (structuredFixture) => {
     fixture.logged_in = false;
     fixture.can_send = false;
     fixture.config.vnc_enabled = true;
+    fixture.config.extra_features_enabled = false;
     fixture.update_required = true;
     LMUI.receive(fixture);
     check(!document.getElementById("login-panel").hidden &&
@@ -1554,8 +1555,13 @@ window.runSelfTest = async (structuredFixture) => {
       .every(element => loginIds.has(element.id) || element.closest('[data-offline]') || element.disabled), "network controls remain locked; local pet and tarot are available");
     check(!document.getElementById('show-pet').disabled && !document.getElementById('show-tarot').disabled,
       "offline pet and tarot entries remain available");
+    // 額外功能預設關閉；離線權限不應繞過使用者的顯示偏好。
+    check($("show-pet").hidden && $("show-tarot").hidden,
+      "offline optional entries stay hidden when extra features are disabled");
+    fixture.config.extra_features_enabled = true;
+    LMUI.receive(fixture);
     check($("show-pet").hidden === !featureEnabled("pet") && $("show-tarot").hidden === !featureEnabled("tarot"),
-      "offline optional entries match compiled capabilities");
+      "enabled offline optional entries match compiled capabilities");
     const dynamicButton = document.createElement("button");
     document.body.append(dynamicButton);
     await frame();
