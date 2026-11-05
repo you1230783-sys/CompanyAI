@@ -1058,7 +1058,6 @@ pub(super) fn run_for(
                         } else if result["result"]["status"] == "CANCELLED" {
                             format!("{label}：已取消；存檔及圖面狀態以原生回報為準。")
                         } else if result["ok"] == false {
-                            let reason = result["error"].as_str().unwrap_or("工具未提供錯誤原因");
                             // 只取已解析的工具名稱，不把參數、檔名或內容放進預設診斷。
                             let descriptor = serde_json::to_value(&request).unwrap_or_default();
                             let stage = format!(
@@ -1067,10 +1066,10 @@ pub(super) fn run_for(
                             );
                             format!(
                                 "{label}：失敗（操作 {operation_id}）\n{}",
-                                crate::errors::report(
+                                crate::errors::report_tool(
                                     &run.root,
                                     &stage,
-                                    reason,
+                                    &result,
                                     &[&run.session.access_token]
                                 )
                             )

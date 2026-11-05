@@ -11,6 +11,10 @@ static LOG_LOCK: Mutex<()> = Mutex::new(());
 /// 代碼一旦發行便不換意義，文件與程式採同一組對照。
 pub fn description(code: &str) -> (&'static str, &'static str) {
     match code {
+        "14" => (
+            "AI 的操作參數不符規則，已拒絕且未執行。",
+            "AI 會依原因自行修正；已完成的操作與成果會保留。",
+        ),
         "13" => (
             "程式發生非預期錯誤，已停止接受新工作。",
             "請預覽並匯出診斷後重新啟動；核對原請求及既有成果，不直接重播寫入。",
@@ -271,6 +275,29 @@ fn load(root: &Path) -> AppResult<Vec<Entry>> {
 /// 紀錄失敗時仍回傳原問題的友善說明，附註診斷未保存；不遞迴呼叫錯誤處理器。
 pub fn report(root: &Path, stage: &str, raw: &str, secrets: &[&str]) -> String {
     let code = classify(stage, raw);
+    report_code(root, stage, raw, secrets, code)
+}
+
+/// 只有 Broker 明確保證尚未執行的契約拒絕才使用 14；缺欄位與未知結果沿用原分類。
+pub fn tool_code(stage: &str, result: &Value) -> &'static str {
+    if result["ok"] == false && result["error_kind"] == "contract" && result["executed"] == false {
+        "14"
+    } else {
+        classify(stage, result["error"].as_str().unwrap_or_default())
+    }
+}
+
+pub fn report_tool(root: &Path, stage: &str, result: &Value, secrets: &[&str]) -> String {
+    report_code(
+        root,
+        stage,
+        result["error"].as_str().unwrap_or("工具未提供錯誤原因"),
+        secrets,
+        tool_code(stage, result),
+    )
+}
+
+fn report_code(root: &Path, stage: &str, raw: &str, secrets: &[&str], code: &str) -> String {
     let detail = redact(raw, secrets);
     let result = (|| -> AppResult<()> {
         let _guard = LOG_LOCK.lock().map_err(|_| "錯誤紀錄鎖定失敗。")?;
@@ -385,5 +412,26 @@ mod tests {
             .unwrap()
             .contains("unreadable_or_invalid"));
         fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod contract_tests {
+    use super::*;
+    #[test]
+    fn only_explicit_nonexecuted_contract_rejections_get_14() {
+        let mut result =
+            json!({"ok":false,"error_kind":"contract","executed":false,"error":"需求不可改名"});
+        assert_eq!(tool_code("project_tool.update_deliverables", &result), "14");
+        assert_eq!(
+            tool_code("project_tool.record_reading_notes", &result),
+            "14"
+        );
+        result["executed"] = json!(true);
+        assert_eq!(tool_code("project_tool.run_python", &result), "99");
+        result.as_object_mut().unwrap().remove("executed");
+        assert_eq!(tool_code("project_tool.run_python", &result), "99");
+        assert!(!description("14").1.contains("匯出"));
+        assert!(include_str!("ui/diagnostics.rs").contains("\"14\""));
     }
 }

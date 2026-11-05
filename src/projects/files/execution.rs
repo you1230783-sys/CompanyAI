@@ -277,6 +277,17 @@ impl Broker {
             }
         };
         let mut result = cad_preflight::normalize_outcome(tool, result);
+        // 這兩個入口只驗證記憶體計畫，全部通過才提交；Err 不會寫檔或部分修改。
+        // 不將一般工具的 Err 當成未執行，因為 COM／Python 可能已產生部分成果。
+        if result["ok"] == false
+            && matches!(
+                tool,
+                Tool::UpdateDeliverables { .. } | Tool::RecordReadingNotes { .. }
+            )
+        {
+            result["error_kind"] = json!("contract");
+            result["executed"] = json!(false);
+        }
         if matches!(tool, Tool::ExecuteWorkflowStep { .. })
             && result["result"]["outcome"]["ok"] == false
         {
