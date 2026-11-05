@@ -187,13 +187,76 @@ def analyze(request):
     log = BoundedLog()
     with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
         exec(compile(request["code"], "<company-ai-analysis>", "exec"), scope)
-    summary = json.dumps(scope.get("result", {}), ensure_ascii=False, allow_nan=False)
-    if len(summary) > 12000:
-        raise ValueError("result exceeds 12000 characters; use emit_table for full data")
-    return {"ok": True, "summary": json.loads(summary), "stdout": log.getvalue(), "outputs": outputs,
+    summary = normalize_summary(scope.get("result", {}))
+    return {"ok": True, "summary": summary, "stdout": log.getvalue(), "outputs": outputs,
             "versions": {"python": sys.version.split()[0], "pandas": pd.__version__,
                          "numpy": np.__version__, "openpyxl": openpyxl.__version__,
                          "scipy": scipy.__version__, "matplotlib": matplotlib.__version__}}
+
+
+def normalize_summary(value):
+    """將小型 NumPy 結果轉成 JSON；保留錯誤位置，不把未知物件變成文字。"""
+    import math
+    import numpy as np
+
+    active = set()
+    remaining = 12000
+
+    def convert(item, path, depth=0):
+        nonlocal remaining
+        remaining -= 1
+        if remaining < 0 or depth > 64:
+            raise ValueError(f"{path}: result 太大或巢狀過深；請用 emit_table 保存完整資料")
+        if isinstance(item, np.bool_):
+            item = bool(item)
+        elif isinstance(item, np.integer):
+            item = int(item)
+        elif isinstance(item, np.floating):
+            item = float(item)
+        if item is None or isinstance(item, (bool, int)):
+            return item
+        if isinstance(item, float):
+            if not math.isfinite(item):
+                raise ValueError(f"{path}: NaN／Inf 不可作為結果；請轉成 None 或字串，並註明缺值原因")
+            return item
+        if isinstance(item, str):
+            remaining -= len(item)
+            if remaining < 0:
+                raise ValueError(f"{path}: result exceeds 12000 characters; use emit_table for full data")
+            return item
+        if not isinstance(item, (dict, list, tuple, np.ndarray)):
+            raise TypeError(f"{path}: 不支援 {type(item).__name__}；請明確轉成 JSON 值或使用 emit_table")
+        identity = id(item)
+        if identity in active:
+            raise ValueError(f"{path}: result 不可循環引用")
+        active.add(identity)
+        try:
+            if isinstance(item, np.ndarray):
+                # 先限元素數，避免為最終必定超限的大陣列配置整份 Python list。
+                if item.size > 12000:
+                    raise ValueError(f"{path}: ndarray 太大；result 上限 12000 字元，請使用 emit_table")
+                return convert(item.tolist(), path, depth + 1)
+            if isinstance(item, dict):
+                output = {}
+                for key, child in item.items():
+                    # 保留原本 JSON 可接受的鍵；非有限數鍵也不能繞過 NaN 檢查。
+                    if not isinstance(key, (str, int, float, bool, type(None))):
+                        raise TypeError(f"{path}: 結果鍵必須是 JSON 支援的型別")
+                    if isinstance(key, float) and not math.isfinite(key):
+                        raise ValueError(f"{path}[{key!r}]: NaN／Inf 鍵請轉成字串，並註明缺值原因")
+                    remaining -= len(str(key))
+                    output[key] = convert(child, f"{path}[{key!r}]", depth + 1)
+                return output
+            return [convert(child, f"{path}[{index}]", depth + 1)
+                    for index, child in enumerate(item)]
+        finally:
+            active.remove(identity)
+
+    normalized = convert(value, "result")
+    encoded = json.dumps(normalized, ensure_ascii=False, allow_nan=False)
+    if len(encoded) > 12000:
+        raise ValueError("result exceeds 12000 characters; use emit_table for full data")
+    return json.loads(encoded)
 
 
 def main():

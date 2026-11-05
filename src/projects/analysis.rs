@@ -102,11 +102,27 @@ impl Report {
     }
 }
 
+/// Python 的 stdout 是文字日誌，不能當作結構化數值來源；不嘗試解析或提升其權威性。
+pub(super) fn validate_summary_pointer(data: &Value, pointer: &str) -> AppResult<()> {
+    if pointer.starts_with("/stdout") {
+        return Err("stdout 是文字日誌，不能用 JSON Pointer 引用其中數值。請在 Python 指定 result = {...}，再引用 /summary/...；不要重跑已成功的計算，於下一次必要計算時保留 result。".into());
+    }
+    if (pointer == "/summary" || pointer.starts_with("/summary/"))
+        && data["summary"]
+            .as_object()
+            .is_some_and(|summary| summary.is_empty())
+    {
+        return Err("Python summary 為空，沒有可引用的計算值；print 不會填入 summary。請指定 result = {...}，再以 /summary/... 引用；不需為此重跑已成功的計算，下一次必要計算時改用 result。".into());
+    }
+    Ok(())
+}
+
 /// 只讀成功工具的 result；權限及操作身分仍由 broker 的紀錄索引核對。
 pub fn select(result: &Value, pointer: &str) -> AppResult<Value> {
     if result["ok"] != true || pointer.len() > 400 {
         return Err("只能引用成功工具的結果，JSON Pointer 最多 400 bytes。".into());
     }
+    validate_summary_pointer(&result["result"], pointer)?;
     let value = result["result"]
         .pointer(pointer)
         .ok_or("找不到引用的 JSON Pointer；以工具 result 為起點。")?;

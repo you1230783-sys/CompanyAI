@@ -32,12 +32,12 @@ pub fn verify(root: &Path) -> AppResult<()> {
     } else {
         0
     };
-    if first > 30 {
-        return Err("原生測試案例需介於 0–30。".into());
+    if first > 31 {
+        return Err("原生測試案例需介於 0–31。".into());
     }
     // Python 從呼叫端 EXE 旁啟動；先依正式規則授予 AppContainer 唯讀權限。
     company_ai::projects::python::prepare_runtime()?;
-    for case in first..=30 {
+    for case in first..=31 {
         verify_case(root, case)?;
     }
     Ok(())
@@ -444,6 +444,78 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                             "finish",
                             json!({"message":"契約拒絕回復完成","artifacts":[]}),
                         ),
+                    }
+                } else if case == 31 {
+                    // M7：JSON 日誌不自動升格；兩種驗證拒絕後以 NumPy result 正確登記。
+                    if matches!(posts, 4 | 5) {
+                        assert_eq!(previous["error_kind"], "contract", "{previous}");
+                        assert_eq!(previous["executed"], false);
+                        assert!(previous["error"].as_str().unwrap().contains("result"));
+                    }
+                    match posts {
+                        1 => call(&body, "load_skill", json!({"id":"python-analysis"})),
+                        2 => call(
+                            &body,
+                            "run_python",
+                            json!({"purpose":"只印 JSON 的對照", "inputs":[], "code":r#"print('{"n":121}')"#}),
+                        ),
+                        3 => {
+                            assert_eq!(previous["ok"], true, "{previous}");
+                            assert_eq!(previous["result"]["summary"], json!({}));
+                            assert!(previous["result"]["guidance"]
+                                .as_str()
+                                .unwrap()
+                                .contains("不需重跑"));
+                            copy = previous["operation_id"].as_str().unwrap().into();
+                            call(
+                                &body,
+                                "record_analysis",
+                                json!({"report":{
+                                "goal":"合成分析", "current_step":"驗證引用", "open_questions":[], "superseded":[], "checks":[], "method":null,
+                                "findings":[{"claim":"筆數", "status":"confirmed", "evidence":[{"operation_id":copy,"pointer":"/stdout/n"}]}]}}),
+                            )
+                        }
+                        4 => call(
+                            &body,
+                            "register_report_values",
+                            json!({"values":[{"id":"n","operation_id":copy,"pointer":"/summary/n","decimals":0,"unit":"筆"}]}),
+                        ),
+                        5 => call(
+                            &body,
+                            "run_python",
+                            json!({"purpose":"必要計算保存 NumPy 結果", "inputs":[], "code":"result={'n':np.int64(121),'peaks':np.array([1.,2.]),'ok':np.bool_(True)}"}),
+                        ),
+                        6 => {
+                            assert_eq!(previous["ok"], true, "{previous}");
+                            assert_eq!(
+                                previous["result"]["summary"],
+                                json!({"n":121,"peaks":[1.0,2.0],"ok":true})
+                            );
+                            copy = previous["operation_id"].as_str().unwrap().into();
+                            call(
+                                &body,
+                                "record_analysis",
+                                json!({"report":{
+                                "goal":"合成分析", "current_step":"登記數值", "open_questions":[], "superseded":[], "checks":[], "method":null,
+                                "findings":[{"claim":"合成筆數", "status":"confirmed", "evidence":[{"operation_id":copy,"pointer":"/summary/n"}]}]}}),
+                            )
+                        }
+                        7 => {
+                            assert_eq!(previous["ok"], true, "{previous}");
+                            call(
+                                &body,
+                                "register_report_values",
+                                json!({"values":[{"id":"n","operation_id":copy,"pointer":"/summary/n","decimals":0,"unit":"筆"}]}),
+                            )
+                        }
+                        _ => {
+                            assert_eq!(previous["ok"], true, "{previous}");
+                            call(
+                                &body,
+                                "finish",
+                                json!({"message":"NumPy 引用完成", "artifacts":[]}),
+                            )
+                        }
                     }
                 } else if case == 30 {
                     // 合成數值經真實 Python worker、登記與下一輪提示，最後由原生層附表。
@@ -1320,6 +1392,23 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         29 => {
             assert!(result?.contains("契約拒絕回復完成"));
             assert_eq!(posts, 3);
+            assert_eq!(
+                activity
+                    .iter()
+                    .filter(|s| s.contains("Error Code: 14"))
+                    .count(),
+                2,
+                "{activity:?}"
+            );
+            assert!(!activity.iter().any(|s| s.contains("Error Code: 99")));
+        }
+        31 => {
+            let answer = result?;
+            assert!(
+                answer.contains("本次登記的計算值") && answer.contains("121"),
+                "{answer}"
+            );
+            assert_eq!(posts, 8);
             assert_eq!(
                 activity
                     .iter()

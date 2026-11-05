@@ -92,6 +92,34 @@
 - **目標**：每輪增加「等待耗時（秒）」與「結束原因」（`finish_reason`）；服務有回傳時增加「推理 tokens」與「快取 tokens」。缺值顯示「未取得」，不推算。合計列顯示截斷輪數與截斷總耗時。
 - **驗收**：既有測試的合計格式維持；新增欄位在缺值時顯示「未取得」。
 
+### M7. Python 數值要放進 `result`，否則證據引用與數值登記都會失敗（0.9.12 複核後追加）
+
+- **現象**：
+  1. EIS 案例中，AI 每次都用 `print(json.dumps(res))` 輸出數值，工具結果為 `"summary": {}`，數字只存在 `stdout` 字串中。
+  2. 0.9.12 之前的另一輪實測，`record_analysis`（保存分析狀態、證據與核對結果）多次失敗，其中一輪推理用到約 28K。
+- **原因**：
+  1. `record_analysis` 的證據與核對以 JSON Pointer 從工具 result 取值（`src/projects/analysis.rs` 的 `select`、`check`）；`register_report_values` 只接受 `/summary/...`（`src/projects/report_values.rs` 的 `Metric::from_result`）。JSON Pointer 無法指進 `stdout` 字串，AI 只能反覆猜 pointer。
+  2. `src/projects/python_worker.py` 約 190 行以 `json.dumps(scope["result"], allow_nan=False)` 產生 summary。**numpy 的 `np.int64`、`np.bool_`、`ndarray` 不能被 json 序列化**，`NaN` 也會被拒絕；只要 AI 把 `np.argmax(...)`、`len(pks)` 以外的 numpy 整數或陣列放進 result，整次 Python 執行就會在計算完成後失敗。這很可能是模型改用 `print` 的原因。
+  3. M4 的權威數值表與每輪固定事實都依賴 `register_report_values`，因此 M7 未完成時，M4 在實際任務中可能沒有任何數值可列。
+- **目標**：
+  1. **summary 序列化容錯**：在 `python_worker.py` 產生 summary 前，遞迴轉換 numpy 純量（`np.integer`→`int`、`np.floating`→`float`、`np.bool_`→`bool`）與小型 `ndarray`（轉 list，仍受 12,000 字元上限）。`NaN`／`Inf` 仍拒絕，但錯誤訊息要指出是哪個鍵，並說明「請轉成 None 或字串，並註明缺值原因」。不可把無法轉換的物件默默轉成字串。
+  2. **執行後提示**：`run_python` 成功但 `summary` 為空、且 `stdout` 可解析為 JSON 物件時，在工具結果加入提示：「數值請指定給 `result = {...}`；`record_analysis` 證據與 `register_report_values` 都使用 `/summary/...`。不需重跑已成功的計算，下一次計算時改用 result。」
+  3. **錯誤訊息具體化**：`analysis::select` 與 `Metric::from_result` 遇到以 `/stdout` 開頭的 pointer，或 `/summary/...` 但 summary 為空時，回覆具體原因與改法，不只說「找不到」。
+  4. **M1 補充**：`record_analysis` 與 `register_report_values` 在**寫入前的驗證錯誤**（pointer、格式、上限）也標為 `error_kind:"contract"`、`executed:false`。`record_analysis` 會在核對後保存方法到專案記憶，只有保存之前的錯誤可以標為未執行，之後的錯誤維持原分類。
+  5. 不由程式自動把 stdout JSON 轉成 summary，維持「result 才是正式計算結果」的單一規則。
+- **修改處**：`src/projects/python_worker.py`、`src/projects/python.rs` 或 `src/projects/files/python.rs`（工具結果組裝處）、`src/projects/analysis.rs`、`src/projects/report_values.rs`、`src/projects/files/analysis.rs`、`src/projects/files/execution.rs`（約 280–293 行的契約拒絕清單）、`src/projects/skills/python-analysis.md`、`src/projects/skills/analysis-quality.md`。
+- **驗收**：
+  1. `result = {"n": np.int64(121), "peaks": np.array([1.0, 2.0])}` 可以成功並得到 int／list。
+  2. `result = {"x": float("nan")}` 失敗且訊息指出鍵 `x`。
+  3. 只有 print JSON、summary 為空時，工具結果出現提示。
+  4. `/stdout/...` 的 pointer 錯誤訊息具體，並顯示代碼 14。
+  5. 真實模型重跑 EIS 案例：`record_analysis` 與 `register_report_values` 至少各成功一次，最終回答附有權威數值表。
+
+### 0.9.12 複核補充（Claude，2026-11-06）
+
+- `src/projects/skills/python-analysis.md` 新增的文字列出「頻率上下限、取樣密度、τ網格／步距」，這些是 EIS 專用名詞，放在通用 Python 技能中容易讓其他任務的模型誤解。建議改成通用寫法，例如「資料範圍、筆數、取樣間距與分析參數」，EIS 名詞只當例子。
+- M5 在 EIS 案例中會分別於第 10、18 輪暫停並等待使用者按「繼續」。如果程式縮在托盤，請確認暫停時有桌寵或 Windows 通知，否則使用者不知道任務停了。
+
 ## 3. 不在本次範圍
 
 - 重建 checkpoint 或事件日誌：已有，不重做。

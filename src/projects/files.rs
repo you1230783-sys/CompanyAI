@@ -38,6 +38,7 @@ use output::{ensure_output_folder, reserve_external_output, shared_output_folder
 mod python;
 mod python_edit;
 mod references;
+mod registration;
 mod report_values;
 mod review;
 mod semantic_progress;

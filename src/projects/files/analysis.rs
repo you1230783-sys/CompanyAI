@@ -1,4 +1,5 @@
 //! 將分析結論綁定既有操作；不允許模型自行提供「原文」或通過旗標。
+use super::registration::RegistrationError;
 use super::*;
 use crate::projects::analysis;
 
@@ -51,7 +52,10 @@ impl Broker {
         )
     }
 
-    pub(super) fn record_analysis(&mut self, report: &analysis::Report) -> AppResult<Value> {
+    pub(super) fn record_analysis(
+        &mut self,
+        report: &analysis::Report,
+    ) -> Result<Value, RegistrationError> {
         report.validate()?;
         let mut findings = Vec::new();
         let mut excerpt_bytes = 0usize;
@@ -59,7 +63,8 @@ impl Broker {
             let mut evidence = Vec::new();
             for reference in &finding.evidence {
                 let (request, result) = self
-                    .recorded_operation(&reference.operation_id)?
+                    .recorded_operation(&reference.operation_id)
+                    .map_err(RegistrationError::execution)?
                     .ok_or("證據操作不存在於本次任務，請先讀取原文。")?;
                 let tool = request["tool"].as_str().unwrap_or("");
                 if !matches!(
@@ -111,15 +116,18 @@ impl Broker {
         let mut checks = Vec::new();
         for spec in &report.checks {
             let (_, result) = self
-                .recorded_operation(&spec.operation_id)?
+                .recorded_operation(&spec.operation_id)
+                .map_err(RegistrationError::execution)?
                 .ok_or("核對操作不存在於本次任務。")?;
             checks.push(analysis::check(spec, &result)?);
         }
         // 先完成全部核對才寫記憶。方法僅作可再嘗試的經驗，不自動執行舊程式。
         let method_note = if let Some(method) = &report.method {
             Some(
-                self.memory()?
-                    .save_analysis_method(method, &checks, &self.task_id)?,
+                self.memory()
+                    .map_err(RegistrationError::execution)?
+                    .save_analysis_method(method, &checks, &self.task_id)
+                    .map_err(RegistrationError::execution)?,
             )
         } else {
             self.analysis

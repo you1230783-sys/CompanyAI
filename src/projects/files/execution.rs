@@ -216,6 +216,7 @@ impl Broker {
                 json!({"ok":false,"operation_id":id,"error":"上一批閱讀尚未保存成果。先record_reading_notes，逐項引用目前reading.pending的operation_id，保存實際流程／分區／關係／疑問；不可只重述已讀完。"}),
             );
         }
+        let mut registration_contract = false;
         let outcome = loop {
             let result = if let Tool::RunBatch { tasks } = tool {
                 self.run_batch(id, tasks, worker.executable(), cancel)
@@ -227,6 +228,16 @@ impl Broker {
                     | Tool::OutlookRead { .. }
             ) {
                 self.outlook_tool(tool, worker.executable(), cancel, notify)
+            } else if let Tool::RecordAnalysis { report } = tool {
+                self.record_analysis(report).map_err(|error| {
+                    registration_contract = error.contract;
+                    error.message
+                })
+            } else if let Tool::RegisterReportValues { values } = tool {
+                self.register_values(values).map_err(|error| {
+                    registration_contract = error.contract;
+                    error.message
+                })
             } else {
                 self.perform(tool, worker, cancel)
             };
@@ -280,13 +291,14 @@ impl Broker {
         // 以下入口只驗證記憶體計畫，全部通過才提交；Err 不會寫檔或部分修改。
         // 不將一般工具的 Err 當成未執行，因為 COM／Python 可能已產生部分成果。
         if result["ok"] == false
-            && matches!(
-                tool,
-                Tool::UpdateDeliverables { .. }
-                    | Tool::RecordReadingNotes { .. }
-                    | Tool::BindDeliverable { .. }
-                    | Tool::SupersedeArtifact { .. }
-            )
+            && (registration_contract
+                || matches!(
+                    tool,
+                    Tool::UpdateDeliverables { .. }
+                        | Tool::RecordReadingNotes { .. }
+                        | Tool::BindDeliverable { .. }
+                        | Tool::SupersedeArtifact { .. }
+                ))
         {
             result["error_kind"] = json!("contract");
             result["executed"] = json!(false);

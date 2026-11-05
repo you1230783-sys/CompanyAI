@@ -3,6 +3,18 @@ use super::*;
 use crate::projects::python;
 use sha2::{Digest, Sha256};
 
+/// 只提供下一步提示，絕不把模型列印的 JSON 提升成可引用的計算摘要。
+fn summary_guidance(response: &Value) -> Option<&'static str> {
+    let empty = response["summary"]
+        .as_object()
+        .is_some_and(|summary| summary.is_empty());
+    let printed_object = response["stdout"]
+        .as_str()
+        .and_then(|text| serde_json::from_str::<Value>(text).ok())
+        .is_some_and(|value| value.is_object());
+    (empty && printed_object).then_some("數值請指定給 `result = {...}`；`record_analysis` 證據與 `register_report_values` 都使用 `/summary/...`。不需重跑已成功的計算，下一次計算時改用 result。")
+}
+
 /// emit 工具已決定成果格式；省略副檔名時補上，明確指定錯誤格式時則拒絕。
 /// 仍只接受單一安全檔名，不能藉自動補副檔名取得任意路徑寫入能力。
 fn output_name(name: &str, kind: &str) -> AppResult<String> {
@@ -176,10 +188,12 @@ impl Broker {
         for (name, bytes) in books {
             artifacts.push(self.save_python_binary(&name, &bytes, cancel)?);
         }
-        Ok(
-            json!({"purpose":purpose,"summary":response["summary"],"stdout":response["stdout"],"versions":response["versions"],
-            "sources":sources,"code_sha256":code_hash,"artifacts":artifacts,"progress_identity":progress_identity,"execution":"本機 AppContainer，無網路，原檔唯讀；衍生資料非原始列的一對一副本。"}),
-        )
+        let mut result = json!({"purpose":purpose,"summary":response["summary"],"stdout":response["stdout"],"versions":response["versions"],
+            "sources":sources,"code_sha256":code_hash,"artifacts":artifacts,"progress_identity":progress_identity,"execution":"本機 AppContainer，無網路，原檔唯讀；衍生資料非原始列的一對一副本。"});
+        if let Some(guidance) = summary_guidance(&response) {
+            result["guidance"] = json!(guidance);
+        }
+        Ok(result)
     }
 
     fn save_python_binary(
@@ -264,6 +278,21 @@ impl Broker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn print_only_json_gets_guidance_without_promoting_stdout() {
+        let response = json!({"summary":{},"stdout":"{\"n\":121}\n"});
+        assert!(summary_guidance(&response).unwrap().contains("不需重跑"));
+        assert_eq!(response["summary"], json!({}));
+        for response in [
+            json!({"summary":{"n":121},"stdout":"{\"n\":0}"}),
+            json!({"summary":{},"stdout":"[121]"}),
+            json!({"summary":{},"stdout":"debug\n{\"n\":121}"}),
+            json!({"summary":{},"stdout":""}),
+        ] {
+            assert!(summary_guidance(&response).is_none());
+        }
+    }
 
     /// 只驗證成果 checkpoint 的路徑／版本契約；真正 XLSX 由 python_smoke 驗證。
     #[test]

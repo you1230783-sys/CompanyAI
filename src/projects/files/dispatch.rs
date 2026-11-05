@@ -32,7 +32,9 @@ impl Broker {
             {
                 Err("批次操作不接受內部翻譯區段。".into())
             }
-            Tool::RegisterReportValues { values } => self.register_values(values),
+            Tool::RegisterReportValues { values } => {
+                self.register_values(values).map_err(|error| error.message)
+            }
             Tool::LinkDiagramSources {
                 diagram_index,
                 revision,
@@ -151,7 +153,9 @@ impl Broker {
                 reason,
             } => self.set_work_stage(*stage, note_ids, reason),
             Tool::RecordLogEvents { events } => self.record_log_events(events),
-            Tool::RecordAnalysis { report } => self.record_analysis(report),
+            Tool::RecordAnalysis { report } => {
+                self.record_analysis(report).map_err(|error| error.message)
+            }
             Tool::PlanExcelAnalysis { proposal } => {
                 let columns = proposal.columns()?;
                 let selection = office::excel::Selection {

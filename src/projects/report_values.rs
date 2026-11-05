@@ -25,6 +25,7 @@ pub struct Metric {
 impl Metric {
     pub fn from_result(spec: &Spec, request: &Value, result: &Value) -> AppResult<Self> {
         crate::jobs::validate_id(&spec.id)?;
+        super::analysis::validate_summary_pointer(&result["result"], &spec.pointer)?;
         if request["tool"] != "run_python"
             || result["ok"] != true
             || !spec.pointer.starts_with("/summary/")

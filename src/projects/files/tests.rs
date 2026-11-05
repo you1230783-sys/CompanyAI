@@ -1,6 +1,50 @@
 use super::*;
 
 #[test]
+fn analysis_registration_distinguishes_validation_from_method_storage() {
+    let mut broker = Broker::new(
+        Project {
+            id: "registration".into(),
+            name: "驗證".into(),
+            root: std::env::current_dir().unwrap(),
+            imports: Default::default(),
+        },
+        "registration".into(),
+    )
+    .unwrap();
+    broker.results.insert("printed".into(), (json!({"tool":"run_python"}),
+        json!({"ok":true,"result":{"summary":{},"stdout":"{\"n\":121}","code_sha256":"hash","sources":[]}})));
+    let mut report: crate::projects::analysis::Report = serde_json::from_value(json!({
+        "goal":"測試", "current_step":"引用", "open_questions":[], "superseded":[], "checks":[], "method":null,
+        "findings":[{"claim":"筆數", "status":"confirmed", "evidence":[{"operation_id":"printed","pointer":"/stdout/n"}]}]
+    })).unwrap();
+    for pointer in ["/stdout", "/stdout/n", "/summary", "/summary/n"] {
+        report.findings[0].evidence[0].pointer = pointer.into();
+        let error = broker.record_analysis(&report).unwrap_err();
+        assert!(error.contract && error.message.contains("result"));
+        assert!(broker.analysis.report.is_none());
+        let spec = crate::projects::report_values::Spec {
+            id: "n".into(),
+            operation_id: "printed".into(),
+            pointer: pointer.into(),
+            decimals: 0,
+            unit: "筆".into(),
+        };
+        let error = broker.register_values(&[spec]).unwrap_err();
+        assert!(error.contract && error.message.contains("result"));
+        assert!(broker.report_values.metrics.is_empty());
+    }
+    // 通過全部核對後，故意不啟用記憶儲存；不得把保存階段錯誤標成參數拒絕。
+    report.findings.clear();
+    report.method = Some(serde_json::from_value(json!({"title":"方法", "applicability":"合成資料", "steps":"計算", "validation":"核對", "limitations":"待驗"})).unwrap());
+    let error = broker.record_analysis(&report).unwrap_err();
+    assert!(!error.contract, "{}", error.message);
+    assert!(broker.analysis.report.is_none());
+    report.method = None;
+    assert!(broker.record_analysis(&report).is_ok());
+}
+
+#[test]
 fn memory_directory_pin_allows_atomic_files_and_keeps_directory_protected() {
     let root = std::env::current_dir()
         .unwrap()

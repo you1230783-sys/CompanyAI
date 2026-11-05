@@ -1,9 +1,10 @@
 //! 報告綁定的Broker入口：來源讀取、Office編輯與成果保存均沿用原有邊界。
+use super::registration::RegistrationError;
 use super::*;
 use crate::projects::report_values::{Assignment, BoundBlock, Metric, Spec};
 
 impl Broker {
-    pub(super) fn register_values(&mut self, specs: &[Spec]) -> AppResult<Value> {
+    pub(super) fn register_values(&mut self, specs: &[Spec]) -> Result<Value, RegistrationError> {
         if specs.is_empty() || specs.len() > 40 {
             return Err("每次登記1–40個計算值。".into());
         }
@@ -14,7 +15,8 @@ impl Broker {
                 return Err("同批計算值ID不可重複。".into());
             }
             let (request, result) = self
-                .recorded_operation(&spec.operation_id)?
+                .recorded_operation(&spec.operation_id)
+                .map_err(RegistrationError::execution)?
                 .ok_or("計算來源操作不存在。")?;
             let metric = Metric::from_result(spec, &request, &result)?;
             if let Some(old) = next.metrics.get(&spec.id) {
