@@ -1,6 +1,6 @@
 # 0.9.7 驗證與發行紀錄
 
-狀態：本機v142空快取建置、完整回歸、Office與NSIS通過。GitHub hosted CI另於推送後驗證，結果連結隨Release記錄；不以本機結果替代。
+狀態：初次本機v142空快取建置、完整回歸、Office與NSIS通過；首次GitHub CI失敗後正在修正及重新驗證。下方r1成品與證據為修正前結果，尚未發布，不代表目前原始碼已完成封裝。
 
 本版 D02a：v142 Windows CI、空快取 frozen 契約與依賴檢查，詳見 [CI 與依賴政策](CI_AND_DEPENDENCIES.md)。唯一應用相依更新為已撤回的 yoke-derive 0.8.3 → 0.8.4。
 
@@ -13,6 +13,13 @@
 不變條件：固定安裝路徑、公司 HTTP／lm_server、machines.json 明文及匯入匯出、公司更新同源／RSA／SHA256、原件唯讀及不重播成功寫入均保留。公司模型、公司信箱、加密 Office、SMB／VNC 實際機台、防毒與人工 DPI 仍須公司環境驗收。
 
 ## CI與依賴定向驗證
+
+首次[GitHub CI](https://github.com/you1230783-sys/CompanyAI/actions/runs/41936574844)已成功安裝v142並完成frozen編譯，Rust為482通過、13失敗、2個互動桌面案例依政策排除。漏洞檢查通過既有精確維護公告政策。失敗不能由本機結果抵銷：
+
+- 11項涉及專案記憶的原子替換回報共享衝突。記憶目錄鎖改用READ_ATTRIBUTES，避免不必要的DELETE存取需求；仍不分享DELETE，獨占anchor也保留。新增案例核對額外目錄讀取handle、初次發布／覆寫、拒絕目錄更名、拒絕anchor移除／寫入及目錄非空。本機C與Y槽原案例都能通過，Windows Server差異仍須遠端重驗確認。
+- 2項測試假定系統ANSI為BIG5。抽出明確碼頁的既有解碼邏輯，分別核對950、65001及1252歧義；LOG案例核對歧義必須回報來源錯誤及不完整結果。正式入口仍讀取GetACP，不放寬無損往返與拒絕歧義規則。
+
+上述修正後的完整本機流程與遠端結果須重新記錄，不能沿用r1成品發布。
 
 Test-CI.ps1在本機以空Cargo快取完成v142 release、fmt、完整／核心all-targets Clippy及497／453項Rust。本機沒有排除通知測試。Hosted模式的兩項排除見政策；實際遠端結果以對應提交的Actions執行為準。
 

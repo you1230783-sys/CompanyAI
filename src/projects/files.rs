@@ -748,7 +748,14 @@ fn pin_stage(path: &Path) -> AppResult<StageGuard> {
 
 /// 私有目錄跨啟動存在，使用唯一 anchor，避免上次崩潰殘留的 anchor 阻擋之後存取。
 pub(super) fn pin_memory_directory(path: &Path) -> AppResult<StageGuard> {
-    pin_named_stage(path, &format!(".anchor_{}", crate::jobs::new_id()?))
+    // 記憶檔替換需要重新開啟父目錄；不要求目錄 DELETE 存取權，避免與
+    // 未分享 DELETE 的讀取 handle 衝突。仍以不分享 DELETE 的目錄 handle
+    // 防止更名，並用獨占 anchor 防止清空目錄後改為重新解析點。
+    pin_named_stage_access(
+        path,
+        &format!(".anchor_{}", crate::jobs::new_id()?),
+        FILE_READ_ATTRIBUTES,
+    )
 }
 /// 共用成果目錄可能同時是CAD來源的父目錄，必須與既有唯讀pin相容。
 /// READ_ATTRIBUTES不要求DELETE存取；不分享DELETE的目錄handle仍防止更名，

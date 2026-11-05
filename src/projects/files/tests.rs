@@ -1,6 +1,44 @@
 use super::*;
 
 #[test]
+fn memory_directory_pin_allows_atomic_files_and_keeps_directory_protected() {
+    let root = std::env::current_dir()
+        .unwrap()
+        .join(".build")
+        .join(format!("memory-pin-{}", crate::jobs::new_id().unwrap()));
+    fs::create_dir_all(&root).unwrap();
+    let guard = pin_memory_directory(&root).unwrap();
+    // 模擬替換操作對父目錄的額外開啟，不分享 DELETE；不需要解除原保護。
+    let reader = OpenOptions::new()
+        .access_mode(FILE_READ_ATTRIBUTES)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(&root)
+        .unwrap();
+    let output = root.join("record.dpapi");
+    let temporary = root.join("record.tmp");
+    fs::write(&temporary, b"first").unwrap();
+    fs::rename(&temporary, &output).unwrap();
+    fs::write(&temporary, b"second").unwrap();
+    fs::rename(&temporary, &output).unwrap();
+    assert_eq!(fs::read(&output).unwrap(), b"second");
+    assert!(fs::rename(&root, root.with_extension("moved")).is_err());
+    assert!(fs::remove_file(&guard.anchor_path).is_err());
+    assert!(OpenOptions::new()
+        .write(true)
+        .open(&guard.anchor_path)
+        .is_err());
+    drop(reader);
+    fs::remove_file(output).unwrap();
+    assert!(
+        fs::remove_dir(&root).is_err(),
+        "獨占 anchor 必須保持目錄非空"
+    );
+    drop(guard);
+    fs::remove_dir(root).unwrap();
+}
+
+#[test]
 #[cfg(not(feature = "cad"))]
 fn disabled_cad_rejects_cached_success_and_native_execution() {
     let mut broker = Broker::new(

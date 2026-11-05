@@ -85,8 +85,12 @@ pub(super) fn decode_with_limit(bytes: &[u8], limit: usize) -> AppResult<(String
     if bom {
         return Err("UTF-8 BOM 與內容不一致，請確認解密狀態。".into());
     }
+    decode_legacy(bytes, limit, unsafe { GetACP() })
+}
+
+/// 明確傳入系統碼頁，讓測試不依賴執行機器的語系；正式入口仍使用 GetACP。
+fn decode_legacy(bytes: &[u8], limit: usize, ansi: u32) -> AppResult<(String, Encoding)> {
     // 不以「寬鬆 ANSI 總能轉換」當成功；必須嚴格解碼及無損往返。
-    let ansi = unsafe { GetACP() };
     let mut candidate: Option<(String, Encoding)> = None;
     for codepage in [950, ansi] {
         if codepage == 65001 {
@@ -279,7 +283,6 @@ mod tests {
             Encoding::Utf8(true),
             Encoding::Utf16(true),
             Encoding::Utf16(false),
-            Encoding::CodePage(950),
         ] {
             assert_eq!(
                 decode(&encode("測試\r\n", enc).unwrap()).unwrap().0,
@@ -288,6 +291,21 @@ mod tests {
         }
         assert!(encode("測試😀", Encoding::CodePage(950)).is_err());
         assert!(decode(&[0, 1, 2, 3]).is_err());
+    }
+    #[test]
+    fn legacy_decoding_checks_explicit_system_codepages_without_guessing() {
+        let original = "測試\r\n";
+        let bytes = encode(original, Encoding::CodePage(950)).unwrap();
+        assert_eq!(decode_cp(&bytes, 950).unwrap(), original);
+        for ansi in [950, 65001] {
+            assert_eq!(decode_legacy(&bytes, MAX_TEXT, ansi).unwrap().0, original);
+        }
+        // 同一組 BIG5 bytes 在英文 Windows 也能無損解成另一段文字。
+        // 不可以為了通過 CI 而忽略此歧義，或把亂碼視為有效來源。
+        assert!(decode_legacy(&bytes, MAX_TEXT, 1252)
+            .unwrap_err()
+            .contains("BIG5 與系統 ANSI 結果不同"));
+        assert!(decode_legacy(&bytes, 1, 950).is_err());
     }
     #[test]
     fn edits_check_revision_and_unicode_position() {

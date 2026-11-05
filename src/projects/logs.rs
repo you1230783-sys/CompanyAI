@@ -929,7 +929,7 @@ mod tests {
         let line = "12:25:48.084 ERROR 測試\r\n";
         for (name, encoding) in [
             ("20260623_system_A01-01.log", text::Encoding::Utf16(true)),
-            ("20260623_system_Z01-CY.log", text::Encoding::CodePage(950)),
+            ("20260623_system_Z01-CY.log", text::Encoding::Utf8(true)),
         ] {
             std::fs::write(
                 project.root.join(name),
@@ -953,6 +953,31 @@ mod tests {
         assert_eq!(result["matches"].as_array().unwrap().len(), 2);
         assert_eq!(result["complete"], false);
         assert_eq!(result["errors"].as_array().unwrap().len(), 1);
+        // BIG5 是否可自動辨識取決於系統 ANSI；歧義時必須保留錯誤，
+        // 不能遺漏來源後仍宣稱完整搜尋。明確碼頁組合另由 text 測試涵蓋。
+        let big5 = text::encode(line, text::Encoding::CodePage(950)).unwrap();
+        std::fs::write(project.root.join("20260623_system_BIG5.log"), &big5).unwrap();
+        let big5_query = Query {
+            paths: vec!["20260623_system_BIG5.log".into()],
+            ..query.clone()
+        };
+        let (big5_result, _) = search(&project, &big5_query, None, &cancel).unwrap();
+        match text::decode(&big5) {
+            Ok((decoded, _)) => {
+                assert_eq!(decoded, line);
+                assert_eq!(big5_result["matches"].as_array().unwrap().len(), 1);
+                assert_eq!(big5_result["complete"], true);
+            }
+            Err(error) => {
+                assert!(error.contains("BIG5 與系統 ANSI 結果不同"));
+                assert!(big5_result["matches"].as_array().unwrap().is_empty());
+                assert_eq!(big5_result["complete"], false);
+                let errors = big5_result["errors"].as_array().unwrap();
+                assert_eq!(errors.len(), 1);
+                assert_eq!(errors[0]["path"], "20260623_system_BIG5.log");
+                assert!(errors[0]["error"].as_str().unwrap().contains(&error));
+            }
+        }
         std::fs::write(
             project.root.join("invalid.log"),
             "header\n2026/06/23, 12:25:48.084 ok\n2026/99/23, 12:25:48.084 ERROR\n",
