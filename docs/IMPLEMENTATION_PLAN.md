@@ -19,7 +19,7 @@
 
 - 已完成：0.9.0 的可靠度／文件整理已交付；0.9.1～0.9.7 已發行。功能完成不代表下方公司實機缺項已驗收。
 - 最新交付：[0.9.7 Release](https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.7)、[本機驗證](VALIDATION_0_9_7.md)、[發行提交 CI](https://github.com/you1230783-sys/CompanyAI/actions/runs/41945624630)。完整499／核心455項Rust、v142空快取、Office及NSIS通過；五項Release資產公開下載SHA256核對一致。
-- 下一個待做：**0.9.8／D02b**，量測LTO、codegen與體積，選定配置後完整驗證再發行；保留panic unwind。
+- 0.9.8／D02b已發布：ThinLTO／16 units，保留panic unwind；完整本機及同提交CI、公開下載核對通過，見[驗證與發布收據](VALIDATION_0_9_8.md)。下一版0.9.9只提交來源。
 - 新增待辦：**C01／輸入預算與原文保留策略**，已確認50,000 tokens軟目標及約40,000整理後目標；已排入0.9.9與F08／F09同版，詳見下方專節。
 - 後續待做：**0.9.9／F08＋F09＋C01**，Word內容對齊與額外功能開關；**0.9.10／D03**，僅程式開啟／托盤時執行的無人值守流程。
 - 擱置：M02使用評價與統計。跨專案知識庫不在目前排程；Authenticode已移除待辦。NAS同步由使用者處理。

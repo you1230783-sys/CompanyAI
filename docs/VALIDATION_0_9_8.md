@@ -42,3 +42,12 @@
 | LM_AI.exe（僅本機） | 68927488 | `c2a9b6b4456576c76c88f3aacdca392dde3f02550872a6e9cfa2de8894659f79` |
 
 兩份相容更新JSON均指向NSIS，已由正式EXE核對RSA、SHA256與版本。公司更新仍使用`/lm_server/desktop/releases/LM_AI_Setup.exe`，沒有部署公司伺服器；GitHub僅提供手動下載。Release資產限定安裝包、兩份更新JSON、verification.json與SHA256SUMS.txt。
+
+
+## 已發布收據（2026-11-05）
+
+已發布 [v0.9.8](https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.8)，tag 與發布時 main 同為 `2b6ece35204b922dda2a87988eb7d4b82ec646e7`。
+[同提交 CI](https://github.com/you1230783-sys/CompanyAI/actions/runs/41959105102) 通過，下載報告確認 v142／空快取 frozen／完整與核心 lint、Rust 及依賴政策。
+證據提交內描述後續 0.9.9 節奏時帶入 CI 跳過標記，故改以 workflow_dispatch 在同一提交執行完整既定 CI；沒有免除任何發布檢查，也沒有改寫歷史。
+[遠端報告收據](../offline/github-ci-verification-0.9.8.json)及[五項公開資產下載核對](../offline/release-download-verification-0.9.8.json)皆 PASS。
+本節為發布後文件收據，不變更已測程式或成品；0.9.9 依最新授權只提交原始碼，完整驗證與封裝合併到 0.9.10。
