@@ -4,7 +4,7 @@
 
 ## 保留版本與驗證
 
-- [0.9.10合併驗證進度](VALIDATION_0_9_10.md)
+- [0.9.10合併驗證與發行收據](VALIDATION_0_9_10.md)
 - [固定流程排程](SCHEDULED_WORKFLOWS.md)
 
 - [0.9.9來源交付（未單獨驗證）](IMPLEMENTATION_0_9_9.md)

@@ -1,6 +1,6 @@
 # 0.9.10 合併驗證與發行紀錄
 
-本機完整v142驗證與必要封裝已通過。GitHub同提交CI、Release及公開下載由發行後收據補記；本機結果不能代替遠端驗證。
+本機完整v142驗證、必要封裝、GitHub同提交CI、Release及公開下載核對均已通過。發布後收據見文末；公司實機與Claude複核仍待執行。
 
 本版合併0.9.9 F08／F09／C01與0.9.10 D03。0.9.9僅推送來源`b3bbfe9`，依指示沒有單獨編譯、驗證、封裝或Release。實作界線見[0.9.9來源交付](IMPLEMENTATION_0_9_9.md)及[固定流程排程](SCHEDULED_WORKFLOWS.md)。
 
@@ -56,3 +56,12 @@
 公司模型重讀頻率／累積用量／完成品質、真Outlook信箱、加密Office、公司SMB／VNC／防毒、人工框選／多螢幕DPI及桌寵拖曳待實機確認。排程僅程式開啟／托盤有效；休眠／鎖屏長時間驗收未完成。需互動同意、品質選擇或渲染器的流程可能暫停／失敗；未知寫入不能重播。固定PDF範例可讀但仍保留Markdown圍欄／連結／圖片記號。
 
 Claude二次驗證由使用者在本版完成後安排，目前沒有宣稱已通過。後續版本由實測回饋另行決定，本輪止於0.9.10。
+
+
+## 已發布收據（2026-11-05）
+
+已發布 [v0.9.10](https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.10)，tag與發布時main同為`b6684e68a817b177c3ed060fe466600f22071d57`。
+[同提交GitHub CI](https://github.com/you1230783-sys/CompanyAI/actions/runs/41976149119)通過，下載artifact核對實際v142、空快取frozen、完整／核心lint與Rust、依賴政策。
+Hosted依既有政策排除兩項互動桌面通知案例；本機完整Build仍執行，沒有新增略過項目。
+[遠端報告收據](../offline/github-ci-verification-0.9.10.json)與[五項公開資產下載核對](../offline/release-download-verification-0.9.10.json)皆PASS；下載未帶認證，每個檔案大小與SHA256吻合。
+本節只記錄發布後收據，未更動已測程式或成品；發行tag保持原驗證提交。0.9.9沒有獨立Release。本輪止於0.9.10，等待使用者安排Claude二次驗證及公司實機回饋。
