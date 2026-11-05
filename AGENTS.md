@@ -2,6 +2,8 @@
 
 ## 目前工作
 
+- **0.9.13 本輪授權：依 docs/CHANGE_HANDBOOK_EIS_FEEDBACK.md 的 M7 與第二節「0.9.12 複核補充」兩項修正，完成後進版、v142 空快取 frozen 驗證／封裝並推送 Git 與 Release。M7、通用技能詞彙、暫停通知各自提交；真實模型比較仍由公司端驗收。當前實作已完成，最終建置與發布尚待執行，不以先前版本 PASS 代替本版驗證。**
+
 - **0.9.12已發布：v0.9.12固定於42fc74f5a0f725426ce98afdf71da48224c69625，同提交CI 42053066119通過。v142空快取frozen r3、466項非CAD Rust、31組原生HTTP、5組前端、Python／Office／排程及NSIS生命週期完成，五項公開下載SHA256核對通過。先前檔案鎖／Schema與測試參數失敗已如實記錄，見docs/VALIDATION_0_9_12.md。真實模型比較由公司端驗收，M4第二階段偵測另排；不自行進版。**
 
 - **0.9.12 目前授權：依 docs/CHANGE_HANDBOOK_EIS_FEEDBACK.md 實作 M1–M6，每項獨立 commit 並記錄測試／限制，完成後進版、v142 空快取 frozen 編譯、必要封裝驗證、GitHub 與 Release 發布。使用者已明確指定真實模型 EIS 比較留待公司端驗收；本機用合成回歸，不宣稱公司資料已驗收。M4 第二階段數值不一致偵測另行排期，不變更 50K 輸入預算、不重建 checkpoint、不新增 AI 刪檔能力。**
