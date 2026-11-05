@@ -102,6 +102,14 @@ pub fn run_observed(
         journal.create(root)?;
     }
     check_target(&project, grant, &grant.target.principal)?;
+    if !resume && needs_office(grant) {
+        if let Some(reason) = crate::projects::office::busy_before_dispatch()? {
+            journal.phase = Phase::Skipped;
+            journal.detail = reason;
+            journal.save(root)?;
+            return Ok(());
+        }
+    }
     let mut broker = Broker::new(project.clone(), execution.into())?;
     broker.enable_memory(&grant.target.conversation)?;
     if resume {
@@ -201,4 +209,20 @@ pub fn run_observed(
         }
         // 成功後進入下一輪先持久保存新版本；保存失敗保留上次 InFlight，禁止重播。
     }
+}
+
+/// 檢查固定範本及核准參數中明示的Office路徑／操作；不執行或猜測模型程式。
+fn needs_office(grant: &Grant) -> bool {
+    fn office_path(value: &serde_json::Value) -> bool {
+        match value {
+            serde_json::Value::String(s) => crate::projects::office::supported(Path::new(s)),
+            serde_json::Value::Array(values) => values.iter().any(office_path),
+            serde_json::Value::Object(values) => values.values().any(office_path),
+            _ => false,
+        }
+    }
+    grant.template.steps.iter().any(|step| {
+        let tool = step.request["tool"].as_str().unwrap_or("");
+        tool.contains("office") || tool.contains("excel") || office_path(&step.request)
+    }) || grant.parameters.values().any(office_path)
 }

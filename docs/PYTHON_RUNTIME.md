@@ -1,5 +1,13 @@
 # Python 執行環境與離線重建
 
+## 0.9.11：來源版本、科學計算與PNG交付
+
+read_file／read_code_section新增`source_revision`，使用同一次唯讀來源handle取得原始bytes SHA256；原`revision`仍代表解碼文字。Python輸入應引用source_revision，不以null繞過變更檢查。這可避免UTF-8 BOM造成內容未變卻版本不符；不同編碼的可讀性仍遵守既有解碼規則，並未新增任意編碼支援。
+
+emit_table／emit_excel省略副檔名自動補.csv／.xlsx；指定錯誤副檔名會指出應改哪個檔名，不再誤導成result巢狀格式錯誤。新增emit_figure(name,fig,dpi=150)，以Agg及內附Huninn字型產出PNG，最大4096×4096、8MiB、50–300 DPI；由Rust用WIC完整解碼核對後保存受控成果，並以hash追蹤恢復與交付。
+
+字型快取與TEMP/TMP使用OS建立的當次AppContainer私有目錄；沒有授權專案寫入、網路或子程序。OPENBLAS_NUM_THREADS=1避免小型平行任務各自建立大量計算執行緒；120秒／1GiB及每次8份成果限制維持。SciPy與Matplotlib可直接使用，一次計算可輸出多份表格／圖，無需為拆輸出重跑完整反演。
+
 ## 0.8.50：需求驗收與實際副本測試
 
 `plan_code_change`、`review_code_change` 保存需求來源、差異摘要、核對行號與證據；`test_python` 以內建標準 unittest／mock 測試完整目前副本，不能另抄一份函式當成成果驗證。測試驅動器 `src/projects/python/test_source.py` 內嵌在 EXE，透過原有 worker 傳入，無需修改 runtime 或安裝套件。
@@ -60,13 +68,13 @@ Python 文字快照在 Rust 端解碼，不把原始路徑交給模型程式。`
 
 ## 固定依賴
 
-CPython 3.13.12 x64（官方 embeddable）、pandas 2.2.3、NumPy 2.2.6、openpyxl 3.1.5，以及 python-dateutil 2.9.0.post0、six 1.17.0、pytz 2025.2、tzdata 2025.2、et-xmlfile 2.0.0。沒有 pip、pywin32、PowerShell、matplotlib；畫圖仍用現有離線圖表工具。上游授權留在 runtime 的 LICENSE／dist-info 目錄。
+CPython 3.13.12 x64（官方embeddable）、pandas 2.2.3、NumPy 2.2.6、openpyxl 3.1.5、SciPy 1.17.1、Matplotlib 3.11.2；所有間接依賴版本與wheel雜湊見offline/python-lock.json。沒有pip、pywin32或PowerShell。上游授權保留在runtime的LICENSE／dist-info目錄，Huninn字型與授權在LMFonts。
 
 `offline/python-lock.json` 記錄來源、版本、輸入檔案與 `python-inputs.zip` 的 SHA256。這些是上游預編譯發行品；CPython `sys.version` 為 MSC 1944，不能稱為本專案以 v142 編譯。Rust 主程式及 C++ 測試仍由固定 v142 x64 建置；Python 相容性另以安裝後實測核對。
 
 ## 資料流
 
-原始 Excel → Rust Excel COM（唯讀、固定操作）→ 追蹤 CSV → Rust 驗證快照 → Python／pandas → 精簡摘要與 CSV／XLSX 成果 → Rust 驗證並保存 `_AI_Output`。
+原始 Excel → Rust Excel COM（唯讀、固定操作）→ 追蹤 CSV → Rust 驗證快照 → Python／pandas → 精簡摘要與 CSV／XLSX／PNG 成果 → Rust 驗證並保存 `_AI_Output`。
 
 一般 CSV／文字直接由 Rust 唯讀取入；`_AI_Output` 內生成 XLSX 可交給 openpyxl。模型取得來源與結論，不會因呼叫 Python 自動取得全部檔案內容。統計衍生列會明示為衍生資料，不冒充原始列；原始路徑、版本、Excel 欄位及逐列型別／顯示值在輸入 metadata 中保留。
 

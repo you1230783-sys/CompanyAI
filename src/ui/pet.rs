@@ -15,6 +15,8 @@ pub(super) enum PetCommand {
         bubble_opacity: u8,
         notice_seconds: u8,
         font_size: Option<u8>,
+        open_action: Option<String>,
+        shortcuts: Option<Vec<String>>,
     },
     Import {
         state: String,
@@ -27,6 +29,7 @@ pub(super) enum PetCommand {
 impl App {
     #[cfg(feature = "pet")]
     pub(super) fn desktop_notice(&mut self, message: &str) {
+        self.schedules.notice = false;
         if !self.smoke {
             self.pet.typography(self.config.ui_font);
             self.pet.notify(message);
@@ -48,6 +51,8 @@ impl App {
                     bubble_opacity,
                     notice_seconds,
                     font_size,
+                    open_action,
+                    shortcuts,
                 } => {
                     let mut settings = self.pet.settings();
                     // 精細圖檔較大；滑桿調整只回偏好，換角色或匯入時才傳六張預覽。
@@ -62,6 +67,12 @@ impl App {
                     settings.notice_seconds = notice_seconds;
                     if let Some(font_size) = font_size {
                         settings.font_size = font_size;
+                    }
+                    if let Some(action) = open_action {
+                        settings.open_action = action;
+                    }
+                    if let Some(shortcuts) = shortcuts {
+                        settings.shortcuts = shortcuts;
                     }
                     self.pet.configure(settings)?;
                 }
@@ -87,11 +98,12 @@ impl App {
                     self.desktop_notice("這是桌寵通知。點一下可回到主視窗；拖曳角色可移動位置。");
                 }
             }
-            let state = if include_images {
+            let mut state = if include_images {
                 self.pet.state()?
             } else {
                 json!({"settings": self.pet.settings()})
             };
+            state["navigation_targets"] = json!(self.pet_targets());
             self.view.post(&json!({"type":"pet_state","state":state}))
         })();
         if let Err(error) = &result {
@@ -103,6 +115,23 @@ impl App {
     pub(super) fn tick_pet(&mut self) {
         self.pet.typography(self.config.ui_font);
         let active = self.work.store.tasks.iter().any(|t| t.active());
+        let received = self.projects.received_reply()
+            || self
+                .work
+                .store
+                .tasks
+                .iter()
+                // 伺服器工具進度不等於第一個回覆字元，仍維持思考直到收到文字。
+                .any(|t| t.active() && !t.partial.is_empty());
+        let settings = self.pet.settings();
+        let available = self.pet_targets();
+        self.pet.navigation_menu(
+            settings
+                .shortcuts
+                .iter()
+                .filter_map(|target| available.iter().find(|(id, _)| id == target).cloned())
+                .collect(),
+        );
         let waiting = self
             .work
             .store
@@ -111,14 +140,54 @@ impl App {
             .any(|t| t.active() && t.project_retry.due_at_millis > 0);
         let phase = if waiting {
             "waiting"
-        } else if self.projects.is_running() || active {
+        } else if (self.projects.is_running() || active) && received {
             "working"
-        } else if self.busy != "none" {
+        } else if self.projects.is_running() || active || self.busy != "none" {
             "thinking"
         } else {
             "idle"
         };
         let _ = self.pet.tick(phase);
+    }
+
+    #[cfg(feature = "pet")]
+    fn pet_targets(&self) -> Vec<(String, String)> {
+        let mut targets = vec![("main".into(), "開啟主介面".into())];
+        if self.config.vnc_enabled && cfg!(feature = "vnc") {
+            targets.push(("vnc".into(), "VNC".into()));
+        }
+        if self.config.extra_features_enabled {
+            targets.push(("settings".into(), "桌寵設定".into()));
+            if cfg!(feature = "tarot") {
+                targets.push(("tarot".into(), "塔羅牌桌".into()));
+            }
+        }
+        if self.logged_in() {
+            targets.extend([
+                ("new_chat".into(), "一般對話：新對話".into()),
+                ("projects".into(), "專案清單".into()),
+                ("schedules".into(), "排程與審計".into()),
+            ]);
+            targets.extend(self.projects.store.projects.iter().map(|project| {
+                (
+                    format!("project:{}", project.id),
+                    format!("專案：{}（新對話）", project.name),
+                )
+            }));
+        }
+        targets
+    }
+    #[cfg(feature = "pet")]
+    pub(super) fn pet_navigate(&mut self, target: String) {
+        show_window(self.window);
+        if self.pet_targets().iter().any(|(id, _)| id == &target) {
+            let _ = self
+                .view
+                .post(&json!({"type":"pet_navigate","target":target}));
+        } else {
+            self.status = "桌寵目的地目前不可用，請檢查登入、功能開關或專案設定。".into();
+            self.publish();
+        }
     }
 }
 #[cfg(feature = "pet")]
@@ -168,6 +237,8 @@ fn choose_png(owner: HWND) -> AppResult<Option<PathBuf>> {
 // 核心通知中心仍保存通知；未編入桌寵時不建立透明視窗或載入角色圖片。
 #[cfg(not(feature = "pet"))]
 impl App {
-    pub(super) fn desktop_notice(&mut self, _message: &str) {}
+    pub(super) fn desktop_notice(&mut self, _message: &str) {
+        self.schedules.notice = false;
+    }
     pub(super) fn tick_pet(&mut self) {}
 }

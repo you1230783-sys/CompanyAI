@@ -324,7 +324,11 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         if ($LASTEXITCODE -ne 0) { throw 'Document work harness build failed.' }
         & (Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\document_work_smoke.exe') $exe (Join-Path $projectRoot '.build')
         if ($LASTEXITCODE -ne 0) { throw 'Document translation/comparison/export verification failed.' }
-        Copy-Item -LiteralPath (Join-Path $projectRoot '.build\document-work-verification.json') -Destination (Join-Path $projectRoot 'offline\document-work-verification.json') -Force
+        & $powerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Test-ExportFormat.ps1') -Report (Join-Path $projectRoot '.build\document-work-verification.json')
+        if ($LASTEXITCODE -ne 0) { throw 'Word Markdown format readback failed.' }
+        if (-not $ValidateOnly) {
+            Copy-Item -LiteralPath (Join-Path $projectRoot '.build\document-work-verification.json') -Destination (Join-Path $projectRoot 'offline\document-work-verification.json') -Force
+        }
 
         & cargo build --example office_images --frozen
         if ($LASTEXITCODE -ne 0) { throw 'Office image harness build failed.' }
@@ -342,6 +346,8 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         $scheduleProbe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\debug\examples\schedule_smoke.exe'
         & $scheduleProbe $exe (Join-Path $projectRoot ('.build\schedule-smoke-' + [guid]::NewGuid().ToString('N')))
         if ($LASTEXITCODE -ne 0) { throw 'Scheduled workflow durable execution verification failed.' }
+        & $powerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Test-ScheduleBusy.ps1') -Exe $exe -Probe $scheduleProbe
+        if ($LASTEXITCODE -ne 0) { throw 'Occupied Office schedule verification failed.' }
     }
     if ($TestCadComparison) {
         # 僅新建獨立圖面：核對兩版CAD的實際差異與固定尺寸文字警告。

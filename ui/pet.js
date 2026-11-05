@@ -59,6 +59,9 @@ window.PetUI = (() => {
   <p class="subtle">0 秒不顯示泡泡，通知仍可從通知中心查看。隱藏角色後，啟用的泡泡仍會顯示；通知開關沿用一般設定。拖曳角色可移動位置。</p>
   <p><strong>只接受 PNG，建議先去背。</strong>每個動作一張圖，保留透明度、最長邊縮至256像素，每張小於500 KB；原圖不變。</p><div class="pet-images"></div><button data-generator class="secondary-button">用 AI 生成自己的角色…</button><p data-message role="status"></p>`;
   document.body.append(dialog);
+  const navigation=document.createElement('fieldset');
+  navigation.innerHTML='<legend>點擊與右鍵捷徑</legend><label>點擊桌寵開啟 <select data-open-action></select></label><p>右鍵最上方固定為「開啟主介面」「隱藏桌寵」。下面可加入最多8個捷徑；新對話只建立空白對話。</p><div data-shortcuts></div>';
+  dialog.querySelector('.pet-bubble-controls').before(navigation);
   const generator = document.createElement("dialog");
   generator.id = "pet-generator-dialog";
   generator.dataset.offline = "true";
@@ -96,6 +99,8 @@ window.PetUI = (() => {
       bubble_opacity: 100 - Number(find("[data-transparency]").value),
       notice_seconds: Number(find("[data-seconds]").value),
       font_size: Number(find("[data-font-size]").value),
+      open_action: find('[data-open-action]').value || 'main',
+      shortcuts: [...find('[data-shortcuts]').querySelectorAll('input:checked')].map(input=>input.value),
     };
   }
   function sample() {
@@ -134,6 +139,7 @@ window.PetUI = (() => {
     "[data-transparency]",
     "[data-seconds]",
     "[data-font-size]",
+    "[data-open-action]",
   ])
     find(selector).addEventListener("input", () => {
       sample();
@@ -148,6 +154,20 @@ window.PetUI = (() => {
   function render(current) {
     if (!queued) {
       const s = current.settings;
+      const targets=new Map(current.navigation_targets||[['main','開啟主介面']]);
+      const selected=s.open_action||'main', shortcuts=s.shortcuts||[];
+      for(const id of [selected,...shortcuts])if(!targets.has(id))targets.set(id,`目前不可用：${id}`);
+      const menu=find('[data-open-action]'), list=find('[data-shortcuts]');menu.replaceChildren();list.replaceChildren();
+      for(const [id,label] of targets) {
+        menu.add(new Option(label,id));
+        const row=document.createElement('label'), checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.value=id;checkbox.checked=shortcuts.includes(id);
+        checkbox.onchange=()=>{
+          if(list.querySelectorAll('input:checked').length>8){checkbox.checked=false;find('[data-message]').textContent='右鍵捷徑最多8項。';return;}
+          if(ready){queued=values();flush();}
+        };
+        row.append(checkbox,document.createTextNode(label));list.append(row);
+      }
+      menu.value=selected;
       find("[data-enabled]").checked = s.enabled;
       find("[data-skin]").value = s.skin;
       find("[data-size]").value = s.size;

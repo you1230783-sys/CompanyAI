@@ -244,7 +244,7 @@ fn run() -> AppResult<()> {
         assert!(difference["total_changes"].as_u64().unwrap() > 0);
         checks.push("Word native comparison reports changed paragraphs");
     }
-    let mut message=Message::assistant("# 匯出標題\n\n| 項目 | 數值 |\n| --- | --- |\n| 測試 | 42 |\n\n```python\nprint(42)\n```\n\n來源：[文件](https://example.com/reference)\n\n![圖表](chart.png)".into());
+    let mut message=Message::assistant("# 匯出標題\n中文 **粗體😀**、*斜體*、`inline_code` 後接一般文字。\n\n| 項目 | 數值 |\n| --- | --- |\n| **測試** | *42* |\n\n```python\n    print(42)\n\n    # 保留縮排與空行\n```\n程式碼後的一般文字。\n\n來源：[文件](https://example.com/reference)\n\n![圖表](chart.png)".into());
     // 真Excel公式的計算值與公式文字分開比較，不把純數字變更誤稱為公式變更。
     for (name, number, formula) in [("before.xlsx", 10, "=B2*2"), ("after.xlsx", 11, "=B2*3")] {
         office::render(
@@ -318,9 +318,16 @@ fn run() -> AppResult<()> {
     .contains("來源已修改"));
     checks.push("translation refuses source changed after prepare");
     message.incomplete = true;
-    let plan = export::prepare(&project, &[message])?;
-    assert!(!plan.warnings.is_empty());
     for pdf in [false, true] {
+        let mut export_message = message.clone();
+        if pdf {
+            // 本機Word會將彩色emoji轉成圖像，PDF文字層無法完整讀回。
+            // 保留產品的完整性拒絕；DOCX仍測補充平面UTF-16座標，PDF則
+            // 分別驗證可抽取的中文與Markdown格式，不把圖像化符號當成通過。
+            export_message.content = export_message.content.replace('😀', "");
+        }
+        let plan = export::prepare(&project, &[export_message])?;
+        assert!(!plan.warnings.is_empty());
         let name = if pdf { "export.pdf" } else { "export.docx" };
         let value = export::save(
             &project,
@@ -338,6 +345,7 @@ fn run() -> AppResult<()> {
         );
     }
     checks.push("native answer export DOCX/PDF with Chinese text, table, code, URL, embedded PNG and readback");
+    checks.push("DOCX supplementary Unicode formatting; PDF uses selectable-text fixture, color-emoji extraction limitation remains explicit");
     let report = json!({"version":env!("CARGO_PKG_VERSION"),"result":"PASS","checks":checks,"fixture":root,"real_model_tested":false,"company_encryption_tested":false});
     std::fs::write(
         Path::new(args.get(2).unwrap()).join("document-work-verification.json"),

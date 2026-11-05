@@ -397,7 +397,7 @@ function showView(view) {
   $("project-context").hidden = !project;
   $("project-context").onclick = project ? () => send({type:"project", command:{action:"open_folder", id:project.id}}) : null;
   // 一般對話提供快速解釋；專案透過原本的任務輸入提出需求。
-  document.querySelector('[data-action="explain"]').hidden = !!conversation?.project_id;
+  document.querySelectorAll(".composer-shortcuts [data-action]").forEach(button => { button.hidden = !!conversation?.project_id; });
   // 只在真正進入助理頁時更新，狀態推播重繪不重複查詢。
   if (previous !== view && view === "outlook") window.MailUI?.enter();
 }
@@ -596,6 +596,7 @@ function renderMessages() {
   messageSignature = signature;
   const container = $("messages");
   const expanded = new Set(changed ? [] : [...container.querySelectorAll(".answer-details[open]")].map((details) => details.closest("article").dataset.index));
+  const detailExpanded = new Set(changed ? [] : [...container.querySelectorAll(".message-project-details[open]")].map(e=>e.closest("article").dataset.index));
   const activityExpanded = new Set(changed ? [] : [...container.querySelectorAll(".project-activity[open]")].map(details => details.closest("article").dataset.index));
   const activityScroll = new Map(changed ? [] : [...container.querySelectorAll(".project-activity-history")].map(list => [list.closest("article").dataset.index, list.scrollTop]));
   // 完成答案的分析依據預設收起；同一對話重繪時保留手動展開及內層證據狀態。
@@ -652,12 +653,17 @@ function renderMessages() {
       renderProjectActivity(details, message.project_activity, true);
       content.append(details);
     }
+    const projectDetails = node("details", "message-project-details");
+    projectDetails.append(node("summary", "", "詳情內容"));
+    projectDetails.open = detailExpanded.has(String(index));
+    const toolHistory = content.querySelector(".project-activity");
+    if (toolHistory) projectDetails.append(toolHistory);
     content.append(bubble);
     window.ConversationUI?.overview(content,message,!!state.conversations.find(c=>c.id===state.active_id)?.project_id);
     if(message.request_id)window.ReviewUI?.attach(bubble,{conversation:state.active_id,message_index:index,request_id:message.request_id});
     if (message.project_analysis) {
       const analysis = node("div");
-      AnalysisUI.render(analysis,message.project_analysis,true); content.append(analysis);
+      AnalysisUI.render(analysis,message.project_analysis,true); projectDetails.append(analysis);
       const previous = analysisExpanded.get(String(index));
       if (previous) {
         const disclosure = analysis.querySelector(".analysis-disclosure");
@@ -667,6 +673,7 @@ function renderMessages() {
         }
       }
     }
+    if (projectDetails.children.length > 1) content.append(projectDetails);
     if (message.project_diagrams?.length) {
       const diagrams=node("div","project-diagrams");content.append(diagrams);
       DiagramUI.render(diagrams,message.project_diagrams,{conversation:state.active_id,message_index:index,request_id:message.request_id});
@@ -916,7 +923,7 @@ function receive(next) {
   applyUiFont(state.config.ui_font);
   $("ui-font").value = state.config.ui_font || "wenkai_tc";
   $("interface-scale").value = String(state.config.interface_scale || 100);
-  for (const [section, label, list] of [["projects", "專案", "project-list"], ["recent", "最近對話", "history-list"]]) {
+  for (const [section, label, list] of [["recent", "最近對話", "history-list"]]) {
     const collapsed = !!state.config[section + "_collapsed"];
     $(list).hidden = collapsed;
     if(section==="recent")$("history-filter").parentElement.hidden=collapsed;
@@ -1073,10 +1080,7 @@ $("send").onclick = () => submit();
 document
   .querySelectorAll("[data-action]")
   .forEach((button) => (button.onclick = () => submit(button.dataset.action)));
-$("new-chat").onclick = () => {
-  showView("chat");
-  send({ type: "new_chat" });
-};
+$("new-chat").onclick = () => window.NavigationUI?.newConversation();
 $("collapse").onclick = () =>
   send({
     type: "preferences",
@@ -1390,6 +1394,7 @@ if (bridge) {
       receiveHotkeyMessage(event.data);
         window.TarotUI?.receive(event.data);
         window.PetUI?.receive(event.data);
+        window.NavigationUI?.receive(event.data);
         window.ReminderUI?.receive(event.data);
         window.DraftTools?.receive(event.data);
         window.ConversationUI?.receive(event.data);
@@ -1442,6 +1447,6 @@ $("clear-all-events").onclick = () =>
   );
 
 // 每個區塊各自保存；不受整個側欄的收合狀態影響。
-for (const section of ["projects", "recent"]) {
+for (const section of ["recent"]) {
   $("collapse-" + section).onclick = () => send({type:"collapse_section", section, collapsed:!state.config[section + "_collapsed"]});
 }

@@ -5,20 +5,49 @@
   "package_source": "https://pypi.org/",
   "binary_origin": "Official CPython and upstream win_amd64 wheels; not locally compiled with v142",
   "packages": {
-    "tzdata": "2025.2",
-    "python-dateutil": "2.9.0.post0",
+    "contourpy": "1.4.0",
+    "cycler": "0.12.1",
+    "et_xmlfile": "2.0.0",
+    "fonttools": "4.68.0",
+    "kiwisolver": "1.5.1",
+    "matplotlib": "3.11.2",
     "numpy": "2.2.6",
-    "pandas": "2.2.3",
-    "et-xmlfile": "2.0.0",
     "openpyxl": "3.1.5",
+    "packaging": "26.3",
+    "pandas": "2.2.3",
+    "pillow": "13.0.0",
+    "pyparsing": "3.3.3",
+    "python-dateutil": "2.9.0.post0",
+    "pytz": "2025.2",
+    "scipy": "1.17.1",
     "six": "1.17.0",
-    "pytz": "2025.2"
+    "tzdata": "2025.2"
   },
-  "archive_sha256": "ff3e97b14eeb8e05bf992d6c5d2b098558cc51308c2c6b713164cd39f6173e4c",
+  "archive_sha256": "1bb7ef2eb38013bf42e1925d2dc4e512d703363d5bd6f1a91686463c5049fa26",
   "files": [
+    {
+      "name": "contourpy-1.4.0-cp313-cp313-win_amd64.whl",
+      "sha256": "6507a016976a75a15aee47809a34605de6244ccc056e6164bf9fb14b27eecad4"
+    },
+    {
+      "name": "cycler-0.12.1-py3-none-any.whl",
+      "sha256": "85cef7cff222d8644161529808465972e51340599459b8ac3ccbac5a854e0d30"
+    },
     {
       "name": "et_xmlfile-2.0.0-py3-none-any.whl",
       "sha256": "7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa"
+    },
+    {
+      "name": "fonttools-4.68.0-cp313-cp313-win_amd64.whl",
+      "sha256": "6ed796b220654b4d37ad20af73419ec7969b669dd678cab88afb602c5683a331"
+    },
+    {
+      "name": "kiwisolver-1.5.1-cp313-cp313-win_amd64.whl",
+      "sha256": "dc23390afe9f4ef9ac3bcc72a03a56eebbde03f4c571a32cb38f859cff9a6524"
+    },
+    {
+      "name": "matplotlib-3.11.2-cp313-cp313-win_amd64.whl",
+      "sha256": "bc067c462a86f0e57bf52fc6e058d90171a5420007dac00c46e90153050c69a7"
     },
     {
       "name": "numpy-2.2.6-cp313-cp313-win_amd64.whl",
@@ -29,20 +58,36 @@
       "sha256": "5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2"
     },
     {
+      "name": "packaging-26.3-py3-none-any.whl",
+      "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c"
+    },
+    {
       "name": "pandas-2.2.3-cp313-cp313-win_amd64.whl",
       "sha256": "61c5ad4043f791b61dd4752191d9f07f0ae412515d59ba8f005832a532f8736d"
     },
     {
-      "name": "python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
-      "sha256": "a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427"
+      "name": "pillow-13.0.0-cp313-cp313-win_amd64.whl",
+      "sha256": "9dda0788a9932776a75d8bcc020076edc308ce2508b51f6739a45e3158b3fc42"
+    },
+    {
+      "name": "pyparsing-3.3.3-py3-none-any.whl",
+      "sha256": "ece8c00a69cf01b45d0b1dedabb469c90d8caf996d4fda40f147627a122849a4"
     },
     {
       "name": "python-3.13.12-embeddable-amd64.zip",
       "sha256": "f0b5a8e2662f51cfedefaf7cc0b8c22f05b776efa4a392042946422662e3a23c"
     },
     {
+      "name": "python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+      "sha256": "a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427"
+    },
+    {
       "name": "pytz-2025.2-py2.py3-none-any.whl",
       "sha256": "5ddf76296dd8c44c26eb8f4b6f35488f3ccbf6fbbd7adee0b7262d43f0ec2f00"
+    },
+    {
+      "name": "scipy-1.17.1-cp313-cp313-win_amd64.whl",
+      "sha256": "37425bc9175607b0268f493d79a292c39f9d001a357bebb6b88fdfaff13f6448"
     },
     {
       "name": "six-1.17.0-py2.py3-none-any.whl",

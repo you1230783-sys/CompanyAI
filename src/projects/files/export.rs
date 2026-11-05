@@ -1,6 +1,7 @@
 //! 對話內容直接排成Office操作，沒有模型重寫，也不接收HTML、遠端圖片或任意COM。
 use super::*;
 use crate::protocol::Message;
+mod markdown;
 
 #[derive(Clone)]
 pub struct Plan {
@@ -73,20 +74,28 @@ pub fn prepare(project: &Project, messages: &[Message]) -> AppResult<Plan> {
         let lines: Vec<_> = message.content.lines().collect();
         let mut at = 0;
         let mut code = false;
+        let mut fence: Option<(char, usize)> = None;
         while at < lines.len() {
             let line = lines[at];
-            if line.trim_start().starts_with("```") {
-                code = !code;
-                plan.actions.push(paragraph(
-                    line.into(),
-                    office::Format {
-                        font: Some("Consolas".into()),
-                        size: Some(9.),
-                        ..Default::default()
-                    },
-                ));
-                at += 1;
-                continue;
+            let trimmed = line.trim_start();
+            if let Some((marker, count)) = fence {
+                let length = trimmed.chars().take_while(|c| *c == marker).count();
+                if length >= count && trimmed[length..].trim().is_empty() {
+                    code = false;
+                    fence = None;
+                    at += 1;
+                    continue;
+                }
+            } else if line.len() - trimmed.len() <= 3 {
+                if let Some(marker) = trimmed.chars().next().filter(|c| matches!(c, '`' | '~')) {
+                    let length = trimmed.chars().take_while(|c| *c == marker).count();
+                    if length >= 3 {
+                        code = true;
+                        fence = Some((marker, length));
+                        at += 1;
+                        continue;
+                    }
+                }
             }
             if !code
                 && at + 1 < lines.len()
@@ -109,8 +118,30 @@ pub fn prepare(project: &Project, messages: &[Message]) -> AppResult<Plan> {
                         "表格欄數不一致或超過100列／10欄；請先修正回答或改匯出較短範圍。".into(),
                     );
                 }
-                plan.actions
-                    .push(office::Action::WordTable { before: None, rows });
+                let formatted: Vec<Vec<Vec<office::TextRun>>> = rows
+                    .iter()
+                    .map(|row| row.iter().map(|cell| markdown::inline(cell)).collect())
+                    .collect();
+                if formatted
+                    .iter()
+                    .flatten()
+                    .flatten()
+                    .any(|run| run.bold || run.italic || run.code)
+                {
+                    plan.actions
+                        .push(office::Action::WordRichTable { rows: formatted });
+                } else {
+                    let rows = formatted
+                        .iter()
+                        .map(|row| {
+                            row.iter()
+                                .map(|runs| runs.iter().map(|run| run.text.as_str()).collect())
+                                .collect()
+                        })
+                        .collect();
+                    plan.actions
+                        .push(office::Action::WordTable { before: None, rows });
+                }
                 continue;
             }
             if !code && line.trim().starts_with("![") && line.trim().ends_with(')') {
@@ -140,6 +171,9 @@ pub fn prepare(project: &Project, messages: &[Message]) -> AppResult<Plan> {
                     office::Format {
                         font: Some("Consolas".into()),
                         size: Some(9.),
+                        fill: Some("#F3F4F6".into()),
+                        space_after: Some(0.),
+                        space_before: Some(0.),
                         ..Default::default()
                     },
                 )
@@ -164,9 +198,22 @@ pub fn prepare(project: &Project, messages: &[Message]) -> AppResult<Plan> {
                     )
                 }
             };
-            if !text.is_empty() {
+            if code || !text.is_empty() {
                 text::validate(&text)?;
-                plan.actions.push(paragraph(text, format));
+                if code {
+                    plan.actions.push(paragraph(text, format));
+                } else {
+                    let runs = markdown::inline(&text);
+                    if runs.iter().any(|run| run.bold || run.italic || run.code) {
+                        plan.actions
+                            .push(office::Action::WordRichParagraph { runs, format });
+                    } else {
+                        plan.actions.push(paragraph(
+                            runs.iter().map(|run| run.text.as_str()).collect(),
+                            format,
+                        ));
+                    }
+                }
             }
             at += 1;
         }

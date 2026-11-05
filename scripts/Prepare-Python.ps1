@@ -29,7 +29,11 @@ foreach ($entry in $lock.files | Where-Object { $_.name -like '*.whl' }) {
 # 明確隔離使用者 PATH／登錄／site-packages；不啟用 site 或自動執行 .pth。
 @('python313.zip', '.', 'Lib\site-packages') | Set-Content -LiteralPath (Join-Path $Destination 'python313._pth') -Encoding ASCII
 Copy-Item -LiteralPath (Join-Path $root 'src\projects\python_worker.py') -Destination (Join-Path $Destination 'lm_worker.py')
-& (Join-Path $Destination 'python.exe') -I -B -c 'import sys,pandas,numpy,openpyxl; print(sys.version); print(pandas.__version__,numpy.__version__,openpyxl.__version__)'
+$fontDirectory = Join-Path $Destination 'LMFonts'
+New-Item -ItemType Directory -Path $fontDirectory | Out-Null
+Copy-Item -LiteralPath (Join-Path $root 'ui/fonts/jf-openhuninn-2.1.ttf') -Destination $fontDirectory
+Copy-Item -LiteralPath (Join-Path $root 'ui/fonts/HUNINN-LICENSE.txt') -Destination $fontDirectory
+& (Join-Path $Destination 'python.exe') -I -B -c 'import sys,pandas,numpy,openpyxl,scipy,matplotlib; print(sys.version); print(pandas.__version__,numpy.__version__,openpyxl.__version__,scipy.__version__,matplotlib.__version__)'
 if ($LASTEXITCODE -ne 0) { throw 'Offline Python import verification failed.' }
 # 保存每個檔案雜湊，原生啟動端核對後才允許執行模型程式。
 $manifest = @()

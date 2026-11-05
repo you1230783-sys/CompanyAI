@@ -1,0 +1,51 @@
+{
+  "version": "0.9.11",
+  "result": "PASS_SOURCE_BUILD_AND_TARGETED_FINAL_CHECKS",
+  "recorded_at": "2026-11-05T17:31:19.8037694+08:00",
+  "build_only": {
+    "recorded_at": "2026-11-05T16:55:28.949053+08:00",
+    "result": "BUILD_ONLY",
+    "msvc": "14.29.30133",
+    "compiler_report": [
+      "v142.c",
+      "Verified _MSC_FULL_VER=192930159 x64"
+    ],
+    "linker": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\link.exe",
+    "empty_cargo_cache": true,
+    "default_features": true,
+    "requested_features": [],
+    "exe": "Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\company-ai.exe",
+    "exe_sha256": "2ed2a4ba49c8300c09bd2e28638acc05661420ec3a861a3460f2fb43ca5ed4de",
+    "tests_run": false,
+    "installer_built": false
+  },
+  "final_native_ui": {
+    "result": "PASS_NATIVE_UI",
+    "version": "0.9.11",
+    "exe_sha256": "2ed2a4ba49c8300c09bd2e28638acc05661420ec3a861a3460f2fb43ca5ed4de",
+    "recorded_at": "2026-11-05T17:26:27.7679645+08:00"
+  },
+  "core_tests_passed": 472,
+  "default_all_targets_clippy": "PASS",
+  "core_all_targets_clippy": "PASS",
+  "logs": [
+    {
+      "name": "final-build-0.9.11.log",
+      "sha256": "526409a2b4605d701a5bd897f187307efd666ea4f2a2f9124eb7ee6fd3fcf32a"
+    },
+    {
+      "name": "core-0.9.11-r2.log",
+      "sha256": "acd9f881e92196c91e3fe94dc670daccfeeb5a709cce62a25ad758ed388e0ed2"
+    },
+    {
+      "name": "final-default-lint-0.9.11.log",
+      "sha256": "1280e7dc47a0922ac545ae112207895c1f81d1bdfb20404fecb87441dc53b0bd"
+    }
+  ],
+  "integration_evidence": "source-verification-0.9.11.json",
+  "integration_exe_sha256": "0beaef156a7b950c140f9e0531fee2c7af09e6c40dd96ab5a880aa6b875cab1b",
+  "post_integration_source_change": "Only add cfg(feature = pet) to ProjectRuntime::received_reply; default behavior unchanged. Integration suites were not rerun against the final binary.",
+  "installer_built": false,
+  "release_published": false,
+  "company_eis_drt_verified": false
+}

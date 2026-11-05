@@ -68,16 +68,16 @@ window.runReviewTests = async (check) => {
     check(panel.textContent.includes("200處上限")&&!panel.querySelector("img,script"),"source cap is explicit and preview text is inert");
     check(!panel.querySelector('.analysis-disclosure').open,"completed analysis defaults to collapsed");
 
-    // 同一份分析由執行中轉成完成時收起；之後由使用者決定展開，更新不搶走狀態。
+    // 分析一律預設收合；之後由使用者決定展開，更新不搶走狀態。
     const analysis={coverage:{one:{path:"A.log",scope:"LOG 原文",status:"partial",detail:"已讀取 2 行"}}};
     AnalysisUI.render(panel,analysis);
-    check(panel.querySelector('.analysis-disclosure').open,"running analysis starts expanded");
+    check(!panel.querySelector('.analysis-disclosure').open,"running analysis starts collapsed");
     panel.querySelector('.analysis-disclosure > summary').click();
     AnalysisUI.render(panel,{...analysis,review_required:true});
-    check(!panel.querySelector('.analysis-disclosure').open,"running analysis respects manual collapse on update");
+    check(panel.querySelector('.analysis-disclosure').open,"running analysis respects manual expansion on update");
     panel.querySelector('.analysis-disclosure > summary').click();
     AnalysisUI.render(panel,analysis,true);
-    check(!panel.querySelector('.analysis-disclosure').open,"finishing analysis collapses previously expanded content");
+    check(!panel.querySelector('.analysis-disclosure').open,"finishing analysis preserves manually collapsed content");
     panel.querySelector('.analysis-disclosure > summary').click();
     AnalysisUI.render(panel,{...analysis,review_required:true},true);
     check(panel.querySelector('.analysis-disclosure').open,"completed analysis preserves manual expansion on update");

@@ -3,6 +3,69 @@ use super::*;
 use crate::projects::python;
 use sha2::{Digest, Sha256};
 
+/// emit 工具已決定成果格式；省略副檔名時補上，明確指定錯誤格式時則拒絕。
+/// 仍只接受單一安全檔名，不能藉自動補副檔名取得任意路徑寫入能力。
+fn output_name(name: &str, kind: &str) -> AppResult<String> {
+    let extension = match kind {
+        "table" => "csv",
+        "xlsx" => "xlsx",
+        "png" => "png",
+        _ => {
+            return Err(format!(
+                "Python 成果種類 {kind:?} 不支援；請使用 emit_table、emit_excel或emit_figure。"
+            ))
+        }
+    };
+    let path = relative(name)?;
+    if path.components().count() != 1 {
+        return Err("Python 成果只接受單一檔名，不可包含資料夾。".into());
+    }
+    match path.extension() {
+        None => Ok(format!("{name}.{extension}")),
+        Some(actual) if actual.eq_ignore_ascii_case(extension) => Ok(name.into()),
+        Some(_) => Err(format!(
+            "Python 成果檔名「{name}」與格式不符；此輸出需使用 .{extension}，例如「分析.{extension}」。不要修改 result 結構或來源 kind。"
+        )),
+    }
+}
+
+#[cfg(test)]
+mod output_name_tests {
+    use super::output_name;
+
+    #[test]
+    fn missing_extensions_are_added_without_changing_explicit_formats() {
+        assert_eq!(output_name("eis_data", "table").unwrap(), "eis_data.csv");
+        assert_eq!(
+            output_name("probe_book", "xlsx").unwrap(),
+            "probe_book.xlsx"
+        );
+        assert_eq!(output_name("量測.CSV", "table").unwrap(), "量測.CSV");
+        assert!(output_name("plot.png", "table")
+            .unwrap_err()
+            .contains(".csv"));
+        assert!(output_name("book.csv", "xlsx")
+            .unwrap_err()
+            .contains(".xlsx"));
+    }
+
+    #[test]
+    fn automatic_extensions_preserve_path_and_format_boundaries() {
+        for name in [
+            "",
+            "../escape",
+            "folder/result",
+            "C:\\result",
+            "CON",
+            "data.",
+            "data ",
+        ] {
+            assert!(output_name(name, "table").is_err(), "{name:?}");
+        }
+        assert!(output_name("data", "unknown").is_err());
+    }
+}
+
 impl Broker {
     pub(super) fn run_python(
         &mut self,
@@ -42,17 +105,13 @@ impl Broker {
         let mut tables = Vec::new();
         let mut books = Vec::new();
         for output in outputs {
-            let name = output["name"].as_str().ok_or("Python 成果缺少檔名。")?;
-            let path = relative(name)?;
-            if path.components().count() != 1 {
-                return Err("Python 成果只接受單一檔名。".into());
-            }
+            let kind = output["kind"].as_str().ok_or("Python 成果缺少種類。")?;
+            let name = output_name(
+                output["name"].as_str().ok_or("Python 成果缺少檔名。")?,
+                kind,
+            )?;
             match output["kind"].as_str() {
-                Some("table")
-                    if path
-                        .extension()
-                        .is_some_and(|s| s.eq_ignore_ascii_case("csv")) =>
-                {
+                Some("table") => {
                     let columns: Vec<String> = serde_json::from_value(output["columns"].clone())
                         .map_err(|_| "Python 表頭無效。")?;
                     let rows = output["rows"].as_array().ok_or("Python 資料列無效。")?;
@@ -92,18 +151,19 @@ impl Broker {
                     table.csv()?;
                     tables.push((name.to_owned(), table));
                 }
-                Some("xlsx")
-                    if path
-                        .extension()
-                        .is_some_and(|s| s.eq_ignore_ascii_case("xlsx")) =>
-                {
+                Some("xlsx") => {
                     let bytes = python::unhex(output["hex"].as_str().ok_or("缺少 XLSX 資料。")?)?;
                     if !bytes.starts_with(b"PK\x03\x04") {
                         return Err("Python 未產生 XLSX 容器。".into());
                     }
                     books.push((name.to_owned(), bytes));
                 }
-                _ => return Err("Python 成果格式只允許 CSV 與 XLSX。".into()),
+                Some("png") => {
+                    let bytes = python::unhex(output["hex"].as_str().ok_or("缺少PNG資料。")?)?;
+                    python::validate_png(&bytes)?;
+                    books.push((name.to_owned(), bytes));
+                }
+                _ => return Err("Python 成果格式只允許 CSV、XLSX與PNG。".into()),
             }
         }
         if self.datasets.len() + tables.len() > 30 {
@@ -114,7 +174,7 @@ impl Broker {
             artifacts.push(self.save_dataset(&name, &table, cancel)?);
         }
         for (name, bytes) in books {
-            artifacts.push(self.save_python_book(&name, &bytes, cancel)?);
+            artifacts.push(self.save_python_binary(&name, &bytes, cancel)?);
         }
         Ok(
             json!({"purpose":purpose,"summary":response["summary"],"stdout":response["stdout"],"versions":response["versions"],
@@ -122,7 +182,7 @@ impl Broker {
         )
     }
 
-    fn save_python_book(
+    fn save_python_binary(
         &mut self,
         name: &str,
         bytes: &[u8],
@@ -159,14 +219,19 @@ impl Broker {
             .read_to_end(&mut readback)
             .map_err(|e| e.to_string())?;
         if readback != bytes {
-            return Err("Python XLSX 寫入後讀回不一致。".into());
+            return Err("Python 成果寫入後讀回不一致。".into());
         }
         let sha256 = format!("{:x}", Sha256::digest(bytes));
         self.python_artifacts.push(python::Artifact {
             path: path.clone(),
             sha256: sha256.clone(),
         });
-        Ok(json!({"path":path,"sha256":sha256,"bytes":bytes.len(),"verified":true,"format":"xlsx"}))
+        let format = Path::new(name)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        Ok(json!({"path":path,"sha256":sha256,"bytes":bytes.len(),"verified":true,"format":format}))
     }
 
     pub(super) fn verify_python_artifact(&self, artifact: &python::Artifact) -> AppResult<()> {
@@ -175,7 +240,7 @@ impl Broker {
             || !rel.starts_with("_AI_Output")
             || rel
                 .extension()
-                .is_none_or(|s| !s.eq_ignore_ascii_case("xlsx"))
+                .is_none_or(|s| !s.eq_ignore_ascii_case("xlsx") && !s.eq_ignore_ascii_case("png"))
         {
             return Err("Python 成果路徑不合法。".into());
         }
@@ -217,7 +282,7 @@ mod tests {
         let cancel = AtomicBool::new(false);
         let mut broker = Broker::new(project.clone(), "test".into()).unwrap();
         let artifact = broker
-            .save_python_book("測試.xlsx", b"checkpoint-fixture", &cancel)
+            .save_python_binary("測試.xlsx", b"checkpoint-fixture", &cancel)
             .unwrap();
         let state = broker.saved().unwrap();
         let mut restored = Broker::new(project.clone(), "test".into()).unwrap();

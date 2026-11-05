@@ -2,7 +2,7 @@
 "use strict";
 window.ScheduleUI = (() => {
   let form = null, previewId = null, pending = false, confirmButton = null, previewBox = null, formStatus = null;
-  let list = null, listBody = null;
+  let list = null, listBody = null, openAudit = false;
   let previewRequestId = null;
   const make = (tag, text) => { const node=document.createElement(tag); if(text!=null)node.textContent=text; return node; };
   const sendCommand = command => send({type:"schedule",command});
@@ -48,6 +48,7 @@ window.ScheduleUI = (() => {
   }
   function action(parent,text,command) {const b=make("button",text);b.onclick=()=>sendCommand(command);parent.append(b);}
   function receive(event) {
+    if(event.type==="show_schedule_audit") {openAudit=true;showList();return;}
     if(event.type==="schedule_preview" && form?.open && pending && event.request_id===previewRequestId) {
       pending=false;previewId=event.id;
       form.querySelectorAll("input,select,#schedule-preview").forEach(control=>control.disabled=false);
@@ -72,9 +73,10 @@ window.ScheduleUI = (() => {
         if(!event.running && entry.execution && audits.some(a=>a.execution===entry.execution&&a.status==="已暫停，可從未執行步驟續接")) {
           action(card,"核對後續接尚未執行步驟",{action:"resume",id:entry.id});
         }
-        for(const audit of audits){const details=make("details");details.append(make("summary",`${new Date(audit.started_at*1000).toLocaleString()}：${audit.status}，已通過${audit.next_step}步`),make("pre",JSON.stringify(audit,null,2)));card.append(details);}
+        for(const audit of audits){const details=make("details");details.open=openAudit && audit===audits[0];details.append(make("summary",`${new Date(audit.started_at*1000).toLocaleString()}：${audit.status}，已通過${audit.next_step}步`),make("pre",JSON.stringify(audit,null,2)));card.append(details);}
         listBody.append(card);
       }
+      openAudit=false;
     }
   }
   $("show-schedules").onclick=showList;

@@ -54,6 +54,15 @@ def analyze(request):
     import pandas as pd
     import numpy as np
     import openpyxl
+    import scipy
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from pathlib import Path
+    font_path = Path(__file__).parent / "LMFonts" / "jf-openhuninn-2.1.ttf"
+    matplotlib.font_manager.fontManager.addfont(str(font_path))
+    matplotlib.rcParams["font.family"] = matplotlib.font_manager.FontProperties(fname=str(font_path)).get_name()
+    matplotlib.rcParams["axes.unicode_minus"] = False
 
     tables, texts, metadata = {}, {}, {}
     for item in request["inputs"]:
@@ -153,9 +162,28 @@ def analyze(request):
         outputs.append({"kind": "xlsx", "name": name, "hex": buffer.getvalue().hex(),
                         "sheets": names, "content_sha256": content_hash.hexdigest()})
 
-    scope = {"pd": pd, "np": np, "openpyxl": openpyxl, "io": io,
+    def emit_figure(name, figure, dpi=150):
+        """圖片只經記憶體管道交給原生層驗證／發布，不能自行寫專案路徑。"""
+        if len(outputs) >= 8:
+            raise ValueError("At most 8 outputs")
+        dpi = float(dpi)
+        if not np.isfinite(dpi) or not 50 <= dpi <= 300:
+            raise ValueError("Figure DPI must be 50–300")
+        size = figure.get_size_inches() * dpi
+        if not np.all(np.isfinite(size)) or np.any(size < 1) or np.any(size > 4096):
+            raise ValueError("Figure dimensions must be 1–4096 pixels")
+        buffer = io.BytesIO()
+        figure.savefig(buffer, format="png", dpi=dpi)
+        payload = buffer.getvalue()
+        if len(payload) > 8 * 1024 * 1024:
+            raise ValueError("PNG output exceeds 8 MiB")
+        outputs.append({"kind":"png", "name":name, "hex":payload.hex(),
+                        "content_sha256":hashlib.sha256(payload).hexdigest()})
+        plt.close(figure)
+
+    scope = {"pd": pd, "np": np, "openpyxl": openpyxl, "scipy": scipy, "plt": plt, "io": io,
              "tables": tables, "texts": texts, "metadata": metadata,
-             "emit_table": emit_table, "emit_excel": emit_excel, "result": {}}
+             "emit_table": emit_table, "emit_excel": emit_excel, "emit_figure": emit_figure, "result": {}}
     log = BoundedLog()
     with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
         exec(compile(request["code"], "<company-ai-analysis>", "exec"), scope)
@@ -164,7 +192,8 @@ def analyze(request):
         raise ValueError("result exceeds 12000 characters; use emit_table for full data")
     return {"ok": True, "summary": json.loads(summary), "stdout": log.getvalue(), "outputs": outputs,
             "versions": {"python": sys.version.split()[0], "pandas": pd.__version__,
-                         "numpy": np.__version__, "openpyxl": openpyxl.__version__}}
+                         "numpy": np.__version__, "openpyxl": openpyxl.__version__,
+                         "scipy": scipy.__version__, "matplotlib": matplotlib.__version__}}
 
 
 def main():

@@ -3,9 +3,26 @@
 use super::*;
 use serde_json::{json, Value};
 
+/// 對話匯出使用的固定文字片段，不接受HTML或任意COM指令。
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TextRun {
+    pub text: String,
+    pub bold: bool,
+    pub italic: bool,
+    pub code: bool,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Action {
+    /// 僅由原生對話匯出建立，模型工具入口拒絕此操作。
+    WordRichParagraph {
+        runs: Vec<TextRun>,
+        format: Format,
+    },
+    WordRichTable {
+        rows: Vec<Vec<Vec<TextRun>>>,
+    },
     /// 僅由文件翻譯工具建立；不接受一般office_action提供此內部操作。
     TranslateRuns {
         snapshot: Box<Snapshot>,
@@ -164,7 +181,7 @@ impl Format {
             return Err("此文件不支援指定的預設樣式。".into());
         }
         if family != "Workbooks"
-            && (self.fill.is_some()
+            && ((family != "Documents" && self.fill.is_some())
                 || self.borders.is_some()
                 || self.wrap.is_some()
                 || self.column_width.is_some()
@@ -247,6 +264,15 @@ fn excel_range(session: &Session, target: &str) -> AppResult<IDispatch> {
 fn apply_format(target: &IDispatch, family: &str, format: &Format) -> AppResult<()> {
     format.validate(family)?;
     let font = child(target, "Font")?;
+    if family == "Documents" {
+        if let Some(fill) = &format.fill {
+            set(
+                &child(target, "Shading")?,
+                "BackgroundPatternColor",
+                color(fill)?.into(),
+            )?;
+        }
+    }
     if let Some(style) = &format.style {
         match family {
             "Documents" => set(
@@ -563,6 +589,50 @@ impl Session {
         }
         let doc = self.document()?;
         match action {
+            Action::WordRichParagraph { runs, format } if self.collection == "Documents" => {
+                let text: String = runs.iter().map(|run| run.text.as_str()).collect();
+                let start = integer(&self.word_insertion(&None, cancel)?, "Start")?;
+                self.apply(
+                    &Action::WordParagraph {
+                        before: None,
+                        text,
+                        format: format.clone(),
+                    },
+                    cancel,
+                )?;
+                apply_text_runs(doc, start, runs, format)?;
+            }
+            Action::WordRichTable { rows } if self.collection == "Documents" => {
+                let plain_rows: Vec<Vec<String>> = rows
+                    .iter()
+                    .map(|row| {
+                        row.iter()
+                            .map(|runs| runs.iter().map(|run| run.text.as_str()).collect())
+                            .collect()
+                    })
+                    .collect();
+                self.apply(
+                    &Action::WordTable {
+                        before: None,
+                        rows: plain_rows,
+                    },
+                    cancel,
+                )?;
+                let tables = child(doc, "Tables")?;
+                let table = item(&tables, integer(&tables, "Count")?)?;
+                for (r, row) in rows.iter().enumerate() {
+                    for (c, runs) in row.iter().enumerate() {
+                        let cell = obj(invoke(
+                            &table,
+                            "Cell",
+                            vec![(r as i32 + 1).into(), (c as i32 + 1).into()],
+                            false,
+                        )?)?;
+                        let start = integer(&child(&cell, "Range")?, "Start")?;
+                        apply_text_runs(doc, start, runs, &Format::default())?;
+                    }
+                }
+            }
             Action::TranslateRuns { snapshot, items } if self.collection == "Documents" => {
                 super::translation::apply(self, snapshot, items, cancel)?;
             }
@@ -678,6 +748,15 @@ impl Session {
                     false,
                 )?)?;
                 // 新段落不沿用前一段的標題／條列設定；既有段落的格式工具仍只改指定屬性。
+                // Word 插入點會繼承前段的直接字型與底色，須先清除，避免程式碼
+                // 區塊後的正文繼續呈現等寬字型、灰底或粗斜體。
+                invoke(&child(&range, "Font")?, "Reset", vec![], false)?;
+                invoke(&child(&range, "ParagraphFormat")?, "Reset", vec![], false)?;
+                set(
+                    &child(&range, "Shading")?,
+                    "BackgroundPatternColor",
+                    (-16777216i32).into(),
+                )?;
                 apply_format(
                     &range,
                     self.collection,
@@ -1032,6 +1111,46 @@ fn plain(text: &str) -> AppResult<()> {
     super::super::text::validate(text)?;
     if text.chars().any(|c| c.is_control() && c != '\t') {
         return Err("單一段落／表格欄位不可含換行或結構控制字元。".into());
+    }
+    Ok(())
+}
+
+/// Word Range採UTF-16座標；不能用UTF-8位元組長度，避免中文與emoji格式錯位。
+fn apply_text_runs(
+    document: &IDispatch,
+    mut start: i32,
+    runs: &[TextRun],
+    base: &Format,
+) -> AppResult<()> {
+    if runs.len() > 10000 {
+        return Err("匯出文字格式片段過多。".into());
+    }
+    for run in runs {
+        plain(&run.text)?;
+        let end = start + run.text.encode_utf16().count() as i32;
+        if end > start {
+            let range = obj(invoke(
+                document,
+                "Range",
+                vec![start.into(), end.into()],
+                false,
+            )?)?;
+            apply_format(
+                &range,
+                "Documents",
+                &Format {
+                    bold: Some(run.bold || base.bold.unwrap_or(false)),
+                    italic: Some(run.italic || base.italic.unwrap_or(false)),
+                    font: if run.code {
+                        Some("Consolas".into())
+                    } else {
+                        base.font.clone()
+                    },
+                    ..Default::default()
+                },
+            )?;
+        }
+        start = end;
     }
     Ok(())
 }

@@ -305,6 +305,18 @@ fn read_cancel(
     worker: Option<&mut Worker>,
     server_pdf: Option<&mut super::server_pdf::Reader>,
 ) -> AppResult<(String, Encoding)> {
+    read_snapshot(project, path, cancel, worker, server_pdf)
+        .map(|(content, encoding, _)| (content, encoding))
+}
+
+/// 文字與原始位元組版本在同一個拒絕寫入的handle下取得；解碼不改變來源身分。
+fn read_snapshot(
+    project: &Project,
+    path: &str,
+    cancel: &AtomicBool,
+    worker: Option<&mut Worker>,
+    server_pdf: Option<&mut super::server_pdf::Reader>,
+) -> AppResult<(String, Encoding, Option<String>)> {
     let rel = relative(path)?;
     let ext = readable_extension(&rel)?;
     let target = project.root.join(&rel);
@@ -316,13 +328,13 @@ fn read_cancel(
             return Err("Office 檔案上限為 50 MB。".into());
         }
         let snapshot = office::process(&target, None, None, None, cancel)?;
-        return Ok((snapshot.serialize()?, Encoding::Utf8(true)));
+        return Ok((snapshot.serialize()?, Encoding::Utf8(true), None));
     }
     // 匯入文字是使用者本次明確提供的快照；不宣稱即時同步原檔。
     let key = rel.to_string_lossy().replace('\\', "/");
     if let Some(text) = project.imports.get(&key) {
         text::validate(text)?;
-        return Ok((text.clone(), Encoding::Utf8(true)));
+        return Ok((text.clone(), Encoding::Utf8(true), None));
     }
     if ext == "pdf" {
         if let Some(reader) = server_pdf {
@@ -332,7 +344,7 @@ fn read_cancel(
                 .ok_or("PDF 檔名無效。")?;
             return reader
                 .read(&mut file, name, cancel)
-                .map(|text| (text, Encoding::Utf8(true)));
+                .map(|text| (text, Encoding::Utf8(true), None));
         }
     }
     if ext == "pdf" || ext == "msg" {
@@ -363,7 +375,7 @@ fn read_cancel(
                 Worker::start(&exe, cancel)?.extract_pdf(&bytes, cancel)?
             }
         };
-        return Ok((content, Encoding::Utf8(true)));
+        return Ok((content, Encoding::Utf8(true), None));
     }
     if !plain_text_candidate(&rel) {
         return Err("此檔案需使用對應的 CAD 或圖片工具，不能當純文字開啟。".into());
@@ -381,7 +393,11 @@ fn read_cancel(
     file.take((limit + 1) as u64)
         .read_to_end(&mut data)
         .map_err(|e| e.to_string())?;
-    text::decode_with_limit(&data, limit).map_err(|error| format!(
+    text::decode_with_limit(&data, limit)
+        .map(|(content, encoding)| {
+            use sha2::{Digest, Sha256};
+            (content, encoding, Some(format!("sha256:{:x}", Sha256::digest(&data))))
+        }).map_err(|error| format!(
         "無法以純文字讀取「{path}」（副檔名：{}）：{error}。目前沒有可用的其他讀取器；可能是二進位、密文或無法確認編碼。未修改原檔。",
         if ext.is_empty() { "無" } else { &ext }))
 }
@@ -1531,13 +1547,24 @@ impl Broker {
         cancel: &AtomicBool,
         worker: &mut Worker,
     ) -> AppResult<String> {
+        self.content_snapshot(path, cancel, worker)
+            .map(|(content, _)| content)
+    }
+
+    /// 工作副本／匯入快照沒有可交給Python的磁碟版本；不能冒充原始來源。
+    pub(super) fn content_snapshot(
+        &mut self,
+        path: &str,
+        cancel: &AtomicBool,
+        worker: &mut Worker,
+    ) -> AppResult<(String, Option<String>)> {
         let canonical = self.code_copy_id(path).unwrap_or_else(|| path.into());
         let path = canonical.as_str();
         if let Some(copy) = self.copies.get(path) {
             if extension(Path::new(&copy.name))? != "md" {
                 self.txt_context = true;
             }
-            return Ok(copy.text.clone());
+            return Ok((copy.text.clone(), None));
         }
         if readable_extension(Path::new(path))? != "md" {
             self.txt_context = true;
@@ -1550,15 +1577,15 @@ impl Broker {
             .filter(|_| cache_document)
             .map(|m| m.source_stamp(path))
             .transpose()?;
-        let content = loop {
-            let result = read_cancel(
+        let (content, source_revision) = loop {
+            let result = read_snapshot(
                 &self.project,
                 path,
                 cancel,
                 Some(worker),
                 self.server_pdf.as_mut(),
             )
-            .map(|(text, _)| text);
+            .map(|(text, _, revision)| (text, revision));
             match result {
                 Err(error) if error.contains(super::interaction::BUSY) => {
                     if !self.wait_for_file(&error, cancel)? {
@@ -1571,7 +1598,7 @@ impl Broker {
         if let (Some(memory), Some(stamp)) = (self.memory.as_mut(), stamp) {
             memory.register_document(path, &content, &stamp)?;
         }
-        Ok(content)
+        Ok((content, source_revision))
     }
     /// 選欄讀取不呼叫 content()，避免先建立受 2000 格限制的完整編輯快照。
     /// 來源及上層目錄在整次 COM 操作期間禁止替換；每批使用原檔 bytes 的版本指紋。

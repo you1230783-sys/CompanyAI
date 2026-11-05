@@ -238,10 +238,13 @@ window.runSelfTest = async (structuredFixture) => {
     check(LMUI.atBottom(), "follow new reply");
     fixture.config.projects_collapsed = true; fixture.config.recent_collapsed = false;
     LMUI.receive(fixture);
-    check($("project-list").hidden && !$("history-list").hidden, "independent project collapse");
+    check(!$("projects-dialog").open && !$("history-list").hidden, "project manager stays closed until requested");
+    $("collapse-projects").click();
+    check($("projects-dialog").open && $("projects-dialog").contains($("project-list")), "project manager opens in modal");
+    $("projects-dialog").close();
     fixture.config.projects_collapsed = false; fixture.config.recent_collapsed = true;
     LMUI.receive(fixture);
-    check(!$("project-list").hidden && $("history-list").hidden, "independent recent collapse");
+    check(!$("projects-dialog").open && $("history-list").hidden, "recent collapse is independent of project manager");
     fixture.config.recent_collapsed = false;
     const narration = document.createElement("div");
     renderProjectNarration(narration, ["AI 說明：" + sample]);
@@ -1231,8 +1234,8 @@ window.runSelfTest = async (structuredFixture) => {
     check(!$("project-list").textContent.includes("專案標題") && $("project-list").textContent.includes("測試專案"), "project area contains management entries without duplicate conversations");
     check($("history-list").textContent.includes("專案標題") && $("history-list").textContent.includes("專案：測試專案"), "project conversation is included and labelled in recent list");
     check($("sidebar").contains($("show-vnc")) && !$("advanced-dialog").contains($("show-vnc")), "VNC has a direct sidebar entry");
-    check(!!($("show-vnc").compareDocumentPosition($("project-list")) & Node.DOCUMENT_POSITION_FOLLOWING), "projects follow advanced functions and VNC entries");
-    check(!!($("project-list").compareDocumentPosition($("history-list")) & Node.DOCUMENT_POSITION_FOLLOWING), "projects precede recent history");
+    check(!!($("show-vnc").compareDocumentPosition($("collapse-projects")) & Node.DOCUMENT_POSITION_FOLLOWING), "project button follows VNC entry");
+    check(!!($("collapse-projects").compareDocumentPosition($("history-list")) & Node.DOCUMENT_POSITION_FOLLOWING), "project button precedes recent history");
     const savedActive = fixture.active_id, savedMessages = fixture.messages, savedNotifications = fixture.notifications;
     const savedSend = send, retryCommands = [];
     try {

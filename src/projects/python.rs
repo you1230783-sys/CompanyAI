@@ -13,11 +13,13 @@ use std::{
 };
 
 pub(super) mod encoding;
+mod png;
+pub(super) use png::validate as validate_png;
 
 pub const MAX_INPUT: usize = 32 * 1024 * 1024;
 pub const MAX_OUTPUT: usize = 8 * 1024 * 1024;
 
-/// read_file 回傳原始 SHA-256；Python／LOG 保留既有前綴表示。
+/// read_file 的 source_revision 回傳原始 SHA-256；revision 仍是解碼文字版本。
 /// 三種表示必須指向完全相同的原始位元組雜湊，不接受其他命名空間或略過版本核對。
 fn source_revision_matches(requested: &str, actual: &str) -> bool {
     requested == actual
@@ -32,7 +34,7 @@ pub struct Input {
     pub name: String,
     pub path: String,
     pub kind: String,
-    /// 同一原始檔的read_file裸SHA或既有sha256:/log:表示；仍逐位核對目前檔案內容。
+    /// 使用 read_file.source_revision 或 Python/LOG 的原始位元組版本；逐位核對來源。
     pub revision: Option<String>,
     /// 文字來源的明確編碼；缺省沿用依副檔名決定的自動模式。
     pub encoding: Option<String>,
@@ -329,7 +331,7 @@ pub(super) fn snapshot(
                 .as_ref()
                 .is_some_and(|r| !source_revision_matches(r, &revision))
             {
-                return Err("Python 來源版本已變更，請重新檢查。".into());
+                return Err(format!("Python 來源版本已變更或版本種類不符（來源：{}）。read_file的revision是解碼後文字版本；run_python.inputs.revision請使用同次閱讀的source_revision，或先前成功run_python的sources.revision。請核對來源後重試，不以null略過已指定的版本。", input.path));
             }
             if generated_xlsx {
                 json!({"name":input.name,"path":input.path,"kind":"xlsx","revision":revision,"hex":hex(&bytes)})

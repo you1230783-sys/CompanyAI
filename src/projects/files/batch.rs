@@ -635,6 +635,25 @@ mod tests {
             .is_err());
         }
     }
+
+    #[test]
+    fn batch_python_preserves_literal_backslashes_and_code_newlines() {
+        let code =
+            "lines=['第一行','第二行']\nprint('\\n'.join(lines))\nresult={'path':r'C:\\data'}";
+        let task = Task {
+            task_id: "python-escapes".into(),
+            tool: "run_python".into(),
+            arguments_json:
+                json!({"purpose":"核對巢狀JSON不改寫Python字串", "code":code,"inputs":[]})
+                    .to_string(),
+        };
+        let envelope = serde_json::to_string(&task).unwrap();
+        let decoded: Task = serde_json::from_str(&envelope).unwrap();
+        let Tool::RunPython { code: restored, .. } = decoded.request().unwrap() else {
+            panic!("wrong tool")
+        };
+        assert_eq!(restored, code);
+    }
     #[test]
     fn argument_errors_identify_the_child_and_explain_where_progress_belongs() {
         let error = Task {

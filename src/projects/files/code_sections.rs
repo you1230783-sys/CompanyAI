@@ -319,7 +319,7 @@ impl Broker {
         if !plain_text_candidate(Path::new(&name)) {
             return Err("區段工具讀取一般文字；文件、CAD 與圖片請使用對應的專用工具。".into());
         }
-        let content = self.content(&canonical, cancel, worker)?;
+        let (content, source_revision) = self.content_snapshot(&canonical, cancel, worker)?;
         let (first, actual_last) = read_bounds(&content, first, last)?;
         let (start, end) = section(&content, first, actual_last)?;
         let value = &content[start..end];
@@ -332,6 +332,7 @@ impl Broker {
             "offset":content[..start].chars().count(),"next_offset":content[..end].chars().count(),"total":content.chars().count(),
             "guidance":"副本修改優先傳copy_id、section_id、replacement。若用舊介面，範圍須等於實際first_line/last_line，不能拿大段hash改小段。原件只供對照；修改與測試讀copy_id。"});
         result["read_only"] = json!(copy_id.is_none());
+        result["source_revision"] = json!(source_revision);
         self.reading.project_saved_read(&mut result);
         if result["reused_reading_note"] == true {
             return Ok(result);

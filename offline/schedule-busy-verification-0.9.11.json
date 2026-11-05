@@ -1,0 +1,12 @@
+{
+  "result": "PASS",
+  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\schedule-busy-9c87466701c84c24b97daf9bd0a18110",
+  "checks": [
+    "actual Excel workbook occupied",
+    "no tool dispatch or output",
+    "original workbook untouched",
+    "recurring schedule enabled with next occurrence",
+    "skip audit retained"
+  ],
+  "version": "0.9.11"
+}

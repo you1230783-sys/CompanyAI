@@ -594,6 +594,7 @@ impl App {
         self.active_id = Some(chat.clone());
         self.messages = vec![question];
         self.projects.running = Some(Running {
+            received_reply: false,
             cad_read_progress: None,
             pending_cad: None,
             pending_file: None,

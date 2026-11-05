@@ -51,6 +51,28 @@ fn claims_are_unique_and_recurrence_advances_only_after_confirmed_completion() {
     let (_, next) = store.claim(&id, 87400).unwrap();
     assert_ne!(execution, next);
 }
+
+#[test]
+fn preflight_skip_advances_recurring_schedule_but_never_replays_uncertain_work() {
+    for (repeat, disabled, step) in [(1, false, 0), (0, false, 0), (1, true, 0), (1, false, 1)] {
+        let mut store = Store::default();
+        let mut grant = grant();
+        grant.repeat_days = repeat;
+        let id = store.add(grant, 1).unwrap();
+        let (entry, execution) = store.claim(&id, 1000).unwrap();
+        let mut journal = Journal::new(execution.clone(), &entry.grant).unwrap();
+        journal.phase = Phase::Skipped;
+        journal.next = step;
+        store.entries[0].enabled = !disabled;
+        store.reconcile(&execution, &journal, 1001).unwrap();
+        assert_eq!(
+            store.entries[0].enabled,
+            repeat == 1 && !disabled && step == 0
+        );
+        assert_eq!(store.entries[0].execution.is_none(), step == 0);
+        assert!(journal.can_resume(&entry.grant).is_err());
+    }
+}
 #[test]
 fn missed_runs_are_skipped_and_single_shots_do_not_reappear() {
     let mut store = Store::default();
@@ -58,11 +80,17 @@ fn missed_runs_are_skipped_and_single_shots_do_not_reappear() {
     let mut single = grant();
     single.repeat_days = 0;
     store.add(single, 1).unwrap();
-    assert!(!store.skip_missed(1300));
-    assert!(store.skip_missed(1301));
+    assert!(!store.skip_missed(1300).unwrap());
+    assert!(store.skip_missed(1301).unwrap());
     assert_eq!(store.entries[0].next_due, Some(87400));
     assert!(!store.entries[1].enabled);
-    assert!(store.audit.is_empty());
+    assert_eq!(store.audit.len(), 2);
+    assert!(store
+        .audit
+        .iter()
+        .all(|a| a.next_step == 0 && a.outputs.is_empty()));
+    assert!(!store.skip_missed(1302).unwrap());
+    assert_eq!(store.audit.len(), 2);
 }
 #[test]
 fn unknown_and_blocked_steps_cannot_resume_or_start_next_recurrence() {

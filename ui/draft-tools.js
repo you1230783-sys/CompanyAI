@@ -8,6 +8,7 @@ window.DraftTools = (() => {
   modal.id = "templates-dialog";
   modal.className = "draft-tool-dialog";
   modal.innerHTML = `<div class="tarot-heading"><h2>指令範本</h2><button data-close type="button">關閉</button></div>
+    <p>把常用提問保存成可重複填寫的草稿。例如「請將以下內容翻譯為 {{語言}}，保留 {{專有名詞}}：{{原文}}」。使用時填入英文、產品名稱與原文，預覽後加入輸入框，再自行按送出。</p>
     <p>範本只加入草稿，不自動送出、不授予工具權限。匯入內容請先檢查；分享前請移除私人資料。</p>
     <div class="draft-template-layout"><section><label>分類篩選<select data-filter><option value="">全部分類</option></select></label>
     <label><input type="checkbox" data-favorites> 只看收藏</label><div data-list class="draft-template-list"></div>

@@ -11,14 +11,24 @@ impl Broker {
         match tool {
             Tool::DocumentTask { command } => self.document_task(command, worker, cancel),
             Tool::OfficeAction { operation, .. }
-                if matches!(operation.as_ref(), office::Action::TranslateRuns { .. }) =>
+                if matches!(
+                    operation.as_ref(),
+                    office::Action::TranslateRuns { .. }
+                        | office::Action::WordRichParagraph { .. }
+                        | office::Action::WordRichTable { .. }
+                ) =>
             {
-                Err("翻譯區段只能由document_task的原生完成流程套用。".into())
+                Err("內部翻譯／匯出格式只能由原生文件流程套用。".into())
             }
             Tool::OfficeBatch { operations, .. }
-                if operations
-                    .iter()
-                    .any(|a| matches!(a, office::Action::TranslateRuns { .. })) =>
+                if operations.iter().any(|a| {
+                    matches!(
+                        a,
+                        office::Action::TranslateRuns { .. }
+                            | office::Action::WordRichParagraph { .. }
+                            | office::Action::WordRichTable { .. }
+                    )
+                }) =>
             {
                 Err("批次操作不接受內部翻譯區段。".into())
             }
@@ -1070,7 +1080,7 @@ impl Broker {
                     result["guidance"] = json!("這是 LOG 首頁。載入 log-analysis，使用 read_log 續讀或 search_logs 搜尋；不可使用全文摘要工具。");
                     return Ok(result);
                 }
-                let content = self.content(path, cancel, worker)?;
+                let (content, source_revision) = self.content_snapshot(path, cancel, worker)?;
                 let total = content.chars().count();
                 if *offset > total {
                     return Err("讀取位置超過全文。".into());
@@ -1086,7 +1096,7 @@ impl Broker {
                     } else {
                         Value::Null
                     };
-                let mut result = json!({"path":path,"working_copy":self.copies.contains_key(path),"text":text,"offset":offset,"next_offset":next,"total":total,"truncated":next<total,"revision":text::revision(&content),"document":document,"imported_snapshot":self.project.imports.contains_key(&path.replace('\\', "/"))});
+                let mut result = json!({"path":path,"working_copy":self.copies.contains_key(path),"text":text,"offset":offset,"next_offset":next,"total":total,"truncated":next<total,"revision":text::revision(&content),"source_revision":source_revision,"document":document,"imported_snapshot":self.project.imports.contains_key(&path.replace('\\', "/"))});
                 self.reading.project_saved_read(&mut result);
                 Ok(result)
             }

@@ -405,6 +405,9 @@
     ChartUI.render($("project-charts"), showActivity ? projects.charts : []);
     ChartUI.cleanup();
     AnalysisUI.render($("project-analysis"),showActivity ? projects.analysis : null);
+    const details = $("project-details");
+    if (details.dataset.conversation !== state.active_id) { details.open=false; details.dataset.conversation=state.active_id || ""; }
+    details.hidden = !showActivity;
     const key = showActivity ? projects.running_id : "";
     const events = showActivity ? (projects.activity || [projects.status]) : [];
     const nextActivity = JSON.stringify([key, events]);
@@ -448,15 +451,13 @@
       title.setAttribute("aria-label",title.title);
       title.append(node("strong","",project.name));
       title.onclick=()=>filterHistory(`project:${project.id}`);
-      const newChat = button("＋ 新對話", () => {
-        showView("chat"); command({action:"new_chat", id:project.id});
-      }, disabled);
-      newChat.title = "新增專案對話";
       const settings = node("button", "icon-button"); settings.type = "button";
       settings.innerHTML = icon("settings"); settings.title = "專案設定";
       settings.setAttribute("aria-label", `${project.name}：專案設定`);
       settings.disabled = disabled; settings.onclick = () => openSettings(project);
-      heading.append(title, newChat, settings); card.append(heading);
+      heading.append(title, settings); card.append(heading);
+      const folder = button(project.root, () => command({action:"open_folder",id:project.id}), false);
+      folder.classList.add("project-folder-link"); folder.title="開啟目的地資料夾"; card.append(folder);
       // 對話集中在「最近對話」；專案區只保留篩選、新增及設定入口。
       list.append(card);
     }

@@ -1,0 +1,78 @@
+{
+  "version": "0.9.11",
+  "scope": "source UI browser/DOM tests; native validation separate",
+  "result": "PASS_SOURCE_UI",
+  "groups": [
+    {
+      "log": ".build/Test-Conversations-0.9.11-final.log",
+      "sha256": "95786ab44344cd288684d1d903b6a5953a1b3aa5c5accbb7a4fcbdcd82a181da",
+      "checks": 32
+    },
+    {
+      "log": ".build/Test-DocumentWork-0.9.11-final.log",
+      "sha256": "95ccaf09b0b5fb01e56ebb93f908a97bd05aabfb0ea40e4fdf27b7a1d522952f",
+      "checks": 24
+    },
+    {
+      "log": ".build/Test-Schedules-0.9.11.log",
+      "sha256": "103a704f1ce23eeb22e34de108f13147c8fb591026630f63c7b0de24846a8c1e",
+      "checks": 13
+    },
+    {
+      "log": ".build/Test-PetTarot-0.9.11.log",
+      "sha256": "773f8ee72638f33456261a2cb32b9073ae4d04d6112995cf60a22ccc8395776a",
+      "checks": 49
+    },
+    {
+      "log": ".build/Test-DraftTools-0.9.11.log",
+      "sha256": "aaf37bb3ce5406855e8ee3b4a307c37af12076d980d36c79fab871bb50b5db87",
+      "checks": 18
+    },
+    {
+      "log": ".build/Test-Workbench-0.9.11-final.log",
+      "sha256": "ce499959b8a098792f4baa831445d46dcf5aec879e794909d6288bb31f2c9603",
+      "checks": 23
+    },
+    {
+      "log": ".build/Test-BuildFeatures-0.9.11.log",
+      "sha256": "dd858ffcff15118f684e6756d48f235494387de8a42a2d72b7b912d918d11597",
+      "checks": 155
+    },
+    {
+      "log": ".build/Test-Preferences-0.9.11.log",
+      "sha256": "eab8057d593b361152bbb0d76949896115f135fe5f8a4a967da57baa65add5a9",
+      "checks": 22
+    },
+    {
+      "log": ".build/Test-ReliabilityUI-0.9.11.log",
+      "sha256": "d9f2f124e4cfccc87c094d9dba77451fe9566cf2710af546697f144aa9bbb2c2",
+      "checks": 18
+    },
+    {
+      "log": ".build/Test-ReplyTables-0.9.11.log",
+      "sha256": "9e0307a59e6ac48a000e6ee399cabc621496f6945211a61ee7c25e1874645e0e"
+    },
+    {
+      "log": ".build/Test-UiAuth-0.9.11-r2.log",
+      "sha256": "af2115281d15f97ccc8c8e5af030fe14d5b051aaf6fc48af265a962be9c84901"
+    },
+    {
+      "log": ".build/Test-Review-0.9.11-r2.log",
+      "sha256": "d48e1909bd3d90b9a7e1aec08f116474a47f1e8a27ca32936161fe5371245547",
+      "checks": 31
+    },
+    {
+      "log": ".build/settings-0.9.11-r2.log",
+      "sha256": "b610247a5939f4b2cbc2bc4baff3d62a74b5ebc2f8dd00983f7d7c59529f2985",
+      "checks": 12
+    },
+    {
+      "log": ".build/Test-ChartLayout-0.9.11.log",
+      "sha256": "d0e0621adfce0a8f727c03cc0f0bf3ba523cb14b911d9b9875680144d9861ed3",
+      "checks": 8
+    }
+  ],
+  "limitations": [
+    "Synthetic fixtures only; company service and manual desktop interaction not covered"
+  ]
+}

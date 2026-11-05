@@ -279,6 +279,7 @@ struct PendingFile {
     reply: mpsc::Sender<bool>,
 }
 pub(super) struct Running {
+    received_reply: bool,
     cad_read_progress: Option<serde_json::Value>,
     pending_cad: Option<PendingCad>,
     pending_file: Option<PendingFile>,
@@ -315,6 +316,10 @@ impl ProjectRuntime {
     }
     pub fn is_running(&self) -> bool {
         self.running.is_some()
+    }
+    #[cfg(feature = "pet")]
+    pub(super) fn received_reply(&self) -> bool {
+        self.running.as_ref().is_some_and(|run| run.received_reply)
     }
     /// 發生panic後撤銷待確認操作；保留磁碟上的journal，不自動恢復寫入。
     pub fn quarantine(&mut self) {
@@ -1473,6 +1478,7 @@ impl App {
         self.projects.attention_seen.clear();
         self.projects.attention_conversation = None;
         self.projects.running = Some(Running {
+            received_reply: false,
             cad_read_progress: None,
             pending_cad: None,
             pending_file: None,
@@ -1765,6 +1771,7 @@ impl App {
             }
             ProjectEvent::Progress(id, text) => {
                 if let Some(run) = self.projects.running.as_mut().filter(|r| r.id == id) {
+                    run.received_reply |= text.is_model_reply();
                     if !run.activity.last().is_some_and(|last| **last == *text) {
                         run.activity.push(text.clone());
                     }

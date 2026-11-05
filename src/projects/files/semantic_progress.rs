@@ -19,6 +19,7 @@ pub(super) fn calculation_identity(sources: &[Value], response: &Value) -> Optio
         outputs.push(match output["kind"].as_str()? {
             "table" => json!(["table", output["columns"], output["rows"]]),
             "xlsx" => json!(["xlsx", output["content_sha256"].as_str()?]),
+            "png" => json!(["png", output["content_sha256"].as_str()?]),
             _ => return None,
         });
     }

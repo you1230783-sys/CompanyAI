@@ -30,6 +30,28 @@ struct Profile {
     name: Vec<u16>,
     sid: PSID,
 }
+impl Profile {
+    /// 系統建立並綁定此AppContainer SID的暫存區；不授權使用者TEMP或專案路徑。
+    fn folder(&self) -> AppResult<std::path::PathBuf> {
+        let mut sid_text = ptr::null_mut();
+        if unsafe { Authorization::ConvertSidToStringSidW(self.sid, &mut sid_text) } == 0 {
+            return Err(error("無法取得隔離身分"));
+        }
+        let mut folder = ptr::null_mut();
+        let status = unsafe { GetAppContainerFolderPath(sid_text, &mut folder) };
+        unsafe {
+            LocalFree(sid_text.cast());
+        }
+        if status < 0 || folder.is_null() {
+            return Err("無法取得隔離暫存目錄。".into());
+        }
+        let path = unsafe { windows::core::PCWSTR(folder).to_string() };
+        unsafe {
+            windows::Win32::System::Com::CoTaskMemFree(Some(folder.cast()));
+        }
+        Ok(std::path::PathBuf::from(path.map_err(|e| e.to_string())?))
+    }
+}
 impl Drop for Profile {
     fn drop(&mut self) {
         unsafe {
@@ -284,8 +306,6 @@ impl Worker {
             "USERPROFILE",
             "LOCALAPPDATA",
             "APPDATA",
-            "TEMP",
-            "TMP",
             "ProgramData",
             "ALLUSERSPROFILE",
             "ProgramFiles",
@@ -297,6 +317,13 @@ impl Worker {
                 entries.push(format!("{key}={}", value.to_string_lossy()));
             }
         }
+        // 科學繪圖的字型快取只寫本次隔離目錄；保留無網路與原件唯讀邊界。
+        let private_temp = profile.folder()?;
+        for key in ["TEMP", "TMP", "MPLCONFIGDIR"] {
+            entries.push(format!("{key}={}", private_temp.display()));
+        }
+        entries.push("MPLBACKEND=Agg".into());
+        entries.push("OPENBLAS_NUM_THREADS=1".into());
         entries.sort_by_key(|s| s.to_ascii_uppercase());
         let mut env: Vec<u16> = format!("{}\0\0", entries.join("\0"))
             .encode_utf16()

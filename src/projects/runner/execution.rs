@@ -712,6 +712,11 @@ pub(super) fn run_for(
                 }
             };
             record["last_model_reply"] = json!(reply);
+            if !reply.is_empty() {
+                let event = Activity::model_reply();
+                activity.push(event.clone());
+                progress(event);
+            }
             if let Some(entry) = record["requests"].as_array_mut().and_then(|a| a.last_mut()) {
                 if entry.get("response").is_none() {
                     entry["response"] = json!(diagnostic_excerpt(

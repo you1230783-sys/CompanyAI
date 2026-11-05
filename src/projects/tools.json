@@ -3566,7 +3566,7 @@
       "type": "function",
       "function": {
         "name": "run_python",
-        "description": "本機隔離 Python 分析，內附 pandas/NumPy/openpyxl。一般或混合來源最多8份；CSV/dataset/文字，以及_AI_Output生成XLSX。LOG無BOM先Big5再UTF-8，metadata提供編碼與歧義提示。原始Excel先COM匯出。texts/tables以inputs.name索引，不是path；每項必填name/path/kind。emit_table/emit_excel成果自動保存。 程式碼CPP/H/PY/JS等可用kind=text，內容只放texts[name]作靜態搜尋/統計，不執行來源；全程式碼最多32檔，其他或混合來源最多8檔。單檔32MiB、合計序列化60MiB。",
+        "description": "本機隔離 Python 分析，內附 pandas/NumPy/openpyxl/SciPy/Matplotlib。一般或混合來源最多8份；CSV/dataset/文字，以及_AI_Output生成XLSX。LOG無BOM先Big5再UTF-8，metadata提供編碼與歧義提示。原始Excel先COM匯出。texts/tables以inputs.name索引，不是path；每項必填name/path/kind。emit_table(檔名.csv,df)／emit_excel(檔名.xlsx,sheets)／emit_figure(檔名.png,fig,dpi=150)成果自動保存；缺副檔名自動補上。plt已提供，PNG最多4096×4096及8MiB。 程式碼CPP/H/PY/JS等可用kind=text，內容只放texts[name]作靜態搜尋/統計，不執行來源；全程式碼最多32檔，其他或混合來源最多8檔。單檔32MiB、合計序列化60MiB。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -3602,7 +3602,8 @@
                     ]
                   },
                   "revision": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "原檔使用read_file.source_revision或成功run_python的sources.revision；read_file.revision是文字版本，不能混用。資料集沿用inspect_dataset版本。"
                   },
                   "encoding": {
                     "type": "string",

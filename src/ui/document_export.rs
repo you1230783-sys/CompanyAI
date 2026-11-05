@@ -15,6 +15,9 @@ pub(super) enum ExportCommand {
         name: String,
     },
     Cancel,
+    OpenFolder {
+        id: String,
+    },
 }
 struct Pending {
     id: String,
@@ -26,10 +29,19 @@ struct Pending {
     pdf: bool,
     plan: export::Plan,
 }
+struct Completed {
+    id: String,
+    generation: u64,
+    project: projects::Project,
+    identity: [u32; 3],
+    path: String,
+}
 #[derive(Default)]
 pub(super) struct Runtime {
     pending: Option<Pending>,
     running: Option<(String, Arc<AtomicBool>)>,
+    destination: Option<Completed>,
+    completed: Option<Completed>,
 }
 impl Runtime {
     pub(super) fn cancel(&mut self) {
@@ -118,6 +130,21 @@ impl App {
     pub(super) fn export_command(&mut self, command: ExportCommand) -> AppResult<()> {
         let result = (|| -> AppResult<()> {
             match command {
+                ExportCommand::OpenFolder { id } => {
+                    let result = self
+                        .document_export
+                        .completed
+                        .as_ref()
+                        .filter(|result| result.id == id && result.generation == self.generation)
+                        .ok_or("匯出資料夾入口已過期，請重新匯出或從成果中心開啟。")?;
+                    if !self.logged_in()
+                        || projects::files::directory_identity(&result.project.root)?
+                            != result.identity
+                    {
+                        return Err("帳號或匯出根目錄已變更，未開啟資料夾。".into());
+                    }
+                    projects::files::reveal(&result.project, &result.path)
+                }
                 ExportCommand::Cancel => {
                     self.document_export.cancel();
                     Ok(())
@@ -184,6 +211,13 @@ impl App {
                     let pending = self.document_export.pending.take().ok_or("預覽已取消。")?;
                     let cancel = Arc::new(AtomicBool::new(false));
                     self.document_export.running = Some((id.clone(), cancel.clone()));
+                    self.document_export.destination = Some(Completed {
+                        id: id.clone(),
+                        generation: self.generation,
+                        project: pending.project.clone(),
+                        identity: pending.identity,
+                        path: String::new(),
+                    });
                     self.busy = "export";
                     let tx = self.tx.clone();
                     let generation = self.generation;
@@ -226,14 +260,21 @@ impl App {
             return Ok(());
         }
         self.document_export.running = None;
+        let destination = self.document_export.destination.take();
         if self.busy == "export" {
             self.busy = "none";
         }
         if generation == self.generation && self.logged_in() {
             match result {
-                Ok(value) => self
-                    .view
-                    .post(&json!({"type":"document_export_done","result":value}))?,
+                Ok(value) => {
+                    if let Some(mut destination) = destination {
+                        destination.path =
+                            value["path"].as_str().ok_or("匯出缺少成果路徑。")?.into();
+                        self.document_export.completed = Some(destination);
+                    }
+                    self.view
+                        .post(&json!({"type":"document_export_done","id":id,"result":value}))?;
+                }
                 Err(error) => self
                     .view
                     .post(&json!({"type":"document_export_error","message":error}))?,

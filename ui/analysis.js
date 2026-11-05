@@ -26,9 +26,9 @@ window.AnalysisUI = (() => {
     const signature = JSON.stringify([state,finished]);
     if (container.dataset.signature === signature) return;
     const previous = container.querySelector(".analysis-disclosure");
-    // 執行中預設展開；第一次交付答案時收起，之後重繪保留使用者的選擇。
+    // 執行中與交付後皆預設收起，之後重繪保留使用者的選擇。
     const open = previous && container.dataset.finished === String(finished)
-      ? previous.open : !finished;
+      ? previous.open : false;
     const opened = new Set([...container.querySelectorAll("details[open][data-key]")].map(e=>e.dataset.key));
     const scroll = container.scrollTop;
     container.dataset.signature = signature;

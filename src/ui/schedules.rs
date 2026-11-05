@@ -43,6 +43,8 @@ pub(super) struct Runtime {
     running: Option<Running>,
     next_check: Instant,
     recovered: bool,
+    pub(super) notice: bool,
+    last_error_notice: Option<String>,
 }
 impl Runtime {
     pub(super) fn load(root: &Path) -> Self {
@@ -52,6 +54,8 @@ impl Runtime {
             running: None,
             next_check: Instant::now(),
             recovered: false,
+            notice: false,
+            last_error_notice: None,
         }
     }
     pub(super) fn active(&self) -> bool {
@@ -194,6 +198,9 @@ impl App {
                     }
                     next.save(&self.root)?;
                     self.schedules.store = Ok(next);
+                    self.schedule_notice(
+                        "流程排程已依您的操作停用；可開啟排程清單查看狀態與審計。",
+                    );
                 }
                 ScheduleCommand::Resume { id } => {
                     if !self.schedule_idle() {
@@ -282,8 +289,17 @@ impl App {
         let result = self.advance_schedules();
         if let Err(error) = result {
             self.schedules.next_check = Instant::now() + Duration::from_secs(30);
+            // 保存／啟動失敗也要通知；同一持續錯誤不每30秒重複彈出。
+            if self.schedules.last_error_notice.as_deref() != Some(&error) {
+                self.schedules.last_error_notice = Some(error.clone());
+                self.schedule_notice(
+                    "流程排程未能完成，請開啟排程狀態與審計核對；未自動重播未確認的操作。",
+                );
+            }
             self.fail(error);
             self.publish();
+        } else {
+            self.schedules.last_error_notice = None;
         }
     }
     fn advance_schedules(&mut self) -> AppResult<()> {
@@ -312,7 +328,7 @@ impl App {
             self.schedules.running = None;
             self.status = format!("流程排程：{}", journal.phase.label());
             self.publish();
-            self.desktop_notice(&self.status.clone());
+            self.schedule_notice(&self.status.clone());
             return self.publish_schedules();
         }
         if !self.schedules.recovered || next.entries.iter().any(|entry| entry.status == "執行中")
@@ -333,10 +349,11 @@ impl App {
             self.schedules.store = Ok(next.clone());
             self.schedules.recovered = true;
         }
-        if next.skip_missed(now) {
+        if next.skip_missed(now)? {
             next.save(&self.root)?;
             self.schedules.store = Ok(next.clone());
             let _ = self.publish_schedules();
+            self.schedule_notice("有流程排程錯過時間而未執行，請查看排程狀態與審計。重複排程保留下次；審計容量已滿則停用並保留舊紀錄。");
         }
         if !self.schedule_idle() || self.schedule_available().is_err() {
             return Ok(());
@@ -362,6 +379,7 @@ impl App {
                 item.status = error;
                 next.save(&self.root)?;
                 self.schedules.store = Ok(next);
+                self.schedule_notice("流程排程因授權或來源設定改變而停用，請開啟排程清單核對。");
                 return self.publish_schedules();
             }
             let (entry, execution) = next.claim(&entry.id, now)?;
@@ -371,5 +389,24 @@ impl App {
             self.publish_schedules()?;
         }
         Ok(())
+    }
+
+    fn schedule_notice(&mut self, message: &str) {
+        if self.smoke || !self.config.notification_popups {
+            return;
+        }
+        self.desktop_notice(message);
+        self.schedules.notice = true;
+        self.work.tray_restore_only = false;
+        super::reminders::windows_notice(self.window, message);
+    }
+
+    /// 通知僅導覽到目前帳號可看的審計；舊帳號內容不放進通知點擊參數。
+    pub(super) fn open_schedule_notice(&mut self) -> bool {
+        if !std::mem::take(&mut self.schedules.notice) {
+            return false;
+        }
+        let _ = self.view.post(&json!({"type":"show_schedule_audit"}));
+        true
     }
 }

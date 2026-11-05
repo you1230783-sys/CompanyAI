@@ -1,0 +1,94 @@
+{
+  "version": "0.9.11",
+  "result": "PASS_COMBINED_SOURCE_VALIDATION",
+  "msvc": "14.29.30133",
+  "empty_cargo_cache": true,
+  "continuation_body_sha256": "435a2587c1a64253a4ed490d4a476fd97d144c8dbb0b397b5547ebba0235cac0",
+  "dependencies": [
+    "Microsoft (R) COFF/PE Dumper Version 14.29.30159.0",
+    "Copyright (C) Microsoft Corporation.  All rights reserved.",
+    "",
+    "",
+    "Dump of file Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\company-ai.exe",
+    "",
+    "File Type: EXECUTABLE IMAGE",
+    "",
+    "  Image has the following dependencies:",
+    "",
+    "    bcryptprimitives.dll",
+    "    kernel32.dll",
+    "    shell32.dll",
+    "    oleaut32.dll",
+    "    combase.dll",
+    "    ole32.dll",
+    "    user32.dll",
+    "    shlwapi.dll",
+    "    propsys.dll",
+    "    api-ms-win-core-winrt-error-l1-1-0.dll",
+    "    ntdll.dll",
+    "    advapi32.dll",
+    "    userenv.dll",
+    "    api-ms-win-core-synch-l1-2-0.dll",
+    "    mpr.dll",
+    "    bcrypt.dll",
+    "    gdi32.dll",
+    "    winhttp.dll",
+    "    crypt32.dll",
+    "    dwmapi.dll",
+    "    ADVAPI32.dll",
+    "    KERNEL32.dll",
+    "    WS2_32.dll",
+    "",
+    "  Summary",
+    "",
+    "        3000 .data",
+    "       97000 .pdata",
+    "     33E1000 .rdata",
+    "        A000 .reloc",
+    "       3D000 .rsrc",
+    "      E66000 .text",
+    "        1000 _RDATA"
+  ],
+  "installer_built": false,
+  "cad_tested": false,
+  "company_tested": false,
+  "recorded_at": "2026-11-05T16:46:33.3481216+08:00",
+  "logs": [
+    {
+      "path": ".build/validate-0.9.11-r4.log",
+      "sha256": "51a849496a4d3bbc3b8e26db90204ced437da16a391042343d3b89bec51168d3",
+      "scope": "Rust/lint/build/UI/project PASS; new Python test path assertion failed"
+    },
+    {
+      "path": ".build/continue-0.9.11.log",
+      "sha256": "b12c808243c4dd58f28e2d769e7fd123e03f902e39c61e43f52c5395676e966e",
+      "scope": "Python and Office PASS; emoji PDF text-layer completeness refused"
+    },
+    {
+      "path": ".build/document-tail-0.9.11.log",
+      "sha256": "3051e954d42c08abb08a1daffdabb84d83ba8fb7a215378ae8615dab439e770f",
+      "scope": "DOCX and selectable-text PDF PASS; subsequent Office exit grace needed"
+    },
+    {
+      "path": ".build/export-tail-0.9.11.log",
+      "sha256": "87bd2714fa40fa927bc35cc7a62fa96f282ab6ee7a72b9676e3e2e1b94cddb58",
+      "scope": "Word formatting, images, delivery and schedule PASS"
+    }
+  ],
+  "integration_exe_sha256": "0beaef156a7b950c140f9e0531fee2c7af09e6c40dd96ab5a880aa6b875cab1b",
+  "compiler_probe": "_MSC_FULL_VER=192930159 x64; SDK 10.0.19041.0; Rust 1.98.1",
+  "counts": {
+    "default_rust_non_cad": 456,
+    "cad_filtered": 60,
+    "native_agent": 28,
+    "resilience": 9,
+    "vision": 14,
+    "source_ui_groups": 14
+  },
+  "final_source_change": "After integration, received_reply method is cfg-gated on pet to eliminate dead code in the core build. Default behavior unchanged; final build/UI check separately recorded.",
+  "known_limitations": [
+    "Color emoji may be rendered as images by Word PDF export; missing text remains an explicit incomplete-export error",
+    "Company EIS/DRT method/data not tested",
+    "No installer, release, CAD, company VNC/SMB/mailbox verification in this source delivery"
+  ]
+}

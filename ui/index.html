@@ -35,10 +35,7 @@
         <button id="show-vnc" class="nav-button" title="VNC 快速連線" hidden>
           <span data-icon="monitor"></span><span class="nav-label">VNC 快速連線</span>
         </button>
-        <section class="project-section" aria-label="專案">
-          <div class="section-caption"><button id="collapse-projects" class="section-toggle nav-label" aria-controls="project-list" aria-expanded="true">▾ 專案</button><button id="new-project" class="text-button" title="新增專案"><span data-icon="plus"></span><span class="nav-label">新增專案</span></button></div>
-          <div id="project-list" class="nav-label"></div>
-        </section>
+        <button id="collapse-projects" class="nav-button" aria-haspopup="dialog"><span>▤</span><span class="nav-label">專案</span></button>
         <div class="history-section">
           <div class="section-caption">
             <button id="collapse-recent" class="section-toggle nav-label" aria-controls="history-list" aria-expanded="true">▾ 最近對話</button>
@@ -93,8 +90,7 @@
             <div id="messages"></div>
             <div id="project-charts" class="project-charts" hidden></div>
             <div id="project-narration" hidden></div>
-            <div id="project-analysis" hidden></div>
-                <details id="project-activity" class="project-activity" aria-label="專案執行歷程" hidden></details>
+            <details id="project-details" hidden><summary>詳情內容</summary><div id="project-analysis" hidden></div><details id="project-activity" class="project-activity" aria-label="專案執行歷程" hidden></details></details>
             <div
               id="live-task"
               class="live-task"
@@ -111,18 +107,8 @@
                 <div id="project-supplement-list"></div>
               </details>
               <button id="handoff-source" class="text-button" hidden></button>
-              <div class="draft-tools"><button id="show-templates" type="button">指令範本</button><button id="screenshot-start" type="button" title="Ctrl+Alt+S">截圖提問</button><button id="handoff-start" type="button">帶入專案繼續</button></div>
-              <p id="handoff-path-hint" class="muted" hidden>需要處理這個本機路徑時，可按「帶入專案繼續」；一般對話不會直接存取資料夾。</p>
               <div class="quick-actions">
-              <p id="project-capability-hint" class="muted" role="status" hidden></p>
-              <button id="project-stop" hidden>停止專案任務</button>
-              <details id="project-tools-menu" class="project-tools-menu"><summary>專案工具</summary><p id="project-tools-hint"></p>
-              <button id="weekly-start" hidden>生成週報</button>
-                <button id="project-methods" hidden>重用分析方法</button>
-                <button id="project-artifacts" hidden>成果與流程</button>
-                <button id="work-settings-open" hidden>工作偏好與條件</button>
-              <button id="project-outlook-start" hidden title="查看您選擇的 Outlook 信件，整理需要您處理、回覆或追蹤的事項。">Outlook 助理</button>
-              </details>
+              <div class="composer-shortcuts">
               <button data-action="translate">
                 <span data-icon="languages"></span>翻譯</button
               ><button data-action="summarize">
@@ -130,7 +116,8 @@
               ><button data-action="polish">
                 <span data-icon="sparkles"></span>潤飾
               </button>
-              <button data-action="explain" title="解釋論文、專有名詞或程式碼"><span data-icon="list"></span>解釋</button>
+              <button data-action="explain" title="解釋論文、專有名詞或程式碼"><span data-icon="list"></span>解釋</button><button id="screenshot-start" type="button" title="Ctrl+Alt+S">截圖提問</button></div>
+              <button id="project-tools-open" type="button" aria-haspopup="dialog">專案工具</button>
             </div>
             <div id="attachment-list" class="attachment-list"></div>
             <div id="project-queued-message" class="project-queued-message" hidden></div>
@@ -153,7 +140,7 @@
                 maxlength="16000"
                 spellcheck="false"
               ></textarea>
-              <div class="composer-bottom">
+              <div class="composer-bottom"><button id="project-stop" hidden>停止專案任務</button>
                 <button
                   id="add-attachment"
                   class="icon-button"
@@ -728,6 +715,15 @@
 </div>
       <p class="subtle">桌寵、塔羅與提醒事項可離線使用；Outlook 需先登入。</p>
     </dialog>
+<dialog id="projects-dialog" aria-labelledby="projects-title"><div class="dialog-heading"><h2 id="projects-title">專案</h2><button data-projects-close>關閉</button></div><button id="new-project">新增專案</button><div id="project-list"></div></dialog>
+<dialog id="new-conversation-dialog" aria-labelledby="new-conversation-title"><div class="dialog-heading"><h2 id="new-conversation-title">新增哪一種對話？</h2><button data-conversation-close>取消</button></div><div id="new-conversation-options"></div></dialog>
+<dialog id="project-tools-menu" class="project-tools-menu" aria-labelledby="project-tools-title"><div class="dialog-heading"><h2 id="project-tools-title">專案工具</h2><button data-tools-close>關閉</button></div><button id="show-templates" type="button">指令範本</button><button id="handoff-start" type="button">帶入專案繼續</button><p id="project-tools-hint"></p>
+              <button id="weekly-start" hidden>生成週報</button>
+                <button id="project-methods" hidden>重用分析方法</button>
+                <button id="project-artifacts" hidden>成果與流程</button>
+                <button id="work-settings-open" hidden>工作偏好與條件</button>
+              <button id="project-outlook-start" hidden title="查看您選擇的 Outlook 信件，整理需要您處理、回覆或追蹤的事項。">Outlook 助理</button>
+              <p id="project-capability-hint" hidden></p><p id="handoff-path-hint" hidden>需要處理本機路徑時，可帶入專案繼續。</p></dialog>
     <script src="vendor/markdown-it.min.js"></script>
     <script src="vendor/footnote.min.js"></script>
     <script src="vendor/task-lists.min.js"></script>
@@ -777,6 +773,7 @@
     <script src="weekly.js"></script>
     <script src="project-quick.js"></script>
     <script src="project-composer.js"></script>
+    <script src="navigation.js"></script>
     <script src="dialogs.js"></script>
     <script src="auth-gate.js"></script>
   </body>

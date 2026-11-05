@@ -53,6 +53,18 @@ const delay = milliseconds => new Promise(resolve => setTimeout(resolve, millise
         models:[{id:'quality',label:'品質'}],config:{...LMUI.getState().config,model:'quality'},
         projects:{items:[],running:false,status:'',activity:[]}};
       LMUI.receive(fixture);LMUI.showView('chat');
+      // 用實際訊息重繪核對三種資訊都在同一個預設收合區塊內。
+      fixture.messages=[{role:'assistant',content:'已完成測試',project_activity:['測試工具完成'],
+        project_analysis:{deliverables:{items:[{description:'測試交付',status:'delivered'}]}}}];
+      LMUI.receive(fixture);
+      const projectDetails=document.querySelector('#messages .message-project-details');
+      check(projectDetails && !projectDetails.open && projectDetails.querySelector('.project-activity') &&
+        projectDetails.querySelector('.delivery-card') && projectDetails.querySelector('.analysis-disclosure'),
+        '工具紀錄、交付清單與分析共同預設收在詳情內容');
+      projectDetails.open=true;
+      fixture.messages[0].content='更新測試成果';LMUI.receive(fixture);
+      check(document.querySelector('#messages .message-project-details').open,'訊息重繪保留使用者展開詳情的選擇');
+      fixture.messages=[];LMUI.receive(fixture);
       fixture.projects.items=[{id:'project',name:'專案一',root:'C:/fixture'}, {id:'project-two',name:'專案二',root:'C:/fixture2'}];
       fixture.conversations.push({id:'chat-two',title:'第二個對話',project_id:'project-two',updated_at:1});
       LMUI.receive(fixture);

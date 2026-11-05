@@ -307,7 +307,8 @@ result = {{'denied': denied}}
     assert!(changed_runtime.unwrap_err().contains("損毀或版本不符"));
     let artifacts = [python_copy];
     let completed = broker.finish(&artifacts)?;
-    assert_eq!(completed.len(), if office { 8 } else { 7 });
+    // revision回歸新增同次計算的CSV／XLSX／PNG；原有交付項目仍全部保留。
+    assert_eq!(completed.len(), if office { 11 } else { 10 });
     assert_eq!(
         std::fs::read_to_string(root.join("input.csv")).map_err(|e| e.to_string())?,
         csv
@@ -316,10 +317,11 @@ result = {{'denied': denied}}
     std::fs::write(root.join(book_path), b"modified fixture").map_err(|e| e.to_string())?;
     assert!(broker.finish(&artifacts).is_err());
     let report = json!({"result":"PASS","version":env!("CARGO_PKG_VERSION"),"actual_excel_com":office,
-        "python":"3.13.12","pandas":"2.2.3","numpy":"2.2.6","openpyxl":"3.1.5","duration_seconds":started.elapsed().as_secs_f64(),
+        "python":"3.13.12","pandas":"2.2.3","numpy":"2.2.6","openpyxl":"3.1.5","scipy":"1.17.1","matplotlib":"3.11.2","duration_seconds":started.elapsed().as_secs_f64(),
         "checks":["CSV leading zeros and literal NA","LOG event duration","Big5 LOG plus UTF-8 BOM and fallback snapshots through real Python", "groupby count/mean/sum","tracked CSV and generated XLSX round trip",
             "literal XLSX formula text","idempotent results","source/output path and revision rejection","OS file/network/child-process isolation",
             "two Python processes overlap with separate AppContainers","parallel chart and next file read; per-item errors and idempotent batch","incremental edits persist same draft before syntax check","PY working copy edit and unchanged source","AST plus compile without executing source","UTF-8 BOM and Big5 source encoding","coding declaration mismatch rejection","current revision syntax validation required before publish","PY artifact verified at finish",
+            "BOM raw source_revision bridge with changed-source rejection","SciPy NNLS against known solution","extension-free CSV/XLSX/PNG with native readback",
             "environment allowlist","active cancellation","120 second timeout","unlisted and modified runtime files rejected","original unchanged","modified output rejected at finish"]});
     std::fs::write(
         root.join("python-verification.json"),

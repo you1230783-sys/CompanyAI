@@ -200,24 +200,25 @@ window.WorkbenchUI = (() => {
     schedule.onclick=()=>{try {const parameters=readParameters();dialog.close();window.ScheduleUI.open(flow,conversation,parameters);}catch(error){status.textContent=error.message;}};
     dialog.append(status,add,schedule);dialog.showModal();
   }
-  let exportView=null,exportStatus=null,exportSave=null,exportName=null,exportId=null;
+  let exportView=null,exportStatus=null,exportSave=null,exportName=null,exportId=null,exportFolder=null;
   function exportDialog(index=null){
     if(exportView?.open)exportView.close();
     const conversation=state.active_id;exportView=modal(index===null?"匯出整段對話":"匯出這則回答");
     const format=field(exportView,"格式",select([["docx","Word"],["pdf","PDF"]],"docx"));
     exportName=field(exportView,"副本檔名",input("對話匯出.docx",180));
-    exportStatus=make("p","先預覽匯出範圍。直接使用已保存內容，不經AI重寫。標題、表格、程式碼與本機PNG支援；其他Markdown語法原字保留。來源引用文字會保留。互動圖表、遠端圖片與附件本身不自動嵌入。");
+    exportStatus=make("p","先預覽匯出範圍。直接使用已保存內容，不經AI重寫。支援標題、粗體、斜體、表格、行內程式碼與本機PNG；程式碼區塊保留換行縮排，以等寬字與底色呈現。其他語法原字保留；遠端圖片與附件本身不自動嵌入。");
+    exportFolder=make('button','開啟匯出資料夾');exportFolder.hidden=true;
     const preview=make("button","預覽匯出範圍");exportSave=make("button","確認匯出副本");exportSave.disabled=true;exportId=null;
     format.onchange=()=>{exportName.value="對話匯出."+format.value;exportId=null;exportSave.disabled=true;};
     preview.onclick=()=>{exportSave.disabled=true;exportStatus.textContent="核對內容中…";send({type:"document_export",command:{action:"preview",conversation,index,pdf:format.value==="pdf"}});};
     exportSave.onclick=()=>{if(!exportId)return;exportSave.disabled=true;preview.disabled=true;format.disabled=true;exportStatus.textContent="正在產生副本及讀回驗證…";send({type:"document_export",command:{action:"save",id:exportId,name:exportName.value}});exportId=null;};
     exportView.addEventListener("close",()=>send({type:"document_export",command:{action:"cancel"}}));
-    exportView.append(exportStatus,preview,exportSave);exportView.showModal();
+    exportView.append(exportStatus,preview,exportSave,exportFolder);exportView.showModal();
   }
   function exportReceive(message){
     if(!message.type?.startsWith("document_export_"))return false;
     if(message.type==="document_export_preview"&&exportView?.open&&message.conversation===state.active_id){exportId=message.id;exportSave.disabled=false;exportStatus.textContent=`${message.messages}則訊息、${message.blocks}個內容區塊。輸出位置：${message.folder}。同名檔案自動改名。${(message.warnings||[]).join("；")}`;}
-    if(message.type==="document_export_done"){const text=`已匯出並讀回驗證：${message.result.path}。${message.result.notice}`;if(exportStatus)exportStatus.textContent=text;toast(text);}
+    if(message.type==="document_export_done"){const text=`已匯出並讀回驗證：${message.result.path}。${message.result.notice}`;if(exportStatus)exportStatus.textContent=text;toast(text);if(exportFolder&&message.id){exportFolder.hidden=false;exportFolder.onclick=()=>send({type:'document_export',command:{action:'open_folder',id:message.id}});}}
     if(message.type==="document_export_error"){if(exportStatus)exportStatus.textContent=message.message;toast(message.message);}
     return true;
   }

@@ -568,5 +568,15 @@
     "intro": "練習離線抽牌、看牌義、同牌桌續問與AI解析。",
     "interactive": true,
     "steps": []
+  },
+  {
+    "id": "chat.templates",
+    "revision": 1,
+    "group": "一般對話",
+    "context": "chat",
+    "title": "指令範本：重複使用的提問草稿",
+    "intro": "保存常用提問、填入參數，再檢查與送出。",
+    "interactive": true,
+    "steps": []
   }
 ]

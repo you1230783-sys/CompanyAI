@@ -16,10 +16,32 @@ pub fn local_timestamp() -> String {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum Activity {
-    Timed { text: String, at: String },
+    Timed {
+        text: String,
+        at: String,
+        #[serde(default)]
+        model_reply: bool,
+    },
     Legacy(String),
 }
 impl Activity {
+    /// 明確標記已收到模型內容；排隊、讀檔及連線訊息不可切換成工作動作。
+    pub fn model_reply() -> Self {
+        Self::Timed {
+            text: "已收到AI回覆，開始處理。".into(),
+            at: local_timestamp(),
+            model_reply: true,
+        }
+    }
+    pub fn is_model_reply(&self) -> bool {
+        matches!(
+            self,
+            Self::Timed {
+                model_reply: true,
+                ..
+            }
+        )
+    }
     /// 提供純文字給既有狀態比對；时间另留在序列化事件中。
     pub fn as_str(&self) -> &str {
         self
@@ -38,6 +60,7 @@ impl From<String> for Activity {
         Self::Timed {
             text,
             at: local_timestamp(),
+            model_reply: false,
         }
     }
 }

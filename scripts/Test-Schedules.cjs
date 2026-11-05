@@ -74,6 +74,9 @@ const delay = milliseconds => new Promise(resolve => setTimeout(resolve, millise
       ScheduleUI.receive({type:'schedule_state',running:false,entries:[{id:'schedule',grant:{template:{name:'固定流程'}},status:'未知',enabled:false,next_due:2000,execution:'execution'}],audit:[{schedule:'schedule',execution:'execution',status:'執行結果未知，禁止重播',started_at:1000,next_step:1,outputs:['_AI_Output/result.md']}]});
       check(![...$('schedule-list').querySelectorAll('button')].some(b=>b.textContent.includes('續接')),'未知結果不提供續接入口');
       check($('schedule-list').textContent.includes('_AI_Output/result.md'),'審計保留成果位置');
+      ScheduleUI.receive({type:'show_schedule_audit'});
+      ScheduleUI.receive({type:'schedule_state',running:false,entries:[{id:'schedule',grant:{template:{name:'固定流程'}},status:'已略過',enabled:true,next_due:87400,execution:null}],audit:[{schedule:'schedule',execution:'skipped',status:'執行前條件不符，已略過本次',started_at:1000,next_step:0,outputs:[],detail:'Office正在使用中'}]});
+      check($('schedule-list').open && $('schedule-list').querySelector('details').open && $('schedule-list').textContent.includes('Office正在使用中'),'通知直接開啟略過原因審計並保留下次');
       return checks;
     })()`);
     for(const width of [1180,520]) {

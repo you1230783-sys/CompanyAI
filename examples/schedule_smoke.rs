@@ -72,6 +72,42 @@ fn run() -> AppResult<()> {
         repeat_days: 0,
     };
     let cancel = AtomicBool::new(false);
+    // 外層只開啟自己建立的 Excel 工作簿；確認在任何工具派送之前略過，
+    // 並透過正式 Store.reconcile 保留重複排程，不只檢查錯誤文字。
+    if args.get(3).is_some_and(|arg| arg == "--office-busy") {
+        let mut busy_grant = grant.clone();
+        busy_grant.template.steps[0].request["source"] = json!("busy.xlsx");
+        busy_grant.template.steps[0].request["name"] = json!("scheduled.xlsx");
+        busy_grant.template.id = "busy-template".into();
+        busy_grant.target.template = busy_grant.template.id.clone();
+        busy_grant.target.revision = text::revision(
+            &serde_json::to_string(&busy_grant.template).map_err(|e| e.to_string())?,
+        );
+        busy_grant.repeat_days = 1;
+        Memory::open(project.clone(), "schedule-chat")?.store_workflow(&busy_grant.template)?;
+        let mut store = company_ai::projects::schedule::Store::default();
+        let due = busy_grant.due_at;
+        let id = store.add(busy_grant, due - 60)?;
+        let (entry, execution_id) = store.claim(&id, due)?;
+        execution::run(
+            &root,
+            &exe,
+            project,
+            &entry.grant,
+            &execution_id,
+            &cancel,
+            false,
+        )?;
+        let journal = Journal::load(&root, &execution_id)?;
+        assert!(journal.phase == Phase::Skipped, "{}", journal.detail);
+        assert_eq!(journal.next, 0);
+        assert!(journal.outputs.is_empty() && !root.join("_AI_Output").exists());
+        store.reconcile(&execution_id, &journal, due + 1)?;
+        assert!(store.entries[0].enabled && store.entries[0].execution.is_none());
+        assert_eq!(store.entries[0].next_due, Some(due + 86400));
+        println!("PASS occupied Office: no dispatch/output, audited skip, recurring schedule remains enabled.");
+        return Ok(());
+    }
     execution::run(
         &root,
         &exe,

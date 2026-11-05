@@ -138,7 +138,16 @@ pub(super) unsafe extern "system" fn window_proc(
                     #[cfg(feature = "pet")]
                     crate::pet::MESSAGE => {
                         match wparam {
-                            1 => app.restore_window(),
+                            1 => {
+                                let target = app.pet.settings().open_action;
+                                app.pet_navigate(target);
+                            }
+                            6 => app.restore_window(),
+                            7 => {
+                                if let Some(target) = app.pet.take_navigation() {
+                                    app.pet_navigate(target);
+                                }
+                            }
                             2 => {
                                 PostMessageW(
                                     window,
@@ -260,6 +269,7 @@ pub(super) unsafe extern "system" fn window_proc(
                             app.restore_window();
                         }
                         if lparam as u32 == NIN_BALLOONUSERCLICK
+                            && !app.open_schedule_notice()
                             && !app.work.tray_restore_only
                             && !app.open_project_attention().unwrap_or(false)
                         {

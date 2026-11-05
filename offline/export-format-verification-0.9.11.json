@@ -1,0 +1,14 @@
+{
+  "result": "PASS",
+  "version": "0.9.11",
+  "checks": [
+    "Word reopen",
+    "bold and emoji UTF16 offsets",
+    "italic and inline monospace",
+    "fenced code indentation and blank line",
+    "code background",
+    "following paragraph formatting reset",
+    "table inline formatting"
+  ],
+  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\02dc0240f8bce9c636940910a953597f\\_AI_Output\\對話_79053bd44882eff3eba644d5d3c1a06f1436607d22a1dfe593fb7eacbaf2682c\\export.docx"
+}

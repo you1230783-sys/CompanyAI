@@ -196,6 +196,7 @@ impl App {
         // 先保存送出記錄，避免重開後每次重播。Windows是否顯示仍由通知／勿擾設定決定。
         self.reminders.store = Ok(next);
         self.work.tray_restore_only = true;
+        self.schedules.notice = false;
         #[cfg(feature = "pet")]
         let pet_available = {
             let pet = self.pet.settings();
@@ -225,7 +226,7 @@ impl App {
 }
 
 /// 沿用應用程式托盤圖示，文字只來自使用者明確設定的提醒。
-fn windows_notice(window: HWND, title: &str) -> bool {
+pub(super) fn windows_notice(window: HWND, title: &str) -> bool {
     let mut data = NOTIFYICONDATAW {
         cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
         hWnd: window,

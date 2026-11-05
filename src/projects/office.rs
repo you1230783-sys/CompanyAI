@@ -17,7 +17,7 @@ pub mod excel;
 pub mod export;
 pub mod images;
 pub mod translation;
-pub use authoring::{render, Action, Format};
+pub use authoring::{render, Action, Format, TextRun};
 #[cfg(debug_assertions)]
 mod fixtures;
 #[cfg(debug_assertions)]
@@ -26,6 +26,40 @@ pub use fixtures::create as create_test_fixtures;
 pub use fixtures::translation as create_translation_fixture;
 
 const MAX_BLOCKS: usize = 2000;
+
+/// 排程派送前只查詢既有Office實例，不建立文件、不改設定，也不關閉使用者程式。
+/// 回傳Some才代表已確認暫時占用；其他COM錯誤不能冒充安全略過。
+pub(crate) fn busy_before_dispatch() -> AppResult<Option<String>> {
+    use windows::core::Interface;
+    let _apartment = Apartment::sta().map_err(|e| e.to_string())?;
+    for (program, collection) in [
+        ("Word.Application", "Documents"),
+        ("Excel.Application", "Workbooks"),
+        ("PowerPoint.Application", "Presentations"),
+    ] {
+        let Ok(class) = (unsafe { CLSIDFromProgID(PCWSTR(wide(program).as_ptr())) }) else {
+            continue;
+        };
+        let mut active = None;
+        match unsafe { windows::Win32::System::Ole::GetActiveObject(&class, None, &mut active) } {
+            Ok(()) => {
+                let app: IDispatch = active
+                    .ok_or("Office實例查詢回傳空值。")?
+                    .cast()
+                    .map_err(|e| e.to_string())?;
+                if collection == "Presentations" || integer(&child(&app, collection)?, "Count")? > 0
+                {
+                    return Ok(Some(format!(
+                        "{program}正在使用中；尚未派送任何排程步驟，本次略過。"
+                    )));
+                }
+            }
+            Err(error) if error.code().0 == 0x800401E3u32 as i32 => (), // MK_E_UNAVAILABLE：沒有已註冊實例。
+            Err(error) => return Err(format!("無法確認Office是否占用：{error}")),
+        }
+    }
+    Ok(None)
+}
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Block {
     pub id: String,

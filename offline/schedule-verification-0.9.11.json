@@ -1,0 +1,14 @@
+{
+  "checks": [
+    "fixed template creates and saves actual copy",
+    "completed execution cannot replay",
+    "principal and root changes rejected",
+    "durably idle resume executes only next step",
+    "before-submit interruption cannot resume",
+    "successful write before checkpoint cannot replay",
+    "original source unchanged"
+  ],
+  "company_environment_validated": false,
+  "result": "PASS",
+  "version": "0.9.11"
+}

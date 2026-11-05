@@ -131,7 +131,7 @@ impl Store {
         Ok(id)
     }
     /// 到期超過五分鐘不補跑寫入。重複排程直接前進至未來一次，不逐次補跑。
-    pub fn skip_missed(&mut self, now: u64) -> bool {
+    pub fn skip_missed(&mut self, now: u64) -> AppResult<bool> {
         let mut changed = false;
         for entry in &mut self.entries {
             if entry.enabled
@@ -140,6 +140,25 @@ impl Store {
                     .next_due
                     .is_some_and(|due| now.saturating_sub(due) > GRACE_SECONDS)
             {
+                // 未派送工具也要留下可由通知查閱的紀錄；不偽裝成一次成功執行。
+                // 容量滿時保留全部舊紀錄並明確停用，不能默默刪除審計。
+                if self.audit.len() >= 100 {
+                    entry.enabled = false;
+                    entry.status = "審計已達100筆，未執行並停用；請由維護者封存".into();
+                    changed = true;
+                    continue;
+                }
+                self.audit.push(Audit {
+                    execution: jobs::new_id()?,
+                    schedule: entry.id.clone(),
+                    due_at: entry.next_due.unwrap_or(now),
+                    started_at: now,
+                    finished_at: Some(now),
+                    status: "錯過時間，已略過本次".into(),
+                    next_step: 0,
+                    outputs: vec![],
+                    detail: "超過五分鐘等待期限；可能未登入、程式忙碌或程式未開啟。本次未派送任何工具，不補跑寫入。".into(),
+                });
                 entry.next_due =
                     next_due(entry.next_due.unwrap_or(now), entry.grant.repeat_days, now);
                 entry.enabled = entry.next_due.is_some();
@@ -147,7 +166,7 @@ impl Store {
                 changed = true;
             }
         }
-        changed
+        Ok(changed)
     }
     /// 必須將回傳的新 Store 保存成功，才可啟動工作執行緒。
     pub fn claim(&mut self, id: &str, now: u64) -> AppResult<(Entry, String)> {
@@ -205,7 +224,12 @@ impl Store {
         audit.detail = journal.detail.clone();
         audit.finished_at = Some(now);
         entry.status = audit.status.clone();
-        if journal.phase == Phase::Completed {
+        // Skipped只能表示任何步驟派送前的檢查；拒絕矛盾的持久紀錄。
+        let safe_skip = journal.phase == Phase::Skipped
+            && journal.next == 0
+            && journal.outputs.is_empty()
+            && journal.broker.is_none();
+        if journal.phase == Phase::Completed || safe_skip {
             entry.execution = None;
             entry.next_due = next_due(audit.due_at, entry.grant.repeat_days, now);
             entry.enabled = entry.enabled && entry.next_due.is_some();
@@ -230,6 +254,7 @@ pub enum Phase {
     InFlight,
     Blocked,
     Completed,
+    Skipped,
 }
 impl Phase {
     pub fn label(self) -> &'static str {
@@ -239,6 +264,7 @@ impl Phase {
             Self::InFlight => "執行結果未知，禁止重播",
             Self::Blocked => "步驟失敗，禁止自動重播",
             Self::Completed => "完成",
+            Self::Skipped => "執行前條件不符，已略過本次",
         }
     }
 }

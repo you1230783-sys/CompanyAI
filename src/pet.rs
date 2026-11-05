@@ -41,6 +41,8 @@ pub struct Settings {
     pub notice_seconds: u8,
     /// 桌寵自己的邏輯像素字級；只隨Windows DPI縮放，不沿用主介面的字級或縮放比例。
     pub font_size: u8,
+    pub open_action: String,
+    pub shortcuts: Vec<String>,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -55,11 +57,20 @@ impl Default for Settings {
             bubble_opacity: 100,
             notice_seconds: 5,
             font_size: 16,
+            open_action: "main".into(),
+            shortcuts: vec!["settings".into()],
         }
     }
 }
 impl Settings {
     fn validate(&self) -> AppResult<()> {
+        validate_target(&self.open_action)?;
+        if self.shortcuts.len() > 8 {
+            return Err("桌寵右鍵捷徑最多8項。".into());
+        }
+        for target in &self.shortcuts {
+            validate_target(target)?;
+        }
         if !["cat", "dog", "custom"].contains(&self.skin.as_str())
             || !(72..=200).contains(&self.size)
             || !["round", "comic", "thought"].contains(&self.bubble_style.as_str())
@@ -77,7 +88,28 @@ impl Settings {
         Ok(())
     }
 }
+fn validate_target(value: &str) -> AppResult<()> {
+    if [
+        "main",
+        "new_chat",
+        "vnc",
+        "projects",
+        "schedules",
+        "settings",
+        "tarot",
+    ]
+    .contains(&value)
+    {
+        return Ok(());
+    }
+    if let Some(id) = value.strip_prefix("project:") {
+        return crate::jobs::validate_id(id);
+    }
+    Err("桌寵目的地需選擇已提供的頁面或專案。".into())
+}
 struct State {
+    menu: Vec<(String, String)>,
+    selected_target: Option<String>,
     typography: typography::Typography,
     owner: HWND,
     settings: Settings,
@@ -128,6 +160,13 @@ fn builtin(skin: &str, action: usize) -> &'static [u8] {
     }
 }
 impl Pet {
+    /// 選單只接收主程序核對後的內建目的地；選取值隨彈出時的快照保存。
+    pub fn navigation_menu(&mut self, menu: Vec<(String, String)>) {
+        self.state.borrow_mut().menu = menu;
+    }
+    pub fn take_navigation(&mut self) -> Option<String> {
+        self.state.borrow_mut().selected_target.take()
+    }
     pub fn new(owner: HWND, root: &Path, hidden: bool) -> AppResult<Self> {
         let mut settings = std::fs::read(root.join("pet-settings.json"))
             .ok()
@@ -138,6 +177,8 @@ impl Pet {
             settings.enabled = false;
         }
         let mut state = Box::new(RefCell::new(State {
+            menu: vec![],
+            selected_target: None,
             typography: typography::Typography::default(),
             owner,
             settings,
@@ -609,19 +650,22 @@ unsafe extern "system" fn window_proc(window: HWND, message: u32, w: WPARAM, l: 
                     WM_RBUTTONUP => {
                         // TrackPopupMenu會處理巢狀訊息；先釋放借用，讓主視窗tick可安全更新桌寵。
                         let owner = state.owner;
+                        let shortcuts = state.menu.clone();
                         drop(state);
                         let menu = CreatePopupMenu();
                         if !menu.is_null() {
-                            for (id, label) in [
-                                (1, "開啟主視窗"),
-                                (3, "塔羅牌桌"),
-                                (4, "桌寵設定"),
-                                (5, "隱藏桌寵"),
-                            ] {
-                                if id == 3 && !cfg!(feature = "tarot") {
-                                    continue;
-                                }
-                                AppendMenuW(menu, MF_STRING, id, wide(label).as_ptr());
+                            AppendMenuW(menu, MF_STRING, 6, wide("開啟主介面").as_ptr());
+                            AppendMenuW(menu, MF_STRING, 5, wide("隱藏桌寵").as_ptr());
+                            if !shortcuts.is_empty() {
+                                AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
+                            }
+                            for (index, (_, label)) in shortcuts.iter().enumerate() {
+                                AppendMenuW(
+                                    menu,
+                                    MF_STRING,
+                                    100 + index,
+                                    wide(&label.replace('&', "&&")).as_ptr(),
+                                );
                             }
                             let mut cursor = POINT::default();
                             GetCursorPos(&mut cursor);
@@ -637,7 +681,15 @@ unsafe extern "system" fn window_proc(window: HWND, message: u32, w: WPARAM, l: 
                             );
                             DestroyMenu(menu);
                             if action != 0 {
-                                PostMessageW(owner, MESSAGE, action as usize, 0);
+                                if let Some((target, _)) = action
+                                    .checked_sub(100)
+                                    .and_then(|index| shortcuts.get(index as usize))
+                                {
+                                    (&*pointer).borrow_mut().selected_target = Some(target.clone());
+                                    PostMessageW(owner, MESSAGE, 7, 0);
+                                } else {
+                                    PostMessageW(owner, MESSAGE, action as usize, 0);
+                                }
                             }
                         }
                         return 0;
