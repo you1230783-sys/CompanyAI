@@ -117,7 +117,7 @@ dependencies = [
 
 [[package]]
 name = "company-ai"
-version = "0.9.11"
+version = "0.9.12"
 dependencies = [
  "chrono",
  "pdf-extract",

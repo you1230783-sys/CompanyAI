@@ -32,12 +32,12 @@ pub fn verify(root: &Path) -> AppResult<()> {
     } else {
         0
     };
-    if first > 27 {
-        return Err("原生測試案例需介於 0–27。".into());
+    if first > 30 {
+        return Err("原生測試案例需介於 0–30。".into());
     }
     // Python 從呼叫端 EXE 旁啟動；先依正式規則授予 AppContainer 唯讀權限。
     company_ai::projects::python::prepare_runtime()?;
-    for case in first..=27 {
+    for case in first..=30 {
         verify_case(root, case)?;
     }
     Ok(())
@@ -365,7 +365,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                 if posts == 1 && !saving_notes {
                     assert_eq!(
                         body["tools"].as_array().unwrap().len(),
-                        19,
+                        21,
                         "首次提供基本閱讀、累積筆記、流程步驟、程式搜尋、圖片、技能、並行批次與可選問題"
                     );
                     // 程式碼唯讀工具已移入基本工具；不必先載入 Python 編輯技能。
@@ -424,6 +424,57 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                 }
                 let mut message = if let Some(message) = note_message {
                     message
+                } else if case == 28 {
+                    // 模擬上游連續耗盡輸出額度；不能執行任何截斷內容。
+                    json!({"role":"assistant","content":"","tool_calls":[]})
+                } else if case == 29 {
+                    if posts > 1 {
+                        assert_eq!(previous["error_kind"], "contract");
+                        assert_eq!(previous["executed"], false);
+                    }
+                    match posts {
+                        1 => call(&body, "update_deliverables", json!({"items":[]})),
+                        2 => call(
+                            &body,
+                            "record_reading_notes",
+                            json!({"notes":[{"operation_id":"missing","summary":"測試","relationships":"","open_questions":""}]}),
+                        ),
+                        _ => call(
+                            &body,
+                            "finish",
+                            json!({"message":"契約拒絕回復完成","artifacts":[]}),
+                        ),
+                    }
+                } else if case == 30 {
+                    // 合成數值經真實 Python worker、登記與下一輪提示，最後由原生層附表。
+                    match posts {
+                        1 => call(&body, "load_skill", json!({"id":"python-analysis"})),
+                        2 => call(
+                            &body,
+                            "run_python",
+                            json!({"purpose":"合成資料事實","code":"result={'frequency_min_Hz':0.001,'points':121}","inputs":[]}),
+                        ),
+                        3 => {
+                            assert_eq!(previous["ok"], true, "{previous}");
+                            call(
+                                &body,
+                                "register_report_values",
+                                json!({"values":[
+                                    {"id":"frequency_min_Hz","operation_id":previous["operation_id"],"pointer":"/summary/frequency_min_Hz","decimals":3,"unit":"Hz"},
+                                    {"id":"points","operation_id":previous["operation_id"],"pointer":"/summary/points","decimals":0,"unit":"筆"}
+                                ]}),
+                            )
+                        }
+                        _ => {
+                            assert_eq!(previous["ok"], true, "{previous}");
+                            assert!(body["messages"].to_string().contains("frequency_min_Hz"));
+                            call(
+                                &body,
+                                "finish",
+                                json!({"message":"合成資料完成","artifacts":[]}),
+                            )
+                        }
+                    }
                 } else if body["model"] == "fast" {
                     fast += 1;
                     assert_eq!(body["tools"], json!([]));
@@ -929,7 +980,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     let calls = message["tool_calls"].as_array_mut().unwrap();
                     calls.push(calls[0].clone());
                 }
-                let reason = if case == 3 {
+                let reason = if matches!(case, 3 | 28) {
                     "length"
                 } else if body["model"] == "fast" {
                     "stop"
@@ -945,6 +996,9 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     "client_request_id":body["client_request_id"],"conversation_id":body["conversation_id"],"context":body["context"],
                     "state":"completed","result":{"id":format!("completion_{posts}"),"object":"chat.completion","created":1,"model":body["model"],
                     "choices":[{"index":0,"message":message,"finish_reason":reason}]},"error":null,"error_message":""});
+                if case == 28 {
+                    completed["result"]["usage"] = json!({"prompt_tokens":26036,"completion_tokens":20000,"completion_tokens_details":{"reasoning_tokens":19990}});
+                }
                 if case == 0 {
                     // 正式 HTTP 往返同時帶上游額外欄位，下一輪只能回送白名單訊息。
                     for pointer in [
@@ -1252,6 +1306,39 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
             assert_eq!(instructions.questions()?[0].state, "default");
             assert!(instructions.questions()?[0].answer.is_none());
             assert!(!runner::paused_available(&root.join("native-app"), &id));
+        }
+        28 => {
+            let answer = result?;
+            assert!(
+                answer.contains("連續兩次") && answer.contains("19990"),
+                "{answer}"
+            );
+            assert_eq!(posts, 2);
+            assert!(runner::paused_available(&root.join("native-app"), &id));
+            assert!(!workspace.join("_AI_Output").exists());
+        }
+        29 => {
+            assert!(result?.contains("契約拒絕回復完成"));
+            assert_eq!(posts, 3);
+            assert_eq!(
+                activity
+                    .iter()
+                    .filter(|s| s.contains("Error Code: 14"))
+                    .count(),
+                2,
+                "{activity:?}"
+            );
+            assert!(!activity.iter().any(|s| s.contains("Error Code: 99")));
+        }
+        30 => {
+            let answer = result?;
+            assert!(
+                answer.contains("本次登記的計算值")
+                    && answer.contains("0.001")
+                    && answer.contains("121"),
+                "{answer}"
+            );
+            assert_eq!(posts, 4);
         }
         _ => unreachable!(),
     }
