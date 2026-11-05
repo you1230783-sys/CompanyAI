@@ -799,6 +799,8 @@ mod tests {
             ("save_workflow",json!({"name":"統計報告","steps":[{"step_id":"calc","operation_id":"calc-op","bindings_json":"{}"}]})),
             ("list_workflows",json!({})),
             ("update_deliverables",json!({"items":[{"id":"report","description":"報告","kind":"file","target":null,"blocked_reason":null}]})),
+            ("bind_deliverable",json!({"bindings":[{"id":"report","target":"_AI_Output/report.csv"}]})),
+            ("supersede_artifact",json!({"path":"_AI_Output/v1.csv","replaced_by":"_AI_Output/v2.csv","reason":"已核對新版"})),
             ("read_workflow",json!({"workflow_id":"flow","offset":0})),
             ("prepare_workflow",json!({"workflow_id":"flow","parameters_json":"{}"})),
             ("execute_workflow_step",json!({"execution_id":"run","step_index":0})),

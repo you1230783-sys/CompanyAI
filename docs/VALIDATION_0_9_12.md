@@ -25,3 +25,5 @@
 - 原生HTTP案例28、29已通過；案例30第一次因測試誤用load_skill.name被Schema拒絕，改為既有id欄位後通過。三項均使用正式runner；Python案例真的執行AppContainer worker，非直接注入登記狀態。
 - r2指定v142探針（192930159 x64）與all-targets Clippy已通過；完整Rust、release、Office及NSIS流程正在執行，後續提交補上結果，發布前必須全部通過。
 - RustSec刷新與12項政策測試通過；保留已審核且有期限的ttf-parser維護公告例外，不宣稱零警告。
+
+- r2完整Rust回歸為464通過、2失敗：新交付工具遺漏progress_note共用Schema欄位，目錄解析案例也未加入兩項工具。補齊欄位與實際解析樣本，保留既有契約測試，不放寬斷言；完整流程改由r3重跑。

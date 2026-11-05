@@ -12799,10 +12799,16 @@
                 ],
                 "additionalProperties": false
               }
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "簡短記錄目標、新進展及下一步。"
             }
           },
           "required": [
-            "bindings"
+            "bindings",
+            "progress_note"
           ],
           "additionalProperties": false
         }
@@ -12824,12 +12830,18 @@
             },
             "reason": {
               "type": "string"
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "簡短記錄目標、新進展及下一步。"
             }
           },
           "required": [
             "path",
             "replaced_by",
-            "reason"
+            "reason",
+            "progress_note"
           ],
           "additionalProperties": false
         }
