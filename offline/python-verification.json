@@ -19,6 +19,9 @@
     "coding declaration mismatch rejection",
     "current revision syntax validation required before publish",
     "PY artifact verified at finish",
+    "BOM raw source_revision bridge with changed-source rejection",
+    "SciPy NNLS against known solution",
+    "extension-free CSV/XLSX/PNG with native readback",
     "environment allowlist",
     "active cancellation",
     "120 second timeout",
@@ -26,11 +29,13 @@
     "original unchanged",
     "modified output rejected at finish"
   ],
-  "duration_seconds": 239.6322212,
+  "duration_seconds": 330.6808547,
+  "matplotlib": "3.11.2",
   "numpy": "2.2.6",
   "openpyxl": "3.1.5",
   "pandas": "2.2.3",
   "python": "3.13.12",
   "result": "PASS",
-  "version": "0.9.10"
+  "scipy": "1.17.1",
+  "version": "0.9.12"
 }

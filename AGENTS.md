@@ -2,6 +2,8 @@
 
 ## 目前工作
 
+- **0.9.12已發布：v0.9.12固定於42fc74f5a0f725426ce98afdf71da48224c69625，同提交CI 42053066119通過。v142空快取frozen r3、466項非CAD Rust、31組原生HTTP、5組前端、Python／Office／排程及NSIS生命週期完成，五項公開下載SHA256核對通過。先前檔案鎖／Schema與測試參數失敗已如實記錄，見docs/VALIDATION_0_9_12.md。真實模型比較由公司端驗收，M4第二階段偵測另排；不自行進版。**
+
 - **0.9.12 目前授權：依 docs/CHANGE_HANDBOOK_EIS_FEEDBACK.md 實作 M1–M6，每項獨立 commit 並記錄測試／限制，完成後進版、v142 空快取 frozen 編譯、必要封裝驗證、GitHub 與 Release 發布。使用者已明確指定真實模型 EIS 比較留待公司端驗收；本機用合成回歸，不宣稱公司資料已驗收。M4 第二階段數值不一致偵測另行排期，不變更 50K 輸入預算、不重建 checkpoint、不新增 AI 刪檔能力。**
 
 - **0.9.11 已發布：Release／標籤指向來源提交 01bbda6cf36031a113e1b63fc1c01206e93d4611，同提交 CI 42003106319 通過。相同 EXE 再次以 v142 空快取 frozen 核對後完成 NSIS 安裝／更新／回復／解除安裝及 Python／CAD 安裝後自檢，五項公開下載 SHA256 通過。證據見 offline/release-verification-0.9.11.json、offline/release-download-verification-0.9.11.json；公司 EIS／DRT 仍待實測，不自行進版。後續只有文件與驗證收據提交，不移動已發布標籤。**

@@ -7,11 +7,12 @@
     "Word native comparison reports changed paragraphs",
     "real Excel comparison separates unique key, value, formula and calculated result",
     "translation refuses source changed after prepare",
-    "native answer export DOCX/PDF with Chinese text, table, code, URL, embedded PNG and readback"
+    "native answer export DOCX/PDF with Chinese text, table, code, URL, embedded PNG and readback",
+    "DOCX supplementary Unicode formatting; PDF uses selectable-text fixture, color-emoji extraction limitation remains explicit"
   ],
   "company_encryption_tested": false,
-  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\413f50a02deab61edbcc2fdca7a1d949",
+  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\0e5a8d5a16cffa9ed4d21ca2bf5f197c",
   "real_model_tested": false,
   "result": "PASS",
-  "version": "0.9.10"
+  "version": "0.9.12"
 }

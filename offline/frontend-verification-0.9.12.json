@@ -1,0 +1,200 @@
+{
+  "version": "0.9.12",
+  "scope": "five source UI regressions; native UI separately covered by Build.ps1",
+  "result": "PASS",
+  "groups": [
+    {
+      "script": "scripts/Test-ReplyTables.cjs",
+      "result": "PASS",
+      "log_sha256": "9e0307a59e6ac48a000e6ee399cabc621496f6945211a61ee7c25e1874645e0e",
+      "checks": [
+        "PASS: key-point tables in multiline, split-row and compact form; escaped pipes, ordinary text, mismatched columns and code remain intact."
+      ]
+    },
+    {
+      "script": "scripts/Test-Settings.cjs",
+      "result": "PASS",
+      "log_sha256": "b610247a5939f4b2cbc2bc4baff3d62a74b5ebc2f8dd00983f7d7c59529f2985",
+      "checks": [
+        "settings tabs, Other preferences, selected task, export default, round navigation and stale replies",
+        {
+          "name": "diagnostics-light",
+          "width": 1180,
+          "scroll": 1180,
+          "left": 110,
+          "right": 1070,
+          "top": 17,
+          "bottom": 783
+        },
+        {
+          "name": "advanced-light",
+          "width": 1180,
+          "scroll": 1180,
+          "left": 270,
+          "right": 910,
+          "top": 71.5,
+          "bottom": 728.5
+        },
+        {
+          "name": "advanced-dark",
+          "width": 1180,
+          "scroll": 1180,
+          "left": 270,
+          "right": 910,
+          "top": 71.5,
+          "bottom": 728.5
+        },
+        {
+          "name": "advanced-narrow",
+          "width": 520,
+          "scroll": 520,
+          "left": 20,
+          "right": 500,
+          "top": 71.5,
+          "bottom": 728.5
+        },
+        {
+          "name": "tutorials-narrow",
+          "width": 520,
+          "scroll": 520,
+          "left": 20,
+          "right": 500,
+          "top": 71.5,
+          "bottom": 728.5
+        },
+        {
+          "name": "tutorial-card-narrow",
+          "width": 520,
+          "scroll": 520,
+          "left": 16,
+          "right": 504,
+          "top": 16,
+          "bottom": 784
+        },
+        {
+          "name": "release-history-narrow",
+          "width": 520,
+          "scroll": 520,
+          "left": 20,
+          "right": 500,
+          "top": 24,
+          "bottom": 776
+        },
+        "all 58 tutorials completed in real browser; input/select/checkbox gates, focus, isolation and search",
+        {
+          "name": "operations-narrow",
+          "width": 520,
+          "scroll": 520,
+          "left": 20,
+          "right": 500,
+          "top": 71.5,
+          "bottom": 728.5
+        },
+        {
+          "name": "general-light",
+          "width": 1180,
+          "scroll": 1180,
+          "left": 270,
+          "right": 910,
+          "top": 71.5,
+          "bottom": 728.5
+        },
+        "real ECharts PNG with two parameter reference lines"
+      ]
+    },
+    {
+      "script": "scripts/Test-Conversations.cjs",
+      "result": "PASS",
+      "log_sha256": "95786ab44344cd288684d1d903b6a5953a1b3aa5c5accbb7a4fcbdcd82a181da",
+      "checks": [
+        "new conversation waits for type selection",
+        "unified picker includes general and project",
+        "project selection creates only selected project chat",
+        "general selection creates general chat",
+        "project management opens modal",
+        "tools modal groups templates and handoff",
+        "general composer keeps four quick actions",
+        "pet stale project cannot create conversation",
+        "pet shortcut opens selected project conversation",
+        "combined recent conversations",
+        "recent ordering retained",
+        "project label is visible",
+        "general filter",
+        "project management filters without switching",
+        "opening preserves originating draft",
+        "preview request binds source and target",
+        "stale preview ignored",
+        "untrusted handoff stays editable inert text",
+        "attachment boundary displayed",
+        "confirm submits only preview id and edited text",
+        "confirmation cannot send chat",
+        "closing clears handoff content",
+        "project composer only exposes screenshot and tools",
+        "source navigation retained",
+        "native overview is rendered as inert text",
+        "overview retains verification limits",
+        "old answer cannot invent execution evidence",
+        "tools grouped while stop stays directly accessible",
+        "switching conversations closes and revokes preview",
+        "handoff fits desktop and narrow viewport",
+        "compact toolbar and tools modal fit 1180",
+        "compact toolbar and tools modal fit 520"
+      ]
+    },
+    {
+      "script": "scripts/Test-Workbench.cjs",
+      "result": "PASS",
+      "log_sha256": "1512e5d5487ec5c5097cef98b70cc4aea98be000c4b85392f193f60ee9efc2d5",
+      "checks": [
+        "工具紀錄、交付清單與分析共同預設收在詳情內容",
+        "訊息重繪保留使用者展開詳情的選擇",
+        "點擊專案名稱篩選統一對話清單",
+        "篩選不重複列出對話也不切換目前對話",
+        "執行任務時仍可篩選對話",
+        "長歷史只渲染最新一頁而非丟棄原文",
+        "可查閱超過120筆以前的第一筆紀錄",
+        "新進度不會把正在看的舊頁切回最後",
+        "可直接回到最新進度且DOM仍維持單頁",
+        "舊回應不能覆蓋設定",
+        "切換範圍保留兩份編輯",
+        "保存帶原偏好與條件版本",
+        "定點修改保留原草稿、版本及位置",
+        "修改內容只加入草稿，不執行工具",
+        "流程禁止空白來源",
+        "流程參數保留數字型別",
+        "流程表單不自動執行",
+        "部分完成與條件變更不被隱藏",
+        "沒有成品的任務仍能看到草稿清單",
+        "切換對話關閉舊成果中心",
+        "表單版面 light",
+        "表單版面 dark",
+        "表單版面 narrow"
+      ]
+    },
+    {
+      "script": "scripts/Test-ReliabilityUI.cjs",
+      "result": "PASS",
+      "log_sha256": "d9f2f124e4cfccc87c094d9dba77451fe9566cf2710af546697f144aa9bbb2c2",
+      "checks": [
+        "ordinary chat always shows folder boundary",
+        "copy obtains native error without accepting injected text",
+        "toolbar requests minimal preview, not save",
+        "diagnostics opens read-only preview",
+        "preview is exact inert text",
+        "preview does not save automatically",
+        "confirm submits only native snapshot id",
+        "save disabled until native result",
+        "cancelled save remains reviewable",
+        "closing clears private preview and revokes snapshot",
+        "diagnostics accessible without login",
+        "offline diagnostics does not bypass ordinary command authorization",
+        "first startup announcement opens before login",
+        "unknown previous version is explicitly unknown",
+        "release versions use numeric ordering",
+        "acknowledgment uses dedicated release topic",
+        "acknowledged release does not reopen",
+        "diagnostics preview fits desktop and narrow viewport"
+      ]
+    }
+  ]
+}

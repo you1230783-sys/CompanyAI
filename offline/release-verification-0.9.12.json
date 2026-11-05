@@ -1,0 +1,147 @@
+{
+  "version": "0.9.12",
+  "build_result": "PASS",
+  "implementation_commit": "42fc74f5a0f725426ce98afdf71da48224c69625",
+  "toolset": "MSVC v142 x64 14.29.30133",
+  "compiler_full_version": 192930159,
+  "empty_cargo_cache_frozen": true,
+  "rust_workspace_tests": 466,
+  "cad_unit_tests_filtered": 60,
+  "native_http_cases": 31,
+  "browser_groups": 5,
+  "scope": "Complete non-CAD Build.ps1 r3 with Office and NSIS; exact-source CI includes default/core Rust configurations.",
+  "final_exe_sha256": "ff7b17715cfa1e6dae35cc439a6c8b15f8df66aca3818696bfb573d52000b03f",
+  "final_setup_sha256": "b781e421396865e9b976ee5bb9c94cc34e9d2660fefcff25694dea87f42226e0",
+  "installer_built": true,
+  "installer_lifecycle": {
+    "result": "PASS",
+    "recorded_at": "2026-11-06T00:23:14.0437335+08:00",
+    "version": "0.9.12.0",
+    "toolset": "14.29.30133",
+    "publisher": "Largan, Inc.",
+    "install_path": "C:\\largan\\LM_AI",
+    "parent_existed_before_test": true,
+    "setup_sha256": "b781e421396865e9b976ee5bb9c94cc34e9d2660fefcff25694dea87f42226e0",
+    "vnc_configuration_preserved": true,
+    "webview2_bundled": false,
+    "python_bundled": true,
+    "python_folder": "python",
+    "python_install_self_check": true,
+    "cad_install_self_check": true,
+    "obsolete_cad_cleanup": "verified historical runtime removed after success; failed update and in-use runtime preserved; unknown data preserved",
+    "obsolete_cad_fixture": {
+      "directory": "C:\\largan\\LM_AI_Installer_Test\\cad-eaafe8017161c277",
+      "commit": "9f8febc57e119de30a5b37183f48c0a8878f8e41",
+      "sha256": "eaafe8017161c27796a9fb152839979327d8904ff51b56cdd9cbdff82d9da7fa",
+      "files": 645
+    },
+    "python_failure_rollback": true,
+    "python_reused_without_replacement": true,
+    "python_repair_cases": [
+      "missing-file",
+      "same-size-corruption",
+      "different-manifest"
+    ],
+    "reused_python_survives_app_rollback": true,
+    "runtime_check_stage": "application startup only; no installer prerequisite check",
+    "runtime_unavailable_simulation": "child-only WEBVIEW2_BROWSER_EXECUTABLE_FOLDER points to a nonexistent folder; Setup succeeds, installed app exits with existing guidance",
+    "checks": [
+      "NSIS install into missing product directory",
+      "existing directory preserves user files",
+      "fixed path ignores /D",
+      "shortcuts and registration",
+      "EXE/setup/uninstaller company name",
+      "PID handoff wait",
+      "update replacement",
+      "automatic restart",
+      "locked-file failure preserves old app",
+      "NSIS uninstall preserves unknown files",
+      "actual release Setup installation and WebView2 self-check",
+      "actual release uninstall"
+    ],
+    "scope": "isolated native payload and actual release Setup at C:\\largan\\LM_AI; corporate antivirus and Outlook require company testing"
+  },
+  "ci": {
+    "result": "PASS",
+    "head": "42fc74f5a0f725426ce98afdf71da48224c69625",
+    "url": "https://github.com/you1230783-sys/CompanyAI/actions/runs/42053066119",
+    "run_id": 42053066119,
+    "artifact_id": 13427869377,
+    "archive_sha256": "d607d2f048ec0fb17cbdebc7e0a62bb180163361f69944708784cc187915a4d4",
+    "build": {
+      "recorded_at": "2026-11-05T15:25:26.4397683+00:00",
+      "result": "PASS_CI_SCOPE",
+      "msvc": "14.29.30133",
+      "compiler_report": [
+        "v142.c",
+        "Verified _MSC_FULL_VER=192930159 x64"
+      ],
+      "empty_cargo_cache": true,
+      "lock_sha256": "ad13aee174788d1f748ea84b7efed6f56ab106de18d91eb0de6e6b3df6b292db",
+      "checks": [
+        "v142 x64 release build --frozen",
+        "fmt",
+        "default/core all-targets Clippy -D warnings",
+        "default/core workspace Rust tests"
+      ],
+      "excluded_interactive_tests": [
+        "ui::reminders::tests::windows_shell_accepts_native_reminder_notification",
+        "pet::tests::native_notification_visibility_and_settings_survive_restart"
+      ],
+      "not_validated": [
+        "Office integration",
+        "company models/mailbox/network",
+        "NSIS lifecycle",
+        "interactive desktop/DPI"
+      ],
+      "installer_built": false
+    },
+    "audit_summary": {
+      "recorded_at": "2026-11-05T15:25:35.2964106+00:00",
+      "result": "PASS_WITH_REVIEWED_MAINTENANCE_NOTICE",
+      "tool": "cargo-audit 0.22.2 (official prebuilt tool)",
+      "lock_sha256": "ad13aee174788d1f748ea84b7efed6f56ab106de18d91eb0de6e6b3df6b292db",
+      "database": {
+        "advisory-count": 1409,
+        "last-commit": "26fd2d43f7280a1fb925a3743ec463017afe7119",
+        "last-updated": "2026-11-05T08:50:49+00:00"
+      },
+      "exit_code": 0,
+      "policy": "All targets; vulnerabilities, yanked, unsound and unreviewed warnings fail.",
+      "reviewed_maintenance_notices": [
+        "RUSTSEC-2026-0192: ttf-parser 0.25.1; review before 2027-02-01"
+      ]
+    }
+  },
+  "build_log_sha256": "14ce9b7068f002b261b475b146366c811ed2f208db4cce72c1679cf0897f562c",
+  "prior_attempts": [
+    {
+      "log": ".build/release-0.9.12-r2.log",
+      "sha256": "536c702a1d0d7327b2ba6a19296fd74f56871506899305bc6d3fb7bb8bdb7980",
+      "result": "464 pass, 2 fail; new tool progress_note schema and decoding fixtures corrected; targeted rerun passed"
+    },
+    {
+      "log": ".build/release-0.9.12-r1.log",
+      "sha256": "242ff814acbb4a0d175f1be9c4824cf619aeda6e4a44f250e3c7acdb3e4d11d6",
+      "result": "Clippy failed with Windows sharing violations while native probe held output directory; rerun serially"
+    },
+    {
+      "log": ".build/native-0912.log",
+      "sha256": "d2bd480e3f126dbf92774272e3442c4d0e948f06c547cea92f6acae6f9d360ed",
+      "result": "28/29 passed; fixture30 rejected incorrect load_skill.name; corrected to id"
+    },
+    {
+      "log": ".build/native-0912-r2.log",
+      "sha256": "6c8f6427ee562059e2499fdfdd9a40bdd103d5e086ea80c62c92542bf5c0d4e2",
+      "result": "Fixture30 passed; all new cases rerun in complete build"
+    }
+  ],
+  "limits": [
+    "Real-model EIS comparison explicitly deferred to company acceptance",
+    "M4 free-text numerical mismatch detection deferred to phase two",
+    "No new CAD drawing, company VNC/SMB/mailbox or antivirus acceptance",
+    "Existing Word colored-emoji PDF text-readback limitation retained",
+    "Reviewed time-limited ttf-parser maintenance notice retained",
+    "GitHub manual installer download; company update server not deployed"
+  ]
+}

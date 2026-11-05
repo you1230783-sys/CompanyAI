@@ -2,23 +2,23 @@
 
 LM_AI 連接公司 AI 服務，協助問答、文件整理、Office 副本修訂、Python 分析與 Classic Outlook 郵件分析。支援 Windows 11 x64。
 
-**目前版本：0.9.11。介面、排程與 Python 分析修正已包含於正式安裝包，新增 SciPy／Matplotlib。**
+**目前版本：0.9.12。改善長任務交付、計算值保留與截斷診斷；真實模型比較留待公司端驗收。**
 
-[0.9.11改動](docs/IMPLEMENTATION_0_9_11.md) · [0.9.11驗證紀錄](docs/VALIDATION_0_9_11.md) · [固定流程排程](docs/SCHEDULED_WORKFLOWS.md)。
+[0.9.12改動](docs/CHANGE_HANDBOOK_EIS_FEEDBACK.md) · [0.9.12驗證紀錄](docs/VALIDATION_0_9_12.md) · [固定流程排程](docs/SCHEDULED_WORKFLOWS.md)。
 
 [0.9.9原始碼改動與待驗項目](docs/IMPLEMENTATION_0_9_9.md)。
 
-成品校驗：[Releases與SHA256](https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.11) · [驗證紀錄](docs/VALIDATION_0_9_11.md)。
+成品校驗：[Releases與SHA256](https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.12) · [驗證紀錄](docs/VALIDATION_0_9_12.md)。
 
 ## 下載與安裝
 
-1. [下載 LM_AI_Setup.exe](https://github.com/you1230783-sys/CompanyAI/releases/download/v0.9.11/LM_AI_Setup.exe)。先從托盤離開程式，以一般權限安裝到 `C:\largan\LM_AI`。
+1. [下載 LM_AI_Setup.exe](https://github.com/you1230783-sys/CompanyAI/releases/download/v0.9.12/LM_AI_Setup.exe)。先從托盤離開程式，以一般權限安裝到 `C:\largan\LM_AI`。
 2. 開啟程式，按「登入」，在瀏覽器核對短碼並授權。
 3. 一般提問可直接對話；處理文件時選擇「我的工作區」或建立專案。
 
 安裝包內含 Python，請保留完整安裝目錄。WebView2 Runtime 另依 [離線說明](dist/WEBVIEW2-OFFLINE.md) 安裝。使用者不需安裝 Rust 或 Node。
 
-程式內更新仍從公司伺服器取得並驗證簽章與同源網址。GitHub僅為目前手動下載入口。公司模型、真實Outlook及公司加密文件仍須公司環境驗收；請查看 [0.9.11驗證界線](docs/VALIDATION_0_9_11.md)。
+程式內更新仍從公司伺服器取得並驗證簽章與同源網址。GitHub僅為目前手動下載入口。公司模型、真實Outlook及公司加密文件仍須公司環境驗收；請查看 [0.9.12驗證界線](docs/VALIDATION_0_9_12.md)。
 
 ## 主要功能
 
