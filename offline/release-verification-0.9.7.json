@@ -1,13 +1,13 @@
 {
   "version": "0.9.7",
   "build_result": "PASS",
-  "implementation_commit": "1951b3eff5407e32fcadf4354dbd895b7b19b98b",
+  "implementation_commit": "05b10eb85821ef809cb952a2e411f1a8105d4363",
   "toolset": "MSVC v142 x64 14.29.30133",
   "compiler_full_version": 192930159,
   "windows_sdk": "10.0.19041.0",
   "empty_cargo_cache_frozen": true,
-  "rust_workspace_tests": 497,
-  "core_rust_tests": 453,
+  "rust_workspace_tests": 499,
+  "core_rust_tests": 455,
   "feature_ui_checks": 131,
   "audit_policy_cases": 12,
   "release_features": [
@@ -26,8 +26,8 @@
   "document_ui_checks": 21,
   "isolated_real_com_lifecycle_cases": 5,
   "batch_panic_with_real_hook": "PASS",
-  "final_exe_sha256": "7ad219e7abf30879d4796d7df50ea73dbc63e5b6a822d77baefa6fa475b1083e",
-  "final_setup_sha256": "bb65353fc86b07dcf73d56a8b6f8a09222279795e0f69bb56a375aeb875bd86d",
+  "final_exe_sha256": "06d748324f32de32c82d0db86229cea5adb616289619ed325e4ff2ae48399907",
+  "final_setup_sha256": "5c75f7ab83028f160af778e3ca56f6ecf4f50250a61324e955d2103dd7ef19f6",
   "scope": "One final-source full build, native integration, real local Office and NSIS lifecycle; company environment remains untested.",
   "native_handoff_cases": [
     "login gate",
@@ -89,7 +89,8 @@
     "pet-tarot-ui-verification-0.9.7.json",
     "windows-ci-verification-0.9.7.json",
     "dependency-audit-verification-0.9.7.json",
-    "dependency-audit-summary-verification-0.9.7.json"
+    "dependency-audit-summary-verification-0.9.7.json",
+    "github-ci-verification-0.9.7.json"
   ],
   "invariants": {
     "install_path": "C:\\largan\\LM_AI",
@@ -107,7 +108,7 @@
     "Pet drag and notification UI",
     "Real model translation quality, mixed-format segmentation and terminology acceptance"
   ],
-  "development_failures": "See docs/VALIDATION_0_9_7.md for tool bootstrap and audit policy timezone corrections; initial failures are not PASS.",
+  "development_failures": "See docs/VALIDATION_0_9_7.md for tool bootstrap, audit policy timezone corrections and initial hosted CI directory/locale failures; initial failures are not PASS.",
   "release_assets_only": [
     "NSIS installer",
     "Signed update JSON",

@@ -1,7 +1,7 @@
 {
   "version": "0.9.7",
   "result": "PASS",
-  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\201523bc75858a7f197e6d1dde8e9308",
+  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\e1c9b89e1965f974f23a2936bfae63d1",
   "checks": [
     "styled copy keeps original embedded image bytes",
     "styled copy keeps nonempty header text and table count",
@@ -27,8 +27,8 @@
   "visual_review": {
     "result": "PASS",
     "page_count": 1,
-    "reviewed_image": ".build/document-pages-097/export-page-1.png",
-    "pdf_sha256": "e8b064cf145302b8b8692659c9f71d3e505a366145a9f9725437a772b993ae22",
+    "reviewed_image": ".build/document-pages-097-r2/export-page-1.png",
+    "pdf_sha256": "c7817508049a0d2a06265d998e9f3ffc19972c021a67b5877b0fb820eb54a42c",
     "checks": [
       "Chinese heading and text readable",
       "table borders and cells visible",

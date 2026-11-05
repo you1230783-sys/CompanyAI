@@ -4,6 +4,7 @@
 
 - 固定v142 x64／SDK及Rust的Windows CI，線上準備vendor後以空Cargo快取frozen建置。
 - 完整／核心配置的fmt、Clippy與Rust測試，Hosted互動桌面限制明確記錄。
+- 修正專案記憶目錄鎖與Windows Server的共享相容性，保留防更名與獨占保護；新增跨碼頁回歸，編碼有歧義時仍拒絕匯入。
 - RustSec資料庫持續檢查，修補撤回的yoke-derive；ttf-parser維護公告保留有期限的精確評估。
 - [檢查政策](docs/CI_AND_DEPENDENCIES.md)、[驗證紀錄](docs/VALIDATION_0_9_7.md)。
 
