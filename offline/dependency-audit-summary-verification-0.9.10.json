@@ -1,0 +1,16 @@
+{
+  "recorded_at": "2026-11-05T11:49:45.6982638+08:00",
+  "result": "PASS_WITH_REVIEWED_MAINTENANCE_NOTICE",
+  "tool": "cargo-audit 0.22.2 (official prebuilt tool)",
+  "lock_sha256": "e8f475ab940d862ac7ca7adeaf97f7222ea6322e48f5975b6eab6a1df7a01f9d",
+  "database": {
+    "advisory-count": 1403,
+    "last-commit": "965bf9ad083b58e6340d65829d85217b18be9290",
+    "last-updated": "2026-11-04T04:34:28+08:00"
+  },
+  "exit_code": 0,
+  "policy": "All targets; vulnerabilities, yanked, unsound and unreviewed warnings fail.",
+  "reviewed_maintenance_notices": [
+    "RUSTSEC-2026-0192: ttf-parser 0.25.1; review before 2027-02-01"
+  ]
+}

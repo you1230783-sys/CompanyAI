@@ -1,0 +1,44 @@
+{
+  "version": "0.9.10",
+  "result": "PASS",
+  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\413f50a02deab61edbcc2fdca7a1d949",
+  "checks": [
+    "styled copy keeps original embedded image bytes",
+    "styled copy keeps nonempty header text and table count",
+    "export DOCX contains one real table and original PNG bytes"
+  ],
+  "source_structure": {
+    "media": [
+      "48f3269d7394134f568d08d8e1a444a608ae89c250b7d2da4a64aaf3927bc8a7"
+    ],
+    "headers": [
+      "UNCHANGED HEADER"
+    ],
+    "tables": 1
+  },
+  "export_structure": {
+    "media": [
+      "48f3269d7394134f568d08d8e1a444a608ae89c250b7d2da4a64aaf3927bc8a7"
+    ],
+    "headers": [],
+    "tables": 1
+  },
+  "scope": "OOXML package checks; empty header XML names may be normalized by Word. Not a full layout or translation-quality test.",
+  "visual_review": {
+    "result": "PASS",
+    "page_count": 1,
+    "reviewed_image": ".build/document-pages-0910/export-page-1.png",
+    "pdf_sha256": "ce4f24e91d8a6eb5d8d160d5bf116f7482de3410b61e3fa0c7281c3497d0d3b2",
+    "checks": [
+      "Chinese heading and text readable",
+      "table borders and cells visible",
+      "code and source URL readable",
+      "embedded red/blue PNG visible",
+      "footer and page content not clipped"
+    ],
+    "limitations": [
+      "Basic export preserves literal Markdown fences, link and image notation; not a claim of complete Markdown fidelity.",
+      "This fixed fixture does not validate arbitrary translation quality or page layouts."
+    ]
+  }
+}

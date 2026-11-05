@@ -1,0 +1,49 @@
+{
+  "result": "PASS_CI_SCOPE",
+  "execution_mode": "local combined evidence; Test-CI.ps1 was not rerun",
+  "source_commit": "231c313be8c87386991b7f7691ed15fb6dc29c98",
+  "msvc": "14.29.30133",
+  "compiler_report": [
+    "v142.c",
+    "Verified _MSC_FULL_VER=192930159 x64"
+  ],
+  "empty_cargo_cache": true,
+  "lock_sha256": "e8f475ab940d862ac7ca7adeaf97f7222ea6322e48f5975b6eab6a1df7a01f9d",
+  "checks": [
+    "default release --frozen, fmt, all-targets Clippy and 511 Rust tests: scripts/Build.ps1 -EmptyCargoCache -IncludeInstaller -TestOffice",
+    "core all-targets Clippy -D warnings and 467 Rust tests: --no-default-features --frozen with a new empty Cargo home"
+  ],
+  "excluded_interactive_tests": [],
+  "installer_built": true,
+  "logs": [
+    ".build/build-0.9.10-combined.log",
+    ".build/core-0910.log"
+  ],
+  "not_validated": [
+    "company models/mailbox/network",
+    "interactive DPI"
+  ],
+  "execution_provenance": {
+    "baseline_commit": "7994e09",
+    "application_source_paths": [
+      "src",
+      "ui",
+      "assets",
+      "Cargo.toml",
+      "Cargo.lock",
+      "build.rs",
+      "installer",
+      "scripts/Build.ps1"
+    ],
+    "exe_sha256": "e9c16017e28ef67757080bf8982a7b2f022d2f6b88bad13cb07e3cdc35de6fac",
+    "build_script_sha256": "4e6a6c3aa035ed96eaf4d4bcec5751763935692311e5a30765581cf0f92e8019",
+    "origin_log": ".build/build-0.9.10-full-r5.log",
+    "continuation_log": ".build/build-0.9.10-continuation-r3.log",
+    "reused": "r5 full Rust/lint/release/UI/CAD/LOG and native cases 0-20",
+    "rerun": "fmt/all-targets Clippy; rebuild test example; native cases 21-27 and all remaining project, Python, Office, schedule and NSIS stages",
+    "not_a_single_successful_build_invocation": true,
+    "result": "PASS_COMBINED",
+    "failures": "r5 legacy post-CSV compaction expectation; continuation r1 exact tool count overlooked automatic note results. Continuation r2 also reached a stale CSV automatic-compaction notification assertion, removed after checking actual CSV and chart assertions remain. Only test examples changed; r3 remaining stages passed."
+  },
+  "notice": "Default checks reused from the same-source completed combined build scope; no duplicate default test run. Hosted CI is a separate release gate."
+}
