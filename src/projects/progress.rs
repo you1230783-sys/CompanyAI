@@ -828,7 +828,13 @@ mod tests {
             .as_array_mut()
             .unwrap()
             .insert(0, json!({"role":"system","content":"動態提示"}));
+        let facts = json!({"role":"user","content":"已登記計算值：f_min=0.001 Hz，points=121"});
+        request["messages"]
+            .as_array_mut()
+            .unwrap()
+            .push(facts.clone());
         assert!(state.fit_request(&mut request).unwrap() > 0);
+        assert!(request["messages"].as_array().unwrap().contains(&facts));
         let retained = state.history.len();
         let mut restored: Progress =
             serde_json::from_value(serde_json::to_value(&state).unwrap()).unwrap();

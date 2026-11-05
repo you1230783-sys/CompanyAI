@@ -31,6 +31,14 @@ impl Broker {
         if next.metrics.len() > 200 {
             return Err("每個任務最多200個計算值。".into());
         }
+        // 全部已登記值每輪固定提供，不再只保留前40項；容量不足時拒絕新增而非靜默省略。
+        if serde_json::to_vec(&next.context())
+            .map_err(|e| e.to_string())?
+            .len()
+            > 32_000
+        {
+            return Err("計算值固定區塊上限32,000 bytes，請縮短新ID／單位或減少非報告必需的數值；既有登記未變更。".into());
+        }
         self.report_values = next;
         Ok(
             json!({"values":self.report_values.context(),"scope":"實際計算結果，非公式正確性驗證；以apply_report_values填入Office，用export_report_values取得圖表用CSV。"}),

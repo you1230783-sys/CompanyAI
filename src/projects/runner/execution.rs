@@ -1184,9 +1184,10 @@ pub(super) fn run_for(
                                 record["terminal_tool_result"] = json!({"call":call,"result":crate::projects::agent::Message::result(&call_id,&json!({"ok":true,"state":if broker.has_blocked_deliverables() {"partial"} else {"completed"}}))});
                             }
                             return Ok(format!(
-                                "{message}{locations}{}{}",
+                                "{message}{locations}{}{}{}",
                                 broker.code_delivery_report(&paths),
-                                broker.delivery_report()
+                                broker.delivery_report(),
+                                broker.report_values.answer_table()
                             ));
                         }
                         Err(error) => {
