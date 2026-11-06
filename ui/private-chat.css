@@ -1,0 +1,22 @@
+#private-chat {
+  width: min(1000px, calc(100vw - 24px));
+  max-width: none;
+  padding: 0;
+}
+.private-chat-layout {
+  display: grid;
+  grid-template-columns: minmax(150px, 26%) minmax(0, 1fr);
+  height: min(680px, calc(100vh - 28px));
+}
+.private-chat-layout aside, .private-chat-conversation { min-height: 0; padding: 14px; }
+.private-chat-layout aside { border-inline-end: 1px solid var(--line); overflow: auto; }
+.private-chat-layout aside img { height: 22px; width: 22px; }
+.private-chat-layout aside button { width: 100%; margin-bottom: 6px; }
+.private-chat-friends { display: grid; gap: 4px; overflow-wrap: anywhere; }
+.private-chat-conversation { display: flex; flex-direction: column; }
+.private-chat-conversation header { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.private-chat-conversation h2 { margin: 0; overflow-wrap: anywhere; }
+.private-chat-thread { flex: 1; min-height: 0; overflow: auto; }
+.private-chat-thread button { margin-inline-start: 8px; }
+.private-chat-person { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-block: 6px; }
+#private-chat-contacts form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-block: 12px; }

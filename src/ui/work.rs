@@ -1106,6 +1106,7 @@ impl App {
                         }
                         self.work.capability_model = model;
                         self.work.caps = Some(cap);
+                        self.private_chat_capability_updated();
                         self.work.status.clear();
                         self.work_save()?;
                         self.finish_tasks()?;

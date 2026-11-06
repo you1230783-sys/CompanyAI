@@ -951,6 +951,7 @@ function receive(next) {
     $("show-" + name).hidden = !state.config.extra_features_enabled || !featureEnabled(name);
   }
   window.SettingsUI?.render(state.config, state.build_features);
+  window.PrivateChatUI?.renderAvailability(state);
   document.documentElement.dataset.theme = state.config.dark_mode ? "dark" : "light";
   $("dark-mode").checked = !!state.config.dark_mode;
   document.documentElement.style.setProperty(
@@ -1427,6 +1428,7 @@ if (bridge) {
         window.ConversationUI?.receive(event.data);
         window.BranchUI?.receive(event.data);
         window.SettingsUI?.receive(event.data);
+        window.PrivateChatUI?.receive(event.data);
         window.ProjectUI?.receive(event.data);
         window.ArtifactUI?.receive(event.data);
         window.WorkbenchUI?.receive(event.data);

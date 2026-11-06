@@ -104,6 +104,8 @@ pub struct Config {
     pub vnc_enabled: bool,
     /// 額外功能入口預設關閉；與 VNC 偏好及編譯能力獨立。
     pub extra_features_enabled: bool,
+    pub private_chat_enabled: bool,
+    pub private_chat_lock: crate::private_chat::LockPolicy,
     /// DEBUG 僅保存本機加密 JSON，數字用量報表與正文分開。
     pub debug_mode: bool,
     /// 僅影響未自訂系列顏色的呈現，不傳送模型或修改來源數據。
@@ -134,6 +136,8 @@ struct Preferences {
     always_new_chat: bool,
     vnc_enabled: bool,
     extra_features_enabled: bool,
+    private_chat_enabled: bool,
+    private_chat_lock: crate::private_chat::LockPolicy,
     debug_mode: bool,
     chart_palette: Vec<String>,
 }
@@ -160,6 +164,8 @@ impl Serialize for Config {
             always_new_chat: self.always_new_chat,
             vnc_enabled: self.vnc_enabled,
             extra_features_enabled: self.extra_features_enabled,
+            private_chat_enabled: self.private_chat_enabled,
+            private_chat_lock: self.private_chat_lock,
             debug_mode: self.debug_mode,
             chart_palette: self.chart_palette.clone(),
         }
@@ -190,6 +196,12 @@ impl<'de> Deserialize<'de> for Config {
             always_new_chat: saved.always_new_chat,
             vnc_enabled: saved.vnc_enabled,
             extra_features_enabled: saved.extra_features_enabled,
+            private_chat_enabled: saved.private_chat_enabled,
+            private_chat_lock: if saved.private_chat_lock.valid() {
+                saved.private_chat_lock
+            } else {
+                crate::private_chat::LockPolicy::default()
+            },
             debug_mode: saved.debug_mode,
             chart_palette: if valid_chart_palette(&saved.chart_palette) {
                 saved.chart_palette
@@ -228,6 +240,8 @@ impl Default for Config {
             always_new_chat: false,
             vnc_enabled: false,
             extra_features_enabled: false,
+            private_chat_enabled: false,
+            private_chat_lock: crate::private_chat::LockPolicy::default(),
             debug_mode: false,
             chart_palette: default_chart_palette(),
         }
@@ -522,8 +536,10 @@ mod tests {
         assert_eq!(config.model, "quality");
         assert_eq!(config.hotkey, "Ctrl+Shift+F8");
         let saved = serde_json::to_value(&config).unwrap();
-        assert_eq!(saved.as_object().unwrap().len(), 20);
+        assert_eq!(saved.as_object().unwrap().len(), 22);
         assert_eq!(saved["extra_features_enabled"], false);
+        assert_eq!(saved["private_chat_enabled"], false);
+        assert_eq!(saved["private_chat_lock"]["windows_lock"], true);
         assert!(saved.get("ui_font").is_some());
         assert!(saved.get("interface_scale").is_some());
         assert!(saved.get("server_url").is_none());

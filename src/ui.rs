@@ -52,6 +52,7 @@ mod mail_batch;
 mod onboarding;
 mod pet;
 mod popup;
+mod private_chat;
 mod projects;
 mod reminders;
 mod retry;
@@ -199,6 +200,9 @@ enum Command {
         category: crate::notification_preferences::Category,
         enabled: bool,
     },
+    PrivateChat {
+        command: private_chat::Command,
+    },
     Hotkey {
         value: String,
     },
@@ -254,6 +258,11 @@ enum Event {
     #[cfg(feature = "vnc")]
     VncSearch(String, AppResult<PathBuf>),
     Site(u64, site::SiteEvent),
+    PrivateChat(
+        u64,
+        u64,
+        Result<private_chat::Reply, crate::private_chat::Error>,
+    ),
     MailBatch(u64, u64, mail_batch::MailEvent),
     Work(u64, work::WorkEvent),
     Services(
@@ -292,6 +301,7 @@ struct App {
     #[cfg(feature = "vnc")]
     vnc: vnc::VncRuntime,
     site: site::SiteRuntime,
+    private_chat: private_chat::Runtime,
     mail_flow: mail_batch::MailRuntime,
     work: work::WorkRuntime,
     window: HWND,
@@ -347,6 +357,8 @@ struct App {
 }
 impl Drop for App {
     fn drop(&mut self) {
+        let _ = self.private_chat.lock();
+        private_chat::unregister_windows_lock(self.window);
         // SAFETY: 固定識別碼只屬於本視窗；尚未註冊或視窗已銷毀時呼叫會安全失敗。
         unsafe {
             windows_sys::Win32::UI::Input::KeyboardAndMouse::UnregisterHotKey(
@@ -452,6 +464,7 @@ impl App {
         state_payload["state"]["branches"] = branches;
         // 額外能力以獨立欄位加入，避免大型json!巨集超過展開深度。
         state_payload["state"]["build_features"] = crate::build_features::state();
+        state_payload["state"]["private_chat_available"] = json!(self.private_chat_available());
         state_payload["state"]["schedule_running"] = json!(self.schedules.active());
         // 原生目錄亦套用個人偏好；前端同規則保護搜尋與直接開啟。
         if let Some(tutorials) = state_payload["state"]["onboarding"]["tutorials"].as_array_mut() {

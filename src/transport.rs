@@ -327,7 +327,49 @@ pub fn exchange(
         timeout_ms,
         on_chunk,
         "text/event-stream",
+        RequestOptions::default(),
+    )
+}
+
+#[derive(Default)]
+struct RequestOptions<'a> {
+    test_pins: Option<&'a pins::Pins>,
+    chat_device: Option<&'a str>,
+}
+
+/// 私聊只允許已釘選的 HTTPS v2，裝置識別由原生端傳入。
+pub(crate) fn chat_request(
+    url: &Url,
+    method: &str,
+    body: &[u8],
+    authorization: &str,
+    device: &str,
+    test_pins: Option<&pins::Pins>,
+) -> AppResult<HttpResponse> {
+    if !(pins::for_url(url)?.is_some() || cfg!(test) && test_pins.is_some()) {
+        return Err("私聊只支援已驗證的 HTTPS v2。".into());
+    }
+    if !crate::private_chat::valid_device(device) {
+        return Err("私聊裝置識別格式錯誤。".into());
+    }
+    let length = u32::try_from(body.len()).map_err(|_| "私聊請求過大。")?;
+    let mut reader = body;
+    exchange_inner(
+        url,
+        method,
+        "application/json",
+        Payload {
+            reader: &mut reader,
+            length,
+        },
+        Some(("Authorization", authorization)),
+        15_000,
         None,
+        "application/json",
+        RequestOptions {
+            test_pins,
+            chat_device: Some(device),
+        },
     )
 }
 
@@ -370,7 +412,10 @@ fn download_file_inner(
         30_000,
         Some(&mut chunk),
         "application/octet-stream",
-        test_pins,
+        RequestOptions {
+            test_pins,
+            ..Default::default()
+        },
     )?;
     if response.status != 200 || received != expected_size {
         return Err(format!(
@@ -391,7 +436,7 @@ fn exchange_inner(
     timeout_ms: i32,
     mut on_chunk: Option<ResponseChunks<'_>>,
     response_type: &str,
-    test_pins: Option<&pins::Pins>,
+    options: RequestOptions<'_>,
 ) -> AppResult<HttpResponse> {
     let host = wide(url.host_str().ok_or("網址缺少主機名稱。")?);
     let path = match url.query() {
@@ -407,6 +452,9 @@ fn exchange_inner(
             return Err("驗證 Header 無效。".into());
         }
         headers.push_str(&format!("{name}: {value}\r\n"));
+    }
+    if let Some(device) = options.chat_device {
+        headers.push_str(&format!("X-LMAI-Device: {device}\r\n"));
     }
     if on_chunk.is_some() {
         headers = headers.replace(
@@ -468,7 +516,13 @@ fn exchange_inner(
             return Err(network_error("WinHttpSetOption/cookies"));
         }
         let headers = wide(&headers);
-        pins::send(&mut request, url, &headers, payload.length, test_pins)?;
+        pins::send(
+            &mut request,
+            url,
+            &headers,
+            payload.length,
+            options.test_pins,
+        )?;
         let mut remaining = payload.length as usize;
         let mut upload_buffer = [0u8; 48 * 1024];
         while remaining > 0 {

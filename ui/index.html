@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="conversations.css" />
     <link rel="stylesheet" href="tarot.css" />
     <link rel="stylesheet" href="project-tutorial.css" />
+    <link rel="stylesheet" href="private-chat.css" />
   </head>
   <body>
     <div id="app">
@@ -481,6 +482,26 @@
         </section></div>
 <div id="settings-panel-2" class="settings-panel" role="tabpanel" aria-labelledby="settings-tab-2" hidden><section><h3>額外功能</h3><label class="check-row"><input id="extra-features-enabled" type="checkbox" />開啟其它額外功能</label><p class="subtle">開啟後從進階功能使用桌寵與塔羅；VNC 由下方開關獨立控制。</p></section><section><h3>VNC</h3>          <label class="check-row"><input id="vnc-enabled" type="checkbox" />啟用 VNC 快速連線功能</label>
           <p class="subtle">啟用後顯示側欄入口。機台設定沿用 LM_AI.exe 同一資料夾的 machines.json 與 user_config.json。</p></section>
+<section id="private-chat-settings" hidden>
+  <h3>私聊</h3>
+  <label class="check-row"><input id="private-chat-enabled" type="checkbox" />啟用私聊</label>
+  <p id="private-chat-settings-status" class="subtle" role="status"></p>
+  <div id="private-chat-lock-settings" hidden>
+    <label for="private-chat-lock-when">自動上鎖</label>
+    <div class="input-row">
+      <select id="private-chat-lock-when"><option value="leave">離開聊天介面後</option><option value="since_unlock">解鎖後</option></select>
+      <select id="private-chat-lock-minutes" aria-label="自動上鎖時間"></select>
+    </div>
+    <label class="check-row"><input id="private-chat-windows-lock" type="checkbox" checked />Windows 鎖定畫面時也上鎖</label>
+    <p class="subtle">解鎖期間，這台電腦的系統管理員在技術上可能讀取聊天內容。</p>
+    <div class="button-row">
+      <button id="private-chat-password-change" type="button">變更聊天密碼</button>
+      <button id="private-chat-reset" type="button">忘記密碼／重設聊天</button>
+      <button id="private-chat-erase" type="button">清除本機聊天資料</button>
+    </div>
+    <p class="subtle">更換或交還電腦前，請先清除本機聊天資料。</p>
+  </div>
+</section>
 <section>
           <h3>本機資料</h3>
           <p class="subtle">
@@ -723,6 +744,7 @@
     <dialog id="advanced-dialog" class="advanced-dialog" data-offline="true" aria-labelledby="advanced-title">
       <div class="tarot-heading"><div><h2 id="advanced-title">進階功能</h2><p>桌寵、塔羅與工作工具集中在這裡。</p></div><button data-advanced-close aria-label="關閉進階功能">✕</button></div>
       <div class="advanced-grid">        <button id="show-pet" class="nav-button" data-offline="true" title="桌寵與通知"><span>♧</span><span class="nav-label">桌寵與通知</span></button>
+        <button id="show-private-chat" type="button" class="nav-button" hidden>私聊</button>
         <button id="show-tarot" class="nav-button" data-offline="true" title="離線塔羅"><span>✦</span><span class="nav-label">塔羅牌桌</span></button>
         <button id="show-reminders" class="nav-button" data-offline="true" title="本機提醒事項"><span>◷</span><span class="nav-label">提醒事項</span></button>
         <button id="show-outlook" class="nav-button" title="Outlook 助理">
@@ -792,6 +814,7 @@
     <script src="schedules.js"></script>
     <script src="artifacts.js"></script>
     <script src="settings.js"></script>
+    <script src="private-chat.js"></script>
     <script src="tutorial-lessons.js"></script>
     <script src="project-tutorial.js"></script>
     <script src="onboarding.js"></script>

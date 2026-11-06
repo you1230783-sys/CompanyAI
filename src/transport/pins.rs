@@ -263,7 +263,7 @@ mod tests {
     #[test]
     #[ignore = "需要 scripts/Test-HttpsPins.py 啟動 loopback TLS fixture"]
     fn tls_pin_loopback_fixture() {
-        use super::super::{exchange_inner, Payload};
+        use super::super::{exchange_inner, Payload, RequestOptions};
         let get = |name| std::env::var(name).expect("本機 TLS fixture 參數");
         let url = Url::parse(&get("LMAI_TLS_FIXTURE_URL")).unwrap();
         let pins = Pins::parse(
@@ -285,7 +285,10 @@ mod tests {
                 5_000,
                 None,
                 "application/json",
-                Some(&pins),
+                RequestOptions {
+                    test_pins: Some(&pins),
+                    ..Default::default()
+                },
             )
             .unwrap();
             assert_eq!(reply.status, 200);
@@ -317,7 +320,10 @@ mod tests {
             5_000,
             None,
             "application/json",
-            Some(&pins),
+            RequestOptions {
+                test_pins: Some(&pins),
+                ..Default::default()
+            },
         );
         match get("LMAI_TLS_FIXTURE_EXPECTED").as_str() {
             "match" => assert_eq!(reply.unwrap().status, 200),

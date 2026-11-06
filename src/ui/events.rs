@@ -25,6 +25,9 @@ impl App {
             Event::Site(generation, event) if generation == self.generation => {
                 self.site_event(event)?
             }
+            Event::PrivateChat(generation, operation, result) if generation == self.generation => {
+                self.private_chat_event(operation, result);
+            }
             Event::MailBatch(generation, operation, event)
                 if generation == self.generation && operation == self.mail_flow.operation =>
             {
@@ -63,7 +66,9 @@ impl App {
                         self.config.model =
                             c.models[c.selected_index(&self.config.model)].id.clone();
                         self.models = Some(c);
-                        if self.work.capability_model != self.config.model {
+                        if self.config.uses_transport_v2()
+                            || self.work.capability_model != self.config.model
+                        {
                             self.refresh_work_capabilities();
                         }
                     }
@@ -420,6 +425,7 @@ impl App {
         // 自我檢查開始後由前端管理虛構資料，避免主程式的空白狀態覆蓋測試畫面。
         if !self.smoke {
             self.project_attention_tick();
+            self.private_chat_tick();
         }
         if changed && !self.smoke {
             self.publish();

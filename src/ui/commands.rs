@@ -32,6 +32,7 @@ impl App {
         }
         command.check_access(self.logged_in(), self.versions.blocked(), self.smoke)?;
         match command {
+            Command::PrivateChat { command } => self.private_chat_command(command),
             Command::Schedule { command } => self.schedule_command(command)?,
             Command::DocumentExport { command } => self.export_command(command)?,
             Command::Workspace { command } => self.workspace_command(command)?,

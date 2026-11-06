@@ -26,6 +26,7 @@ pub mod outlook;
 #[cfg(feature = "pet")]
 pub mod pet;
 mod png_preview;
+mod private_chat;
 pub mod projects;
 pub mod protocol;
 pub mod reliability;

@@ -93,6 +93,7 @@ impl App {
         }
     }
     pub(super) fn logout(&mut self) -> AppResult<()> {
+        self.lock_private_chat();
         self.schedules.cancel();
         self.document_export.cancel();
         self.workspace_import = None;

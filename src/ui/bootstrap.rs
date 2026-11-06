@@ -224,6 +224,12 @@ pub(super) unsafe extern "system" fn window_proc(
                         }
                         return 0;
                     }
+                    WM_WTSSESSION_CHANGE if wparam == WTS_SESSION_LOCK as usize => {
+                        if app.config.private_chat_lock.windows_lock {
+                            app.lock_private_chat();
+                        }
+                        return 0;
+                    }
                     WM_TIMER => {
                         app.tick();
                         return 0;
@@ -505,6 +511,7 @@ pub(super) fn run_with_local(
             #[cfg(feature = "vnc")]
             vnc: vnc::VncRuntime::default(),
             site: site::SiteRuntime::default(),
+            private_chat: private_chat::Runtime::new(window),
             mail_flow: mail_batch::MailRuntime::default(),
             work: work::WorkRuntime::default(),
             window,
