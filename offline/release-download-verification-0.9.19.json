@@ -1,0 +1,43 @@
+{
+  "version": "0.9.19",
+  "result": "PASS",
+  "recorded_at": "2026-11-06T12:19:34.806561+00:00",
+  "release_commit": "2a9bf7374afe7c4ca0a1d1637e0ccb10d7699a7e",
+  "tag_commit": "2a9bf7374afe7c4ca0a1d1637e0ccb10d7699a7e",
+  "release_id": 436466127,
+  "release_url": "https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.19",
+  "ci_run_id": 42215112199,
+  "authenticated_download": false,
+  "assets": [
+    {
+      "name": "LM_AI_Setup.exe",
+      "bytes": 92399295,
+      "sha256": "c297074d32b7a23e37254b1b5a6093edb0114eb9495e55f14037ee685e6d583c",
+      "url": "https://github.com/you1230783-sys/CompanyAI/releases/download/v0.9.19/LM_AI_Setup.exe"
+    },
+    {
+      "name": "SHA256SUMS.txt",
+      "bytes": 348,
+      "sha256": "a1e260de055d6a81da2c93560a0e33c09af451a307aed7c1ac33b2c8fc769c39",
+      "url": "https://github.com/you1230783-sys/CompanyAI/releases/download/v0.9.19/SHA256SUMS.txt"
+    },
+    {
+      "name": "update-manifest-exe.json",
+      "bytes": 1050,
+      "sha256": "c3095c580cf2750a1a448d6b29f24cabbb0b2bd339eee35acd8fd7a752dca271",
+      "url": "https://github.com/you1230783-sys/CompanyAI/releases/download/v0.9.19/update-manifest-exe.json"
+    },
+    {
+      "name": "update-manifest.json",
+      "bytes": 1050,
+      "sha256": "c3095c580cf2750a1a448d6b29f24cabbb0b2bd339eee35acd8fd7a752dca271",
+      "url": "https://github.com/you1230783-sys/CompanyAI/releases/download/v0.9.19/update-manifest.json"
+    },
+    {
+      "name": "verification.json",
+      "bytes": 9043,
+      "sha256": "aec8ddef8d8c007f0f0e2df46969a9b369b491a798e34cd63092f47123dd81ea",
+      "url": "https://github.com/you1230783-sys/CompanyAI/releases/download/v0.9.19/verification.json"
+    }
+  ]
+}

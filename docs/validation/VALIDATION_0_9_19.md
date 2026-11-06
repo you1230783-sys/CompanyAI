@@ -1,8 +1,8 @@
 # 0.9.19 Python 與公告整理：驗證紀錄
 
-後續發布授權（2026-11-06）：使用者要求推送 Git 與發布安裝包到 GitHub Release。以下保留本機完成時的證據；同來源 CI、發布與公開下載核對接續記錄。0.9.20 仍暫停。
+發布完成（2026-11-06）：使用者追加授權後，Git 與 [v0.9.19 Release](https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.19) 已發布；同來源 hosted CI 與五項公開下載 SHA256 核對通過。以下保留本機完成時的歷史證據，最終發布紀錄見文末。0.9.20 仍暫停。
 
-狀態：0.9.19 實作、手冊範圍的完整本機驗證、v142 正式建置與封裝封存完成；未推送或公開發布。依使用者最新指示到此暫停，0.9.20 未實作。依 [變更手冊](../CHANGE_HANDBOOK_0_9_19_PYTHON_AND_NOTES.md)；手冊原文不修改。
+本機交付階段紀錄：0.9.19 實作、手冊範圍的完整本機驗證、v142 正式建置與封裝封存完成；當時尚未推送或公開發布，後續結果見上方與文末。依使用者最新指示到此暫停，0.9.20 未實作。依 [變更手冊](../CHANGE_HANDBOOK_0_9_19_PYTHON_AND_NOTES.md)；手冊原文不修改。
 
 ## 範圍與實作
 
@@ -146,3 +146,12 @@ r3 於缺檔修復後失敗：正式 helper 對 `python.previous` 改名得到 W
 ## 保留的驗收界線
 
 依手冊跳過 CAD 圖面整體、真 Outlook 信箱、VNC 與 SMB。公司模型、真實 EIS／Excel 文件及公司電腦效能仍待公司端實測。0.9.18 的 B／C 已抄入 [未來待做](../FUTURE_IDEAS.md)；本版不實作。0.9.20 手冊保留原文，依最新指示暫停。
+
+
+## GitHub 發布與公開下載核對
+
+- Git main 已推送，Release 標籤 `v0.9.19` 固定於 `2a9bf7374afe7c4ca0a1d1637e0ccb10d7699a7e`。正式成品的產品來源仍為 `655bf12`，兩者僅有文件／收據差異；未重新編譯或替換已驗證的 EXE／Setup。發布後的文件提交不移動標籤。
+- [同來源 GitHub Actions](https://github.com/you1230783-sys/CompanyAI/actions/runs/42215112199)（run `42215112199`）通過。下載 CI artifact，核對 v142 14.29.30133、實際 x64 編譯器、空 Cargo 快取 frozen、fmt、default/core Clippy 與 Rust 測試、Cargo.lock 雜湊及 RustSec 報告。Hosted runner 排除既定兩個互動桌面測試；本機完整驗證另有覆蓋。維持有期限的既有 ttf-parser 維護公告例外，未出現新增漏洞。
+- [正式 Release](https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.19) 的安裝包、兩份簽署清單、verification.json 與 SHA256SUMS.txt 共五項資產，全部以**不帶登入憑證**的公開下載重新取得，大小及 SHA256 與上傳前本機檔案相同；標籤 commit 亦由 GitHub API 核對。
+- 這次發布 GitHub 手動下載，沒有部署公司更新伺服器。0.9.20 保留手冊且不實作；公司模型與實機驗收界線不變。
+- 機器證據：[CI 核對](../../offline/github-ci-verification-0.9.19.json)、[發布前整合驗證](../../offline/release-publication-verification-0.9.19.json)、[公開下載核對](../../offline/release-download-verification-0.9.19.json)。原本的 release-verification-0.9.19.json 保留本機交付時的狀態，不回寫歷史時間。
