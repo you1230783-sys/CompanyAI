@@ -1,0 +1,36 @@
+{
+  "version": "0.9.16",
+  "result": "PASS_RELATED_SCOPE",
+  "recorded_at": "2026-11-06T10:42:57.8235618+08:00",
+  "build": {
+    "recorded_at": "2026-11-06T10:33:52.8771518+08:00",
+    "result": "BUILD_ONLY",
+    "msvc": "14.29.30133",
+    "compiler_report": [
+      "v142.c",
+      "Verified _MSC_FULL_VER=192930159 x64"
+    ],
+    "linker": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\link.exe",
+    "empty_cargo_cache": true,
+    "default_features": true,
+    "requested_features": [],
+    "exe": "Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\company-ai.exe",
+    "exe_sha256": "d550ea9c10498e6469113f1e3b44372dfa7326675373eed9a32d90955aaeea3f",
+    "tests_run": false,
+    "installer_built": false
+  },
+  "exe_sha256": "d550ea9c10498e6469113f1e3b44372dfa7326675373eed9a32d90955aaeea3f",
+  "setup_sha256": "2d274f40a01cf9e6a8840b51bfc2d1eb8037d4dd02678d673542124122db18f3",
+  "empty_cargo_cache_frozen": true,
+  "scope": "M10: native branch edit/switch/DPAPI/retry and HTTP context/attachment isolation, project prefix handoff and draft-only edit, release EXE self-check and actual candidate installer lifecycle",
+  "synthetic_model_fixture": true,
+  "company_acceptance": false,
+  "not_rerun": [
+    "Office document comparison/translation/export",
+    "full native HTTP long-task matrix",
+    "Python scientific analysis matrix",
+    "CAD drawing",
+    "company mailbox/network/encrypted documents",
+    "full NSIS PID/rollback/repair matrix retained from 0.9.15"
+  ]
+}

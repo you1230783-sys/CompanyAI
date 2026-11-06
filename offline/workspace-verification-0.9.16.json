@@ -1,0 +1,20 @@
+{
+  "cases": [
+    "login gate",
+    "existing default workspace reused",
+    "original conversation and draft retained",
+    "new project draft keeps source link",
+    "path escape rejected",
+    "account generation cancels import",
+    "encrypted chunk import/readback",
+    "duplicate finish rejected",
+    "no model run or website attachment",
+    "native export revision/root/cancel guards",
+    "workflow reminder stores identity without execution",
+    "wrong principal and changed template rejected",
+    "manual load only opens parameter draft"
+  ],
+  "company_service_tested": false,
+  "result": "PASS",
+  "version": "0.9.16"
+}

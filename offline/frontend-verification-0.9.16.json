@@ -1,0 +1,98 @@
+{
+  "version": "0.9.16",
+  "result": "PASS",
+  "branches": {
+    "result": "PASS",
+    "checks": [
+      "all general user messages offer edit",
+      "legacy single branch has no redundant selector",
+      "edit displays exact inert text without execution",
+      "cancel edit makes no request",
+      "edit binds exact conversation version index and request",
+      "edit does not send old tail from WebView",
+      "native attachment rejection keeps editable text",
+      "selected version renders after restore",
+      "switch emits only draft preservation and selection",
+      "inflight work prevents branching and switching",
+      "executed project edit disabled with reason",
+      "every project message has draft handoff",
+      "project handoff binds selected prefix and defaults project",
+      "handoff confirmation creates draft without send authority",
+      "unstarted project question is draft-only edit",
+      "conversation switch invalidates edit dialog",
+      "branch visual light",
+      "branch visual dark",
+      "branch visual narrow"
+    ]
+  },
+  "plan": {
+    "result": "PASS",
+    "checks": [
+      "plan preference defaults off",
+      "plan preference uses native persistence",
+      "plan text is inert company content",
+      "manual resume disabled until native approval",
+      "showing plan does not submit model or tools",
+      "foreign conversation response ignored",
+      "rejection requires feedback",
+      "edited approval sends exact edited plan and revision",
+      "rejection sends feedback without authorization",
+      "major revision shows before and after",
+      "native approved checkpoint refresh removes stale approval and enables resume",
+      "plan visual light",
+      "plan visual dark",
+      "plan visual narrow"
+    ]
+  },
+  "conversations": {
+    "result": "PASS",
+    "checks": [
+      "new conversation waits for type selection",
+      "unified picker includes general and project",
+      "project selection creates only selected project chat",
+      "general selection creates general chat",
+      "project management opens modal",
+      "tools modal groups templates and handoff",
+      "general composer keeps four quick actions",
+      "pet stale project cannot create conversation",
+      "pet shortcut opens selected project conversation",
+      "combined recent conversations",
+      "recent ordering retained",
+      "project label is visible",
+      "general filter",
+      "project management filters without switching",
+      "opening preserves originating draft",
+      "preview request binds source and target",
+      "stale preview ignored",
+      "untrusted handoff stays editable inert text",
+      "attachment boundary displayed",
+      "confirm submits only preview id and edited text",
+      "confirmation cannot send chat",
+      "closing clears handoff content",
+      "project composer only exposes screenshot and tools",
+      "source navigation retained",
+      "native overview is rendered as inert text",
+      "overview retains verification limits",
+      "old answer cannot invent execution evidence",
+      "tools grouped while stop stays directly accessible",
+      "switching conversations closes and revokes preview",
+      "handoff fits desktop and narrow viewport",
+      "compact toolbar and tools modal fit 1180",
+      "compact toolbar and tools modal fit 520"
+    ]
+  },
+  "screenshots": [
+    {
+      "path": ".build/branch-light.png",
+      "sha256": "f2923d814747d568590d21d2ca1b11bdf5702da324d54f1e0411ce934effb9df"
+    },
+    {
+      "path": ".build/branch-dark.png",
+      "sha256": "47fdd06f31a5a04a01a307576e3b08f03deb2e50970b2031cb7bc938a890c6b4"
+    },
+    {
+      "path": ".build/branch-narrow.png",
+      "sha256": "1abccece365d4274729ae45b0424599ae674bd09735d6ee7c7272d5931248711"
+    }
+  ]
+}

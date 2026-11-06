@@ -1,0 +1,31 @@
+{
+  "result": "PASS",
+  "url": "https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.16",
+  "assets": [
+    {
+      "name": "LM_AI_Setup.exe",
+      "size": 90065828,
+      "sha256": "2d274f40a01cf9e6a8840b51bfc2d1eb8037d4dd02678d673542124122db18f3"
+    },
+    {
+      "name": "SHA256SUMS.txt",
+      "size": 348,
+      "sha256": "9cdde6830987ae203f24af10397636ee325458d1464e2cbdeaa9f7399cc99133"
+    },
+    {
+      "name": "update-manifest-exe.json",
+      "size": 1050,
+      "sha256": "63e759456b1b2b1c19bb743b3b450dc896ee4f87a59e779120733306af0a687a"
+    },
+    {
+      "name": "update-manifest.json",
+      "size": 1050,
+      "sha256": "63e759456b1b2b1c19bb743b3b450dc896ee4f87a59e779120733306af0a687a"
+    },
+    {
+      "name": "verification.json",
+      "size": 9062,
+      "sha256": "5877882ef04d27bbc6e05e668ed23961b51a6c26ead0010add8695848d86718f"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "cases": [
+    "native edit sends fresh request with selected prefix only",
+    "later turn isolates server context",
+    "manual retry uses same selected prefix and fresh identity",
+    "expired or foreign attachment rejected",
+    "DPAPI restart retains selected branch",
+    "switch restores old tail and draft without HTTP",
+    "stale branch rejected",
+    "missing attachment explicitly rejected",
+    "valid retained attachments rechecked over HTTP; old-tail token excluded",
+    "executed project cannot fork",
+    "unstarted project edit only updates draft"
+  ],
+  "company_service_tested": false,
+  "result": "PASS",
+  "transport": "native controller and loopback HTTP",
+  "version": "0.9.16"
+}

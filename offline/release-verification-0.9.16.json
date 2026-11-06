@@ -1,0 +1,205 @@
+{
+  "version": "0.9.16",
+  "build_result": "PASS",
+  "implementation_commit": "6fd91557427bbe613be7a3085601bbcd33533bc0",
+  "toolset": "MSVC v142 14.29.30133 x64",
+  "compiler_full_version": 192930159,
+  "empty_cargo_cache_frozen": true,
+  "rust_workspace_tests": 481,
+  "cad_unit_tests_filtered": 60,
+  "browser_groups": 3,
+  "final_exe_sha256": "d550ea9c10498e6469113f1e3b44372dfa7326675373eed9a32d90955aaeea3f",
+  "final_setup_sha256": "2d274f40a01cf9e6a8840b51bfc2d1eb8037d4dd02678d673542124122db18f3",
+  "installer_built": true,
+  "scope": "M10 related tests and actual candidate install/update/startup/uninstall. Full unchanged installer matrix retained from 0.9.15.",
+  "build": {
+    "version": "0.9.16",
+    "result": "PASS_RELATED_SCOPE",
+    "recorded_at": "2026-11-06T10:42:57.8235618+08:00",
+    "build": {
+      "recorded_at": "2026-11-06T10:33:52.8771518+08:00",
+      "result": "BUILD_ONLY",
+      "msvc": "14.29.30133",
+      "compiler_report": [
+        "v142.c",
+        "Verified _MSC_FULL_VER=192930159 x64"
+      ],
+      "linker": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\link.exe",
+      "empty_cargo_cache": true,
+      "default_features": true,
+      "requested_features": [],
+      "exe": "Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\company-ai.exe",
+      "exe_sha256": "d550ea9c10498e6469113f1e3b44372dfa7326675373eed9a32d90955aaeea3f",
+      "tests_run": false,
+      "installer_built": false
+    },
+    "exe_sha256": "d550ea9c10498e6469113f1e3b44372dfa7326675373eed9a32d90955aaeea3f",
+    "setup_sha256": "2d274f40a01cf9e6a8840b51bfc2d1eb8037d4dd02678d673542124122db18f3",
+    "empty_cargo_cache_frozen": true,
+    "scope": "M10: native branch edit/switch/DPAPI/retry and HTTP context/attachment isolation, project prefix handoff and draft-only edit, release EXE self-check and actual candidate installer lifecycle",
+    "synthetic_model_fixture": true,
+    "company_acceptance": false,
+    "not_rerun": [
+      "Office document comparison/translation/export",
+      "full native HTTP long-task matrix",
+      "Python scientific analysis matrix",
+      "CAD drawing",
+      "company mailbox/network/encrypted documents",
+      "full NSIS PID/rollback/repair matrix retained from 0.9.15"
+    ]
+  },
+  "installer_lifecycle": {
+    "result": "PASS_RELEASE_PACKAGE",
+    "version": "0.9.16.0",
+    "recorded_at": "2026-11-06T10:42:57.5563122+08:00",
+    "toolset": "14.29.30133",
+    "setup_sha256": "2d274f40a01cf9e6a8840b51bfc2d1eb8037d4dd02678d673542124122db18f3",
+    "app_sha256": "d550ea9c10498e6469113f1e3b44372dfa7326675373eed9a32d90955aaeea3f",
+    "install_path": "C:\\largan\\LM_AI",
+    "checks": [
+      "actual candidate Setup install",
+      "fixed path ignores /D",
+      "company metadata, registry and shortcut targets",
+      "missing WebView2 child-only guidance",
+      "installed WebView2/self-check including feature receipts",
+      "installed Python and CAD self-check",
+      "same-package update preserves user data and runtime identity",
+      "updated EXE/self-check/Python/CAD",
+      "uninstall preserves unknown user file"
+    ],
+    "not_rerun": [
+      "PID handoff and automatic restart",
+      "locked-file rollback",
+      "runtime repair matrix",
+      "obsolete CAD cleanup matrix"
+    ],
+    "prior_full_matrix": "offline/installer-verification-0.9.15.json",
+    "scope": "actual candidate only; installer and runtime unchanged; company environment remains separate"
+  },
+  "native_branches": {
+    "cases": [
+      "native edit sends fresh request with selected prefix only",
+      "later turn isolates server context",
+      "manual retry uses same selected prefix and fresh identity",
+      "expired or foreign attachment rejected",
+      "DPAPI restart retains selected branch",
+      "switch restores old tail and draft without HTTP",
+      "stale branch rejected",
+      "missing attachment explicitly rejected",
+      "valid retained attachments rechecked over HTTP; old-tail token excluded",
+      "executed project cannot fork",
+      "unstarted project edit only updates draft"
+    ],
+    "company_service_tested": false,
+    "result": "PASS",
+    "transport": "native controller and loopback HTTP",
+    "version": "0.9.16"
+  },
+  "native_handoff": {
+    "cases": [
+      "project prefix excludes later messages and creates draft without execution or attachments",
+      "original project results retained",
+      "login gate",
+      "cancel does not create a conversation",
+      "conversation binding",
+      "changed source rejects stale preview",
+      "account generation binding",
+      "replaced project root rejected",
+      "only creates draft, no copied task or attachment",
+      "one-shot confirmation",
+      "encrypted restart retains drafts and source link without authority replay"
+    ],
+    "company_service_tested": false,
+    "result": "PASS",
+    "version": "0.9.16"
+  },
+  "ci": {
+    "result": "PASS",
+    "head": "6fd91557427bbe613be7a3085601bbcd33533bc0",
+    "url": "https://github.com/you1230783-sys/CompanyAI/actions/runs/42151446993",
+    "run_id": 42151446993,
+    "artifact_id": 13473656002,
+    "archive_sha256": "8723cb6510e11226981fff2113e15d325e8cc4568e73828ce9c3d0f23c8ba46f",
+    "build": {
+      "recorded_at": "2026-11-06T02:49:43.3225947+00:00",
+      "result": "PASS_CI_SCOPE",
+      "msvc": "14.29.30133",
+      "compiler_report": [
+        "v142.c",
+        "Verified _MSC_FULL_VER=192930159 x64"
+      ],
+      "empty_cargo_cache": true,
+      "lock_sha256": "7b6db93b67e7f1e347ce79221ba168258cf75c015183fab6867d2df057f64a12",
+      "checks": [
+        "v142 x64 release build --frozen",
+        "fmt",
+        "default/core all-targets Clippy -D warnings",
+        "default/core workspace Rust tests"
+      ],
+      "excluded_interactive_tests": [
+        "ui::reminders::tests::windows_shell_accepts_native_reminder_notification",
+        "pet::tests::native_notification_visibility_and_settings_survive_restart"
+      ],
+      "not_validated": [
+        "Office integration",
+        "company models/mailbox/network",
+        "NSIS lifecycle",
+        "interactive desktop/DPI"
+      ],
+      "installer_built": false
+    },
+    "audit_summary": {
+      "recorded_at": "2026-11-06T02:49:49.8492057+00:00",
+      "result": "PASS_WITH_REVIEWED_MAINTENANCE_NOTICE",
+      "tool": "cargo-audit 0.22.2 (official prebuilt tool)",
+      "lock_sha256": "7b6db93b67e7f1e347ce79221ba168258cf75c015183fab6867d2df057f64a12",
+      "database": {
+        "advisory-count": 1409,
+        "last-commit": "26fd2d43f7280a1fb925a3743ec463017afe7119",
+        "last-updated": "2026-11-05T08:50:49+00:00"
+      },
+      "exit_code": 0,
+      "policy": "All targets; vulnerabilities, yanked, unsound and unreviewed warnings fail.",
+      "reviewed_maintenance_notices": [
+        "RUSTSEC-2026-0192: ttf-parser 0.25.1; review before 2027-02-01"
+      ]
+    }
+  },
+  "build_log_sha256": "b0270e303d9f9aa65d63bd32f6af23a5d708a542c684e9df3695bc54471c951b",
+  "validation_log_sha256": "aa3cda03a43472f02e7a2f9dd82ed388c98ddb3db166c2cadbb2ce2413ca2d8a",
+  "checks": [
+    "481 non-CAD Rust tests; fmt and all-target Clippy",
+    "19 branch, 14 plan and 32 conversation browser checks",
+    "Native controller/HTTP/DPAPI: selected prefix, old-tail attachment exclusion, fresh request and server context, manual retry, switch without execution",
+    "Project executed-edit rejection and prefix handoff creates draft only",
+    "Actual EXE six native UI self-checks and Python/CAD runtime",
+    "Actual candidate install/update/startup/uninstall; preserves runtime and user data"
+  ],
+  "prior_attempts": [
+    {
+      "path": ".build/check-0916-r1.log",
+      "sha256": "c31756817aec256af1ea26f175a8d4c01f4122a69049c19b491ecac2c9047145"
+    },
+    {
+      "path": ".build/clippy-0916-r1.log",
+      "sha256": "d266224a6618339c84dae2a09bc16e0cc9a7eb6a709d47eb9b61ce4f3bdd3fa1"
+    },
+    {
+      "path": ".build/test-0916-r1.log",
+      "sha256": "add95fdd5b225c9c1816130d040af1e5728b96f10e8bc776f67126131d629f90"
+    },
+    {
+      "path": ".build/native-branch0916-r1.txt",
+      "sha256": "eb80fc8afe90b6513477f327277f7a73f20e6b7f66d2ba3494896a5ea9ce9df5"
+    }
+  ],
+  "limits": [
+    "Company model and valid attachment reuse across isolated server conversations deferred to user",
+    "Full Python scientific, CAD drawing and Office document matrices not rerun",
+    "Full installer PID/rollback/repair matrix retained from 0.9.15, not rerun",
+    "Maximum 32 versions per conversation; archive remains bounded to 32MB",
+    "Invalid retained attachment requires explicit reattachment in a new conversation",
+    "Reviewed time-limited ttf-parser maintenance notice retained",
+    "GitHub manual downloads only; company update server not deployed"
+  ]
+}
