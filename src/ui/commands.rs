@@ -50,6 +50,13 @@ impl App {
             Command::Reminder { command } => self.reminder_command(command)?,
             Command::Template { command } => self.template_command(command)?,
             Command::Screenshot { command } => self.screenshot_command(command)?,
+            Command::Branch { command } => {
+                if let Err(error) = self.branch_command(command) {
+                    self.view
+                        .post(&json!({"type":"branch_error","message":error}))?;
+                    return Err(error);
+                }
+            }
             Command::Handoff { command } => {
                 let id = command.correlation().to_owned();
                 if let Err(error) = self.handoff_command(command) {
@@ -178,6 +185,10 @@ impl App {
                             return Ok(());
                         }
                         if let Err(error) = self.verify_handoff_flow() {
+                            self.smoke_result = Some(Err(error));
+                            return Ok(());
+                        }
+                        if let Err(error) = self.verify_branch_flow() {
                             self.smoke_result = Some(Err(error));
                             return Ok(());
                         }

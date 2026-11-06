@@ -187,12 +187,13 @@ impl App {
         {
             return Err("請先等待部分任務完成後再重試。".into());
         }
+        let branch_snapshot = self.is_branch_snapshot(conversation);
         let id = jobs::new_id()?;
         let question = messages.last_mut().ok_or("缺少使用者訊息。")?;
         question.request_id = Some(id.clone());
         let title: String = question.content.chars().take(50).collect();
         let mut request = if let Some(task) =
-            previous.filter(|task| task.request.get("messages").is_some())
+            previous.filter(|task| !branch_snapshot && task.request.get("messages").is_some())
         {
             // 保留原模型、用途與附件；僅換這次使用者明確要求的新請求 ID。
             task.request.clone()
@@ -227,7 +228,17 @@ impl App {
                         .ok_or_else(|| "原附件已到期或移除，請重新加入附件。".to_string())
                 })
                 .collect::<AppResult<Vec<_>>>()?;
-            let mut request = jobs::current_chat_request(
+            let tokens = if branch_snapshot {
+                self.branch_attachment_tokens(conversation, &context(&messages)?)?
+            } else {
+                tokens
+            };
+            let request_builder = if branch_snapshot {
+                jobs::snapshot_chat_request
+            } else {
+                jobs::current_chat_request
+            };
+            let mut request = request_builder(
                 &settings.model,
                 &context(&messages)?,
                 conversation,
@@ -285,6 +296,7 @@ impl App {
             applied: false,
             message: "正在重新嘗試".into(),
             title_generation: false,
+            branch_snapshot,
             tool_events: Vec::new(),
             partial: String::new(),
             project_retry: Default::default(),

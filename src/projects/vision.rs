@@ -151,6 +151,7 @@ pub(super) fn analyze(
             message: String::new(),
             mail_analysis: false,
             title_generation: false,
+            branch_snapshot: false,
             tool_events: vec![],
             partial: String::new(),
             project_retry: Default::default(),

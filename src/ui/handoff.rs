@@ -8,6 +8,8 @@ pub(super) enum HandoffCommand {
         source: String,
         project: String,
         request: String,
+        #[serde(default)]
+        through: Option<usize>,
     },
     Commit {
         id: String,
@@ -25,6 +27,7 @@ pub(super) struct Pending {
     generation: u64,
     project: crate::projects::Project,
     root_identity: [u32; 3],
+    through: Option<usize>,
 }
 impl HandoffCommand {
     pub(super) fn correlation(&self) -> &str {
@@ -109,7 +112,7 @@ impl App {
         self.work = Default::default();
         self.archive = Default::default();
         self.versions = Default::default();
-        verify(self.handoff_ready("missing").is_err(), "login gate")?;
+        verify(self.handoff_ready("missing", None).is_err(), "login gate")?;
         self.session = Some(Session {
             access_token: "local-handoff-fixture".into(),
             expires_at: crate::unix_now() + 3600,
@@ -129,6 +132,7 @@ impl App {
             source: source.clone(),
             project: project.clone(),
             request: "fixture".into(),
+            through: None,
         };
         self.handoff_command(prepare())?;
         let id = self.handoff.as_ref().ok_or("缺少預覽")?.id.clone();
@@ -231,7 +235,48 @@ impl App {
                     .is_some(),
             "encrypted restart retains drafts and source link without authority replay",
         )?;
+        // 專案訊息交接只摘要指定前綴；後續寫入紀錄與附件識別不移轉。
+        let project_source = self.active_id.clone().ok_or("缺少專案來源")?;
+        self.messages = vec![
+            Message::user("PREFIX_ONLY"),
+            Message::assistant("CUT_HERE".into()),
+            Message::assistant("LATER_SECRET".into()),
+        ];
+        self.save_history()?;
+        self.handoff_command(HandoffCommand::Prepare {
+            source: project_source.clone(),
+            project: project.clone(),
+            request: "project_prefix".into(),
+            through: Some(1),
+        })?;
+        verify(
+            !excerpt(&self.messages[..=1], "").contains("LATER_SECRET"),
+            "project prefix excludes later messages",
+        )?;
+        let id = self.handoff.as_ref().ok_or("缺少專案交接預覽")?.id.clone();
+        self.handoff_command(HandoffCommand::Commit {
+            id,
+            text: "PREFIX_ONLY / CUT_HERE".into(),
+        })?;
+        verify(
+            self.active_id.as_ref() != Some(&project_source)
+                && self.messages.is_empty()
+                && self.work.store.tasks.is_empty()
+                && self.work.store.attachments.is_empty()
+                && self.draft == "PREFIX_ONLY / CUT_HERE",
+            "project prefix creates draft only",
+        )?;
+        verify(
+            self.archive
+                .conversations
+                .iter()
+                .find(|c| c.id == project_source)
+                .is_some_and(|c| c.messages[2].content == "LATER_SECRET"),
+            "original project results retained",
+        )?;
         Ok(vec![
+            "project prefix excludes later messages and creates draft without execution or attachments",
+            "original project results retained",
             "login gate",
             "cancel does not create a conversation",
             "conversation binding",
@@ -243,7 +288,7 @@ impl App {
             "encrypted restart retains drafts and source link without authority replay",
         ])
     }
-    fn handoff_ready(&self, source: &str) -> AppResult<()> {
+    fn handoff_ready(&self, source: &str, through: Option<usize>) -> AppResult<()> {
         if !self.logged_in()
             || self.versions.blocked()
             || self.panic_fault
@@ -252,10 +297,11 @@ impl App {
             || self.projects.is_running()
             || self.work.store.pending(Some(source))
             || self.history_error.is_some()
-            || self.projects.store.project_for(source).is_some()
+            || (self.projects.store.project_for(source).is_some() && through.is_none())
+            || through.is_some_and(|i| i >= self.messages.len())
             || self.active_id.as_deref() != Some(source)
         {
-            return Err("請在原一般對話完成目前工作後，再帶入專案。".into());
+            return Err("請在來源對話完成目前工作後，再準備交接。".into());
         }
         Ok(())
     }
@@ -285,12 +331,13 @@ impl App {
                 source,
                 project,
                 request,
+                through,
             } => {
                 self.handoff = None;
                 if request.is_empty() || request.len() > 80 {
                     return Err("交接請求代號過長。".into());
                 }
-                self.handoff_ready(&source)?;
+                self.handoff_ready(&source, through)?;
                 self.preserve_draft()?;
                 let project = self
                     .projects
@@ -301,7 +348,10 @@ impl App {
                     .ok_or("請先建立或選擇專案。")?
                     .clone();
                 let root_identity = crate::projects::files::directory_identity(&project.root)?;
-                let text = excerpt(&self.messages, &self.draft);
+                let text = match through {
+                    Some(index) => excerpt(&self.messages[..=index], ""),
+                    None => excerpt(&self.messages, &self.draft),
+                };
                 let attachment_count = self
                     .work
                     .store
@@ -317,6 +367,7 @@ impl App {
                     generation: self.generation,
                     project,
                     root_identity,
+                    through,
                 };
                 self.view.post(&json!({"type":"handoff_preview","request":request,"id":pending.id,"source":source,
                     "project":pending.project.name,"root":pending.project.root,"text":text,
@@ -329,7 +380,7 @@ impl App {
                     .as_ref()
                     .filter(|p| p.id == id)
                     .ok_or("交接預覽已失效，請重新準備。")?;
-                self.handoff_ready(&pending.source)?;
+                self.handoff_ready(&pending.source, pending.through)?;
                 if pending.generation != self.generation
                     || pending.revision != self.handoff_revision(&pending.source)?
                 {
@@ -365,7 +416,7 @@ impl App {
                     .last_mut()
                     .ok_or("無法建立交接草稿。")?;
                 conversation.draft = text.clone();
-                conversation.title = "從一般對話帶入的草稿".into();
+                conversation.title = "從對話摘錄帶入的草稿".into();
                 conversation.handoff_source = Some(pending.source);
                 let mut store = self.projects.store.clone();
                 store.conversations.insert(id.clone(), pending.project.id);

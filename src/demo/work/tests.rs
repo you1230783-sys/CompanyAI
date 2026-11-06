@@ -125,6 +125,7 @@ fn attachments_background_stream_recovery_cancel_and_ownership() {
             message: String::new(),
             mail_analysis: false,
             title_generation: false,
+            branch_snapshot: false,
             tool_events: Vec::new(),
             partial: String::new(),
             project_retry: Default::default(),

@@ -1,7 +1,7 @@
 /* 對話交接、來源導覽及原生任務總覽；所有外部文字均以 textContent/value 顯示。 */
 "use strict";
 (() => {
-  let pending=null, request=null, origin=null;
+  let pending=null, request=null, origin=null, through=null;
   const command=value=>send({type:"handoff",command:value});
   const dialog=document.createElement("dialog");dialog.id="handoff-dialog";
   dialog.innerHTML=`<div class="dialog-heading"><h2>帶入專案繼續</h2><button data-close>關閉</button></div>
@@ -20,18 +20,22 @@
   dialog.addEventListener('close',()=>{if(!dialog.open){invalidate();origin=null;}});
   q('[data-close]').onclick=()=>dialog.close();
   q('[data-project]').onchange=invalidate;
-  $('handoff-start').onclick=()=>{
+  function openHandoff(index=null) {
+    through=index;
     invalidate();origin=state.active_id;
     send({type:'draft',text:$('prompt').value});
     const select=q('[data-project]');select.replaceChildren();
     for(const project of state.projects?.items||[])select.add(new Option(project.name,project.id));
     q('[data-status]').textContent=select.options.length ? '選擇目的專案後，先預覽內容。' : '尚無專案，請先建立專案，再回到原對話帶入。';
     q('[data-prepare]').disabled=!select.options.length;
+    const current=state.conversations?.find(c=>c.id===origin);
+    if(index!==null && current?.project_id)select.value=current.project_id;
     dialog.showModal();
-  };
+  }
+  $('handoff-start').onclick=()=>openHandoff();
   q('[data-prepare]').onclick=()=>{
     invalidate();request=crypto.randomUUID();q('[data-status]').textContent='正在準備…';
-    command({action:'prepare',source:origin,project:q('[data-project]').value,request});
+    command({action:'prepare',source:origin,project:q('[data-project]').value,request,...(through===null?{}:{through})});
   };
   q('[data-accept]').onclick=()=>{
     if(!pending)return;q('[data-accept]').disabled=true;
@@ -43,6 +47,7 @@
   }
   $('prompt').addEventListener('input',pathHint);
   window.ConversationUI={
+    fromMessage:openHandoff,
     receive(message) {
       if(message.type==='handoff_preview' && dialog.open && message.request===request && message.source===origin && origin===state.active_id) {
         pending=message.id;q('[data-text]').value=message.text;

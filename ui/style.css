@@ -1716,3 +1716,9 @@ dialog textarea:focus, dialog input:focus { outline: 2px solid var(--accent); ou
 .task-plan-card button { margin: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); color: var(--ink); }
 .task-plan-card button:disabled { opacity: .45; }
 #plan-mode-label { white-space: nowrap; font-size: 13px; }
+
+/* 版本選擇固定一列，窄視窗仍能操作。 */
+#branch-versions { padding: 8px 12px; }
+#branch-versions select { width: auto; max-width: 100%; }
+#branch-edit-dialog { width: min(640px, 92vw); }
+#branch-edit-dialog textarea { width: 100%; box-sizing: border-box; }

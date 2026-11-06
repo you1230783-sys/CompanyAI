@@ -581,6 +581,7 @@ function renderMessages() {
     state.config.chart_palette,
     state.busy === "chat",
     state.retry,
+    state.branches,
   ]);
   if (signature === messageSignature) {
     const retry = document.querySelector("#messages .retry-message");
@@ -714,6 +715,7 @@ function renderMessages() {
       retry.dataset.request = state.retry.request_id || "";
       tools.append(retry);
     }
+    window.BranchUI?.attach(tools,message,index);
     window.WorkbenchUI?.attachReply(tools,message,index,content);
     content.append(tools);
     article.append(avatar, content);
@@ -974,6 +976,7 @@ function receive(next) {
   window.DraftTools?.sync();
   window.ProjectUI?.render();
   window.ConversationUI?.sync();
+  window.BranchUI?.sync();
   window.ArtifactUI?.sync();
   window.WorkbenchUI?.sync();
   window.WeeklyUI?.render();
@@ -1399,6 +1402,7 @@ if (bridge) {
         window.ReminderUI?.receive(event.data);
         window.DraftTools?.receive(event.data);
         window.ConversationUI?.receive(event.data);
+        window.BranchUI?.receive(event.data);
         window.SettingsUI?.receive(event.data);
         window.ProjectUI?.receive(event.data);
         window.ArtifactUI?.receive(event.data);

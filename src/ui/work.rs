@@ -565,7 +565,7 @@ impl App {
         let local = self.ensure_local_conversation()?;
         let request_id = jobs::new_id()?;
         let files = self.work.store.drafts(Some(&local));
-        let tokens: Vec<String> = files
+        let mut tokens: Vec<String> = files
             .iter()
             .map(|a| {
                 a.token()
@@ -573,8 +573,31 @@ impl App {
                     .ok_or("附件尚未就緒或已到期。".to_string())
             })
             .collect::<AppResult<_>>()?;
-        let names: Vec<_> = files.iter().map(|a| a.name.clone()).collect();
-        let attachment_ids = files.iter().map(|a| a.id.clone()).collect();
+        let mut names: Vec<_> = files.iter().map(|a| a.name.clone()).collect();
+        let mut attachment_ids: Vec<String> = files.iter().map(|a| a.id.clone()).collect();
+        let branch_snapshot = self.is_branch_snapshot(&local);
+        if branch_snapshot {
+            let retained = self.branch_attachment_tokens(&local, &messages)?;
+            for token in retained {
+                if !tokens.contains(&token) {
+                    tokens.push(token);
+                }
+            }
+            if let Some(question) = messages.last() {
+                for name in &question.attachments {
+                    if !names.contains(name) {
+                        names.push(name.clone());
+                    }
+                }
+                if let Some(settings) = &question.retry_settings {
+                    for id in &settings.attachment_ids {
+                        if !attachment_ids.contains(id) {
+                            attachment_ids.push(id.clone());
+                        }
+                    }
+                }
+            }
+        }
         let mut messages = messages;
         let last = messages.last_mut().ok_or("缺少使用者訊息。")?;
         last.request_id = Some(request_id.clone());
@@ -604,7 +627,12 @@ impl App {
             attachment_ids,
             quick_action: matches!(action, "translate" | "summarize" | "polish" | "explain"),
         });
-        let mut request = jobs::current_chat_request(
+        let request_builder = if branch_snapshot {
+            jobs::snapshot_chat_request
+        } else {
+            jobs::current_chat_request
+        };
+        let mut request = request_builder(
             model,
             &messages,
             &local,
@@ -651,6 +679,7 @@ impl App {
             message: "正在送出；關閉後會恢復查詢".into(),
             mail_analysis: action == "mail",
             title_generation: false,
+            branch_snapshot,
             tool_events: Vec::new(),
             partial: String::new(),
             project_retry: Default::default(),
@@ -726,6 +755,7 @@ impl App {
             message: String::new(),
             mail_analysis: false,
             title_generation: true,
+            branch_snapshot: false,
             tool_events: Vec::new(),
             partial: String::new(),
             project_retry: Default::default(),
@@ -769,6 +799,23 @@ impl App {
             })
             .map(|a| (a.name.clone(), a.size))
             .collect();
+        let branch_files: Vec<_> = self
+            .work
+            .store
+            .attachments
+            .iter()
+            .filter(|file| {
+                task.branch_snapshot
+                    && file.conversation_id == task.conversation_id
+                    && !file.removed
+                    && file.token().is_some_and(|token| {
+                        task.request["attachment_tokens"]
+                            .as_array()
+                            .is_some_and(|tokens| tokens.iter().any(|v| v.as_str() == Some(token)))
+                    })
+            })
+            .cloned()
+            .collect();
         let principal = self.work.store.principal_id.clone();
         crate::reliability::spawn(move || {
             let id = task.request_id.clone();
@@ -777,7 +824,7 @@ impl App {
                 let mut task = task;
                 // 快捷操作／標題可能使用另一模型，須重新驗證其能力與附件規則。
                 let requested = task.request["model"].as_str().ok_or("缺少模型。")?;
-                if requested != config.model {
+                if requested != config.model || task.branch_snapshot {
                     let mut model_config = config.clone();
                     model_config.model = requested.into();
                     let caps = jobs::capabilities(&model_config, &session)?;
@@ -795,11 +842,34 @@ impl App {
                         }
                     }
                 }
-                let server_conversation = if task.title_generation {
-                    &task.request_id
-                } else {
-                    &task.conversation_id
-                };
+                // 網站才是附件有效性的權威；本機快取通過仍需查詢，失效不可悄悄略過。
+                if task.branch_snapshot {
+                    for file in &branch_files {
+                        let saved = file
+                            .remote
+                            .as_ref()
+                            .ok_or("原附件紀錄遺失，請另開對話重新附加。")?;
+                        let current: AttachmentStatus = jobs::get(
+                            &config,
+                            &session,
+                            &format!("{}/attachments/{}", jobs::PREFIX, saved.job_id),
+                        ).map_err(|error| format!("無法確認原附件仍有效，請另開對話重新附加；本次不會忽略附件送出。{error}"))?;
+                        current.validate()?;
+                        if current.job_id != saved.job_id
+                            || current.state != "ready"
+                            || current
+                                .expires_at
+                                .is_none_or(|expiry| expiry <= crate::unix_now())
+                            || current.attachment_token != saved.attachment_token
+                        {
+                            return Err(
+                                "原附件在網站已失效，請另開對話重新附加；本次不會忽略附件送出。"
+                                    .into(),
+                            );
+                        }
+                    }
+                }
+                let server_conversation = task.server_conversation();
                 let remote = jobs::conversation(&config, &session, server_conversation)?;
                 task.request["conversation_id"] = json!(remote);
                 chat_started = true;

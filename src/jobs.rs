@@ -160,6 +160,9 @@ pub struct Task {
     pub mail_analysis: bool,
     #[serde(default)]
     pub title_generation: bool,
+    /// 分支請求採明確快照，每個 request ID 使用獨立網站對話。
+    #[serde(default)]
+    pub branch_snapshot: bool,
     #[serde(default)]
     pub tool_events: Vec<ToolStatus>,
     #[serde(default)]
@@ -168,6 +171,13 @@ pub struct Task {
     pub project_retry: ProjectRetry,
 }
 impl Task {
+    pub(crate) fn server_conversation(&self) -> &str {
+        if self.title_generation || self.branch_snapshot {
+            &self.request_id
+        } else {
+            &self.conversation_id
+        }
+    }
     /// 自動重試更換網路請求ID，對話仍歸屬第一次提問，避免新增使用者訊息。
     pub(crate) fn history_id(&self) -> &str {
         self.project_retry
@@ -585,6 +595,25 @@ pub fn current_chat_request(
     )
 }
 
+/// 分支不讓網站補上舊尾段；呼叫端須以獨立網站對話送出此完整快照。
+pub(crate) fn snapshot_chat_request(
+    model: &str,
+    messages: &[Message],
+    conversation: &str,
+    request_id: &str,
+    mode: &str,
+    tokens: Vec<String>,
+) -> AppResult<Value> {
+    if messages.last().is_none_or(|m| m.role != "user") {
+        return Err("缺少本次使用者訊息。".into());
+    }
+    let mut calendar = Message::user(&crate::calendar::context(None)?);
+    calendar.role = "system".into();
+    let mut snapshot = vec![calendar];
+    snapshot.extend_from_slice(messages);
+    chat_request(model, &snapshot, conversation, request_id, mode, tokens)
+}
+
 /// 專案只使用背景往返及桌面技能；允許較長的受控工具歷程。
 pub(crate) fn project_chat_request(
     model: &str,
@@ -957,6 +986,7 @@ mod tests {
             message: String::new(),
             mail_analysis: false,
             title_generation: false,
+            branch_snapshot: false,
             tool_events: Vec::new(),
             partial: "已收到的部分".into(),
             project_retry: Default::default(),
@@ -1026,6 +1056,7 @@ mod tests {
                 message: String::new(),
                 mail_analysis: false,
                 title_generation: false,
+                branch_snapshot: false,
                 tool_events: Vec::new(),
                 partial: "串流中的正文".into(),
                 project_retry: Default::default(),
@@ -1210,6 +1241,7 @@ mod tests {
             message: String::new(),
             mail_analysis: false,
             title_generation: false,
+            branch_snapshot: false,
             tool_events: Vec::new(),
             partial: String::new(),
             project_retry: Default::default(),
@@ -1261,6 +1293,7 @@ mod tests {
                 message: String::new(),
                 mail_analysis: false,
                 title_generation: false,
+                branch_snapshot: false,
                 tool_events: Vec::new(),
                 partial: String::new(),
                 project_retry: Default::default(),

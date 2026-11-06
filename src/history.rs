@@ -1,5 +1,8 @@
 //! 以結構化 JSON 保存對話，整份使用 DPAPI 加密，不保存 Token 或模型憑證。
 //! 小型桌面歷史不需要資料庫服務；schema 欄位保留日後遷移的入口。
+mod branches;
+pub use branches::{editable_project_draft, BranchInfo, SavedBranch};
+
 use crate::{protocol::Message, storage, unix_now, AppResult};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path};
@@ -47,6 +50,10 @@ pub struct Conversation {
     pub created_at: u64,
     pub updated_at: u64,
     pub messages: Vec<Message>,
+    #[serde(default)]
+    pub branch: BranchInfo,
+    #[serde(default)]
+    pub alternate_branches: Vec<SavedBranch>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_queued: Option<QueuedProjectMessage>,
 }
@@ -101,6 +108,8 @@ impl Archive {
             title_manual: false,
             draft: String::new(),
             handoff_source: None,
+            branch: BranchInfo::default(),
+            alternate_branches: Vec::new(),
             created_at: unix_now(),
             updated_at: unix_now(),
             messages,
@@ -133,6 +142,7 @@ impl Archive {
             return Err("對話紀錄版本或大小不支援。".into());
         }
         for conversation in &self.conversations {
+            conversation.validate_branches()?;
             if let Some(queued) = &conversation.project_queued {
                 if crate::jobs::validate_id(&queued.id).is_err()
                     || crate::jobs::validate_id(&queued.after_run).is_err()

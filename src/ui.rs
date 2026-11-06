@@ -44,6 +44,7 @@ use windows_sys::Win32::{
     UI::{HiDpi::*, Shell::*, WindowsAndMessaging::*},
 };
 mod access;
+mod branches;
 mod diagnostics;
 mod document_export;
 mod handoff;
@@ -82,6 +83,9 @@ enum Command {
     },
     Workspace {
         command: workspace::WorkspaceCommand,
+    },
+    Branch {
+        command: branches::BranchCommand,
     },
     Handoff {
         command: handoff::HandoffCommand,
@@ -416,6 +420,7 @@ impl App {
                         .cmp(&b["notification_key"].as_str())
                 })
         });
+        let branches = self.branch_state();
         let mut state_payload = json!({"type":"state","state":{
             "update_available":self.versions.known.as_ref().is_some_and(|info| info.available()),
             "update_status":self.update_status,"update_ready":self.update_ready.is_some(),"update_busy":self.update_busy,
@@ -428,6 +433,7 @@ impl App {
             "mail":self.mail,"mail_busy":self.mail_busy,"mail_batch":self.mail_batch_state(),"history_error":self.history_error,
             "work":self.work_state(),"vnc":self.vnc_state(),"version_status":self.version_status,"login_code":self.grant.as_ref().map(|g|&g.user_code)
         }});
+        state_payload["state"]["branches"] = branches;
         // 額外能力以獨立欄位加入，避免大型json!巨集超過展開深度。
         state_payload["state"]["build_features"] = crate::build_features::state();
         state_payload["state"]["schedule_running"] = json!(self.schedules.active());
