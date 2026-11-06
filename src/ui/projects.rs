@@ -333,6 +333,7 @@ pub(super) struct Running {
 }
 #[derive(Default)]
 pub(super) struct ProjectRuntime {
+    recovered_retries: std::collections::BTreeMap<String, String>,
     attention_seen: std::collections::BTreeSet<String>,
     attention_conversation: Option<String>,
     weekly: Option<weekly::PendingWeekly>,
@@ -531,6 +532,11 @@ impl App {
             let mut message = Message::assistant(projects::runner::recover(&self.root, &id)?);
             message.local_time = projects::runner::recover_local_time(&self.root, &id);
             message.project_paused = projects::runner::paused_available(&self.root, &id);
+            if message.project_paused {
+                self.projects
+                    .recovered_retries
+                    .insert(conversation.id.clone(), id.clone());
+            }
             message.project_analysis = projects::runner::recover_analysis(&self.root, &id);
             message.project_overview = projects::runner::recover_overview(&self.root, &id);
             message.project_activity =
@@ -546,6 +552,44 @@ impl App {
             self.archive = archive;
         }
         Ok(())
+    }
+
+    pub(super) fn tick_recovered_retries(&mut self) -> AppResult<bool> {
+        if self.project_slots_full() || self.work.store.principal_id.is_empty() {
+            return Ok(false);
+        }
+        while let Some((conversation, id)) = self.projects.recovered_retries.pop_first() {
+            if !projects::runner::recovering_retry(
+                &self.root,
+                &id,
+                &conversation,
+                &self.work.store.principal_id,
+            ) {
+                continue;
+            }
+            let Some(chat) = self
+                .archive
+                .conversations
+                .iter()
+                .find(|chat| chat.id == conversation)
+            else {
+                continue;
+            };
+            if !chat.messages.last().is_some_and(|message| {
+                message.project_paused && message.request_id.as_deref() == Some(&id)
+            }) {
+                continue;
+            }
+            if self.projects.active(Some(&conversation))
+                || self.schedules.active_conversation(&conversation)
+            {
+                self.projects.recovered_retries.insert(conversation, id);
+                return Ok(false);
+            }
+            self.begin_project_for(conversation, chat.messages.clone(), Some(id), None)?;
+            return Ok(true);
+        }
+        Ok(false)
     }
     pub(super) fn project_tasks(&self) -> Vec<serde_json::Value> {
         self.projects.running.values().map(|run| json!({"id":run.id,"conversation_id":run.conversation,
@@ -1971,9 +2015,7 @@ impl App {
             ProjectEvent::Progress(id, text) => {
                 if let Some(run) = self.projects.run_mut(&id).filter(|r| r.id == id) {
                     run.received_reply |= text.is_model_reply();
-                    if !run.activity.last().is_some_and(|last| **last == *text) {
-                        run.activity.push(text.clone());
-                    }
+                    text.apply(&mut run.activity, true);
                     run.status = text.to_string();
                 }
             }

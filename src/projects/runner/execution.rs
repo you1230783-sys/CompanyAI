@@ -587,7 +587,7 @@ pub(super) fn run_for(
                             true,
                         )
                     },
-                    |message| report(&mut activity, &mut progress, message),
+                    |event| report_activity(&mut activity, &mut progress, event),
                 ),
             )
             .and_then(|reply| match reply {
@@ -1039,7 +1039,7 @@ pub(super) fn run_for(
                             compare_path.as_deref(),
                             focus,
                             deadline,
-                            |text| report(&mut activity, &mut progress, text),
+                            |event| report_activity(&mut activity, &mut progress, event),
                         )? {
                             crate::projects::delegation::Outcome::Complete(result) => result,
                             crate::projects::delegation::Outcome::Pending(reason) => {
@@ -1060,7 +1060,7 @@ pub(super) fn run_for(
                             path,
                             focus,
                             deadline,
-                            |text| report(&mut activity, &mut progress, text),
+                            |event| report_activity(&mut activity, &mut progress, event),
                         )? {
                             crate::projects::delegation::Outcome::Complete(result) => result,
                             crate::projects::delegation::Outcome::Pending(reason) => {
@@ -1424,6 +1424,14 @@ pub(super) fn report(
         return;
     }
     let event = Activity::from(message);
-    activity.push(event.clone());
+    report_activity(activity, progress, event);
+}
+
+fn report_activity(
+    activity: &mut Vec<Activity>,
+    progress: &mut impl FnMut(Activity),
+    event: Activity,
+) {
+    event.apply(activity, false);
     progress(event);
 }

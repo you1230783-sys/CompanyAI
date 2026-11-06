@@ -120,6 +120,20 @@ pub fn paused_for(root: &Path, id: &str, conversation: &str, principal: &str) ->
         s.version == 1 && s.available && s.conversation == conversation && s.principal == principal
     })
 }
+
+/// 只有已落盤的模型等待可於重開後自動續接。一般工具 checkpoint 仍需手動確認。
+pub(crate) fn recovering_retry(root: &Path, id: &str, conversation: &str, principal: &str) -> bool {
+    load_pause(root, id).is_ok_and(|s| {
+        s.version == 1
+            && s.available
+            && s.conversation == conversation
+            && s.principal == principal
+            && s.broker.task_plan.pending.is_none()
+            && s.pending_model.as_ref().is_some_and(|task| {
+                task.conversation_id == conversation && task.project_retry.due_at_millis > 0
+            })
+    })
+}
 fn save_pause(
     run: &Run,
     principal: &str,

@@ -26,7 +26,10 @@ pub(super) fn receive(
     deadline: Instant,
     lookup_only: bool,
     agent_caps: Option<&super::agent::Capabilities>,
-    hooks: (impl FnMut(&Task) -> AppResult<()>, impl FnMut(String)),
+    hooks: (
+        impl FnMut(&Task) -> AppResult<()>,
+        impl FnMut(crate::calendar::Activity),
+    ),
 ) -> AppResult<Reply> {
     let (mut checkpoint, mut notify) = hooks;
     super::runner::check_cancel(&run.cancel)?;
@@ -39,6 +42,7 @@ pub(super) fn receive(
         task.project_retry.exhausted = false;
         task.project_retry.due_at_millis = 0;
         task.project_retry.replace_failed = false;
+        task.project_retry.activity = None;
         if manual_replace {
             // 只有已確認暫時失敗才可用新的 ID。原結果不明時，手動繼續仍只查原 ID。
             retry::replace(task)?;
@@ -73,6 +77,7 @@ pub(super) fn receive(
             return Ok(Reply::Pending(super::runner::TIME_LIMIT_REASON.into()));
         }
         if task.project_retry.due_at_millis > 0 {
+            let waiting = task.project_retry.activity.clone();
             let waited = retry::wait(&run.cancel, &control, task, deadline, &mut notify);
             // 等待中的停止也沿用原生取消流程；可能仍在執行的原請求不能被漏掉。
             if run.cancel.load(std::sync::atomic::Ordering::Relaxed) {
@@ -80,19 +85,31 @@ pub(super) fn receive(
                     super::agent::cancel(&run.config, &run.session, task, caps);
                 }
             }
-            match waited? {
-                retry::Wait::Ready => (),
-                retry::Wait::Deadline => {
+            let mut finish_wait = |status| {
+                if let Some(waiting) = waiting.clone() {
+                    notify(retry::finish(waiting, status));
+                }
+            };
+            match waited {
+                Ok(retry::Wait::Ready) => (),
+                Ok(retry::Wait::Deadline) => {
+                    finish_wait("已停止等待");
                     checkpoint(task)?;
                     return Ok(Reply::Pending(super::runner::TIME_LIMIT_REASON.into()));
                 }
-                retry::Wait::Disabled => {
+                Ok(retry::Wait::Disabled) => {
                     task.project_retry.exhausted = true;
                     task.project_retry.due_at_millis = 0;
+                    task.project_retry.activity = None;
+                    finish_wait("已取消持續重試");
                     checkpoint(task)?;
                     return Ok(Reply::Pending(
                         "已取消持續重試，且本輪已超過兩次等待，任務已暫停。".into(),
                     ));
+                }
+                Err(error) => {
+                    finish_wait("已取消等待");
+                    return Err(error);
                 }
             }
             let replace = task.project_retry.replace_failed;
@@ -100,6 +117,7 @@ pub(super) fn receive(
                 retry::replace(task)?;
             }
             task.project_retry.due_at_millis = 0;
+            task.project_retry.activity = None;
             // 新 ID 必須先保存再 POST；此間當機，下次只查新 ID。
             checkpoint(task)?;
             super::events::register(&run.root, &task.request_id)?;
@@ -108,7 +126,8 @@ pub(super) fn receive(
                     match super::agent::submit(&run.config, &run.session, task, caps) {
                         super::agent::Submission::Accepted(status) => Some(status),
                         super::agent::Submission::Rejected(reason) => {
-                            return Ok(Reply::Rejected(reason))
+                            finish_wait("重新送出未獲接受");
+                            return Ok(Reply::Rejected(reason));
                         }
                         super::agent::Submission::Unknown(_) => None,
                     }
@@ -118,6 +137,13 @@ pub(super) fn receive(
             } else {
                 None
             };
+            finish_wait(if !replace {
+                "已開始查詢原請求"
+            } else if submitted_status.is_some() {
+                "已重新送出"
+            } else {
+                "已嘗試重新送出，將查詢原請求"
+            });
         }
         // POST 有可解析狀態便立即核對；不丟棄錯誤身分再以後續 GET 掩蓋它。
         let received =

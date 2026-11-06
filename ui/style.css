@@ -1451,6 +1451,8 @@ body.collapsed .project-section { overflow: visible; }
 /* 閱讀錨點由清單更新程式維護，避免瀏覽器再自動補償一次捲動。 */
 .project-activity-history { margin: 0; padding: 0 18px 12px 36px; max-height: 260px; overflow-y: auto; overflow-anchor: none; color: var(--muted); }
 .project-activity-history li { padding: 3px 0; white-space: pre-wrap; }
+.project-activity:not([open]) .project-retry-expanded,
+.project-activity[open] .project-retry-collapsed { display: none; }
 #project-diagnostics-dialog { width: min(960px, 92vw); }
 #project-diagnostics-text, #project-token-text, #project-token-short-text { box-sizing: border-box; width: 100%; height: min(24vh, 240px); min-height: 120px; max-height: none; padding: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); resize: vertical; font-family: Consolas, monospace; white-space: pre-wrap; }
 #project-activity { margin: 12px auto; max-width: 880px; }

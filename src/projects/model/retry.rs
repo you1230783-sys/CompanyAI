@@ -1,5 +1,6 @@
 //! 只對已確認的上游失敗重新推論；未知提交始終查原 ID。
 //! 排程寫入 Task，先保存再等待／送出，重啟不會遺失等待位置。
+use crate::calendar::{Activity, RetryActivity};
 use crate::{jobs::Task, AppResult};
 #[cfg(test)]
 use serde_json::json;
@@ -21,10 +22,30 @@ pub(super) fn schedule_project(
     let (state, seconds) = control.reserve_retry(task.project_retry.attempts)?;
     if let Some(seconds) = seconds {
         set_wait(task, replace, reason, seconds);
+        let retry = &mut task.project_retry;
+        retry.activity = Some(RetryActivity {
+            id: format!("{}-{}", task.request_id, state.total),
+            attempt: if state.enabled {
+                state.total
+            } else {
+                retry.attempts
+            },
+            limit: if state.enabled {
+                PROJECT_RETRY_LIMIT
+            } else {
+                2
+            },
+            continuous: state.enabled,
+            reason: reason.into(),
+            total_seconds: seconds,
+            due_at_millis: retry.due_at_millis,
+            waiting: true,
+        });
         return Ok(None);
     }
     task.project_retry.exhausted = true;
     task.project_retry.due_at_millis = 0;
+    task.project_retry.activity = None;
     let reason = if state.total >= PROJECT_RETRY_LIMIT {
         format!("已自動重試 {PROJECT_RETRY_LIMIT} 次，仍無法連線；可稍後按繼續。")
     } else {
@@ -45,11 +66,13 @@ pub(super) fn wait(
     control: &Inbox,
     task: &Task,
     deadline: Instant,
-    notify: &mut impl FnMut(String),
+    notify: &mut impl FnMut(Activity),
 ) -> AppResult<Wait> {
     let until = task.project_retry.due_at_millis;
     // 每次等待只記一次；取消與期限仍每100ms檢查，不把逐秒倒數灌進歷史。
-    let mut shown = false;
+    if let Some(activity) = task.project_retry.activity.clone() {
+        notify(Activity::retry(activity, "AI 連線恢復：等待重試"));
+    }
     loop {
         super::super::runner::check_cancel(cancel)?;
         if Instant::now() >= deadline {
@@ -62,21 +85,19 @@ pub(super) fn wait(
         if remaining == 0 {
             return Ok(Wait::Ready);
         }
-        let seconds = remaining.div_ceil(1000);
-        if !shown {
-            shown = true;
-            notify(format!(
-                "AI 連線恢復：第 {} 次，{}，剩餘 {seconds} 秒；可停止等待。",
-                task.project_retry.attempts,
-                if task.project_retry.replace_failed {
-                    "準備重試已失敗的推論"
-                } else {
-                    "準備查回原請求"
-                }
-            ));
-        }
         std::thread::sleep(Duration::from_millis(remaining.min(100)));
     }
+}
+
+/// 一次等待只保留最後狀態，清除截止時間，避免完成後繼續顯示倒數。
+pub(super) fn finish(mut activity: RetryActivity, result: &str) -> Activity {
+    activity.waiting = false;
+    activity.due_at_millis = 0;
+    let text = format!(
+        "AI 連線恢復（{}/{}）：{}，{result}",
+        activity.attempt, activity.limit, activity.reason
+    );
+    Activity::retry(activity, &text)
 }
 
 #[cfg(test)]
@@ -92,11 +113,14 @@ mod tests {
         use std::sync::atomic::{AtomicBool, Ordering};
         let mut task: Task = serde_json::from_value(json!({"request_id":"r","conversation_id":"c",
             "request":{},"mode":"background","title":"t","created_at":0,"remote":null,"applied":false})).unwrap();
-        task.project_retry.attempts = 2;
-        task.project_retry.due_at_millis = now_millis() + 1100;
-        task.project_retry.replace_failed = true;
         let cancel = AtomicBool::new(false);
         let control = control();
+        assert!(schedule_project(&control, &mut task, true, "排隊逾時")
+            .unwrap()
+            .is_none());
+        task.project_retry.due_at_millis = now_millis() + 1100;
+        task.project_retry.activity.as_mut().unwrap().due_at_millis =
+            task.project_retry.due_at_millis;
         let mut messages = Vec::new();
         assert!(matches!(
             wait(
@@ -110,7 +134,19 @@ mod tests {
             Wait::Ready
         ));
         assert_eq!(messages.len(), 1, "跨秒等待不得重複寫倒數");
-        assert!(messages[0].contains("第 2 次"));
+        let activity = messages[0].retry_info().unwrap();
+        assert_eq!(activity.total_seconds, 30);
+        assert_eq!(activity.reason, "排隊逾時");
+        let mut live = messages.clone();
+        let mut saved = Vec::new();
+        messages[0].apply(&mut saved, false);
+        assert!(saved.is_empty());
+        let finished = finish(activity.clone(), "已重新送出");
+        finished.apply(&mut live, true);
+        finished.apply(&mut saved, false);
+        assert_eq!(live.len(), 1);
+        assert_eq!(saved.len(), 1);
+        assert!(!live[0].retry_info().unwrap().waiting);
         task.project_retry.due_at_millis = now_millis() + 30_000;
         let started = Instant::now();
         let error = wait(

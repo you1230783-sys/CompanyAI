@@ -16,6 +16,11 @@ pub fn local_timestamp() -> String {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum Activity {
+    Retry {
+        text: String,
+        at: String,
+        retry: RetryActivity,
+    },
     Timed {
         text: String,
         at: String,
@@ -24,7 +29,57 @@ pub enum Activity {
     },
     Legacy(String),
 }
+
+/// 一次等待的識別與截止時間。前端可從時鐘重算倒數，原生只在狀態變更時發送。
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct RetryActivity {
+    pub id: String,
+    pub attempt: usize,
+    pub limit: usize,
+    pub continuous: bool,
+    pub reason: String,
+    pub total_seconds: u64,
+    pub due_at_millis: u64,
+    pub waiting: bool,
+}
+
 impl Activity {
+    pub fn retry(retry: RetryActivity, text: &str) -> Self {
+        Self::Retry {
+            text: text.into(),
+            at: local_timestamp(),
+            retry,
+        }
+    }
+
+    pub fn retry_info(&self) -> Option<&RetryActivity> {
+        match self {
+            Self::Retry { retry, .. } => Some(retry),
+            _ => None,
+        }
+    }
+
+    /// 結果更新原活動列。保存時可略過尚未結束的倒數，它可從 checkpoint 還原。
+    pub(crate) fn apply(&self, history: &mut Vec<Self>, live: bool) {
+        if let Some(retry) = self.retry_info() {
+            if retry.waiting && !live {
+                return;
+            }
+            if let Some(previous) = history
+                .iter_mut()
+                .find(|entry| entry.retry_info().is_some_and(|entry| entry.id == retry.id))
+            {
+                *previous = self.clone();
+                return;
+            }
+        } else if history
+            .last()
+            .is_some_and(|last| last.as_str() == self.as_str())
+        {
+            return;
+        }
+        history.push(self.clone());
+    }
     /// 明確標記已收到模型內容；排隊、讀檔及連線訊息不可切換成工作動作。
     pub fn model_reply() -> Self {
         Self::Timed {
@@ -51,7 +106,7 @@ impl std::ops::Deref for Activity {
     type Target = str;
     fn deref(&self) -> &str {
         match self {
-            Self::Timed { text, .. } | Self::Legacy(text) => text,
+            Self::Retry { text, .. } | Self::Timed { text, .. } | Self::Legacy(text) => text,
         }
     }
 }

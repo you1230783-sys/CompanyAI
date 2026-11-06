@@ -37,7 +37,7 @@ pub(super) fn analyze(
     compare_path: Option<&str>,
     focus: &str,
     deadline: Instant,
-    mut progress: impl FnMut(String),
+    mut progress: impl FnMut(crate::calendar::Activity),
 ) -> AppResult<Outcome> {
     if !input::model_supported(&run.config.model) {
         return Ok(failed(input::UNSUPPORTED_MODEL));

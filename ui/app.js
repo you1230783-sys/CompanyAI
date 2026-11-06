@@ -409,6 +409,29 @@ function activityEvents(events) {
   return (events || []).flatMap(event=>typeof event==="string" ? [{text:event,at:null}]
     : event && typeof event.text==="string" ? [event] : []);
 }
+
+function projectRetryText(retry, now) {
+  const title = retry.continuous
+    ? `連線恢復（第 ${retry.attempt}/${retry.limit} 次，持續重試）`
+    : `連線恢復（${retry.attempt}/${retry.limit}）`;
+  const remaining = Math.min(retry.total_seconds, Math.max(0, Math.ceil((retry.due_at_millis - now) / 1000)));
+  return `${title}：${retry.reason}，剩餘 ${remaining}/${retry.total_seconds} 秒…`;
+}
+
+function activityTextNode(event) {
+  if (!event.retry?.waiting) return document.createTextNode(event.text);
+  const line = node("span", "project-retry-clock", projectRetryText(event.retry, Date.now()));
+  line.retryActivity = event.retry;
+  return line;
+}
+
+// 只更新目前已掛載的文字節點，切回對話由同一截止時間重算。
+setInterval(() => {
+  const now = Date.now();
+  for (const line of document.querySelectorAll(".project-retry-clock")) {
+    line.textContent = projectRetryText(line.retryActivity, now);
+  }
+}, 1000);
 function localTimeNode(value, short=false) {
   if(typeof value!=="string" || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)) return null;
   const time=node("time","local-time",short?value.slice(11):value);
@@ -465,7 +488,11 @@ function renderProjectActivity(details, events, finished = false) {
   pager.querySelector('[data-page="newer"]').disabled=start===lastStart;
   pager.querySelector('[data-page="latest"]').disabled=page.start===null;
   pager.querySelector('.project-activity-count').textContent=`第 ${start+1}–${start+history.length} 筆，共 ${all.length} 筆`;
-  summary.textContent = label;
+  if (!finished && latest.retry?.waiting) {
+    const collapsed = node("span", "project-retry-collapsed");
+    collapsed.append(activityTextNode(latest));
+    summary.replaceChildren(collapsed, node("span", "project-retry-expanded", "查看工具紀錄與進度筆記"));
+  } else summary.textContent = label;
   if(!finished){const time=localTimeNode(latest.at,true);if(time)summary.prepend(time);}
   const previous = [...list.children];
   const oldTop = list.scrollTop;
@@ -485,7 +512,7 @@ function renderProjectActivity(details, events, finished = false) {
     // 活動內容不是通知 ID；不可共用通知已讀按鈕的 data-event。
     const item=node("li");item.dataset.activityEvent=JSON.stringify(event);
     const time=localTimeNode(event.at,true);if(time)item.append(time);
-    item.append(document.createTextNode(event.text));list.append(item);
+    item.append(activityTextNode(event));list.append(item);
   });
   if (follow) list.scrollTop = list.scrollHeight;
   else if (anchor?.isConnected && list.contains(anchor)) {

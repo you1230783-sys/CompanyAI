@@ -320,6 +320,15 @@ impl App {
         }
         if self.logged_in() && !self.versions.blocked() {
             changed |= self.site_tick();
+            if !self.smoke {
+                match self.tick_recovered_retries() {
+                    Ok(updated) => changed |= updated,
+                    Err(error) => {
+                        self.fail(error);
+                        changed = true;
+                    }
+                }
+            }
             match self.mail_batch_tick() {
                 Ok(updated) => changed |= updated,
                 Err(e) => {

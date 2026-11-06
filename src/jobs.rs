@@ -137,6 +137,8 @@ pub struct ProjectRetry {
     pub replace_failed: bool,
     pub exhausted: bool,
     pub history: Vec<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity: Option<crate::calendar::RetryActivity>,
 }
 impl ProjectRetry {
     fn is_empty(&self) -> bool {

@@ -35,7 +35,7 @@ pub fn summarize(
     path: &str,
     focus: &str,
     deadline: Instant,
-    mut progress: impl FnMut(String),
+    mut progress: impl FnMut(crate::calendar::Activity),
 ) -> AppResult<Outcome> {
     jobs::validate_id(operation)?;
     if run.config.model != "quality" {
@@ -123,7 +123,7 @@ pub fn summarize(
         }
         let index = state.summaries.len();
         let section = &sections[index];
-        progress(format!("快速模型摘要 {}/{}", index + 1, sections.len()));
+        progress(format!("快速模型摘要 {}/{}", index + 1, sections.len()).into());
         let lookup_only = state.pending.is_some();
         if state.pending.is_none() {
             let id = jobs::new_id()?;
