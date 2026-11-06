@@ -1,0 +1,44 @@
+{
+  "version": "0.9.20",
+  "result": "PASS_HANDBOOK_RELATED_LOCAL_SCOPE",
+  "recorded_at": "2026-11-06T16:37:17.307083+00:00",
+  "source_commit": "2b83921b21c4dd67e9b198d7350fd34294173cdc",
+  "toolset": "14.29.30133",
+  "compiler_report": [
+    "v142.c",
+    "Verified _MSC_FULL_VER=192930159 x64"
+  ],
+  "windows_sdk": "10.0.19041.0\\",
+  "empty_cargo_cache": true,
+  "exe_sha256": "5c797ac053909e463f64eb1fcb000f50aa198547715dd9b459182b0e0d28dbdf",
+  "setup_sha256": "608bf894372b767f52e3a3490d5438ab0127fada870b59f7531dcefdf35df528",
+  "cargo_lock_sha256": "fa2b786ed22b4eff4e9b0ee3217c1a7141e3c25ac97becf30a0be38883546a18",
+  "workspace_tests": 584,
+  "native_http_retry_cases": 10,
+  "frontend_suites": [
+    "MultiTask",
+    "Schedules",
+    "DocumentWork",
+    "TaskPlan"
+  ],
+  "office_excel": {
+    "culture": "zh-tw",
+    "general": "G/通用格式",
+    "sample_cells": 1209,
+    "sample_chars": 10800,
+    "full_chars": 70595,
+    "xls_xlsx": true
+  },
+  "basic_installer_checks": [
+    "actual candidate Setup install",
+    "fixed path ignores /D",
+    "company metadata, registry and shortcut targets",
+    "missing WebView2 child-only guidance",
+    "installed WebView2/self-check including feature receipts",
+    "installed Python and CAD self-check",
+    "same-package update preserves user data and runtime identity",
+    "updated EXE/self-check/Python/CAD",
+    "uninstall preserves unknown user file"
+  ],
+  "company_acceptance": false
+}
