@@ -9,6 +9,52 @@ use std::{collections::BTreeMap, path::Path, sync::atomic::AtomicBool};
 fn tool(value: Value) -> AppResult<Tool> {
     serde_json::from_value(value).map_err(|e| e.to_string())
 }
+
+pub fn verify_eis(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResult<()> {
+    let path = "eis.xlsx";
+    let mut broker = Broker::new(
+        Project {
+            id: "eis-fixture".into(),
+            name: "EIS 範例".into(),
+            root: root.into(),
+            imports: BTreeMap::new(),
+        },
+        "eis-read".into(),
+    )?;
+    let mut call = |id: &str, value: Value| broker.execute(id, &tool(value)?, worker, cancel);
+    let header = call(
+        "header",
+        json!({"tool":"inspect_excel","path":path,"sheet":1,"header_row":2,"start_column":"B","column_count":1}),
+    )?;
+    assert_eq!(header["ok"], true, "{header}");
+    let general = header["result"]["headers"][0]["cell"]["number_format"]
+        .as_str()
+        .unwrap();
+    assert!(matches!(general, "General" | "G/通用格式"), "{general}");
+    let columns: Vec<_> = (2..=40)
+        .map(company_ai::projects::office::excel::column_name)
+        .collect();
+    let mut request = json!({"tool":"read_excel_range","path":path,"revision":header["result"]["revision"],"sheet":1,"columns":columns,"header_row":2,"start_row":3,"row_count":31});
+    let sample = call("sample", request.clone())?;
+    assert_eq!(sample["ok"], true, "{sample}");
+    assert_eq!(sample["result"]["data_cells"], 1209);
+    assert_eq!(sample["result"]["rows"][0][2], json!(4740.12));
+    assert!(sample["result"]["rows"][30][39].is_null());
+    request["detail"] = json!("full");
+    let full = call("full", request)?;
+    assert_eq!(full["ok"], true, "{full}");
+    assert_eq!(full["result"]["rows"][0][2], json!(4740.124567));
+    assert!(full["result"]["exceptions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|entry| entry["header"] != true));
+    let sample_chars = sample["result"].to_string().chars().count();
+    let full_chars = full["result"].to_string().chars().count();
+    assert!(sample_chars < full_chars / 2);
+    println!("PASS native EIS Excel B3:AN33: General={general}, values={sample_chars}, full={full_chars}");
+    Ok(())
+}
 pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResult<()> {
     for ext in ["xlsx", "xls"] {
         let path = format!("large.{ext}");

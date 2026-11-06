@@ -18,6 +18,10 @@ fn run() -> AppResult<()> {
     }
     let cancel = AtomicBool::new(false);
     let mut worker = Worker::start(&exe, &cancel)?;
+    office_excel_read::verify_eis(&root, &mut worker, &cancel)?;
+    if args.get(3).is_some_and(|s| s == "--excel-read-only") {
+        return office_excel_read::verify(&root, &mut worker, &cancel);
+    }
     office_excel_plan::verify(&root, &mut worker, &cancel)?;
     // Word 實際輸出的繁體中文 PDF，驗證嵌入字型／ToUnicode，不只測 ASCII fixture。
     let mut pdf = Broker::new(

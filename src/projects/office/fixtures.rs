@@ -151,6 +151,34 @@ pub fn create(folder: &Path) -> AppResult<()> {
     }
     create_large_excel(folder)?;
     create_time_excel(folder)?;
+    create_eis_excel(folder)?;
+    Ok(())
+}
+
+/// 合成 EIS 版面。B3:AN33 含科學記號、一般格式表頭及成片空白，不使用公司文件。
+fn create_eis_excel(folder: &Path) -> AppResult<()> {
+    let session = Session::start(Path::new("eis.xlsx"), true)?;
+    let document = session.document()?;
+    let sheet = item(&child(document, "Worksheets")?, 1)?;
+    for (address, property, value) in [
+        ("B2:AN2", "Value2", "量測".into()),
+        ("B3:AN33", "Value2", 4740.124567f64.into()),
+        ("C3:AN33", "NumberFormat", "0.00E+00".into()),
+    ] {
+        let range = obj(invoke(&sheet, "Range", vec![address.into()], false)?)?;
+        set(&range, property, value)?;
+    }
+    let blank = obj(invoke(&sheet, "Range", vec!["V25:AN33".into()], false)?)?;
+    invoke(&blank, "Clear", vec![], false)?;
+    invoke(
+        document,
+        "SaveAs",
+        vec![
+            folder.join("eis.xlsx").to_string_lossy().as_ref().into(),
+            save_format("xlsx")?.into(),
+        ],
+        false,
+    )?;
     Ok(())
 }
 /// 三份欄序不同的全天量測表；用固定公式產生每分鐘資料，驗證每檔各自綁定欄位。
