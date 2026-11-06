@@ -1,9 +1,9 @@
 {
   "bytes_per_file": 10526720,
   "csv_rows": 60,
-  "csv_scan_seconds": 17.8157933,
+  "csv_scan_seconds": 17.8865994,
   "csv_summary_bytes": 7047,
-  "elapsed_seconds": 120.7577137,
+  "elapsed_seconds": 122.7277522,
   "files": 30,
   "long_line_continuation": true,
   "matches": 60,

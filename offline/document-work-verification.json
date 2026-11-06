@@ -11,8 +11,8 @@
     "DOCX supplementary Unicode formatting; PDF uses selectable-text fixture, color-emoji extraction limitation remains explicit"
   ],
   "company_encryption_tested": false,
-  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\0e5a8d5a16cffa9ed4d21ca2bf5f197c",
+  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\b1b4a3fbb523b2d5fa1a0c359b5f75ee",
   "real_model_tested": false,
   "result": "PASS",
-  "version": "0.9.12"
+  "version": "0.9.13"
 }

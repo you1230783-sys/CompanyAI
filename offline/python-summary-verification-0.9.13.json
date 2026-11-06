@@ -1,0 +1,13 @@
+{
+  "version": "0.9.13",
+  "result": "PASS",
+  "manifest_changed_files": [
+    "lm_worker.py"
+  ],
+  "worker_sha256": "34def8ab6b924a4975349f3aad376cf32baaf0c88ecb4ae98612d5450f5eb9ac",
+  "packages_unchanged": true,
+  "normalization_tests": 6,
+  "normalization_test_result": "PASS",
+  "test_file_sha256": "c90f40d87f3dc317873e6d26ce1d802690e39eb089ccd80716cd9f626f702843",
+  "scope": "Six normalization tests previously run with the bundled Python 3.13.12 and NumPy 2.2.6; native AppContainer separately included in Build.ps1."
+}

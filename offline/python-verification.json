@@ -29,7 +29,7 @@
     "original unchanged",
     "modified output rejected at finish"
   ],
-  "duration_seconds": 330.6808547,
+  "duration_seconds": 349.85895849999997,
   "matplotlib": "3.11.2",
   "numpy": "2.2.6",
   "openpyxl": "3.1.5",
@@ -37,5 +37,5 @@
   "python": "3.13.12",
   "result": "PASS",
   "scipy": "1.17.1",
-  "version": "0.9.12"
+  "version": "0.9.13"
 }

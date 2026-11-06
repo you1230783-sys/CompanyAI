@@ -1,0 +1,144 @@
+{
+  "version": "0.9.13",
+  "build_result": "PASS",
+  "implementation_commit": "5f89ae0da50c4469332df69d3871ad7f06b0b377",
+  "toolset": "MSVC v142 x64 14.29.30133",
+  "compiler_full_version": 192930159,
+  "empty_cargo_cache_frozen": true,
+  "rust_workspace_tests": 468,
+  "cad_unit_tests_filtered": 60,
+  "native_http_cases": 32,
+  "browser_groups": 5,
+  "scope": "Complete non-CAD Build.ps1 r1 with Office and NSIS; exact-source CI includes default/core Rust configurations.",
+  "final_exe_sha256": "3a97f4c6d178f7f19f22f6621c608a9b25786380e425e4603bba9c86f5afed05",
+  "final_setup_sha256": "33d48801609ac33860b17a43ee83eb791a1f95a4cf37603790e9a06f1354b1e9",
+  "installer_built": true,
+  "installer_lifecycle": {
+    "result": "PASS",
+    "recorded_at": "2026-11-06T08:25:08.5424101+08:00",
+    "version": "0.9.13.0",
+    "toolset": "14.29.30133",
+    "publisher": "Largan, Inc.",
+    "install_path": "C:\\largan\\LM_AI",
+    "parent_existed_before_test": true,
+    "setup_sha256": "33d48801609ac33860b17a43ee83eb791a1f95a4cf37603790e9a06f1354b1e9",
+    "vnc_configuration_preserved": true,
+    "webview2_bundled": false,
+    "python_bundled": true,
+    "python_folder": "python",
+    "python_install_self_check": true,
+    "cad_install_self_check": true,
+    "obsolete_cad_cleanup": "verified historical runtime removed after success; failed update and in-use runtime preserved; unknown data preserved",
+    "obsolete_cad_fixture": {
+      "directory": "C:\\largan\\LM_AI_Installer_Test\\cad-eaafe8017161c277",
+      "commit": "9f8febc57e119de30a5b37183f48c0a8878f8e41",
+      "sha256": "eaafe8017161c27796a9fb152839979327d8904ff51b56cdd9cbdff82d9da7fa",
+      "files": 645
+    },
+    "python_failure_rollback": true,
+    "python_reused_without_replacement": true,
+    "python_repair_cases": [
+      "missing-file",
+      "same-size-corruption",
+      "different-manifest"
+    ],
+    "reused_python_survives_app_rollback": true,
+    "runtime_check_stage": "application startup only; no installer prerequisite check",
+    "runtime_unavailable_simulation": "child-only WEBVIEW2_BROWSER_EXECUTABLE_FOLDER points to a nonexistent folder; Setup succeeds, installed app exits with existing guidance",
+    "checks": [
+      "NSIS install into missing product directory",
+      "existing directory preserves user files",
+      "fixed path ignores /D",
+      "shortcuts and registration",
+      "EXE/setup/uninstaller company name",
+      "PID handoff wait",
+      "update replacement",
+      "automatic restart",
+      "locked-file failure preserves old app",
+      "NSIS uninstall preserves unknown files",
+      "actual release Setup installation and WebView2 self-check",
+      "actual release uninstall"
+    ],
+    "scope": "isolated native payload and actual release Setup at C:\\largan\\LM_AI; corporate antivirus and Outlook require company testing"
+  },
+  "ci": {
+    "result": "PASS",
+    "head": "5f89ae0da50c4469332df69d3871ad7f06b0b377",
+    "url": "https://github.com/you1230783-sys/CompanyAI/actions/runs/42127495093",
+    "run_id": 42127495093,
+    "artifact_id": 13462450910,
+    "archive_sha256": "e33b3330bda49926d725296b40157887ced342270e08a8a805a6b0a6036ad196",
+    "build": {
+      "recorded_at": "2026-11-05T23:20:07.4769699+00:00",
+      "result": "PASS_CI_SCOPE",
+      "msvc": "14.29.30133",
+      "compiler_report": [
+        "v142.c",
+        "Verified _MSC_FULL_VER=192930159 x64"
+      ],
+      "empty_cargo_cache": true,
+      "lock_sha256": "654667f06731bb5bf7091f4a7eaaeda7c7bbde5489b70cff186684dc17f69eba",
+      "checks": [
+        "v142 x64 release build --frozen",
+        "fmt",
+        "default/core all-targets Clippy -D warnings",
+        "default/core workspace Rust tests"
+      ],
+      "excluded_interactive_tests": [
+        "ui::reminders::tests::windows_shell_accepts_native_reminder_notification",
+        "pet::tests::native_notification_visibility_and_settings_survive_restart"
+      ],
+      "not_validated": [
+        "Office integration",
+        "company models/mailbox/network",
+        "NSIS lifecycle",
+        "interactive desktop/DPI"
+      ],
+      "installer_built": false
+    },
+    "audit_summary": {
+      "recorded_at": "2026-11-05T23:20:12.9342635+00:00",
+      "result": "PASS_WITH_REVIEWED_MAINTENANCE_NOTICE",
+      "tool": "cargo-audit 0.22.2 (official prebuilt tool)",
+      "lock_sha256": "654667f06731bb5bf7091f4a7eaaeda7c7bbde5489b70cff186684dc17f69eba",
+      "database": {
+        "advisory-count": 1409,
+        "last-commit": "26fd2d43f7280a1fb925a3743ec463017afe7119",
+        "last-updated": "2026-11-05T08:50:49+00:00"
+      },
+      "exit_code": 0,
+      "policy": "All targets; vulnerabilities, yanked, unsound and unreviewed warnings fail.",
+      "reviewed_maintenance_notices": [
+        "RUSTSEC-2026-0192: ttf-parser 0.25.1; review before 2027-02-01"
+      ]
+    }
+  },
+  "build_log_sha256": "280c011cb9db23b9563fef850bf7d84bf3b013142194437b0435a1fbcc9cb364",
+  "changes": {
+    "M7": "7f3e385",
+    "general_python_skill": "364df0e",
+    "pause_notification": "15bcf31"
+  },
+  "new_checks": [
+    "Six bundled Python summary normalization unit tests",
+    "Native HTTP case 31: print-only JSON -> Code 14 evidence and numeric rejection -> NumPy result -> evidence -> registered answer table",
+    "Real AppContainer summary scalar/array, NaN/Inf key paths, oversized ndarray",
+    "Hidden-window UI: persisted visible pause notice, popup preference, conversation selection and one-shot navigation"
+  ],
+  "prior_attempts": [
+    {
+      "log": ".build/clippy-0913-ui.log",
+      "sha256": "c08408ec8924415b774a36b9e479cf3b300046de330b7924494e4eef8b593443",
+      "result": "New UI test omitted session argument; corrected test and session fingerprint; all-target Clippy then passed"
+    }
+  ],
+  "limits": [
+    "Real-model EIS comparison explicitly deferred to company acceptance",
+    "M4 free-text numerical mismatch detection deferred to phase two",
+    "Native hidden-window UI test suppresses live pet delivery; existing native pet test separately verifies visibility/settings. Company manual click acceptance pending",
+    "No new CAD drawing, company VNC/SMB/mailbox or antivirus acceptance",
+    "Existing Word colored-emoji PDF text-readback limitation retained",
+    "Reviewed time-limited ttf-parser maintenance notice retained",
+    "GitHub manual installer download; company update server not deployed"
+  ]
+}

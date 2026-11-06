@@ -1,0 +1,52 @@
+{
+  "result": "PASS",
+  "head": "5f89ae0da50c4469332df69d3871ad7f06b0b377",
+  "url": "https://github.com/you1230783-sys/CompanyAI/actions/runs/42127495093",
+  "run_id": 42127495093,
+  "artifact_id": 13462450910,
+  "archive_sha256": "e33b3330bda49926d725296b40157887ced342270e08a8a805a6b0a6036ad196",
+  "build": {
+    "recorded_at": "2026-11-05T23:20:07.4769699+00:00",
+    "result": "PASS_CI_SCOPE",
+    "msvc": "14.29.30133",
+    "compiler_report": [
+      "v142.c",
+      "Verified _MSC_FULL_VER=192930159 x64"
+    ],
+    "empty_cargo_cache": true,
+    "lock_sha256": "654667f06731bb5bf7091f4a7eaaeda7c7bbde5489b70cff186684dc17f69eba",
+    "checks": [
+      "v142 x64 release build --frozen",
+      "fmt",
+      "default/core all-targets Clippy -D warnings",
+      "default/core workspace Rust tests"
+    ],
+    "excluded_interactive_tests": [
+      "ui::reminders::tests::windows_shell_accepts_native_reminder_notification",
+      "pet::tests::native_notification_visibility_and_settings_survive_restart"
+    ],
+    "not_validated": [
+      "Office integration",
+      "company models/mailbox/network",
+      "NSIS lifecycle",
+      "interactive desktop/DPI"
+    ],
+    "installer_built": false
+  },
+  "audit_summary": {
+    "recorded_at": "2026-11-05T23:20:12.9342635+00:00",
+    "result": "PASS_WITH_REVIEWED_MAINTENANCE_NOTICE",
+    "tool": "cargo-audit 0.22.2 (official prebuilt tool)",
+    "lock_sha256": "654667f06731bb5bf7091f4a7eaaeda7c7bbde5489b70cff186684dc17f69eba",
+    "database": {
+      "advisory-count": 1409,
+      "last-commit": "26fd2d43f7280a1fb925a3743ec463017afe7119",
+      "last-updated": "2026-11-05T08:50:49+00:00"
+    },
+    "exit_code": 0,
+    "policy": "All targets; vulnerabilities, yanked, unsound and unreviewed warnings fail.",
+    "reviewed_maintenance_notices": [
+      "RUSTSEC-2026-0192: ttf-parser 0.25.1; review before 2027-02-01"
+    ]
+  }
+}
