@@ -2,6 +2,8 @@
 
 ## 目前工作
 
+- **0.9.18 已發布：v0.9.18 固定於 531efeeae9d40c3639a1f1c29870b8fade5a850e。X1／X2、M7混合stdout、禁止巢狀新增應用程式鎖，文件分類及新手冊／FUTURE_IDEAS一併交付。48項相關Rust、v142空快取frozen、相關原生Excel／Office／資源、候選NSIS與五項公開下載通過；驗證中發現的COM查詢及自檢HTTP伺服器問題已修正並記錄。僅相關驗證，未跑完整回歸或同來源hosted CI；原生與最終自檢候選的證據界線見 docs/validation/VALIDATION_0_9_18.md。到此停止，等待公司實測，不實作B／C。**
+
 - **2026-11-06 最新授權：依 CHANGE_HANDBOOK_0_9_18_EXCEL_READ.md 實作 X1／X2，納入 M7 混合 stdout 與 Office／CAD 巢狀鎖補強，進版0.9.18。跳過完整回歸，只做相關單元／schema／原生 Excel／Office 與候選安裝包驗證，v142 x64 空快取 frozen 建置；完成後打包、Git與可下載安裝包交付。FUTURE_IDEAS.md 及新手冊一起提交，三份手冊均保留原文。此授權取代前一輪不編譯／不發布及停在0.9.17的界線；本版未做的完整項目必須明列，不宣稱完整驗收。**
 
 - **2026-11-06 發布後補強：依使用者提供的 Claude 建議，修改 M7 的混合 stdout JSON 提示，以及 Office／CAD 鎖的巢狀擴充防護。僅本機原始碼與待驗案例，不編譯、不進版、不打包、不推送／發布；等待公司端實測回饋後再整合。已發布 0.9.17 與其驗證證據維持原樣，本次修改尚未編譯或執行測試；進度見 docs/IMPLEMENTATION_PLAN.md。**

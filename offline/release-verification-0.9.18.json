@@ -1,0 +1,246 @@
+{
+  "version": "0.9.18",
+  "result": "PASS_RELATED_SCOPE",
+  "source_commit": "531efeeae9d40c3639a1f1c29870b8fade5a850e",
+  "recorded_at": "2026-11-06T15:43:58.416567+08:00",
+  "full_regression_run": false,
+  "company_acceptance": false,
+  "toolset": "MSVC v142 14.29.30133 x64",
+  "compiler_full_version": 192930159,
+  "empty_cargo_cache_frozen": true,
+  "exe_sha256": "f293ff697b5482063788b936a2ced45e61b75780a506a484b5a747aff6cbe19b",
+  "setup_sha256": "3c6ce78eb293ec7bd17fa3be69e144343ad298b3098b36fd312887be19d54da5",
+  "installer_built": true,
+  "related": {
+    "version": "0.9.18",
+    "result": "PASS_RELATED_SCOPE",
+    "recorded_at": "2026-11-06T15:43:12.282142+08:00",
+    "full_regression_run": false,
+    "company_acceptance": false,
+    "rust_unique_tests": 48,
+    "rust_tests": [
+      "projects::agent::schema::tests::cad_operation_diagnostics_follow_kind_for_missing_and_extra_fields",
+      "projects::agent::schema::tests::cad_optional_line_style_uses_null_on_wire_and_is_omitted_for_original_tool",
+      "projects::agent::schema::tests::cad_read_accepts_a_note_with_the_next_page",
+      "projects::agent::schema::tests::cad_repair_hint_explains_edit_envelope_without_rewriting_arguments",
+      "projects::agent::schema::tests::diagnostics_follow_nullable_arrays_and_limit_model_supplied_field_names",
+      "projects::agent::schema::tests::every_tool_preserves_the_progress_note_contract",
+      "projects::agent::schema::tests::mixed_types_preserve_values_and_existing_constraints",
+      "projects::agent::schema::tests::python_input_errors_locate_missing_kind_and_unknown_key_without_echoing_code",
+      "projects::agent::schema::tests::type_arrays_reject_invalid_kinds_and_normalize_single_kind",
+      "projects::agent::schema::tests::union_diagnostics_do_not_choose_ambiguous_or_unknown_tags",
+      "projects::agent::tests::every_native_tool_schema_maps_to_existing_decision",
+      "projects::agent::tests::strict_schema_duplicate_keys_unknown_fields_and_malformed_arguments_fail",
+      "projects::files::diagram_sources::tests::excel_excerpt_keeps_old_and_compact_column_mapping",
+      "projects::files::mail_notes::tests::dynamic_schema_and_parser_keep_summary_separate_from_tool_arguments",
+      "projects::files::python::tests::print_only_json_gets_guidance_without_promoting_stdout",
+      "projects::files::references::excel_note_tests::excel_old_and_compact_archive_notes_and_analysis_keep_exact_evidence",
+      "projects::files::references::excel_note_tests::successful_excel_alias_is_accepted_after_archive_without_rereading",
+      "projects::files::references::excel_note_tests::wrong_or_failed_alias_does_not_replace_valid_source_or_mutate_notes",
+      "projects::files::tests::new_design_hides_drawing_schema_until_saved_and_keeps_state_after_restore",
+      "projects::office::availability::tests::busy_or_persistent_query_failure_never_becomes_idle",
+      "projects::office::availability::tests::disconnected_rot_is_requeried_until_confirmed_idle",
+      "projects::office::excel::compact::tests::compact_empty_page_and_numeric_headers_roundtrip",
+      "projects::office::excel::compact::tests::compact_numeric_100_by_9_is_under_forty_percent",
+      "projects::office::excel::compact::tests::compact_roundtrip_preserves_every_cell_and_special_headers",
+      "projects::office::excel::tests::chart_limits_are_independent_of_model_read_pages",
+      "projects::office::excel::tests::selected_columns_are_bounded_without_counting_intervening_columns",
+      "projects::overview::tests::excel_overview_reads_metadata_for_legacy_and_compact_pages",
+      "projects::overview::tests::failed_reads_and_model_claims_never_become_successful_outputs",
+      "projects::overview::tests::section_reads_and_image_pairs_keep_the_actual_source_paths",
+      "projects::overview::tests::truncation_and_missing_records_are_explicit",
+      "projects::skills::tests::cad_stages_and_reference_pages_do_not_load_unrelated_tools",
+      "projects::skills::tests::catalog_is_short_and_groups_load_once",
+      "projects::skills::tests::every_advertised_skill_can_be_loaded_through_tool_schema",
+      "projects::skills::tests::formula_skill_keeps_source_data_writes_without_reloading",
+      "projects::skills::tests::new_cad_outline_guidance_matches_available_primitives",
+      "projects::skills::tests::shared_core_guides_are_not_repeated",
+      "projects::workflows::tests::excel_workflow_preserves_old_results_and_requires_resave_for_changed_shape",
+      "projects::workflows::tests::old_copy_ids_and_old_calculation_operations_are_not_runnable_templates",
+      "projects::workflows::tests::parameter_form_checks_names_types_and_unsigned_tool_fields_before_running",
+      "projects::workflows::tests::rejects_tool_switch_and_forward_dependency",
+      "projects::workflows::tests::rerun_resolves_new_source_and_prior_result_without_reusing_old_copy_id",
+      "resource_locks::tests::application_groups_allow_reentry_and_memory_but_not_nested_expansion",
+      "resource_locks::tests::cancelled_and_timed_out_waiters_leave_no_ticket",
+      "resource_locks::tests::fifo_waiters_and_independent_resources",
+      "resource_locks::tests::nested_new_application_is_rejected_before_joining_fifo",
+      "resource_locks::tests::observer_panic_removes_waiting_ticket",
+      "resource_locks::tests::sorted_group_reentrancy_and_unwind_release",
+      "ui::branches::smoke::tests::branch_fixture_accepts_delayed_and_split_http_requests"
+    ],
+    "format_and_clippy": "PASS: fmt; v142 default-feature workspace all-targets Clippy -D warnings --frozen",
+    "compact_size": {
+      "fixture": "100 rows x 9 numeric columns",
+      "old_characters": 80111,
+      "new_characters": 5807,
+      "ratio": 0.07248692439240553,
+      "api_tokens_measured": false
+    },
+    "checks": [
+      "compact exact Cell round-trip",
+      "legacy/new notes and exact archive/checkpoint",
+      "analysis evidence JSON Pointers",
+      "diagram excerpts and overview",
+      "old workflow shape mismatch rejected; new saved format usable",
+      "mixed stdout guidance",
+      "nested application lock rejection, FIFO/reentry/memory",
+      "tool schema and skill catalog"
+    ],
+    "native_checks": [
+      "actual Excel XLS/XLSX compact dates/formulas/errors/special header",
+      "read_work_log compact result readback",
+      "Office COM read/edit/save/reopen",
+      "Word FIFO and independent Excel; external Word busy",
+      "two Python AppContainer workers/cancel isolation"
+    ],
+    "not_validated": [
+      "full unrelated Rust regression",
+      "full frontend suite",
+      "CAD drawings",
+      "real Outlook mailbox",
+      "VNC",
+      "SMB",
+      "company models and input-token usage",
+      "full scientific workload",
+      "full NSIS PID/rollback/repair matrix",
+      "same-source hosted CI"
+    ],
+    "ci_policy": "[skip ci]: user requested related tests only; no claim of full CI passing",
+    "failures_and_retries": [
+      "First Clippy pass found two schedule_smoke Step initializers missing result_format; fixed and final Clippy passed.",
+      "Two native Office runs failed in time-window CSV export (0x80010108). Diagnostic run also reproduced a disconnected ROT object during the existing Excel Workbooks count check after save. Added bounded read-only availability requery (10 attempts, 100 ms), preserving busy/unknown refusal and never replaying writes. Two additional tests passed; final native run uses rebuilt candidate. One diagnostic invocation was rejected for a relative fixture path before any Office operation. After final Office passed, the immediately chained resource probe was refused by its Office-busy preflight. Verified no Office processes in a fresh shell and reran only that probe; its separate receipt records completion."
+    ],
+    "installer_retry_note": "First install self-check failed at native completed task applied; identical EXE retry passed. A second installation check timed out. Synthetic branch records revealed WinHTTP 12152/12030. The fixture accepted sockets inherited Windows nonblocking mode and aborted when packets arrived later. Fixed only the self-check fixture to use blocking accepted sockets with 3-second read/write timeouts; a delayed/split HTTP regression passed. Original 45-second overall self-check and assertions remain. Rebuilt and repackaged; final candidate installer revalidated. One cleanup attempt stopped before the test uninstaller finished; only the verified synthetic marker and empty folder were later removed.",
+    "native_candidate_exe_sha256": "c403944814bf0ab321753c160d2120d74825d962270c7cdb3df0c0ff39d063e5",
+    "native_reuse_scope": "Office/resource tests passed before final self-check-only HTTP fixture fix. Office, Excel compact output, locks, Python and runtime sources unchanged afterwards. Final rebuilt EXE is checked by actual installer and self-check; full native Office matrix was not repeated for an unrelated test-fixture-only change.",
+    "source_documents": {
+      "docs/CHANGE_HANDBOOK_EIS_FEEDBACK.md": "685d2db6233a025b548d1dbe2e801206610e71c25535de6392e117bc90f93dac",
+      "docs/CHANGE_HANDBOOK_0_9_14_TO_0_9_17.md": "79935009c9f1b4894278ba23cfb4ae9fd00fef99761a779be0574b54f9cd4bb5",
+      "docs/CHANGE_HANDBOOK_0_9_18_EXCEL_READ.md": "69f3aec8d33935dffd98f74ea0ce51be2b1efb77a59d06ebb03ce5ba6840fae6",
+      "docs/FUTURE_IDEAS.md": "c6de6eabe189ce47e65ba1054c9c84bb2ffafbcd4c65ae115d46d6cc0862eaa8"
+    }
+  },
+  "build": {
+    "recorded_at": "2026-11-06T15:35:03.6373125+08:00",
+    "result": "BUILD_ONLY",
+    "msvc": "14.29.30133",
+    "compiler_report": [
+      "v142.c",
+      "Verified _MSC_FULL_VER=192930159 x64"
+    ],
+    "linker": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\link.exe",
+    "empty_cargo_cache": true,
+    "default_features": true,
+    "requested_features": [],
+    "exe": "Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\company-ai.exe",
+    "exe_sha256": "f293ff697b5482063788b936a2ced45e61b75780a506a484b5a747aff6cbe19b",
+    "tests_run": false,
+    "installer_built": false
+  },
+  "native_office": {
+    "version": "0.9.18.0",
+    "result": "PASS",
+    "office_version": "16.0.20527.20112",
+    "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\office-test-e9a6ab0a210046b682e7e9ace071f46e",
+    "checks": [
+      "DOC/DOCX/DOCM/XLS/XLSX/XLSM/XLSB/PPT/PPTX/PPTM COM read/edit/save/reopen",
+      "source bytes unchanged",
+      "readable filename and numbered second revision",
+      "duplicate save idempotent",
+      "Excel formula protected and literal = text",
+      "Excel numeric edit",
+      "Word and Excel bold retained",
+      "untouched paragraph/shape retained",
+      "blank DOCX/XLSX/PPTX creation",
+      "Word paragraphs/table/styles and Chinese font",
+      "Excel worksheets/ranges/number formats/borders",
+      "PPT title/content/two-column layouts and text styles",
+      "Office batch commit and failed-batch rollback",
+      "Excel chart reads numeric cells from checked snapshot",
+      "large XLS/XLSX bounded headers and noncontiguous A/F 100-row pages",
+      "range chart uses Excel numeric formula results and preserves missing rows",
+      "range revision mismatch, path escape and cell-budget rejection",
+      "excel-compact-v1: value, blank, date text/number_format, error, data/header formulas; XLS/XLSX",
+      "read_work_log preserves compact rows",
+      "no nested application lock refusal in successful Office regression"
+    ],
+    "company_encryption_tested": false,
+    "screenshots_verified": false,
+    "tested_exe_sha256": "c403944814bf0ab321753c160d2120d74825d962270c7cdb3df0c0ff39d063e5",
+    "final_change_after_this_native_run": "Self-check HTTP fixture only; production Office/Excel/locks/Python unchanged; final installer self-check separately verified."
+  },
+  "native_resources": {
+    "office": {
+      "company_documents": false,
+      "external_word": "existing BUSY marker preserved",
+      "files": [
+        "Y:\\Rust\\Project\\CompanyAI\\.build\\resources-0918-final-00fbe708cad04766b26589bdf40d9eb9\\task-a.docx",
+        "Y:\\Rust\\Project\\CompanyAI\\.build\\resources-0918-final-00fbe708cad04766b26589bdf40d9eb9\\task-b.docx",
+        "Y:\\Rust\\Project\\CompanyAI\\.build\\resources-0918-final-00fbe708cad04766b26589bdf40d9eb9\\independent.xlsx"
+      ],
+      "result": "PASS",
+      "word_excel": "Excel saved and read while A owns Word and B waits",
+      "word_word": "B waits until A closes; both files reopened and checked"
+    },
+    "python": {
+      "batch_worst_case_process_limits_bytes": 4294967296,
+      "excludes": "host process, Office and CAD memory",
+      "per_process_limit_bytes": 1073741824,
+      "result": "PASS",
+      "two_tasks_with_two_item_batches_max_python_processes": 4,
+      "two_worker_limit_bytes": 2147483648,
+      "workers": [
+        {
+          "active_process_limit": 1,
+          "job_handle": 29884,
+          "memory_limit": 1073741824,
+          "peak_process_memory": 150822912,
+          "pid": 36424
+        },
+        {
+          "active_process_limit": 1,
+          "job_handle": 29856,
+          "memory_limit": 1073741824,
+          "peak_process_memory": 152276992,
+          "pid": 24808
+        }
+      ]
+    },
+    "version": "0.9.18"
+  },
+  "installer": {
+    "result": "PASS_RELEASE_PACKAGE",
+    "version": "0.9.18.0",
+    "recorded_at": "2026-11-06T15:43:03.3422122+08:00",
+    "toolset": "14.29.30133",
+    "setup_sha256": "3c6ce78eb293ec7bd17fa3be69e144343ad298b3098b36fd312887be19d54da5",
+    "app_sha256": "f293ff697b5482063788b936a2ced45e61b75780a506a484b5a747aff6cbe19b",
+    "install_path": "C:\\largan\\LM_AI",
+    "checks": [
+      "actual candidate Setup install",
+      "fixed path ignores /D",
+      "company metadata, registry and shortcut targets",
+      "missing WebView2 child-only guidance",
+      "installed WebView2/self-check including feature receipts",
+      "installed Python and CAD self-check",
+      "same-package update preserves user data and runtime identity",
+      "updated EXE/self-check/Python/CAD",
+      "uninstall preserves unknown user file"
+    ],
+    "not_rerun": [
+      "PID handoff and automatic restart",
+      "locked-file rollback",
+      "runtime repair matrix",
+      "obsolete CAD cleanup matrix"
+    ],
+    "prior_full_matrix": "offline/installer-verification-0.9.15.json",
+    "scope": "actual candidate only; installer and runtime unchanged; company environment remains separate"
+  },
+  "hosted_ci": "Skipped by [skip ci]; related-only validation requested.",
+  "committed_document_sha256": {
+    "docs/CHANGE_HANDBOOK_EIS_FEEDBACK.md": "685d2db6233a025b548d1dbe2e801206610e71c25535de6392e117bc90f93dac",
+    "docs/CHANGE_HANDBOOK_0_9_14_TO_0_9_17.md": "79935009c9f1b4894278ba23cfb4ae9fd00fef99761a779be0574b54f9cd4bb5",
+    "docs/CHANGE_HANDBOOK_0_9_18_EXCEL_READ.md": "69f3aec8d33935dffd98f74ea0ce51be2b1efb77a59d06ebb03ce5ba6840fae6",
+    "docs/FUTURE_IDEAS.md": "c6de6eabe189ce47e65ba1054c9c84bb2ffafbcd4c65ae115d46d6cc0862eaa8"
+  }
+}

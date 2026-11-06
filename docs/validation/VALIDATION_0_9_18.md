@@ -1,6 +1,6 @@
 # 0.9.18 Excel 閱讀精簡：相關驗證紀錄
 
-狀態：相關測試、v142空快取frozen正式建置、原生Office與候選安裝包驗證通過；Git／Release交付另記於下方。此文件不代表完整驗收。
+狀態：相關測試、v142空快取frozen正式建置、原生Office與候選安裝包驗證通過；Git／Release及五項公開下載核對已完成。此文件不代表完整驗收。
 
 ## 範圍
 
@@ -48,3 +48,12 @@ X1 僅修改說明與技能，保留既有工具權限及已規劃來源的匯�
 機器收據：`offline/related-verification-0.9.18.json`、`offline/exe-verification-0.9.18.json`、`offline/office-verification-0.9.18.json`、`offline/resource-verification-0.9.18.json`、`offline/installer-verification-0.9.18.json`。發行後另保存release-verification與公開下載核對收據。
 
 原生Office／資源測試使用修正COM後的候選（EXE SHA256 c403944814bf0ab321753c160d2120d74825d962270c7cdb3df0c0ff39d063e5）。之後只修正自檢的HTTP合成伺服器；Excel／Office／鎖／Python正式功能與runtime未再更動，因此不重跑整套已成功的原生矩陣。最終重建版本另通過延遲封包回歸、Clippy、安裝後自檢與封裝流程，最終雜湊以發行收據為準。
+
+## Git／Release 交付
+
+- 來源提交與v0.9.18標籤：`531efeeae9d40c3639a1f1c29870b8fade5a850e`；發行後僅補文件與收據，不改動標籤。
+- [0.9.18 Release](https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.18)：安裝包90,118,568 bytes，五項資產皆以未登入方式下載並核對SHA256通過。
+- 最終EXE SHA256：`f293ff697b5482063788b936a2ced45e61b75780a506a484b5a747aff6cbe19b`。
+- Setup SHA256：`3c6ce78eb293ec7bd17fa3be69e144343ad298b3098b36fd312887be19d54da5`。
+- 詳細證據：`offline/release-verification-0.9.18.json`、`offline/release-download-verification-0.9.18.json`。需求文件另記Git儲存內容SHA256，區別工作樹換行正規化。
+- 依要求使用 `[skip ci]`，未跑同來源完整hosted CI；公司端真實模型／文件與tokens仍待驗收。此版交付完成後停止，不擅自實作B／C或進下一版。
