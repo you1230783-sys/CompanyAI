@@ -1,0 +1,35 @@
+{
+  "version": "0.9.15",
+  "result": "PASS_RELATED_SCOPE",
+  "recorded_at": "2026-11-06T10:07:31.7912007+08:00",
+  "build": {
+    "recorded_at": "2026-11-06T09:44:43.6838882+08:00",
+    "result": "BUILD_ONLY",
+    "msvc": "14.29.30133",
+    "compiler_report": [
+      "v142.c",
+      "Verified _MSC_FULL_VER=192930159 x64"
+    ],
+    "linker": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\link.exe",
+    "empty_cargo_cache": true,
+    "default_features": true,
+    "requested_features": [],
+    "exe": "Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\company-ai.exe",
+    "exe_sha256": "5555033ee1aef9d96be9d2ac7819ae2030987a1415a1c83677fdabbd0b968bfe",
+    "tests_run": false,
+    "installer_built": false
+  },
+  "exe_sha256": "5555033ee1aef9d96be9d2ac7819ae2030987a1415a1c83677fdabbd0b968bfe",
+  "setup_sha256": "6d03da48c0858060f1afd7b6588107c8532626f810e1e66a97b15fb0b5d6c3db",
+  "empty_cargo_cache_frozen": true,
+  "scope": "M9: native plan read-only gate/rejection/edited approval/major revision and pause/recovery, release EXE self-check and full NSIS lifecycle",
+  "synthetic_model_fixture": true,
+  "company_acceptance": false,
+  "not_rerun": [
+    "Office document comparison/translation/export",
+    "full native HTTP long-task matrix",
+    "Python scientific analysis matrix",
+    "CAD drawing",
+    "company mailbox/network/encrypted documents"
+  ]
+}

@@ -1,0 +1,119 @@
+{
+  "version": "0.9.15",
+  "result": "PASS",
+  "plan": {
+    "result": "PASS",
+    "checks": [
+      "plan preference defaults off",
+      "plan preference uses native persistence",
+      "plan text is inert company content",
+      "manual resume disabled until native approval",
+      "showing plan does not submit model or tools",
+      "foreign conversation response ignored",
+      "rejection requires feedback",
+      "edited approval sends exact edited plan and revision",
+      "rejection sends feedback without authorization",
+      "major revision shows before and after",
+      "native approved checkpoint refresh removes stale approval and enables resume",
+      "plan visual light",
+      "plan visual dark",
+      "plan visual narrow"
+    ]
+  },
+  "preview": {
+    "result": "PASS",
+    "checks": [
+      "M8 preview uses local native command only",
+      "M8 rejects another conversation response",
+      "M8 shows immutable-baseline warning and escaped line text",
+      "M8 formula and calculated value display separately",
+      "M8 next page requests native offset",
+      "M8 rejects stale page response",
+      "M8 previous page returns to correct offset",
+      "M8 late response cannot reopen closed preview",
+      "M8 overview only offers supported existing-source preview",
+      "comparison preserves changed/deleted/added Unicode lines",
+      "Office format-only change remains visible",
+      "large comparison is bounded without dropping rows",
+      "comparison opens red deletion and green insertion sides",
+      "comparison treats source HTML as plain text",
+      "before and after remain side by side",
+      "comparison search filters both sides",
+      "only changes hides unchanged rows",
+      "comparison font size is adjustable",
+      "comparison maximizes within app",
+      "legacy artifact never invents a baseline",
+      "review request binds artifact to conversation message and run",
+      "foreign conversation response cannot open review",
+      "matching response opens fixed snapshot",
+      "conversation switch closes private review",
+      "method supports editable steps and new input conditions",
+      "method reuse saves the actual draft without executing or sending a chat",
+      "completion keeps partial failures and failed checks visible",
+      "timeline preserves uncertainty",
+      "source cap is explicit and preview text is inert",
+      "completed analysis defaults to collapsed",
+      "running analysis starts collapsed",
+      "running analysis respects manual expansion on update",
+      "finishing analysis preserves manually collapsed content",
+      "completed analysis preserves manual expansion on update",
+      "saved answer analysis starts collapsed",
+      "message redraw preserves analysis and evidence expansion",
+      "another conversation defaults to collapsed analysis",
+      "M8 visual light",
+      "M8 visual dark",
+      "M8 visual narrow"
+    ]
+  },
+  "conversations": {
+    "result": "PASS",
+    "checks": [
+      "new conversation waits for type selection",
+      "unified picker includes general and project",
+      "project selection creates only selected project chat",
+      "general selection creates general chat",
+      "project management opens modal",
+      "tools modal groups templates and handoff",
+      "general composer keeps four quick actions",
+      "pet stale project cannot create conversation",
+      "pet shortcut opens selected project conversation",
+      "combined recent conversations",
+      "recent ordering retained",
+      "project label is visible",
+      "general filter",
+      "project management filters without switching",
+      "opening preserves originating draft",
+      "preview request binds source and target",
+      "stale preview ignored",
+      "untrusted handoff stays editable inert text",
+      "attachment boundary displayed",
+      "confirm submits only preview id and edited text",
+      "confirmation cannot send chat",
+      "closing clears handoff content",
+      "project composer only exposes screenshot and tools",
+      "source navigation retained",
+      "native overview is rendered as inert text",
+      "overview retains verification limits",
+      "old answer cannot invent execution evidence",
+      "tools grouped while stop stays directly accessible",
+      "switching conversations closes and revokes preview",
+      "handoff fits desktop and narrow viewport",
+      "compact toolbar and tools modal fit 1180",
+      "compact toolbar and tools modal fit 520"
+    ]
+  },
+  "screenshots": [
+    {
+      "path": ".build/plan-light.png",
+      "sha256": "5bf1c9caaa790b0dc15e3e60a7de1554543ca91a8094b967ece0e5e4e76dd7c0"
+    },
+    {
+      "path": ".build/plan-dark.png",
+      "sha256": "e9a005df3079be298fb7083b51496be22437091fbe005859ae12d62dc58156b2"
+    },
+    {
+      "path": ".build/plan-narrow.png",
+      "sha256": "9f297dc91802b1b6fa1a8c90b84dec0e104e2db561bed62ab349a667a27aaad1"
+    }
+  ]
+}

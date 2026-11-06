@@ -1,0 +1,201 @@
+{
+  "version": "0.9.15",
+  "build_result": "PASS",
+  "implementation_commit": "33a07acb4a060997883dd9a0cbba202e4df05336",
+  "toolset": "MSVC v142 14.29.30133 x64",
+  "compiler_full_version": 192930159,
+  "empty_cargo_cache_frozen": true,
+  "rust_workspace_tests": 478,
+  "cad_unit_tests_filtered": 60,
+  "browser_groups": 3,
+  "final_exe_sha256": "5555033ee1aef9d96be9d2ac7819ae2030987a1415a1c83677fdabbd0b968bfe",
+  "final_setup_sha256": "6d03da48c0858060f1afd7b6588107c8532626f810e1e66a97b15fb0b5d6c3db",
+  "installer_built": true,
+  "scope": "Related M9 validation after Build.ps1 -BuildOnly -EmptyCargoCache; not a full native long-task/Python/CAD/Office regression.",
+  "build": {
+    "version": "0.9.15",
+    "result": "PASS_RELATED_SCOPE",
+    "recorded_at": "2026-11-06T10:07:31.7912007+08:00",
+    "build": {
+      "recorded_at": "2026-11-06T09:44:43.6838882+08:00",
+      "result": "BUILD_ONLY",
+      "msvc": "14.29.30133",
+      "compiler_report": [
+        "v142.c",
+        "Verified _MSC_FULL_VER=192930159 x64"
+      ],
+      "linker": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\link.exe",
+      "empty_cargo_cache": true,
+      "default_features": true,
+      "requested_features": [],
+      "exe": "Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\company-ai.exe",
+      "exe_sha256": "5555033ee1aef9d96be9d2ac7819ae2030987a1415a1c83677fdabbd0b968bfe",
+      "tests_run": false,
+      "installer_built": false
+    },
+    "exe_sha256": "5555033ee1aef9d96be9d2ac7819ae2030987a1415a1c83677fdabbd0b968bfe",
+    "setup_sha256": "6d03da48c0858060f1afd7b6588107c8532626f810e1e66a97b15fb0b5d6c3db",
+    "empty_cargo_cache_frozen": true,
+    "scope": "M9: native plan read-only gate/rejection/edited approval/major revision and pause/recovery, release EXE self-check and full NSIS lifecycle",
+    "synthetic_model_fixture": true,
+    "company_acceptance": false,
+    "not_rerun": [
+      "Office document comparison/translation/export",
+      "full native HTTP long-task matrix",
+      "Python scientific analysis matrix",
+      "CAD drawing",
+      "company mailbox/network/encrypted documents"
+    ]
+  },
+  "installer_lifecycle": {
+    "result": "PASS",
+    "recorded_at": "2026-11-06T10:07:31.6273842+08:00",
+    "version": "0.9.15.0",
+    "toolset": "14.29.30133",
+    "publisher": "Largan, Inc.",
+    "install_path": "C:\\largan\\LM_AI",
+    "parent_existed_before_test": true,
+    "setup_sha256": "6d03da48c0858060f1afd7b6588107c8532626f810e1e66a97b15fb0b5d6c3db",
+    "vnc_configuration_preserved": true,
+    "webview2_bundled": false,
+    "python_bundled": true,
+    "python_folder": "python",
+    "python_install_self_check": true,
+    "cad_install_self_check": true,
+    "obsolete_cad_cleanup": "verified historical runtime removed after success; failed update and in-use runtime preserved; unknown data preserved",
+    "obsolete_cad_fixture": {
+      "directory": "C:\\largan\\LM_AI_Installer_Test\\cad-eaafe8017161c277",
+      "commit": "9f8febc57e119de30a5b37183f48c0a8878f8e41",
+      "sha256": "eaafe8017161c27796a9fb152839979327d8904ff51b56cdd9cbdff82d9da7fa",
+      "files": 645
+    },
+    "python_failure_rollback": true,
+    "python_reused_without_replacement": true,
+    "python_repair_cases": [
+      "missing-file",
+      "same-size-corruption",
+      "different-manifest"
+    ],
+    "reused_python_survives_app_rollback": true,
+    "runtime_check_stage": "application startup only; no installer prerequisite check",
+    "runtime_unavailable_simulation": "child-only WEBVIEW2_BROWSER_EXECUTABLE_FOLDER points to a nonexistent folder; Setup succeeds, installed app exits with existing guidance",
+    "checks": [
+      "NSIS install into missing product directory",
+      "existing directory preserves user files",
+      "fixed path ignores /D",
+      "shortcuts and registration",
+      "EXE/setup/uninstaller company name",
+      "PID handoff wait",
+      "update replacement",
+      "automatic restart",
+      "locked-file failure preserves old app",
+      "NSIS uninstall preserves unknown files",
+      "actual release Setup installation and WebView2 self-check",
+      "actual release uninstall"
+    ],
+    "scope": "isolated native payload and actual release Setup at C:\\largan\\LM_AI; corporate antivirus and Outlook require company testing"
+  },
+  "ci": {
+    "result": "PASS",
+    "head": "33a07acb4a060997883dd9a0cbba202e4df05336",
+    "url": "https://github.com/you1230783-sys/CompanyAI/actions/runs/42145350765",
+    "run_id": 42145350765,
+    "artifact_id": 13470137731,
+    "archive_sha256": "e27ecf5c1e8f37fe9ce1392e3fbdac6f6e1d9417bedea0e547601d6130de7ab4",
+    "build": {
+      "recorded_at": "2026-11-06T01:50:09.7404741+00:00",
+      "result": "PASS_CI_SCOPE",
+      "msvc": "14.29.30133",
+      "compiler_report": [
+        "v142.c",
+        "Verified _MSC_FULL_VER=192930159 x64"
+      ],
+      "empty_cargo_cache": true,
+      "lock_sha256": "228b2947d4ec42165970aaec027f7e331a3dfb09fc0ed6dbec0ed317e36c9d90",
+      "checks": [
+        "v142 x64 release build --frozen",
+        "fmt",
+        "default/core all-targets Clippy -D warnings",
+        "default/core workspace Rust tests"
+      ],
+      "excluded_interactive_tests": [
+        "ui::reminders::tests::windows_shell_accepts_native_reminder_notification",
+        "pet::tests::native_notification_visibility_and_settings_survive_restart"
+      ],
+      "not_validated": [
+        "Office integration",
+        "company models/mailbox/network",
+        "NSIS lifecycle",
+        "interactive desktop/DPI"
+      ],
+      "installer_built": false
+    },
+    "audit_summary": {
+      "recorded_at": "2026-11-06T01:50:17.4712409+00:00",
+      "result": "PASS_WITH_REVIEWED_MAINTENANCE_NOTICE",
+      "tool": "cargo-audit 0.22.2 (official prebuilt tool)",
+      "lock_sha256": "228b2947d4ec42165970aaec027f7e331a3dfb09fc0ed6dbec0ed317e36c9d90",
+      "database": {
+        "advisory-count": 1409,
+        "last-commit": "26fd2d43f7280a1fb925a3743ec463017afe7119",
+        "last-updated": "2026-11-05T08:50:49+00:00"
+      },
+      "exit_code": 0,
+      "policy": "All targets; vulnerabilities, yanked, unsound and unreviewed warnings fail.",
+      "reviewed_maintenance_notices": [
+        "RUSTSEC-2026-0192: ttf-parser 0.25.1; review before 2027-02-01"
+      ]
+    }
+  },
+  "build_log_sha256": "8336300f76d1ced8f53ea8f59ead28079434af592e84f5e84dd375c1702df6b0",
+  "checks": [
+    "478 non-CAD Rust tests; fmt and all-target Clippy",
+    "14 plan, 40 preview and 32 conversation browser checks",
+    "Native HTTP/AppContainer plan fixture: 10 unique turns, approval gate, edit/reject/major revision, one artifact",
+    "Existing pause and interruption recovery regressions",
+    "Actual EXE hidden WebView2 self-check and Python/CAD runtime",
+    "Full NSIS install/update/rollback/uninstall and installed runtime checks"
+  ],
+  "prior_attempts": [
+    {
+      "path": ".build/clippy-0915-r2.log",
+      "sha256": "082a245843e2862886672517bba7b37277b5595cb84d3f17328170eeb114c8a5"
+    },
+    {
+      "path": ".build/clippy-0915-r3.log",
+      "sha256": "64533169c73b78eea5ed2ef5d411c32083e4a508f60827880a2378887d8c44ed"
+    },
+    {
+      "path": ".build/clippy-0915-r6.log",
+      "sha256": "108abfde28067024cc901a30ca2479046de70409c5cab7f5453a15646dfe256f"
+    },
+    {
+      "path": ".build/ui-plan-0915-r1.log",
+      "sha256": "38229674ac7762ee06675d66f01f7e58967d9630be720444976a0bc828c64eb8"
+    },
+    {
+      "path": ".build/test-0915-all.log",
+      "sha256": "e84b8b54dd250e27e773f01ed5b45a9d138931b7a530f17cc629bd526d208bb8"
+    },
+    {
+      "path": ".build/native-plan-0915-r1.log",
+      "sha256": "1e07312731b8b31f79db4c99cd57f398e31731d83ed52f46d32acf0e4812e789"
+    },
+    {
+      "path": ".build/native-plan-0915-r2.log",
+      "sha256": "b89c6be54e7849541b02d8a754b931ad4241997a53fb8e59e06e0f0faa9e14dd"
+    },
+    {
+      "path": ".build/native-plan-0915-r3.log",
+      "sha256": "d0a4991296d18ae6f57b2dc2869b1a5d0ac14f3dd63f7609775d23821568c032"
+    }
+  ],
+  "limits": [
+    "Company model planning quality and long-task acceptance deferred to user",
+    "Full Python scientific, CAD drawing and Office document matrices not rerun",
+    "Plan text does not grant additional tool or file permissions",
+    "Plan maximum 20 steps/20 outputs/24KB and 40 history entries",
+    "Reviewed time-limited ttf-parser maintenance notice retained",
+    "GitHub manual downloads only; company update server not deployed"
+  ]
+}
