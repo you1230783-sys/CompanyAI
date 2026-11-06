@@ -1,0 +1,272 @@
+{
+  "before_files": 6695,
+  "before_bytes": 273441693.0,
+  "removed_test_directories": [
+    {
+      "path": "Lib\\site-packages\\scipy\\optimize\\_trustregion_constr\\tests",
+      "files": 6,
+      "bytes": 49928.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\sparse\\linalg\\_eigen\\lobpcg\\tests",
+      "files": 2,
+      "bytes": 28270.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\sparse\\linalg\\_eigen\\arpack\\tests",
+      "files": 2,
+      "bytes": 25374.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\sparse\\linalg\\_isolve\\tests",
+      "files": 8,
+      "bytes": 54492.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\sparse\\linalg\\_dsolve\\tests",
+      "files": 2,
+      "bytes": 35572.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\sparse\\linalg\\_eigen\\tests",
+      "files": 2,
+      "bytes": 37496.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\io\\_harwell_boeing\\tests",
+      "files": 3,
+      "bytes": 5043.0
+    },
+    {
+      "path": "Lib\\site-packages\\mpl_toolkits\\axes_grid1\\tests",
+      "files": 3,
+      "bytes": 29642.0
+    },
+    {
+      "path": "Lib\\site-packages\\mpl_toolkits\\axisartist\\tests",
+      "files": 8,
+      "bytes": 27544.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\spatial\\transform\\tests",
+      "files": 5,
+      "bytes": 191028.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\fft\\_pocketfft\\tests",
+      "files": 3,
+      "bytes": 54014.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\integrate\\_ivp\\tests",
+      "files": 3,
+      "bytes": 45619.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\sparse\\csgraph\\tests",
+      "files": 11,
+      "bytes": 73588.0
+    },
+    {
+      "path": "Lib\\site-packages\\mpl_toolkits\\mplot3d\\tests",
+      "files": 5,
+      "bytes": 123208.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\sparse\\linalg\\tests",
+      "files": 11,
+      "bytes": 712315.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\differentiate\\tests",
+      "files": 2,
+      "bytes": 28414.0
+    },
+    {
+      "path": "Lib\\site-packages\\numpy\\_pyinstaller\\tests",
+      "files": 3,
+      "bytes": 2690.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\interpolate\\tests",
+      "files": 17,
+      "bytes": 554900.0
+    },
+    {
+      "path": "Lib\\site-packages\\numpy\\polynomial\\tests",
+      "files": 11,
+      "bytes": 170082.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\io\\matlab\\tests",
+      "files": 120,
+      "bytes": 138985.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\integrate\\tests",
+      "files": 9,
+      "bytes": 208586.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\constants\\tests",
+      "files": 3,
+      "bytes": 7262.0
+    },
+    {
+      "path": "Lib\\site-packages\\numpy\\matrixlib\\tests",
+      "files": 8,
+      "bytes": 41026.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\optimize\\tests",
+      "files": 46,
+      "bytes": 1025648.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\datasets\\tests",
+      "files": 2,
+      "bytes": 4341.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\fftpack\\tests",
+      "files": 10,
+      "bytes": 638988.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\cluster\\tests",
+      "files": 5,
+      "bytes": 82879.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\special\\tests",
+      "files": 64,
+      "bytes": 2296580.0
+    },
+    {
+      "path": "Lib\\site-packages\\numpy\\testing\\tests",
+      "files": 2,
+      "bytes": 72385.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\io\\arff\\tests",
+      "files": 18,
+      "bytes": 224244.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\spatial\\tests",
+      "files": 40,
+      "bytes": 2132806.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\ndimage\\tests",
+      "files": 14,
+      "bytes": 433729.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\signal\\tests",
+      "files": 23,
+      "bytes": 900370.0
+    },
+    {
+      "path": "Lib\\site-packages\\numpy\\compat\\tests",
+      "files": 1,
+      "bytes": 0.0
+    },
+    {
+      "path": "Lib\\site-packages\\numpy\\linalg\\tests",
+      "files": 4,
+      "bytes": 93227.0
+    },
+    {
+      "path": "Lib\\site-packages\\numpy\\random\\tests",
+      "files": 25,
+      "bytes": 592090.0
+    },
+    {
+      "path": "Lib\\site-packages\\numpy\\typing\\tests",
+      "files": 148,
+      "bytes": 557574.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\linalg\\tests",
+      "files": 33,
+      "bytes": 1005640.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\sparse\\tests",
+      "files": 20,
+      "bytes": 472268.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\stats\\tests",
+      "files": 61,
+      "bytes": 4502444.0
+    },
+    {
+      "path": "Lib\\site-packages\\numpy\\_core\\tests",
+      "files": 99,
+      "bytes": 3514861.0
+    },
+    {
+      "path": "Lib\\site-packages\\matplotlib\\tests",
+      "files": 93,
+      "bytes": 2077563.0
+    },
+    {
+      "path": "Lib\\site-packages\\numpy\\f2py\\tests",
+      "files": 129,
+      "bytes": 229778.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\_lib\\tests",
+      "files": 16,
+      "bytes": 93620.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\fft\\tests",
+      "files": 8,
+      "bytes": 70611.0
+    },
+    {
+      "path": "Lib\\site-packages\\numpy\\lib\\tests",
+      "files": 33,
+      "bytes": 789779.0
+    },
+    {
+      "path": "Lib\\site-packages\\numpy\\fft\\tests",
+      "files": 3,
+      "bytes": 31315.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\odr\\tests",
+      "files": 2,
+      "bytes": 23099.0
+    },
+    {
+      "path": "Lib\\site-packages\\scipy\\io\\tests",
+      "files": 94,
+      "bytes": 439510.0
+    },
+    {
+      "path": "Lib\\site-packages\\numpy\\ma\\tests",
+      "files": 9,
+      "bytes": 383948.0
+    },
+    {
+      "path": "Lib\\site-packages\\pandas\\tests",
+      "files": 1112,
+      "bytes": 12855065.0
+    },
+    {
+      "path": "Lib\\site-packages\\numpy\\tests",
+      "files": 12,
+      "bytes": 55776.0
+    }
+  ],
+  "retained_runtime_import": "numpy\\_core\\tests\\_natype.py",
+  "pruned_files": 4323,
+  "pruned_bytes": 235202934.0,
+  "final_files": 6329,
+  "final_bytes": 276371732.0,
+  "pyc_files": 2006
+}

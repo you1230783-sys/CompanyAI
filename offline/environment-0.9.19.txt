@@ -1,0 +1,66 @@
+Recorded: 2026-11-06T19:25:39.4153208+08:00
+Host OS: Microsoft Windows NT 10.0.26300.0
+Visual Studio: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools
+MSVC: 14.29.30133
+Compiler: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\cl.exe
+v142.c
+Verified _MSC_FULL_VER=192930159 x64
+Windows SDK: 10.0.19041.0\
+Target: x86_64-pc-windows-msvc
+CRT: static
+Rust binaries: Y:\Rust\.tools\rustup\toolchains\1.98.1-x86_64-pc-windows-msvc\bin
+Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-f52307330c6d4e8ab1cbc5305b6c778e
+EXE SHA256: 101DDD9F50B6949AFF617558D0D70D817B86601C104D47F677444425553B78F7
+
+rustc 1.98.1 (48a229cea 2026-09-01)
+binary: rustc
+commit-hash: 48a229ceaefd4985c50990b14116b6d856af0985
+commit-date: 2026-09-01
+host: x86_64-pc-windows-msvc
+release: 1.98.1
+LLVM version: 22.1.8
+cargo 1.98.1 (797e8a9bc 2026-08-05)
+
+Microsoft (R) COFF/PE Dumper Version 14.29.30159.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file Y:\Rust\Project\CompanyAI\target\x86_64-pc-windows-msvc\release\company-ai.exe
+
+File Type: EXECUTABLE IMAGE
+
+  Image has the following dependencies:
+
+    bcryptprimitives.dll
+    kernel32.dll
+    oleaut32.dll
+    ole32.dll
+    combase.dll
+    user32.dll
+    shell32.dll
+    shlwapi.dll
+    propsys.dll
+    api-ms-win-core-winrt-error-l1-1-0.dll
+    ntdll.dll
+    api-ms-win-core-synch-l1-2-0.dll
+    advapi32.dll
+    userenv.dll
+    bcrypt.dll
+    gdi32.dll
+    winhttp.dll
+    dwmapi.dll
+    mpr.dll
+    crypt32.dll
+    ADVAPI32.dll
+    KERNEL32.dll
+    WS2_32.dll
+
+  Summary
+
+        3000 .data
+       9D000 .pdata
+     3489000 .rdata
+        A000 .reloc
+       3D000 .rsrc
+      F3D000 .text
+        1000 _RDATA

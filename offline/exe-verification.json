@@ -1,124 +1,126 @@
 {
-  "recorded_at": "2026-11-06T08:25:08.6829031+08:00",
-  "version": "0.9.13.0",
-  "result": "PASS",
-  "scope": "non-CAD release validation; CAD deferred",
-  "cad_skipped": true,
-  "model_validation": "separate; automated PASS does not imply model content acceptance",
-  "msvc": "14.29.30133",
-  "compiler_report": [
-    "v142.c",
-    "Verified _MSC_FULL_VER=192930159 x64"
+  "version": "0.9.19",
+  "result": "PASS_HANDBOOK_FULL_LOCAL_SCOPE",
+  "recorded_at": "2026-11-06T19:52:55.406263+08:00",
+  "source_commit": "655bf128c5df59eb95a135d4948d4bef1063dae8",
+  "toolset": "MSVC v142 14.29.30133 x64",
+  "compiler_full_version": 192930159,
+  "empty_cargo_cache_frozen": true,
+  "cargo_home": ".build/cargo-empty-f52307330c6d4e8ab1cbc5305b6c778e",
+  "dependency_inputs": [
+    "Cargo.lock",
+    "vendor",
+    ".cargo/config.toml"
   ],
-  "empty_cargo_cache": true,
-  "resilience_checks": [
-    "10/30/60/180/300 second production schedule and bounded retry metadata",
-    "confirmed transient upstream failure retries only inference, no repeated local edit",
-    "five retries exhausted then manual checkpoint continuation",
-    "restart during retry countdown and cancellation",
-    "unknown submission queries original ID without duplicate POST",
-    "quota/unknown-result terminal errors excluded and HTTP 401 pauses without retry",
-    "ten Outlook header pages survive compaction and restore; duplicate data warns at four and pauses at eight",
-    "local profile LM_AI_Projects same-day naming without overwriting existing files"
+  "dependency_input_sha256": {
+    "Cargo.lock": "57e1a0f592bfc7d630d59bef8c2876975850a21bec84a4aff46bc312bdfb1efd",
+    ".cargo/config.toml": "eb00d847621074aee7f68d040b43384ee920fb8eacad564198c2a7635534bdfb"
+  },
+  "exe_sha256": "101ddd9f50b6949aff617558d0d70d817b86601c104d47f677444425553b78f7",
+  "setup_sha256": "c297074d32b7a23e37254b1b5a6093edb0114eb9495e55f14037ee685e6d583c",
+  "runtime_manifest_sha256": "ebaacb792f2e2d1d6bd0ccf9443d94682bdd64629f988c3eed9cd4721ac4a1ca",
+  "validation_execution": "Full Build r2 passed functional stages; installer r3 exposed retirement sharing violation, and actual upgrade r2 exposed background cleanup blocking atomic onboarding writes. Final product changes since functional baseline are confined to cleanup root locking (5942f2c, 655bf12). Final source passed all 577 Rust tests, fmt, Clippy, v142 empty-cache frozen rebuild, PythonRevision, complete installer matrix r5 and actual previous-version upgrade r3. Functional baseline EXE is recorded separately.",
+  "functional_baseline_exe_sha256": "79a178266d02ecd11ecb8ff3ae6efa8175ceb46b9e89f48658440c6393330d17",
+  "rust_tests": 577,
+  "frontend_suites": 18,
+  "reports": {
+    "final-build": "offline/final-build-verification-0.9.19.json",
+    "frontend": "offline/frontend-verification-0.9.19.json",
+    "python-revision": "offline/python-revision-verification-0.9.19.json",
+    "resources": "offline/resources-verification-0.9.19.json",
+    "python-upgrade": "offline/python-upgrade-verification-0.9.19.json",
+    "python-build": "offline/python-build-verification-0.9.19.json",
+    "batch": "offline/batch-verification-0.9.19.json",
+    "code": "offline/code-verification-0.9.19.json",
+    "composer": "offline/composer-verification-0.9.19.json",
+    "document-work": "offline/document-work-verification-0.9.19.json",
+    "handoff": "offline/handoff-verification-0.9.19.json",
+    "log": "offline/log-verification-0.9.19.json",
+    "office": "offline/office-verification-0.9.19.json",
+    "python": "offline/python-verification-0.9.19.json",
+    "screenshot": "offline/screenshot-verification-0.9.19.json",
+    "workspace": "offline/workspace-verification-0.9.19.json",
+    "installer": "offline/installer-verification-0.9.19.json"
+  },
+  "python_timing": {
+    "before": {
+      "measurements": [
+        {
+          "analysis_ms": 2461.4717,
+          "execution_ms": 0.000400003045797348,
+          "startup_ms": 161.4061,
+          "total_ms": 8797.4424,
+          "verify_ms": 6174.5538
+        },
+        {
+          "analysis_ms": 2452.9188,
+          "execution_ms": 0.000400003045797348,
+          "startup_ms": 73.80839999999999,
+          "total_ms": 11852.8123,
+          "verify_ms": 9326.082400000001
+        }
+      ]
+    },
+    "after": {
+      "measurements": [
+        {
+          "analysis_ms": 1040.0005,
+          "execution_ms": 0.000400003045797348,
+          "startup_ms": 106.005,
+          "total_ms": 7972.656,
+          "verify_ms": 6826.6476999999995
+        },
+        {
+          "analysis_ms": 929.7158,
+          "execution_ms": 0.000500003807246685,
+          "startup_ms": 83.90090000000001,
+          "total_ms": 1425.4674,
+          "verify_ms": 411.8489
+        }
+      ]
+    },
+    "build_kind": "debug harness; release product separately verified"
+  },
+  "installer_timing": {
+    "before": {
+      "fresh_ms": 66152.2151,
+      "reuse_ms": 35838.5603,
+      "kind": "0.9.18 unchanged runtime; synthetic manifest mismatch for replacement",
+      "changed_manifest_ms": 65315.6047
+    },
+    "after": {
+      "reuse_ms": 16717.4606,
+      "kind": "0.9.19 same runtime; synthetic manifest mismatch for replacement",
+      "deferred_cleanup_ms": 1172.8483,
+      "changed_manifest_ms": 47456.1023,
+      "fresh_ms": 52074.9747
+    },
+    "kind": "same-machine instrumented NSIS, one sample per scenario"
+  },
+  "evidence_sha256": {
+    ".build/full-build-0919-r2.log": "3c6295a9b5844d5e4cb260379eedd4170a67b57c2aa7edff94c2fe82830da5ed",
+    ".build/background-final-build-0919.log": "16976f6b8f7f571a7dc1fdd7367b80779dd6cd1e8aba6dd32b00ad4b16ff807b",
+    ".build/background-final-build-0919.err": "8fb9f5178a7d1a3d1d2ce6559eee9f8ea94493414b6047a454a17d74037ce50f",
+    ".build/background-root-regression-0919.log": "a6025c7f8a2d6ef0344608f858fc1e4ef37045d054c45c7948b7a5ce2a44a1de",
+    ".build/retire-regression-0919-after-r2.log": "54f9cf23bac047d0bf097253c62a952b3d6994699999dcf27f1ab93a70fbaca5",
+    ".build/cad-unit-0919-final.log": "402c850642d229226956be681e34e44ee1315b1562d4f2f28ebccbbbf74245a9",
+    ".build/installer-0919-r5.log": "186165cde0baf7de9422c46aec431a1b391db8935ea56983ab42f1b7b7aad403",
+    ".build/python-upgrade-0919-r3.log": "12d264144a116ef8e584343b95d9972765282968d8f16accf91e3503a09ad0ae",
+    ".build/python-repro-0919.log": "c76d786ae328ff6c9dc9bf2a08da862a82d36c5ff6bb01a70a274ecb511b8e5f",
+    ".build/bytecode-read-0919-final.log": "e20612155d7aa3b02fe07568cef5d8f940d4125ddebafc36f266bc9006353c25",
+    ".build/after-install-timing.txt": "13a945de665ac50823ebacf86eaf8af560b9f56502320fdc53045dec73f7926a",
+    ".build/baseline-install-timing.txt": "d38d6066add185d2af7f4b117e3694902b9f68d7a7442d112277cdfb90db4f08",
+    ".build/measurement-final-build-0919.json": "414f3ee082343f3c9ee52ce59132d78346a75e26c04923e7ada2b57732ffa7ad"
+  },
+  "company_acceptance": false,
+  "skipped": [
+    "CAD drawing end-to-end",
+    "real Outlook mailbox",
+    "VNC",
+    "SMB",
+    "company model and production documents"
   ],
-  "analysis_checks": [
-    "tool-derived coverage and bounded source ranges",
-    "record_analysis evidence resolves successful operation and JSON pointer",
-    "count reconciliation and zero-counterexample checks use stored numeric results",
-    "project method note deduplication and relevant recall in another conversation",
-    "goal correction marks prior conclusions stale",
-    "Big5 complete-line Python snapshots and over-77-MiB synthetic LOG",
-    "mapped drive to UNC resolution and repeated identical error notifications"
-  ],
-  "image_read_checks": [
-    "same owner/project/run/conversation parent binding for images and native delegation",
-    "converted JPEG 5,000,000-byte per-image and 8,000,000-byte pair limits",
-    "100-image cumulative budget exercised by fifty dual-image requests; fast-model prohibition and definite-rejection cleanup",
-    "ordinary file-list discovery, read_file metadata without upload, and basic analyze_image without loading a skill",
-    "list-only task does not submit images",
-    "native Outlook quick action and removal of image quick commands",
-    "local WIC JPEG conversion for JPEG/PNG/BMP/TIFF/GIF, first-frame scope and source preservation",
-    "same-model tool-free single or dual image child, text-only parent result and original-source hash",
-    "image cache and unknown request resume without repost",
-    "out-of-project and converted-oversize images rejected without image POST"
-  ],
-  "parallel_draft_checks": [
-    "two actual isolated Python executions have overlapping measured intervals",
-    "bounded run_batch preserves child result order and independently reports failure",
-    "chart preparation plus next-file read and failed Python alongside successful Python",
-    "same batch replay reuses results without duplicate artifacts",
-    "line/section hash edits preserve CRLF and source revision",
-    "every Python edit saves the same draft before syntax validation; restore checks disk hash",
-    "later edits remove completed status until syntax is checked and saved again",
-    "hidden copies excluded by exact subject and SentOn seconds without address book; date Table batches and sorted fallback; COM fixture only"
-  ],
-  "code_verification_checks": [
-    "section_id edit, stale handle rejection, draft path alias, EOF clipping and same-revision syntax reuse",
-    "bounded pinned source and current draft state survive history compaction and checkpoint restore",
-    "batch no-progress counted once per model round",
-    "real helper timeout and cancellation kill and reap the child",
-    "actual source default bug detected despite valid syntax and corrected by small edit",
-    "revision-bound requirement and real-test evidence; fake passed evidence rejected",
-    "private scratch write/read; project source and loopback network denied",
-    "missing dependency reported unavailable without claiming success"
-  ],
-  "chart_transform_checks": [
-    "locked Excel CSV keeps A/Index and D/Mean source roles while deriving Index 1",
-    "physical X/Y offset and numbering with horizontal-bar roles",
-    "all-series missing-row removal before shared numbering, zero preserved",
-    "native HTTP transform_chart and updated chart UI event",
-    "DPAPI persistence and original source preservation",
-    "PNG cache invalidation when transform changes",
-    "WebView2 editor validation, transformed plotting and PNG export",
-    "three five-point missing-value examples with unchanged choice submission"
-  ],
-  "excel_chart_checks": [
-    "locked source/header/time/X/Y plans, CSV schema and role enforcement",
-    "local half-open clock/elapsed filters with explicit scan limits",
-    "three actual Excel files with different column orders x five windows, fifteen exact charts",
-    "native chart style DPAPI persistence, original data and reset",
-    "six chart kinds, user axis ranges, reference lines and colors",
-    "native customized PNG callback and verified manual _AI_Output write"
-  ],
-  "cargo_home": "Y:\\Rust\\Project\\CompanyAI\\.build\\cargo-empty-8832688d5f0846a29a4446fade3d6fb7",
-  "checks": [
-    "weekly wizard prepare/confirm/cancel and conversation binding",
-    "online inbox COM fixture",
-    "two ordinary repairs plus two compact-context recovery attempts",
-    "v142 x64 compiler probe",
-    "fmt",
-    "Clippy",
-    "workspace tests (see cad_skipped)",
-    "cargo build --release --frozen",
-    "WebView2 DOM self-check",
-    "native composer persistence, cancellation, cross-conversation continuation and restart recovery",
-    "AppContainer OS file/network isolation",
-    "project copy/edit/publish integration",
-    "HTTP skills/tool loops with bounded JSON repair and activity history",
-    "DPAPI project memory, versioned notes and reserved .lmai boundary",
-    "persistent PDF cache, source/profile/hash invalidation",
-    "built-in skills, bounded cross-file search and chart dedup",
-    "fast model delegation, multi-section summaries, encrypted cache and pause without repost",
-    "offline ECharts canvas and data table",
-    "desktop-agent-v1 native HTTP roles, capability checks, cancellation and parent/child request recovery",
-    "large Excel headers, selected columns, row paging and native chart values",
-    "30 approximately 10 MiB LOG files, time and station filters, pagination and source revision checks",
-    "in-flight user instructions, stale tool and finish suppression, persistent original instructions",
-    "Outlook consent rejection with no mailbox access, fake-source folder/header/body paging and dedup",
-    "file lock close/retry and encrypted resume without repost",
-    "chart anomaly defaults and per-cell evidence table",
-    "24-hour policy with controlled deadlines, automatic multi-batch continuation and checkpoint interruption recovery",
-    "bounded context, preserved user requirements, encrypted operation archive and on-demand old results",
-    "local LOG/Excel CSV datasets with bounded previews, native charting and source provenance",
-    "explicit context handoff and correction compaction without losing user instructions or archived evidence",
-    "Outlook folder picker, DPAPI policy and ancestor enforcement, native forged/stale selection rejection",
-    "local mail coverage with 1000-message limit, no raw-body tool output, independent 50-message AI limit, branches and gaps"
-  ],
-  "exe_sha256": "3a97f4c6d178f7f19f22f6621c608a9b25786380e425e4603bba9c86f5afed05",
-  "installer_built": true,
-  "real_vnc_tested": false,
-  "real_office_tested": true,
-  "real_cad_comparison_tested": false,
-  "real_loopback_smb_tested": false,
+  "remote_published": false,
+  "hosted_ci_tested": false,
   "offline_zip_built": false
 }

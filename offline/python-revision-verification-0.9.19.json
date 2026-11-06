@@ -1,0 +1,8 @@
+{
+  "changed_file_rejected": true,
+  "exe_sha256": "101ddd9f50b6949aff617558d0d70d817b86601c104d47f677444425553b78f7",
+  "recorded_at": "2026-11-06T19:32:42.4609477+08:00",
+  "result": "PASS_NATIVE_FILE_PYTHON_REVISION_BRIDGE",
+  "unchanged_file_accepted": true,
+  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\python-revision-b0260db95e8a4979b3c389a72c0bc2e3"
+}

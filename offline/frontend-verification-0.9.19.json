@@ -1,0 +1,92 @@
+[
+  {
+    "test": "Test-Branches.cjs",
+    "exit_code": 0,
+    "log": ".build\\Test-Branches-0919.log"
+  },
+  {
+    "test": "Test-BuildFeatures.cjs",
+    "exit_code": 0,
+    "log": ".build\\Test-BuildFeatures-0919.log"
+  },
+  {
+    "test": "Test-ChartLayout.cjs",
+    "exit_code": 0,
+    "log": ".build\\Test-ChartLayout-0919.log"
+  },
+  {
+    "test": "Test-Conversations.cjs",
+    "exit_code": 0,
+    "log": ".build\\Test-Conversations-0919.log"
+  },
+  {
+    "test": "Test-DiffPreview.cjs",
+    "exit_code": 0,
+    "log": ".build\\Test-DiffPreview-0919.log"
+  },
+  {
+    "test": "Test-DocumentWork.cjs",
+    "exit_code": 0,
+    "log": ".build/Test-DocumentWork-0919-r2.log"
+  },
+  {
+    "test": "Test-DraftTools.cjs",
+    "exit_code": 0,
+    "log": ".build\\Test-DraftTools-0919.log"
+  },
+  {
+    "test": "Test-MultiTask.cjs",
+    "exit_code": 0,
+    "log": ".build\\Test-MultiTask-0919.log"
+  },
+  {
+    "test": "Test-PetTarot.cjs",
+    "exit_code": 0,
+    "log": ".build\\Test-PetTarot-0919.log"
+  },
+  {
+    "test": "Test-Preferences.cjs",
+    "exit_code": 0,
+    "log": ".build\\Test-Preferences-0919.log"
+  },
+  {
+    "test": "Test-ReliabilityUI.cjs",
+    "exit_code": 0,
+    "log": ".build\\Test-ReliabilityUI-0919.log"
+  },
+  {
+    "test": "Test-ReplyTables.cjs",
+    "exit_code": 0,
+    "log": ".build\\Test-ReplyTables-0919.log"
+  },
+  {
+    "test": "Test-Review.cjs",
+    "exit_code": 0,
+    "log": ".build\\Test-Review-0919.log"
+  },
+  {
+    "test": "Test-Schedules.cjs",
+    "exit_code": 0,
+    "log": ".build\\Test-Schedules-0919.log"
+  },
+  {
+    "test": "Test-Settings.cjs",
+    "exit_code": 0,
+    "log": ".build\\Test-Settings-0919.log"
+  },
+  {
+    "test": "Test-TaskPlan.cjs",
+    "exit_code": 0,
+    "log": ".build\\Test-TaskPlan-0919.log"
+  },
+  {
+    "test": "Test-UiAuth.cjs",
+    "exit_code": 0,
+    "log": ".build\\Test-UiAuth-0919.log"
+  },
+  {
+    "test": "Test-Workbench.cjs",
+    "exit_code": 0,
+    "log": ".build\\Test-Workbench-0919.log"
+  }
+]

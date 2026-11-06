@@ -1,0 +1,18 @@
+{
+  "cases": [
+    "project prefix excludes later messages and creates draft without execution or attachments",
+    "original project results retained",
+    "login gate",
+    "cancel does not create a conversation",
+    "conversation binding",
+    "changed source rejects stale preview",
+    "account generation binding",
+    "replaced project root rejected",
+    "only creates draft, no copied task or attachment",
+    "one-shot confirmation",
+    "encrypted restart retains drafts and source link without authority replay"
+  ],
+  "company_service_tested": false,
+  "result": "PASS",
+  "version": "0.9.19"
+}

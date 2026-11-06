@@ -1,0 +1,16 @@
+{
+  "result": "PASS",
+  "version": "0.9.19",
+  "previous": "0.9.18",
+  "old_install_ms": 67923.6728,
+  "upgrade_ms": 50417.1287,
+  "cached_pid_handoff_ms": 51492.3428,
+  "startup_cleanup": true,
+  "extra_file_and_busy_refusal": true,
+  "read_only_refusal": true,
+  "uninstall_cleanup": true,
+  "user_data_preserved": true,
+  "release_range_preserved": true,
+  "work": "Y:\\Rust\\Project\\CompanyAI\\.build\\python-upgrade-756036f83137443c9c80910e4273f3c7",
+  "setup_sha256": "c297074d32b7a23e37254b1b5a6093edb0114eb9495e55f14037ee685e6d583c"
+}

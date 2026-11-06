@@ -1,5 +1,7 @@
 {
   "cases": [
+    "project prefix excludes later messages and creates draft without execution or attachments",
+    "original project results retained",
     "login gate",
     "cancel does not create a conversation",
     "conversation binding",
@@ -12,5 +14,5 @@
   ],
   "company_service_tested": false,
   "result": "PASS",
-  "version": "0.9.13"
+  "version": "0.9.19"
 }

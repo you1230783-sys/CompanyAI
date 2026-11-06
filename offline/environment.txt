@@ -1,4 +1,4 @@
-Recorded: 2026-11-06T08:03:44.7330679+08:00
+Recorded: 2026-11-06T19:25:39.4153208+08:00
 Host OS: Microsoft Windows NT 10.0.26300.0
 Visual Studio: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools
 MSVC: 14.29.30133
@@ -9,8 +9,8 @@ Windows SDK: 10.0.19041.0\
 Target: x86_64-pc-windows-msvc
 CRT: static
 Rust binaries: Y:\Rust\.tools\rustup\toolchains\1.98.1-x86_64-pc-windows-msvc\bin
-Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-8832688d5f0846a29a4446fade3d6fb7
-EXE SHA256: 3A97F4C6D178F7F19F22F6621C608A9B25786380E425E4603BBA9C86F5AFED05
+Cargo home: Y:\Rust\Project\CompanyAI\.build\cargo-empty-f52307330c6d4e8ab1cbc5305b6c778e
+EXE SHA256: 101DDD9F50B6949AFF617558D0D70D817B86601C104D47F677444425553B78F7
 
 rustc 1.98.1 (48a229cea 2026-09-01)
 binary: rustc
@@ -33,24 +33,24 @@ File Type: EXECUTABLE IMAGE
 
     bcryptprimitives.dll
     kernel32.dll
-    shell32.dll
     oleaut32.dll
-    combase.dll
     ole32.dll
+    combase.dll
     user32.dll
+    shell32.dll
+    shlwapi.dll
     propsys.dll
     api-ms-win-core-winrt-error-l1-1-0.dll
-    shlwapi.dll
     ntdll.dll
+    api-ms-win-core-synch-l1-2-0.dll
     advapi32.dll
     userenv.dll
-    api-ms-win-core-synch-l1-2-0.dll
-    winhttp.dll
     bcrypt.dll
     gdi32.dll
+    winhttp.dll
     dwmapi.dll
-    crypt32.dll
     mpr.dll
+    crypt32.dll
     ADVAPI32.dll
     KERNEL32.dll
     WS2_32.dll
@@ -58,9 +58,9 @@ File Type: EXECUTABLE IMAGE
   Summary
 
         3000 .data
-       97000 .pdata
-     345B000 .rdata
+       9D000 .pdata
+     3489000 .rdata
         A000 .reloc
        3D000 .rsrc
-      E99000 .text
+      F3D000 .text
         1000 _RDATA

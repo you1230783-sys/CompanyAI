@@ -36,6 +36,7 @@
 
 - [EIS 回饋修改手冊](CHANGE_HANDBOOK_EIS_FEEDBACK.md)
 - [0.9.18 Excel 閱讀精簡手冊](CHANGE_HANDBOOK_0_9_18_EXCEL_READ.md)
+- [0.9.19 Python 與公告整理手冊](CHANGE_HANDBOOK_0_9_19_PYTHON_AND_NOTES.md)
 - [0.9.14～0.9.17 修改手冊](CHANGE_HANDBOOK_0_9_14_TO_0_9_17.md)
 - [未來構想（未排期）](FUTURE_IDEAS.md)
 - [實作總計畫](IMPLEMENTATION_PLAN.md)

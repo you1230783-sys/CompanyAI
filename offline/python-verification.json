@@ -25,11 +25,11 @@
     "environment allowlist",
     "active cancellation",
     "120 second timeout",
-    "unlisted and modified runtime files rejected",
+    "cache hit rejects unlisted modules; retained handles deny runtime writes with sharing violation; original bytes and subsequent analysis verified",
     "original unchanged",
     "modified output rejected at finish"
   ],
-  "duration_seconds": 349.85895849999997,
+  "duration_seconds": 242.8362748,
   "matplotlib": "3.11.2",
   "numpy": "2.2.6",
   "openpyxl": "3.1.5",
@@ -37,5 +37,5 @@
   "python": "3.13.12",
   "result": "PASS",
   "scipy": "1.17.1",
-  "version": "0.9.13"
+  "version": "0.9.19"
 }
