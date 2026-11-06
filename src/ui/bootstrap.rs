@@ -414,7 +414,7 @@ pub(super) fn run_with_local(
     } else if smoke {
         Config::default()
     } else {
-        storage::load_config(&root)?
+        storage::restore_transport(&root, storage::load_config(&root)?)?
     };
     let session = if let Some(local) = &local {
         Some(local.session.clone())

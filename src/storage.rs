@@ -60,6 +60,29 @@ pub fn load_config(root: &Path) -> AppResult<Config> {
     }
 }
 
+const V2_LOCK: &[u8] = b"CompanyAI/transport/v2";
+
+/// 裝置授權在瀏覽器核准前沒有帳號代號。已建立 v2 的 Windows 設定檔必須先走安全連線。
+/// 記錄與 Session 分開加密保存，登出或 Token 到期不能移除防降級狀態。
+pub(crate) fn restore_transport(root: &Path, config: Config) -> AppResult<Config> {
+    let Some(bytes) = read_optional(&root.join("transport-v2.dpapi"))? else {
+        return Ok(config);
+    };
+    if protect(&bytes, false)? != V2_LOCK {
+        return Err("HTTPS v2 防降級記錄無法驗證。".into());
+    }
+    config
+        .v2_candidate()?
+        .ok_or_else(|| "此登入已使用 HTTPS v2，但正式公鑰未設定。".into())
+}
+
+pub(crate) fn remember_transport(root: &Path, config: &Config) -> AppResult<()> {
+    if config.uses_transport_v2() {
+        atomic_write(&root.join("transport-v2.dpapi"), &protect(V2_LOCK, true)?)?;
+    }
+    Ok(())
+}
+
 /// 先寫暫存檔再替換，避免程式中途關閉時留下半份 JSON 或憑證。
 pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> AppResult<()> {
     let _transition = path_transition();
@@ -154,6 +177,43 @@ pub fn protect(bytes: &[u8], encrypt: bool) -> AppResult<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn v1_session_and_separate_upgrade_marker_do_not_overwrite_each_other() {
+        let root =
+            std::env::temp_dir().join(format!("lmai-transport-{}", crate::jobs::new_id().unwrap()));
+        let config = Config::default();
+        let session = Session::from_token(
+            TokenResponse {
+                access_token: "fixture-v1".into(),
+                token_type: "Bearer".into(),
+                expires_in: 60,
+            },
+            &config,
+        )
+        .unwrap();
+        save_session(&root, &session).unwrap();
+        remember_transport(&root, &config).unwrap();
+        assert!(!root.join("transport-v2.dpapi").exists());
+        assert!(
+            load_session(&root, &restore_transport(&root, config.clone()).unwrap())
+                .unwrap()
+                .is_some()
+        );
+        let secure = Config {
+            server_url: crate::config::SERVER_URL_V2.into(),
+            ..config.clone()
+        };
+        remember_transport(&root, &secure).unwrap();
+        clear_session(&root).unwrap();
+        let pins = crate::transport::pins::configured().unwrap();
+        let restored = restore_transport(&root, config);
+        if pins.is_some() {
+            assert!(restored.unwrap().uses_transport_v2());
+        } else {
+            assert!(restored.is_err());
+        }
+        assert!(root.join("transport-v2.dpapi").exists());
+    }
     #[test]
     fn saved_login_survives_reload_but_not_expiry_or_origin_change() {
         let unique = std::time::SystemTime::now()

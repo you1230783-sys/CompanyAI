@@ -6,6 +6,10 @@ use url::Url;
 pub const CLIENT_ID: &str = "company-ai-desktop";
 // 公司部署位置集中於此；正式介面與設定檔都不提供覆寫入口。
 pub const SERVER_URL: &str = "http://lp2-en-server";
+pub(crate) const SERVER_URL_V2: &str = "https://lp2-en-server:8443";
+// 正式與備用 SPKI SHA-256 由公司交付。佔位值狀態不啟用 HTTPS v2。
+pub(crate) const PRIMARY_SPKI: &str = "LMAI-PIN-PLACEHOLDER-PRIMARY";
+pub(crate) const BACKUP_SPKI: &str = "LMAI-PIN-PLACEHOLDER-BACKUP";
 pub const CHAT_PATH: &str = "/lm_server/v1/chat/completions";
 pub const DEVICE_PATH: &str = "/lm_server/api/desktop/oauth/device";
 pub const TOKEN_PATH: &str = "/lm_server/api/desktop/oauth/token";
@@ -226,6 +230,22 @@ impl Default for Config {
 }
 
 impl Config {
+    pub(crate) fn uses_transport_v2(&self) -> bool {
+        self.server_url == SERVER_URL_V2
+    }
+
+    /// 只從固定公司端點切換。現行 HTTP 設定與綁定在拿到 v2 Token 前保持原樣。
+    pub(crate) fn v2_candidate(&self) -> AppResult<Option<Self>> {
+        if !matches!(self.server_url.as_str(), SERVER_URL | SERVER_URL_V2)
+            || crate::transport::pins::configured()?.is_none()
+        {
+            return Ok(None);
+        }
+        let mut secure = self.clone();
+        secure.server_url = SERVER_URL_V2.into();
+        Ok(Some(secure))
+    }
+
     /// 網站可以部署在子目錄；將它視為目錄，避免 URL join 把最後一段當成檔名取代。
     /// 主機名稱交由 URL 函式庫解析，單段內網名稱、IP 與自訂埠號都可以使用。
     pub fn base_url(&self) -> AppResult<Url> {
@@ -310,9 +330,15 @@ impl Config {
     }
 
     pub fn verification_url(&self, value: &str) -> AppResult<Url> {
+        reject_ambiguous_characters(value)?;
         let url = Url::parse(value).map_err(|_| "網站回傳的登入網址無效。".to_string())?;
-        validate_url(&url, self.allow_http)?;
-        if url.origin() != self.base_url()?.origin() {
+        let base = self.base_url()?;
+        let v2_browser_page = self.uses_transport_v2()
+            && url.scheme() == "http"
+            && url.host_str() == base.host_str()
+            && url.port_or_known_default() == Some(80);
+        validate_url(&url, self.allow_http || v2_browser_page)?;
+        if url.origin() != base.origin() && !v2_browser_page {
             return Err(
                 "網站回傳了不同來源的登入網址，已停止。請檢查 verification_uri 設定。".into(),
             );
@@ -349,6 +375,31 @@ pub fn validate_url(url: &Url, allow_http: bool) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn v2_browser_verification_only_allows_same_host_http_port_80() {
+        let config = Config {
+            server_url: SERVER_URL_V2.into(),
+            ..Default::default()
+        };
+        assert!(config
+            .verification_url("http://lp2-en-server/verify?code=fixture")
+            .is_ok());
+        assert!(config
+            .verification_url("http://lp2-en-server:80/verify")
+            .is_ok());
+        assert!(config
+            .verification_url("https://lp2-en-server:8443/verify")
+            .is_ok());
+        for url in [
+            "http://lp2-en-server:81/verify",
+            "http://example.org/verify",
+            "https://lp2-en-server/verify",
+            "http://a@lp2-en-server/verify",
+        ] {
+            assert!(config.verification_url(url).is_err(), "{url}");
+        }
+    }
 
     #[test]
     fn minimize_preference_defaults_to_taskbar_and_preserves_both_choices() {

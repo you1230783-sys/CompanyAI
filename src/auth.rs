@@ -5,21 +5,99 @@ use crate::{
     storage::Session,
     transport, AppResult,
 };
+use sha2::{Digest, Sha256};
 use std::{
-    sync::atomic::{AtomicBool, Ordering},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
     thread,
     time::{Duration, Instant},
 };
 
-pub fn request_device(config: &Config) -> AppResult<DeviceGrant> {
+pub(crate) const UPGRADE_MESSAGE: &str = "伺服器已要求使用新的安全連線，請重新登入。";
+static UPGRADE_SESSIONS: Mutex<Vec<[u8; 32]>> = Mutex::new(Vec::new());
+
+/// 只保留需要失效的憑證指紋。較晚到達的舊請求不可登出目前新 Session。
+pub(crate) fn request_transport_upgrade(secret: &str) {
+    if secret.is_empty() {
+        return;
+    }
+    let digest: [u8; 32] = Sha256::digest(secret.as_bytes()).into();
+    if let Ok(mut pending) = UPGRADE_SESSIONS.lock() {
+        if pending.contains(&digest) {
+            return;
+        }
+        if pending.len() == 8 {
+            pending.remove(0);
+        }
+        pending.push(digest);
+    }
+}
+
+pub(crate) fn take_transport_upgrade(session: &Session) -> bool {
+    let digest: [u8; 32] = Sha256::digest(session.access_token.as_bytes()).into();
+    UPGRADE_SESSIONS.lock().is_ok_and(|mut pending| {
+        pending
+            .iter()
+            .position(|entry| *entry == digest)
+            .is_some_and(|index| {
+                pending.remove(index);
+                true
+            })
+    })
+}
+
+/// 登入碼與產生它的來源一起傳遞，輪詢或重開瀏覽器時不能切到另一來源。
+#[derive(Clone)]
+pub(crate) struct LoginGrant {
+    pub grant: DeviceGrant,
+    pub config: Config,
+    allow_v1: bool,
+}
+
+pub(crate) enum LoginResult {
+    Session(Session, Config),
+    StartV1(LoginGrant),
+}
+
+enum DeviceFailure {
+    Unavailable(String),
+    Rejected(String),
+}
+
+impl From<String> for DeviceFailure {
+    fn from(error: String) -> Self {
+        Self::Rejected(error)
+    }
+}
+
+fn request_device_for(config: &Config) -> Result<DeviceGrant, DeviceFailure> {
     config.validate()?;
-    let response = transport::post_form(
-        &config.endpoint(&config.device_path)?,
-        &[("client_id", CLIENT_ID), ("scope", "chat:write")],
-    )
-    .map_err(|error| format!("申請登入碼失敗（尚未開啟瀏覽器）：{error}"))?;
+    let mut fields = vec![("client_id", CLIENT_ID), ("scope", "chat:write")];
+    if config.uses_transport_v2() {
+        fields.push(("transport_version", "2"));
+    }
+    let response =
+        transport::post_form(&config.endpoint(&config.device_path)?, &fields).map_err(|error| {
+            let message = format!("申請登入碼失敗（尚未開啟瀏覽器）：{error}");
+            // 只辨識傳輸層自己產生的逾時與無法建立 TCP。憑證或 TLS 錯誤永不降級。
+            if config.uses_transport_v2()
+                && [12002, 12029]
+                    .iter()
+                    .any(|code| error.starts_with(&format!("Windows 網路錯誤 {code}（")))
+            {
+                DeviceFailure::Unavailable(message)
+            } else {
+                DeviceFailure::Rejected(message)
+            }
+        })?;
     if response.status != 200 {
-        return Err(protocol::api_error(response.status, &response.body, ""));
+        let message = protocol::api_error(response.status, &response.body, "");
+        if config.uses_transport_v2() && transport_v2_unavailable(&response) {
+            return Err(DeviceFailure::Unavailable(message));
+        }
+        return Err(DeviceFailure::Rejected(message));
     }
     let grant: DeviceGrant = serde_json::from_str(&response.body)
         .map_err(|_| "網站未回傳正確的登入碼 JSON，請對照 WEB_INTEGRATION.md。".to_string())?;
@@ -29,27 +107,89 @@ pub fn request_device(config: &Config) -> AppResult<DeviceGrant> {
     Ok(grant)
 }
 
+fn transport_v2_unavailable(response: &transport::HttpResponse) -> bool {
+    response.status == 400
+        && serde_json::from_str::<OAuthError>(&response.body)
+            .is_ok_and(|error| error.error == "transport_v2_unavailable")
+}
+
+pub fn request_device(config: &Config) -> AppResult<DeviceGrant> {
+    request_device_for(config).map_err(|error| match error {
+        DeviceFailure::Unavailable(message) | DeviceFailure::Rejected(message) => message,
+    })
+}
+
+pub(crate) fn begin_login(config: &Config) -> AppResult<LoginGrant> {
+    begin_login_with(config, config.v2_candidate()?, request_device_for)
+}
+
+fn begin_login_with(
+    config: &Config,
+    secure: Option<Config>,
+    mut request: impl FnMut(&Config) -> Result<DeviceGrant, DeviceFailure>,
+) -> AppResult<LoginGrant> {
+    let allow_v1 = !config.uses_transport_v2();
+    if let Some(secure) = secure {
+        match request(&secure) {
+            Ok(grant) => {
+                return Ok(LoginGrant {
+                    grant,
+                    config: secure,
+                    allow_v1,
+                })
+            }
+            Err(DeviceFailure::Unavailable(_)) if allow_v1 => (),
+            Err(DeviceFailure::Unavailable(message) | DeviceFailure::Rejected(message)) => {
+                return Err(message)
+            }
+        }
+    } else if !allow_v1 {
+        return Err("此登入已使用 HTTPS v2，但正式公鑰未設定。".into());
+    }
+    let grant = request(config).map_err(|error| match error {
+        DeviceFailure::Unavailable(message) | DeviceFailure::Rejected(message) => message,
+    })?;
+    Ok(LoginGrant {
+        grant,
+        config: config.clone(),
+        allow_v1: false,
+    })
+}
+
 /// 登入輪詢結果明確區分「尚未完成」與「應增加間隔」，遵守 RFC 8628 的節奏。
 pub enum PollResult {
     Pending,
     SlowDown,
     Granted(Session),
+    TransportUnavailable,
 }
 
 pub fn poll_once(config: &Config, grant: &DeviceGrant) -> AppResult<PollResult> {
-    let response = transport::post_form(
-        &config.endpoint(&config.token_path)?,
-        &[
-            ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
-            ("device_code", &grant.device_code),
-            ("client_id", CLIENT_ID),
-        ],
-    )
-    .map_err(|error| format!("查詢登入授權結果失敗：{error}"))?;
+    let mut fields = vec![
+        ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
+        ("device_code", grant.device_code.as_str()),
+        ("client_id", CLIENT_ID),
+    ];
+    if config.uses_transport_v2() {
+        fields.push(("transport_version", "2"));
+    }
+    let response = transport::post_form(&config.endpoint(&config.token_path)?, &fields)
+        .map_err(|error| format!("查詢登入授權結果失敗：{error}"))?;
+    parse_token_response(config, grant, response)
+}
+
+fn parse_token_response(
+    config: &Config,
+    grant: &DeviceGrant,
+    response: transport::HttpResponse,
+) -> AppResult<PollResult> {
     if response.status == 200 {
         let token: TokenResponse = serde_json::from_str(&response.body)
             .map_err(|_| "授權端點的 Token JSON 格式錯誤。".to_string())?;
         return Session::from_token(token, config).map(PollResult::Granted);
+    }
+    if config.uses_transport_v2() && transport_v2_unavailable(&response) {
+        return Ok(PollResult::TransportUnavailable);
     }
     if matches!(response.status, 400 | 429) {
         let error: OAuthError = serde_json::from_str(&response.body)
@@ -74,6 +214,42 @@ pub fn wait_for_login(
     grant: &DeviceGrant,
     cancelled: &AtomicBool,
 ) -> AppResult<Session> {
+    wait_for_token(config, grant, cancelled)?.ok_or_else(|| "此帳號未提供 HTTPS v2 登入。".into())
+}
+
+pub(crate) fn finish_login(flow: LoginGrant, cancelled: &AtomicBool) -> AppResult<LoginResult> {
+    let session = wait_for_token(&flow.config, &flow.grant, cancelled)?;
+    finish_login_with(flow, session, cancelled, request_device)
+}
+
+fn finish_login_with(
+    flow: LoginGrant,
+    session: Option<Session>,
+    cancelled: &AtomicBool,
+    request: impl FnOnce(&Config) -> AppResult<DeviceGrant>,
+) -> AppResult<LoginResult> {
+    if let Some(session) = session {
+        return Ok(LoginResult::Session(session, flow.config));
+    }
+    if !flow.allow_v1 || cancelled.load(Ordering::Relaxed) {
+        return Err("此登入無法使用 HTTPS v2，已停止連線。".into());
+    }
+    // 驗證頁已授權的 v2 裝置碼不可送給 HTTP。另取全新的 v1 授權。
+    let mut config = flow.config;
+    config.server_url = crate::config::SERVER_URL.into();
+    let grant = request(&config)?;
+    Ok(LoginResult::StartV1(LoginGrant {
+        grant,
+        config,
+        allow_v1: false,
+    }))
+}
+
+fn wait_for_token(
+    config: &Config,
+    grant: &DeviceGrant,
+    cancelled: &AtomicBool,
+) -> AppResult<Option<Session>> {
     let deadline = Instant::now() + Duration::from_secs(grant.expires_in);
     let mut interval = grant.interval;
     loop {
@@ -96,7 +272,8 @@ pub fn wait_for_login(
             return Err("登入碼已過期，請重新登入。".into());
         }
         match result {
-            PollResult::Granted(session) => return Ok(session),
+            PollResult::Granted(session) => return Ok(Some(session)),
+            PollResult::TransportUnavailable => return Ok(None),
             PollResult::Pending => {}
             PollResult::SlowDown => interval += 5,
         }
@@ -145,5 +322,136 @@ pub fn send_chat(config: &Config, session: &Session, body: &str) -> ChatOutcome 
     ChatOutcome {
         reply,
         unauthorized,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn grant(id: &str) -> DeviceGrant {
+        serde_json::from_value(serde_json::json!({"device_code":id,"user_code":"ABC123",
+            "verification_uri":"http://lp2-en-server/verify","expires_in":60,"interval":1}))
+        .unwrap()
+    }
+
+    fn secure() -> Config {
+        Config {
+            server_url: crate::config::SERVER_URL_V2.into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn negotiation_fallback_only_for_unavailable_v2_before_persistent_lock() {
+        let normal = Config::default();
+        let mut routes = Vec::new();
+        let flow = begin_login_with(&normal, Some(secure()), |route| {
+            routes.push(route.uses_transport_v2());
+            if route.uses_transport_v2() {
+                Err(DeviceFailure::Unavailable("逾時".into()))
+            } else {
+                Ok(grant("v1"))
+            }
+        })
+        .unwrap();
+        assert_eq!(routes, [true, false]);
+        assert_eq!(flow.grant.device_code, "v1");
+        for (route, unavailable) in [(&normal, false), (&secure(), true)] {
+            let mut calls = 0;
+            let result = begin_login_with(route, Some(secure()), |config| {
+                calls += 1;
+                assert!(config.uses_transport_v2());
+                if unavailable {
+                    Err(DeviceFailure::Unavailable("逾時".into()))
+                } else {
+                    Err(DeviceFailure::Rejected("TLS_PIN_MISMATCH".into()))
+                }
+            });
+            assert!(result.is_err());
+            assert_eq!(calls, 1);
+        }
+        let flow = begin_login_with(&normal, None, |route| {
+            assert!(!route.uses_transport_v2());
+            Ok(grant("placeholder"))
+        })
+        .unwrap();
+        assert_eq!(flow.grant.device_code, "placeholder");
+    }
+
+    #[test]
+    fn v2_token_success_stays_bound_and_explicit_rejection_uses_a_fresh_grant() {
+        let response = |status, body: &str| transport::HttpResponse {
+            status,
+            body: body.into(),
+        };
+        let secure = secure();
+        let original = grant("original-v2");
+        let granted = parse_token_response(
+            &secure,
+            &original,
+            response(
+                200,
+                r#"{"access_token":"fixture","token_type":"Bearer","expires_in":60}"#,
+            ),
+        )
+        .unwrap();
+        let PollResult::Granted(session) = granted else {
+            panic!("缺少 v2 Session")
+        };
+        assert!(session.valid_for(&secure));
+        assert!(!session.valid_for(&Config::default()));
+        assert!(matches!(
+            parse_token_response(
+                &secure,
+                &original,
+                response(400, r#"{"error":"transport_v2_unavailable"}"#)
+            )
+            .unwrap(),
+            PollResult::TransportUnavailable
+        ));
+        let cancel = AtomicBool::new(false);
+        let mut flow = LoginGrant {
+            grant: original,
+            config: secure,
+            allow_v1: true,
+        };
+        let result = finish_login_with(flow.clone(), None, &cancel, |route| {
+            assert!(!route.uses_transport_v2());
+            Ok(grant("fresh-v1"))
+        })
+        .unwrap();
+        assert!(
+            matches!(result, LoginResult::StartV1(next) if next.grant.device_code == "fresh-v1")
+        );
+        flow.allow_v1 = false;
+        assert!(finish_login_with(flow, None, &cancel, |_| panic!("不應建立 v1 授權")).is_err());
+    }
+
+    #[test]
+    fn upgrade_request_matches_only_the_rejected_session() {
+        let config = Config::default();
+        let token = |name: &str| {
+            Session::from_token(
+                TokenResponse {
+                    access_token: name.into(),
+                    token_type: "Bearer".into(),
+                    expires_in: 60,
+                },
+                &config,
+            )
+            .unwrap()
+        };
+        let old = token("fixture-old");
+        let new = token("fixture-new");
+        let error = protocol::api_error(
+            426,
+            r#"{"error":"transport_upgrade_required"}"#,
+            &old.access_token,
+        );
+        assert!(error.contains(UPGRADE_MESSAGE));
+        assert!(!take_transport_upgrade(&new));
+        assert!(take_transport_upgrade(&old));
+        assert!(!take_transport_upgrade(&old));
     }
 }

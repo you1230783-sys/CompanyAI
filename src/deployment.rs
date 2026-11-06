@@ -243,6 +243,18 @@ fn verify_file(file: &mut fs::File, artifact: &UpdateArtifact) -> AppResult<()> 
     Ok(())
 }
 
+/// 本機 TLS 測試使用已發行的簽章檔，驗證正式下載流程共用的來源、簽章與檔案檢查。
+#[cfg(test)]
+pub(crate) fn verify_download_fixture(
+    config: &Config,
+    artifact: &UpdateArtifact,
+    path: &std::path::Path,
+) -> AppResult<()> {
+    validate_manifest(config, artifact)?;
+    let mut file = fs::File::open(path).map_err(|e| e.to_string())?;
+    verify_file(&mut file, artifact)
+}
+
 pub fn download(config: &Config, latest: &str) -> AppResult<ReadyUpdate> {
     let artifact = fetch_artifact(config, latest)?;
     let directory = crate::storage::data_dir()?

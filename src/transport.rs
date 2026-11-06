@@ -7,6 +7,7 @@ use url::Url;
 use windows_sys::Win32::Networking::WinHttp::*;
 
 pub(crate) mod pdf;
+pub(crate) mod pins;
 #[cfg(feature = "vnc")]
 pub(crate) mod vnc;
 
@@ -16,21 +17,28 @@ pub struct HttpResponse {
 }
 
 /// WinHTTP handle 與建立它的請求一起存活；Drop 確保每個錯誤路徑都會關閉。
-struct Handle(*mut c_void);
+struct Handle(*mut c_void, Option<Box<pins::Check>>);
 impl Handle {
     fn checked(operation: &str, value: *mut c_void) -> AppResult<Self> {
         if value.is_null() {
             Err(network_error(operation))
         } else {
-            Ok(Self(value))
+            Ok(Self(value, None))
         }
+    }
+
+    fn error(&self, operation: &str) -> String {
+        if self.1.as_deref().is_some_and(pins::Check::rejected) {
+            return pins::PIN_ERROR.into();
+        }
+        network_error(operation)
     }
 }
 impl Drop for Handle {
     fn drop(&mut self) {
         // SAFETY: handle 由 WinHTTP 建立，僅由此擁有者關閉一次。
-        unsafe {
-            WinHttpCloseHandle(self.0);
+        if !self.0.is_null() && !self.1.as_deref().is_some_and(pins::Check::rejected) {
+            unsafe { WinHttpCloseHandle(self.0) };
         }
     }
 }
@@ -43,7 +51,9 @@ fn uses_direct_connection(url: &Url) -> bool {
         // 本機示範與測試不經公司代理，避免把 loopback 請求轉送出去。
         return true;
     }
-    Url::parse(crate::config::SERVER_URL).is_ok_and(|company| company.origin() == url.origin())
+    [crate::config::SERVER_URL, crate::config::SERVER_URL_V2]
+        .iter()
+        .any(|origin| Url::parse(origin).is_ok_and(|company| company.origin() == url.origin()))
 }
 
 /// HTTP 與通知 WebSocket 共用相同連線規則。
@@ -145,7 +155,7 @@ pub fn watch_notifications(
                 0,
             ),
         )?;
-        let request = Handle::checked(
+        let mut request = Handle::checked(
             "WinHttpOpenRequest",
             WinHttpOpenRequest(
                 connection.0,
@@ -185,20 +195,9 @@ pub fn watch_notifications(
             "Authorization: Bearer {token}\r\nAccept: application/json\r\nX-Client-Version: {}\r\n",
             env!("CARGO_PKG_VERSION")
         ));
-        if WinHttpSendRequest(
-            request.0,
-            headers.as_ptr(),
-            (headers.len() - 1) as u32,
-            ptr::null(),
-            0,
-            0,
-            0,
-        ) == 0
-        {
-            return Err(network_error("WinHttpSendRequest"));
-        }
+        pins::send(&mut request, url, &headers, 0, None)?;
         if WinHttpReceiveResponse(request.0, ptr::null_mut()) == 0 {
-            return Err(network_error("WinHttpReceiveResponse"));
+            return Err(request.error("WinHttpReceiveResponse"));
         }
         let mut status = 0u32;
         let mut length = 4;
@@ -328,11 +327,21 @@ pub fn exchange(
         timeout_ms,
         on_chunk,
         "text/event-stream",
+        None,
     )
 }
 
 /// 有界二進位下載，沿用禁止重新導向／系統 TLS 驗證，不傳登入 Token。
 pub fn download_file(url: &Url, path: &std::path::Path, expected_size: u64) -> AppResult<()> {
+    download_file_inner(url, path, expected_size, None)
+}
+
+fn download_file_inner(
+    url: &Url,
+    path: &std::path::Path,
+    expected_size: u64,
+    test_pins: Option<&pins::Pins>,
+) -> AppResult<()> {
     use std::io::Write;
     let mut file = std::fs::OpenOptions::new()
         .write(true)
@@ -361,6 +370,7 @@ pub fn download_file(url: &Url, path: &std::path::Path, expected_size: u64) -> A
         30_000,
         Some(&mut chunk),
         "application/octet-stream",
+        test_pins,
     )?;
     if response.status != 200 || received != expected_size {
         return Err(format!(
@@ -381,6 +391,7 @@ fn exchange_inner(
     timeout_ms: i32,
     mut on_chunk: Option<ResponseChunks<'_>>,
     response_type: &str,
+    test_pins: Option<&pins::Pins>,
 ) -> AppResult<HttpResponse> {
     let host = wide(url.host_str().ok_or("網址缺少主機名稱。")?);
     let path = match url.query() {
@@ -423,7 +434,7 @@ fn exchange_inner(
         } else {
             0
         };
-        let request = Handle::checked(
+        let mut request = Handle::checked(
             "WinHttpOpenRequest",
             WinHttpOpenRequest(
                 connection.0,
@@ -457,18 +468,7 @@ fn exchange_inner(
             return Err(network_error("WinHttpSetOption/cookies"));
         }
         let headers = wide(&headers);
-        if WinHttpSendRequest(
-            request.0,
-            headers.as_ptr(),
-            (headers.len() - 1) as u32,
-            ptr::null(),
-            0,
-            payload.length,
-            0,
-        ) == 0
-        {
-            return Err(network_error("WinHttpSendRequest"));
-        }
+        pins::send(&mut request, url, &headers, payload.length, test_pins)?;
         let mut remaining = payload.length as usize;
         let mut upload_buffer = [0u8; 48 * 1024];
         while remaining > 0 {
@@ -490,7 +490,7 @@ fn exchange_inner(
                     &mut written,
                 ) == 0
                 {
-                    return Err(network_error("WinHttpWriteData"));
+                    return Err(request.error("WinHttpWriteData"));
                 }
                 // API 成功但沒有寫入資料時，GetLastError 不代表本次結果。
                 // 明確報告無進度，避免顯示其他呼叫殘留的 10022 等錯誤碼。
@@ -504,7 +504,7 @@ fn exchange_inner(
             remaining -= count;
         }
         if WinHttpReceiveResponse(request.0, ptr::null_mut()) == 0 {
-            return Err(network_error("WinHttpReceiveResponse"));
+            return Err(request.error("WinHttpReceiveResponse"));
         }
         let mut status = 0_u32;
         let mut size = 4_u32;

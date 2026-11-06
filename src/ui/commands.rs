@@ -576,7 +576,7 @@ impl App {
                 self.error = false;
                 let (config, tx, id) = (self.config.clone(), self.tx.clone(), self.login_operation);
                 crate::reliability::spawn(move || {
-                    let _ = tx.send(Event::Grant(id, auth::request_device(&config)));
+                    let _ = tx.send(Event::Grant(id, auth::begin_login(&config)));
                 });
             }
             Command::CancelLogin => {
@@ -591,7 +591,12 @@ impl App {
             }
             Command::ReopenLogin => {
                 if let Some(grant) = &self.grant {
-                    open_browser(self.config.verification_url(grant.browser_url())?.as_str())?;
+                    open_browser(
+                        grant
+                            .config
+                            .verification_url(grant.grant.browser_url())?
+                            .as_str(),
+                    )?;
                 }
             }
             Command::Logout => {

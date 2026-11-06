@@ -1,8 +1,9 @@
 //! PDF 專用 multipart client。WinHTTP 使用非同步 I/O，讓等待轉換時可取消。
 //! 對呼叫端仍為背景執行緒中的同步函式；不影響既有聊天／附件的 HTTP 行為。
-use super::{network_error, uses_direct_connection, Handle};
+use super::{network_error, pins, uses_direct_connection, Handle};
 use crate::{wide, AppResult};
 use std::{
+    cell::Cell,
     ffi::c_void,
     io::Read,
     ptr,
@@ -29,11 +30,26 @@ enum Event {
     Complete(u32, u32),
     Error(u32),
     Closed,
+    PinRejected,
 }
 
-/// Callback 只傳回狀態，不操作檔案或 UI，也不在 callback 中遞迴呼叫 WinHTTP。
+struct Context {
+    sender: mpsc::Sender<Event>,
+    pin: Option<pins::Check>,
+    closing: AtomicBool,
+}
+
+impl Context {
+    fn close(&self, request: *mut c_void) {
+        if !self.closing.swap(true, Ordering::AcqRel) {
+            unsafe { WinHttpCloseHandle(request) };
+        }
+    }
+}
+
+/// 回呼不操作檔案或 UI。TLS 釘選失敗時從資訊回呼關閉請求，阻止送出 HTTP 資料。
 unsafe extern "system" fn callback(
-    _: *mut c_void,
+    request: *mut c_void,
     context: usize,
     status: u32,
     info: *mut c_void,
@@ -44,8 +60,18 @@ unsafe extern "system" fn callback(
     }
     // 所有權由 Request 保留到 HANDLE_CLOSING。先 clone sender，送出 Closed 後
     // 不再接觸 context，避免接收端立即釋放時與 callback 尾端競爭。
-    let sender = unsafe { &*(context as *const mpsc::Sender<Event>) }.clone();
+    let context = unsafe { &*(context as *const Context) };
+    let sender = context.sender.clone();
     let event = match status {
+        WINHTTP_CALLBACK_STATUS_SENDING_REQUEST => {
+            if let Some(pin) = &context.pin {
+                if !pin.before_send(request) {
+                    context.close(request);
+                    let _ = sender.send(Event::PinRejected);
+                }
+            }
+            return;
+        }
         WINHTTP_CALLBACK_STATUS_HANDLE_CLOSING => Event::Closed,
         WINHTTP_CALLBACK_STATUS_REQUEST_ERROR
             if !info.is_null()
@@ -66,16 +92,24 @@ unsafe extern "system" fn callback(
 
 struct Request {
     raw: *mut c_void,
-    _context: Box<mpsc::Sender<Event>>,
+    context: Box<Context>,
+    received_close: Cell<bool>,
     events: mpsc::Receiver<Event>,
     // I/O buffer 必須活到完成 callback，取消時亦不能先釋放。
     buffer: Box<[u8; 65_536]>,
 }
 impl Request {
-    fn new(handle: Handle) -> AppResult<Self> {
+    fn new(handle: Handle, pin: Option<pins::Pins>) -> AppResult<Self> {
+        if pin.is_some() {
+            pins::set_security(handle.0)?;
+        }
         let (sender, events) = mpsc::channel();
-        let context = Box::new(sender);
-        let pointer = (&*context as *const mpsc::Sender<Event>) as usize;
+        let context = Box::new(Context {
+            sender,
+            pin: pin.map(pins::Check::new),
+            closing: AtomicBool::new(false),
+        });
+        let pointer = (&*context as *const Context) as usize;
         unsafe {
             if WinHttpSetOption(
                 handle.0,
@@ -94,7 +128,8 @@ impl Request {
                     | WINHTTP_CALLBACK_STATUS_READ_COMPLETE
                     | WINHTTP_CALLBACK_STATUS_WRITE_COMPLETE
                     | WINHTTP_CALLBACK_STATUS_REQUEST_ERROR
-                    | WINHTTP_CALLBACK_STATUS_HANDLE_CLOSING,
+                    | WINHTTP_CALLBACK_STATUS_HANDLE_CLOSING
+                    | WINHTTP_CALLBACK_STATUS_SENDING_REQUEST,
                 0,
             );
             if previous.map(|f| f as usize) == Some(usize::MAX) {
@@ -105,7 +140,8 @@ impl Request {
         std::mem::forget(handle);
         Ok(Self {
             raw,
-            _context: context,
+            context,
+            received_close: Cell::new(false),
             events,
             buffer: Box::new([0; 65_536]),
         })
@@ -115,6 +151,14 @@ impl Request {
         loop {
             check(cancel, deadline)?;
             match self.events.recv_timeout(Duration::from_millis(50)) {
+                Ok(Event::Closed) => {
+                    self.received_close.set(true);
+                    self.verify_pin()?;
+                    return Err("PDF 轉換連線已關閉。".into());
+                }
+                Ok(Event::PinRejected) => {
+                    self.verify_pin()?;
+                }
                 Ok(Event::Complete(kind, length)) if kind == expected => return Ok(length),
                 Ok(Event::Error(code)) => {
                     return Err(format!("PDF 轉換連線失敗（Windows {code}）；未自動重送。"))
@@ -125,14 +169,22 @@ impl Request {
             }
         }
     }
+
+    fn verify_pin(&self) -> AppResult<()> {
+        self.context
+            .pin
+            .as_ref()
+            .map_or(Ok(()), pins::Check::ensure_verified)
+    }
 }
 impl Drop for Request {
     fn drop(&mut self) {
         // 只取消非同步 request。最後的 HANDLE_CLOSING 回呼抵達後，才可釋放
         // context 與 I/O buffer；不得在其他執行緒關閉同步 WinHTTP handle。
-        unsafe {
-            WinHttpCloseHandle(self.raw);
+        if self.received_close.get() {
+            return;
         }
+        self.context.close(self.raw);
         while let Ok(event) = self.events.recv() {
             if matches!(event, Event::Closed) {
                 break;
@@ -273,7 +325,7 @@ fn convert_with_timeout(
         {
             return Err(network_error("WinHttpSetOption/PDF-policy"));
         }
-        let mut request = Request::new(handle)?;
+        let mut request = Request::new(handle, pins::for_url(url)?)?;
         let headers = wide(&format!("Authorization: Bearer {token}\r\nX-Client-Version: {}\r\nAccept: text/markdown\r\nContent-Type: multipart/form-data; boundary={boundary}\r\n", env!("CARGO_PKG_VERSION")));
         if WinHttpSendRequest(
             request.raw,
@@ -282,7 +334,7 @@ fn convert_with_timeout(
             ptr::null(),
             0,
             total as u32,
-            (&*request._context as *const mpsc::Sender<Event>) as usize,
+            (&*request.context as *const Context) as usize,
         ) == 0
         {
             return Err(network_error("WinHttpSendRequest/PDF"));
@@ -292,6 +344,7 @@ fn convert_with_timeout(
             cancel,
             deadline,
         )?;
+        request.verify_pin()?;
         let mut remaining = total as usize;
         while remaining > 0 {
             check(cancel, deadline)?;

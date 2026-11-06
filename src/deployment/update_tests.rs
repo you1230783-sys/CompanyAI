@@ -11,6 +11,23 @@ fn fixture(kind: &str) -> UpdateArtifact {
 }
 
 #[test]
+fn signed_relative_manifest_uses_the_v2_update_origin_and_keeps_signature_rules() {
+    let config = Config {
+        server_url: crate::config::SERVER_URL_V2.into(),
+        ..Default::default()
+    };
+    let nsis = fixture("nsis");
+    assert!(validate_manifest(&config, &nsis).is_ok());
+    assert_eq!(
+        config.endpoint(&nsis.url).unwrap().port_or_known_default(),
+        Some(8443)
+    );
+    let mut forged = nsis;
+    forged.url = format!("{}{}", crate::config::SERVER_URL, forged.url);
+    assert!(validate_manifest(&config, &forged).is_err());
+}
+
+#[test]
 fn valid_manifests_choose_nsis_on_tie_and_ignore_forged_latest() {
     let config = Config::default();
     let exe = fixture("exe");

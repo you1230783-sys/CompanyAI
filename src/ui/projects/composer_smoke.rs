@@ -76,6 +76,8 @@ impl App {
                 },
             ],
             default_model: Some("fast".into()),
+            transport: Default::default(),
+            chat: Default::default(),
         });
         let mut cases = vec![];
 
@@ -625,6 +627,8 @@ impl App {
             principal_id: "composer-account".into(),
             execution_modes: vec!["background".into()],
             attachments: Default::default(),
+            transport: Default::default(),
+            chat: Default::default(),
         });
         let old = crate::jobs::new_id()?;
         let folder = self.root.join(&old);

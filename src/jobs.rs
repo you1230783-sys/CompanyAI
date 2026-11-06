@@ -27,6 +27,10 @@ pub struct Capabilities {
     pub principal_id: String,
     pub execution_modes: Vec<String>,
     pub attachments: AttachmentRules,
+    #[serde(default)]
+    pub transport: crate::service::TransportSupport,
+    #[serde(default)]
+    pub chat: crate::service::ChatSupport,
 }
 impl Capabilities {
     pub fn validate(&self) -> AppResult<()> {

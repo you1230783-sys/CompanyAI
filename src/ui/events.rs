@@ -96,20 +96,7 @@ impl App {
                 }
             }
             Event::Grant(id, result) if id == self.login_operation => match result {
-                Ok(grant) => {
-                    let browser = self.config.verification_url(grant.browser_url())?;
-                    self.grant = Some(grant.clone());
-                    let (config, tx, cancel) =
-                        (self.config.clone(), self.tx.clone(), self.cancelled.clone());
-                    crate::reliability::spawn(move || {
-                        let _ = tx.send(Event::Login(
-                            id,
-                            auth::wait_for_login(&config, &grant, &cancel),
-                        ));
-                    });
-                    self.status = "請在瀏覽器完成登入授權".into();
-                    open_browser(browser.as_str())?;
-                }
+                Ok(grant) => self.show_login_grant(id, grant)?,
                 Err(e) => {
                     self.busy = "none";
                     return Err(e);
@@ -118,7 +105,15 @@ impl App {
             Event::Login(id, result) if id == self.login_operation => {
                 self.busy = "none";
                 self.grant = None;
-                let session = result?;
+                let (session, route) = match result? {
+                    auth::LoginResult::Session(session, route) => (session, route),
+                    auth::LoginResult::StartV1(grant) => return self.show_login_grant(id, grant),
+                };
+                if !self.demo {
+                    storage::remember_transport(&self.root, &route)?;
+                }
+                // 登入期間使用者仍可能修改個人偏好，僅套用剛完成授權的傳輸來源。
+                self.config.server_url = route.server_url;
                 if !self.demo {
                     storage::save_session(&self.root, &session)?;
                 }
@@ -303,6 +298,18 @@ impl App {
         }
         Ok(())
     }
+
+    fn show_login_grant(&mut self, id: u64, grant: auth::LoginGrant) -> AppResult<()> {
+        let browser = grant.config.verification_url(grant.grant.browser_url())?;
+        self.busy = "login";
+        self.grant = Some(grant.clone());
+        let (tx, cancel) = (self.tx.clone(), self.cancelled.clone());
+        crate::reliability::spawn(move || {
+            let _ = tx.send(Event::Login(id, auth::finish_login(grant, &cancel)));
+        });
+        self.status = "請在瀏覽器完成登入授權".into();
+        open_browser(browser.as_str())
+    }
     pub(super) fn tick(&mut self) {
         if crate::reliability::faulted() {
             self.fault_tick();
@@ -312,6 +319,15 @@ impl App {
         self.tick_reminders();
         self.tick_schedules();
         let mut changed = false;
+        if self
+            .session
+            .as_ref()
+            .is_some_and(auth::take_transport_upgrade)
+        {
+            let _ = self.logout();
+            self.fail(auth::UPGRADE_MESSAGE.into());
+            changed = true;
+        }
         // 先處理到期，再接受 UI 命令或背景結果，不能因本機工作忙碌而繼續使用過期授權。
         if !self.smoke && self.session.is_some() && !self.logged_in() && self.busy != "login" {
             if let Err(error) = self.batch_login_expired() {

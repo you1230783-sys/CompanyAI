@@ -12,7 +12,7 @@ use crate::{
     history::{self, Archive},
     notifications::{self, Inbox},
     outlook::{self, MailPreview},
-    protocol::{DeviceGrant, Message},
+    protocol::Message,
     selection::{self, Hotkey},
     service::{self, ModelCatalog, VersionState},
     storage::{self, Session},
@@ -254,8 +254,8 @@ enum Event {
         AppResult<service::VersionInfo>,
         AppResult<ModelCatalog>,
     ),
-    Grant(u64, AppResult<DeviceGrant>),
-    Login(u64, AppResult<Session>),
+    Grant(u64, AppResult<auth::LoginGrant>),
+    Login(u64, AppResult<auth::LoginResult>),
     Capture(u64, AppResult<String>),
     UpdateReady(AppResult<crate::deployment::ReadyUpdate>),
     SelectionRect(Option<crate::selection_popup::SelectionRect>),
@@ -317,7 +317,7 @@ struct App {
     generation: u64,
     login_operation: u64,
     cancelled: Arc<AtomicBool>,
-    grant: Option<DeviceGrant>,
+    grant: Option<auth::LoginGrant>,
     inbox: Inbox,
     notifications_loading: bool,
     notifications_pending: bool,
@@ -440,7 +440,7 @@ impl App {
             "draft":self.draft,"draft_revision":self.draft_revision,"focus_draft":self.focus_draft,
             "notifications":events,"notification_status":self.notification_status,"unread_count":self.inbox.events.iter().filter(|e| e.visible_ai()&&!e.dismissed&&!e.expired()&&e.read_at.is_none()&&!crate::projects::events::internal(&self.root,e.resource_id.as_deref())).count()+self.site.cache.unread_count.saturating_sub(self.site.cache.items.iter().filter(|e|!e.is_read&&crate::projects::events::internal(&self.root,e.resource_id.as_deref())).count()),"site_status":self.site.status,"site_loading":self.site.loading,"site_mutating":self.site.mutating,"notifications_loading":self.notifications_loading,
             "mail":self.mail,"mail_busy":self.mail_busy,"mail_batch":self.mail_batch_state(),"history_error":self.history_error,
-            "work":self.work_state(),"vnc":self.vnc_state(),"version_status":self.version_status,"login_code":self.grant.as_ref().map(|g|&g.user_code)
+            "work":self.work_state(),"vnc":self.vnc_state(),"version_status":self.version_status,"login_code":self.grant.as_ref().map(|g|&g.grant.user_code)
         }});
         state_payload["state"]["branches"] = branches;
         // 額外能力以獨立欄位加入，避免大型json!巨集超過展開深度。

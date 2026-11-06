@@ -363,6 +363,11 @@ pub fn export(root: &Path, include_details: bool) -> AppResult<Vec<u8>> {
             "log_status":log_status,"retained_event_limit":MAX_EVENTS,"events":events,
             "panic_events":crate::reliability::events(root),
             "panic_log_incomplete":crate::reliability::log_failed(),
+            "https_v2":match crate::transport::pins::configured() {
+                Ok(None) => "HTTPS v2 未啟用：尚未設定正式公鑰",
+                Ok(Some(_)) => "已設定正式公鑰",
+                Err(_) => "HTTPS v2 公鑰格式不正確",
+            },
             "environment":{"architecture":"x64","runtime":"WebView2","panic_strategy":"unwind"}
         }),
     )

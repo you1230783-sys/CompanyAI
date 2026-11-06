@@ -251,6 +251,16 @@ pub struct OAuthError {
 
 /// API 錯誤只顯示必要訊息，並遮蔽當次憑證，避免錯誤回應意外洩漏 Header。
 pub fn api_error(status: u32, body: &str, secret: &str) -> String {
+    let parsed = serde_json::from_str::<serde_json::Value>(body).ok();
+    if matches!(status, 401 | 426)
+        && parsed.as_ref().is_some_and(|value| {
+            value["error"] == "transport_upgrade_required"
+                || value["error_code"] == "transport_upgrade_required"
+        })
+    {
+        crate::auth::request_transport_upgrade(secret);
+        return format!("HTTP {status}：{}", crate::auth::UPGRADE_MESSAGE);
+    }
     let hint = match status {
         401 => "登入已到期或 API Key 無效，請重新登入。",
         403 => "此帳號沒有呼叫此 API 或模型的權限。",
@@ -259,7 +269,6 @@ pub fn api_error(status: u32, body: &str, secret: &str) -> String {
         429 => "請求過多，請稍後再試。",
         _ => "API 請求失敗，請檢查網站服務。",
     };
-    let parsed = serde_json::from_str::<serde_json::Value>(body).ok();
     let detail = parsed
         .as_ref()
         .and_then(|value| {

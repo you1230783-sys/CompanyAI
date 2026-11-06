@@ -115,6 +115,34 @@ pub struct ModelCatalog {
     pub models: Vec<ModelOption>,
     #[serde(default)]
     pub default_model: Option<String>,
+    #[serde(default)]
+    pub transport: TransportSupport,
+    #[serde(default)]
+    pub chat: ChatSupport,
+}
+
+/// 伺服器尚未回報時視為 v1。能力資訊不覆蓋實際完成的 TLS 登入狀態。
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TransportSupport {
+    pub version: u8,
+    pub mode: String,
+}
+
+impl Default for TransportSupport {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            mode: String::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChatSupport {
+    pub enabled: bool,
+    pub https_required: bool,
 }
 impl ModelCatalog {
     pub fn validate(&self) -> AppResult<()> {
