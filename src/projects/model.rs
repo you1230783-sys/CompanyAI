@@ -146,19 +146,10 @@ pub(super) fn receive(
             });
         }
         // POST 有可解析狀態便立即核對；不丟棄錯誤身分再以後續 GET 掩蓋它。
-        let received =
-            match submitted_status.take() {
-                Some(status) => Ok(status),
-                None => match agent_caps {
-                    Some(caps) => super::agent::status(&run.config, &run.session, task, caps),
-                    None => jobs::project_task_status(&run.config, &run.session, task).map_err(
-                        |message| super::agent::StatusError {
-                            message,
-                            retryable: true,
-                        },
-                    ),
-                },
-            };
+        let received = match submitted_status.take() {
+            Some(status) => Ok(status),
+            None => super::agent::status(&run.config, &run.session, task, agent_caps),
+        };
         match received {
             Ok(status) => {
                 // 身分／未知狀態是契約錯誤，不能當成模型正文錯誤而重新送出工作。
@@ -227,10 +218,10 @@ pub(super) fn receive(
                         error.message
                     )));
                 }
-                let error = error.message;
-                let stopped = retry::schedule_project(&control, task, false, "原請求暫時無法查詢")?;
+                let stopped = retry::schedule_project(&control, task, false, error.summary)?;
                 checkpoint(task)?;
                 if let Some(stopped) = stopped {
+                    let error = error.message;
                     return Ok(Reply::Pending(format!(
                         "{stopped} 無法確認原請求 {} 的結果，未另建請求或重播工具。{}最後一次{error}",
                         task.request_id,

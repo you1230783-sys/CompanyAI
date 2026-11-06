@@ -540,19 +540,6 @@ pub(crate) fn project_submit(
         .map_err(|e| format!("提交 POST {CHAT_PATH}：{e}"))
 }
 
-/// 查詢原有請求；識別碼及正文由專案執行器分層驗證。
-pub(crate) fn project_task_status(
-    config: &Config,
-    session: &Session,
-    task: &Task,
-) -> AppResult<TaskStatus> {
-    let path = match &task.remote {
-        Some(r) => format!("{PREFIX}/tasks/{}", r.task_id),
-        None => format!("{PREFIX}/tasks/by-request/{}", task.request_id),
-    };
-    get(config, session, &path).map_err(|e| format!("查詢 GET {path}：{e}"))
-}
-
 pub fn task_status(config: &Config, session: &Session, task: &Task) -> AppResult<TaskStatus> {
     let path = match &task.remote {
         Some(r) => format!("{PREFIX}/tasks/{}", r.task_id),

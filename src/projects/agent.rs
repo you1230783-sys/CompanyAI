@@ -754,17 +754,19 @@ pub fn submit(
 pub struct StatusError {
     pub message: String,
     pub retryable: bool,
+    pub summary: &'static str,
 }
 
 pub fn status(
     config: &Config,
     session: &Session,
     task: &jobs::Task,
-    caps: &Capabilities,
+    caps: Option<&Capabilities>,
 ) -> Result<jobs::TaskStatus, StatusError> {
     let stop = |message| StatusError {
         message,
         retryable: false,
+        summary: "原請求查詢已停止",
     };
     if !session.valid_for(config) {
         return Err(stop("登入已到期，重新登入後可查回原請求。".into()));
@@ -780,6 +782,7 @@ pub fn status(
     .map_err(|message| StatusError {
         message,
         retryable: true,
+        summary: "連線中斷或查詢逾時",
     })?;
     // 身分、額度及格式拒絕不靠延長等待修復；404 僅查原 ID，不代表能重送。
     let error: Value = serde_json::from_str(&response.body).unwrap_or(Value::Null);
@@ -788,7 +791,22 @@ pub fn status(
             error["error_code"].as_str(),
             Some("QUOTA_EXCEEDED" | "UNAUTHORIZED" | "FORBIDDEN")
         );
-    bounded_decode(response, session, caps).map_err(|message| StatusError { message, retryable })
+    let summary = match response.status {
+        404 => "暫未查到原請求",
+        408 => "查詢逾時",
+        429 => "請求過多",
+        500..=599 => "伺服器暫時無法查詢",
+        _ => "原請求查詢已停止",
+    };
+    let decoded = match caps {
+        Some(caps) => bounded_decode(response, session, caps),
+        None => jobs::decode(response, session),
+    };
+    decoded.map_err(|message| StatusError {
+        message,
+        retryable,
+        summary,
+    })
 }
 
 pub fn check_result_limits(status: &jobs::TaskStatus, caps: &Capabilities) -> AppResult<()> {
@@ -815,7 +833,7 @@ pub fn cancel(config: &Config, session: &Session, task: &jobs::Task, caps: &Capa
     let known = task
         .remote
         .clone()
-        .or_else(|| status(config, session, task, caps).ok());
+        .or_else(|| status(config, session, task, Some(caps)).ok());
     if let Some(remote) = known.filter(|s| !s.terminal()) {
         if remote.validate_envelope().is_err() || validate_status(&remote, task).is_err() {
             return;
