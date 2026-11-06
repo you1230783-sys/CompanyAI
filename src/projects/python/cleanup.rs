@@ -41,10 +41,14 @@ pub fn obsolete_runtimes() -> AppResult<Report> {
 /// 成功提交後只改名，不讀取／刪除數千個檔案。失敗仍保留 previous。
 /// rename 不跟隨連結；安裝根目錄持鎖，目的名稱由系統亂數產生且禁止覆寫。
 pub fn retire_previous_runtime() -> AppResult<()> {
-    use std::os::windows::fs::MetadataExt;
     let current = super::runtime_root()?;
     let root = current.parent().ok_or("找不到 Python 安裝目錄。")?;
-    let _parents = files::pin(root)?;
+    retire_at(root)
+}
+
+fn retire_at(root: &Path) -> AppResult<()> {
+    use std::os::windows::fs::MetadataExt;
+    let _root = pin_retirement_root(root)?;
     let previous = root.join("python.previous");
     let metadata = match fs::symlink_metadata(&previous) {
         Ok(metadata) => metadata,
@@ -57,6 +61,22 @@ pub fn retire_previous_runtime() -> AppResult<()> {
     let target = root.join(format!("python.trash-{}", crate::jobs::new_id()?));
     // Windows rename 在目的目錄已存在時失敗；不移除或覆寫碰撞目錄。
     fs::rename(previous, target).map_err(|e| format!("無法暫存舊 Python 環境，已保留：{e}"))
+}
+
+/// 目錄改名需要開啟目的父目錄的寫入權限；一般讀取鎖禁止分享 WRITE，
+/// 會讓本程序自己的 rename 得到 sharing violation。這裡保留讀取權限、
+/// 允許父目錄內正常增刪項目，但仍不分享 DELETE，固定安裝根目錄身分。
+fn pin_retirement_root(root: &Path) -> AppResult<File> {
+    let initial = files::pin(root)?;
+    let directory = OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(root)
+        .map_err(|e| e.to_string())?;
+    // 新鎖已取得才釋放原鎖，沒有可被置換成 junction 的空窗。
+    drop(initial);
+    Ok(directory)
 }
 
 /// 背景與解除安裝共用同一條核對／刪除路徑，留下最後一次清理結果供檢查。
@@ -295,6 +315,44 @@ mod tests {
                 .starts_with("lmai-python-cleanup-"));
             fs::remove_dir_all(&self.root).unwrap();
         }
+    }
+
+    #[test]
+    fn successful_retirement_renames_previous_and_defers_deletion() {
+        let fixture = Fixture::new();
+        let previous = fixture.root.join("python.previous");
+        fs::rename(&fixture.old, &previous).unwrap();
+        retire_at(&fixture.root).unwrap();
+        assert!(!previous.exists());
+        let trash: Vec<_> = fs::read_dir(&fixture.root)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| runtime_name(&p.file_name().unwrap().to_string_lossy()))
+            .collect();
+        assert_eq!(trash.len(), 1);
+        assert_eq!(fs::read(trash[0].join("worker.py")).unwrap(), b"worker");
+        retire_at(&fixture.root).unwrap();
+        assert_eq!(fixture.clean().removed.len(), 1);
+        assert_eq!(
+            fs::read(fixture.root.join("python/keep.txt")).unwrap(),
+            b"current runtime"
+        );
+    }
+
+    #[test]
+    fn retirement_keeps_busy_previous_and_pins_installation_root() {
+        let fixture = Fixture::new();
+        let previous = fixture.root.join("python.previous");
+        fs::rename(&fixture.old, &previous).unwrap();
+        let root_guard = pin_retirement_root(&fixture.root).unwrap();
+        assert!(fs::rename(&fixture.root, fixture.root.with_extension("moved")).is_err());
+        drop(root_guard);
+        let busy = files::pin(&previous).unwrap();
+        assert!(retire_at(&fixture.root).is_err());
+        assert_eq!(fs::read(previous.join("worker.py")).unwrap(), b"worker");
+        drop(busy);
+        retire_at(&fixture.root).unwrap();
+        assert_eq!(fixture.clean().removed.len(), 1);
     }
 
     #[test]
