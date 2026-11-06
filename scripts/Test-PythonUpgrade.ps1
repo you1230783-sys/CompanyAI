@@ -49,6 +49,14 @@ function Run-TestProcess([string]$file, [string]$arguments, [int]$expected = 0) 
     return $timer.Elapsed.TotalMilliseconds
 }
 function Python-Trash { @(Get-ChildItem -LiteralPath $install -Directory | Where-Object Name -Match '^python\.trash-[0-9a-f]{32}$') }
+function Read-OnboardingState {
+    # 等待狀態時不能自己鎖住公告檔；允許應用程式原子替換，讀取者取得
+    # 完整的舊版或新版內容即可，不會讀到半份 JSON。
+    $stream = [IO.FileStream]::new($onboardingFile, [IO.FileMode]::Open, [IO.FileAccess]::Read,
+        ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+    $reader = [IO.StreamReader]::new($stream)
+    try { return ($reader.ReadToEnd() | ConvertFrom-Json) } finally { $reader.Dispose() }
+}
 $oldInstallMs = Run-TestProcess $PreviousSetup '/S'
 $app = Join-Path $install 'LM_AI.exe'
 if ((Get-Item $app).VersionInfo.FileVersion -ne '0.9.18.0') { throw 'Previous Setup is not 0.9.18.' }
@@ -88,7 +96,7 @@ try {
     if ($gui.process.HasExited) { throw 'Demo application exited before startup cleanup verification.' }
     $stateDeadline = [DateTime]::UtcNow.AddSeconds(120)
     do {
-        $onboarding = Get-Content -LiteralPath $onboardingFile -Raw | ConvertFrom-Json
+        $onboarding = Read-OnboardingState
         if ($onboarding.last_version -eq '0.9.19') { break }
         Start-Sleep -Milliseconds 200
     } while (-not $gui.process.HasExited -and [DateTime]::UtcNow -lt $stateDeadline)

@@ -48,7 +48,7 @@ pub fn retire_previous_runtime() -> AppResult<()> {
 
 fn retire_at(root: &Path) -> AppResult<()> {
     use std::os::windows::fs::MetadataExt;
-    let _root = pin_retirement_root(root)?;
+    let _root = pin_installation_root(root)?;
     let previous = root.join("python.previous");
     let metadata = match fs::symlink_metadata(&previous) {
         Ok(metadata) => metadata,
@@ -66,16 +66,26 @@ fn retire_at(root: &Path) -> AppResult<()> {
 /// 目錄改名需要開啟目的父目錄的寫入權限；一般讀取鎖禁止分享 WRITE，
 /// 會讓本程序自己的 rename 得到 sharing violation。這裡保留讀取權限、
 /// 允許父目錄內正常增刪項目，但仍不分享 DELETE，固定安裝根目錄身分。
-fn pin_retirement_root(root: &Path) -> AppResult<File> {
-    let initial = files::pin(root)?;
+fn pin_installation_root(root: &Path) -> AppResult<File> {
+    use std::os::windows::fs::MetadataExt;
+    // 先固定父目錄，再開啟根目錄並檢查本身。不能短暫以一般讀取鎖
+    // 開啟根目錄再轉交，否則轉交空隙仍可能擋住介面同時保存設定。
+    let parent = root.parent().ok_or("找不到安裝根目錄的父目錄。")?;
+    let _parent = files::pin(parent)?;
     let directory = OpenOptions::new()
         .read(true)
         .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
         .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
         .open(root)
         .map_err(|e| e.to_string())?;
-    // 新鎖已取得才釋放原鎖，沒有可被置換成 junction 的空窗。
-    drop(initial);
+    let attributes = directory
+        .metadata()
+        .map_err(|e| e.to_string())?
+        .file_attributes();
+    if attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 || attributes & FILE_ATTRIBUTE_DIRECTORY == 0
+    {
+        return Err("安裝根目錄不是普通資料夾，未整理 Python 環境。".into());
+    }
     Ok(directory)
 }
 
@@ -100,8 +110,9 @@ fn runtime_name(name: &str) -> bool {
 }
 
 fn clean_root(root: &Path, trusted: &BTreeSet<String>) -> AppResult<Report> {
-    // 安裝目錄及祖先固定後，候選目錄只能是同一層的直接子目錄。
-    let _parents = files::pin(root)?;
+    // 背景清理也使用相同根目錄鎖：固定目錄身分，但讓同時啟動的介面
+    // 能以 atomic_write 保存旁邊的公告狀態。候選舊樹仍另外完整鎖定。
+    let _root = pin_installation_root(root)?;
     let mut report = Report::default();
     for entry in fs::read_dir(root).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
@@ -344,7 +355,7 @@ mod tests {
         let fixture = Fixture::new();
         let previous = fixture.root.join("python.previous");
         fs::rename(&fixture.old, &previous).unwrap();
-        let root_guard = pin_retirement_root(&fixture.root).unwrap();
+        let root_guard = pin_installation_root(&fixture.root).unwrap();
         assert!(fs::rename(&fixture.root, fixture.root.with_extension("moved")).is_err());
         drop(root_guard);
         let busy = files::pin(&previous).unwrap();
@@ -353,6 +364,21 @@ mod tests {
         drop(busy);
         retire_at(&fixture.root).unwrap();
         assert_eq!(fixture.clean().removed.len(), 1);
+    }
+
+    #[test]
+    fn background_cleanup_root_allows_atomic_onboarding_update() {
+        let fixture = Fixture::new();
+        let settings = fixture.root.join("onboarding-state.json");
+        fs::write(&settings, b"previous version").unwrap();
+        let root_guard = pin_installation_root(&fixture.root).unwrap();
+        // 真實啟動會在舊樹驗證期間寫入公告；必須能原子替換現有檔案。
+        crate::storage::atomic_write(&settings, b"current version").unwrap();
+        assert_eq!(fs::read(&settings).unwrap(), b"current version");
+        assert!(fs::rename(&fixture.root, fixture.root.with_extension("moved")).is_err());
+        drop(root_guard);
+        assert_eq!(fixture.clean().removed.len(), 1);
+        assert_eq!(fs::read(&settings).unwrap(), b"current version");
     }
 
     #[test]
