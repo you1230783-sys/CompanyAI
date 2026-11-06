@@ -72,6 +72,7 @@ fn run() -> AppResult<()> {
         parameters: BTreeMap::new(),
         due_at: company_ai::unix_now() + 60,
         repeat_days: 0,
+        continuous_retry: true,
     };
     let cancel = AtomicBool::new(false);
     // 外層只開啟自己建立的 Excel 工作簿；確認在任何工具派送之前略過，

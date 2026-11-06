@@ -4,6 +4,24 @@ use crate::AppResult;
 use serde_json::{json, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
 pub(crate) const DELAYS: [u64; 5] = [10, 30, 60, 180, 300];
+pub(crate) const PROJECT_RETRY_LIMIT: usize = 50;
+
+/// 專案各次等待與一般對話分開。次數從零起算，後段每次重新抽取間隔。
+pub(crate) fn project_delay(attempts: usize, continuous: bool) -> AppResult<Option<u64>> {
+    Ok(match (attempts, continuous) {
+        (0, _) => Some(30),
+        (1, _) => Some(60),
+        (_, false) => None,
+        (2, true) => Some(120),
+        (_, true) => {
+            #[cfg(debug_assertions)]
+            if FAST_CLOCK.get() {
+                return Ok(Some(600));
+            }
+            Some(500 + u64::from(crate::jobs::random_u32()? % 201))
+        }
+    })
+}
 
 #[cfg(debug_assertions)]
 std::thread_local! { static FAST_CLOCK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
@@ -70,6 +88,11 @@ pub(crate) fn schedule(task: &mut Task, replace: bool, reason: &str) -> bool {
         return false;
     }
     let seconds = DELAYS[task.project_retry.attempts];
+    set_wait(task, replace, reason, seconds);
+    true
+}
+
+pub(crate) fn set_wait(task: &mut Task, replace: bool, reason: &str, seconds: u64) {
     let delay = seconds * 1000;
     #[cfg(debug_assertions)]
     let delay = if FAST_CLOCK.get() { 100 } else { delay };
@@ -84,7 +107,6 @@ pub(crate) fn schedule(task: &mut Task, replace: bool, reason: &str) -> bool {
     if task.project_retry.history.len() > 10 {
         task.project_retry.history.remove(0);
     }
-    true
 }
 
 /// 舊終態不可變；建立新請求僅重做這輪推論，messages／tools／parent 維持原樣。

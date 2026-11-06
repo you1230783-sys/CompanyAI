@@ -96,7 +96,7 @@ pub fn summarize(
         session: run.session.clone(),
         root: run.root.clone(),
         cancel: run.cancel.clone(),
-        instructions: None,
+        instructions: run.instructions.clone(),
         outlook_consent: None,
         cad_waiter: None,
         cad_progress: None,

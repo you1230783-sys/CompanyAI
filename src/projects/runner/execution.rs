@@ -26,6 +26,10 @@ pub(super) fn run_for(
     {
         return Err("計畫仍在等待核准，請先使用計畫卡片確認或退回。".into());
     }
+    let retry = run.retry_control()?;
+    let _awake = crate::keep_awake::KeepAwake::watch(move || {
+        retry.retry_state().is_ok_and(|state| state.enabled)
+    })?;
     // 續接保留先前歷程；不能在建立新段日誌時把中斷前的診斷資訊清掉。
     let mut activity = if run.resume {
         recover_activity(&run.root, &run.id)?

@@ -412,20 +412,29 @@ pub fn validate_id(id: &str) -> AppResult<()> {
     Ok(())
 }
 pub fn new_id() -> AppResult<String> {
+    let bytes = random_bytes::<16>()?;
+    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+pub(crate) fn random_u32() -> AppResult<u32> {
+    Ok(u32::from_le_bytes(random_bytes()?))
+}
+
+fn random_bytes<const N: usize>() -> AppResult<[u8; N]> {
     use windows_sys::Win32::Security::Cryptography::*;
-    let mut bytes = [0u8; 16];
+    let mut bytes = [0u8; N];
     if unsafe {
         BCryptGenRandom(
             std::ptr::null_mut(),
             bytes.as_mut_ptr(),
-            16,
+            bytes.len() as u32,
             BCRYPT_USE_SYSTEM_PREFERRED_RNG,
         )
     } < 0
     {
-        return Err("無法建立工作識別碼。".into());
+        return Err("無法取得系統亂數。".into());
     }
-    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+    Ok(bytes)
 }
 pub fn decode<T: DeserializeOwned>(
     response: transport::HttpResponse,

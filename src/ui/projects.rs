@@ -16,6 +16,11 @@ mod work_settings;
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(super) enum ProjectCommand {
+    RetryPreference {
+        conversation: String,
+        run_id: Option<String>,
+        enabled: bool,
+    },
     PlanPreference {
         enabled: bool,
     },
@@ -551,7 +556,17 @@ impl App {
         self.projects.count() + usize::from(self.schedules.active()) >= 2
     }
     pub(super) fn project_state(&self) -> serde_json::Value {
-        json!({"plan_mode":self.projects.store.plan_mode,"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len(),"collapsed":self.projects.store.collapsed.contains(&p.id)})).collect::<Vec<_>>(),
+        let retry_target = self.project_retry_target();
+        let retry_enabled = retry_target
+            .and_then(|id| {
+                let control = match self.projects.run(id) {
+                    Some(run) => run.instructions.clone(),
+                    None => projects::steering::Inbox::open(&self.root, id).ok()?,
+                };
+                control.retry_state().ok().map(|state| state.enabled)
+            })
+            .unwrap_or(self.projects.store.continuous_retry);
+        json!({"plan_mode":self.projects.store.plan_mode,"retry_enabled":retry_enabled,"retry_run_id":retry_target,"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len(),"collapsed":self.projects.store.collapsed.contains(&p.id)})).collect::<Vec<_>>(),
             "preferences":self.projects.current(self.active_id.as_deref()).and_then(|r|r.instructions.questions().ok()),
             "chart_review":self.projects.current(self.active_id.as_deref()).and_then(|r|r.pending_chart.as_ref().map(|p|json!({"request_id":p.id,"review":p.review}))),
             "outlook_consent":self.projects.current(self.active_id.as_deref()).and_then(|r|r.pending_outlook.as_ref().map(|p|json!({"request_id":p.id,"folders":p.folders}))),
@@ -563,7 +578,53 @@ impl App {
             "stopping":self.projects.current(self.active_id.as_deref()).is_some_and(|r|r.cancel.load(Ordering::Relaxed)),
             "running":self.projects.active(self.active_id.as_deref()),"running_count":self.projects.count()+usize::from(self.schedules.active()),"capacity_full":self.project_slots_full(),"running_conversations":self.projects.running.keys().map(String::as_str).chain(self.schedules.conversation()).collect::<Vec<_>>(),"running_id":self.projects.current(self.active_id.as_deref()).map(|r|&r.id),"activity":self.projects.current(self.active_id.as_deref()).map(|r|&r.activity),"charts":self.projects.current(self.active_id.as_deref()).map(|r|&r.charts),"analysis":self.projects.current(self.active_id.as_deref()).and_then(|r|r.analysis.as_ref()),"running_conversation":self.projects.current(self.active_id.as_deref()).map(|r|&r.conversation),"status":self.projects.current(self.active_id.as_deref()).map(|r|r.resource_wait.values().next().unwrap_or(&r.status)).or_else(||self.active_id.as_ref().and_then(|id|self.projects.completed_status.get(id))),"error":self.projects.error})
     }
+    fn project_retry_target(&self) -> Option<&str> {
+        self.projects
+            .current(self.active_id.as_deref())
+            .map(|run| run.id.as_str())
+            .or_else(|| {
+                self.messages
+                    .last()
+                    .filter(|message| message.project_paused)
+                    .and_then(|message| message.request_id.as_deref())
+            })
+    }
     pub(super) fn project_command(&mut self, command: ProjectCommand) -> AppResult<()> {
+        if let ProjectCommand::RetryPreference {
+            conversation,
+            run_id,
+            enabled,
+        } = &command
+        {
+            if !self.logged_in()
+                || self.versions.blocked()
+                || self.active_id.as_ref() != Some(conversation)
+                || self.projects.store.project_for(conversation).is_none()
+                || self.project_retry_target() != run_id.as_deref()
+            {
+                return Err("任務已變更，請在原專案對話調整重試設定。".into());
+            }
+            if let Some(id) = run_id {
+                if let Some(run) = self.projects.current(Some(conversation)) {
+                    return run.instructions.set_continuous_retry(*enabled);
+                }
+                if !projects::runner::paused_for(
+                    &self.root,
+                    id,
+                    conversation,
+                    &self.work.store.principal_id,
+                ) {
+                    return Err("原暫停任務或登入帳號已變更。".into());
+                }
+                return projects::steering::Inbox::open(&self.root, id)?
+                    .set_continuous_retry(*enabled);
+            }
+            let mut store = self.projects.store.clone();
+            store.continuous_retry = *enabled;
+            store.save(&self.root)?;
+            self.projects.store = store;
+            return Ok(());
+        }
         if self.task_plan_command(&command)? {
             return Ok(());
         }
@@ -1267,6 +1328,7 @@ impl App {
             | ProjectCommand::Supplement { .. }
             | ProjectCommand::WithdrawSupplement { .. }
             | ProjectCommand::CadReady { .. }
+            | ProjectCommand::RetryPreference { .. }
             | ProjectCommand::PlanPreference { .. }
             | ProjectCommand::PlanView { .. }
             | ProjectCommand::PlanReview { .. } => (),
@@ -1442,6 +1504,9 @@ impl App {
         };
         let cancel = Arc::new(AtomicBool::new(false));
         let instructions = projects::steering::Inbox::open(&self.root, &id)?;
+        if !resume && self.projects.store.continuous_retry {
+            instructions.set_continuous_retry(true)?;
+        }
         let cad_tx = self.tx.clone();
         let cad_run = id.clone();
         let progress_tx = self.tx.clone();

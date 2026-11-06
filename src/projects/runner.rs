@@ -50,6 +50,15 @@ pub struct Run {
     pub file_waiter: Option<super::interaction::FileWaiter>,
 }
 
+impl Run {
+    pub(super) fn retry_control(&self) -> AppResult<super::steering::Inbox> {
+        self.instructions.as_ref().map_or_else(
+            || super::steering::Inbox::open(&self.root, &self.id),
+            |inbox| Ok(inbox.clone()),
+        )
+    }
+}
+
 const MAX_TOOLS: usize = 60;
 const MAX_REPLIES: usize = 80;
 fn quota_reached(replies: usize, tools: usize) -> bool {
@@ -103,6 +112,13 @@ fn load_pause(root: &Path, id: &str) -> AppResult<PausedRun> {
 /// 按鈕依程式建立的暫存紀錄顯示，不相信模型自行聲稱已暫停。
 pub fn paused_available(root: &Path, id: &str) -> bool {
     load_pause(root, id).is_ok_and(|s| s.version == 1 && s.available)
+}
+
+/// 只有原帳號與對話能更改暫停任務的重試偏好。
+pub fn paused_for(root: &Path, id: &str, conversation: &str, principal: &str) -> bool {
+    load_pause(root, id).is_ok_and(|s| {
+        s.version == 1 && s.available && s.conversation == conversation && s.principal == principal
+    })
 }
 fn save_pause(
     run: &Run,

@@ -18,6 +18,7 @@ pub mod errors;
 pub mod history;
 pub mod hotkey;
 pub mod jobs;
+mod keep_awake;
 pub mod local_test;
 pub mod notifications;
 pub mod outlook;

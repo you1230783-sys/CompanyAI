@@ -102,6 +102,11 @@ pub fn run_observed(
         journal.create(root)?;
     }
     check_target(&project, grant, &grant.target.principal)?;
+    // D03 執行已核准的本機步驟，沒有模型推論可重試。防睡眠沿用同一個守衛。
+    let _awake = grant
+        .continuous_retry
+        .then(|| crate::keep_awake::KeepAwake::watch(|| true))
+        .transpose()?;
     if !resume && needs_office(grant) {
         if let Some(reason) = crate::projects::office::busy_before_dispatch()? {
             journal.phase = Phase::Skipped;

@@ -36,7 +36,7 @@ pub fn verify(root: &Path) -> AppResult<()> {
     );
     assert_eq!(std::fs::read_to_string(a.join("keep.txt")).unwrap(), "保留");
     assert!(company_ai::projects::setup::create_default("desktop").is_err());
-    for case in 0..9 {
+    for case in 0..=9 {
         verify_case(root, case)?;
     }
     Ok(())
@@ -101,7 +101,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                     && step == 4
                     && match case {
                         0 | 3 => failures < 2,
-                        1 => !resumed.load(Ordering::Relaxed),
+                        1 | 9 => !resumed.load(Ordering::Relaxed),
                         2 | 5 | 6 => true,
                         _ => false,
                     };
@@ -194,6 +194,10 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         },
         &config,
     )?;
+    if case == 9 {
+        company_ai::projects::steering::Inbox::open(&root.join("resilience-app"), &id)?
+            .set_continuous_retry(true)?;
+    }
     let make = |resume| Run {
         plan_mode: false,
         id: id.clone(),
@@ -237,7 +241,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
             activity.push(s);
         })
     };
-    if matches!(case, 1 | 4) {
+    if matches!(case, 1 | 4 | 9) {
         assert!(result.as_ref().unwrap().contains("繼續"), "{result:?}");
         assert!(runner::paused_available(&root.join("resilience-app"), &id));
         ready.store(true, Ordering::Relaxed);
@@ -275,7 +279,16 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         );
     }
     if case == 1 {
-        assert_eq!(failures, 6);
+        assert_eq!(failures, 3);
+    }
+    if case == 9 {
+        assert_eq!(failures, 51);
+        assert_eq!(
+            company_ai::projects::steering::Inbox::open(&root.join("resilience-app"), &id)?
+                .retry_state()?
+                .total,
+            50
+        );
     }
     assert_eq!(
         std::fs::read_to_string(workspace.join("source.txt")).unwrap(),

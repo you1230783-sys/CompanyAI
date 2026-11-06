@@ -70,6 +70,8 @@ pub struct Store {
     #[serde(default)]
     pub plan_mode: bool,
     #[serde(default)]
+    pub continuous_retry: bool,
+    #[serde(default)]
     pub default_workspace: Option<String>,
     pub projects: Vec<Project>,
     pub conversations: BTreeMap<String, String>,

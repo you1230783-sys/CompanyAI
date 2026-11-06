@@ -15,6 +15,8 @@ pub(super) enum ScheduleCommand {
         parameters: BTreeMap<String, Value>,
         due_at: u64,
         repeat_days: u32,
+        #[serde(default)]
+        continuous_retry: bool,
     },
     Confirm {
         preview_id: String,
@@ -182,6 +184,7 @@ impl App {
                     parameters,
                     due_at,
                     repeat_days,
+                    continuous_retry,
                 } => {
                     crate::jobs::validate_id(&request_id)?;
                     self.schedule_available()?;
@@ -216,6 +219,7 @@ impl App {
                         parameters,
                         due_at,
                         repeat_days,
+                        continuous_retry,
                     };
                     grant.validate()?;
                     if due_at <= crate::unix_now() {

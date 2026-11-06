@@ -474,6 +474,8 @@
   const command = value => send({type:'project',command:value});
   const preference = document.getElementById('plan-mode');
   preference.onchange = () => command({action:'plan_preference',enabled:preference.checked});
+  const continuousRetry = document.getElementById('project-retry');
+  continuousRetry.onchange = () => command({action:'retry_preference',conversation:state.active_id,run_id:state.projects?.retry_run_id ?? null,enabled:continuousRetry.checked});
   function textField(parent, label, value, multiline = true) {
     const field = make('label', label), input = document.createElement(multiline ? 'textarea' : 'input');
     input.value = value || ''; field.append(input); parent.append(field); return input;
@@ -546,6 +548,9 @@
       const project=state.conversations?.find(c=>c.id===state.active_id)?.project_id;
       document.getElementById('plan-mode-label').hidden=!project;
       preference.checked=!!state.projects?.plan_mode;preference.disabled=!state.logged_in;
+      document.getElementById('project-retry-label').hidden=!project;
+      continuousRetry.checked=!!state.projects?.retry_enabled;
+      continuousRetry.disabled=!state.logged_in || !!state.projects?.stopping;
       for(const [key,card] of cards)if(!card.host.isConnected || card.target.conversation!==state.active_id)cards.delete(key);
     },
     render(parent,message,index) {

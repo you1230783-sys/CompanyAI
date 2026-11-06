@@ -23,20 +23,22 @@ window.ScheduleUI = (() => {
     field(form,"首次時間（目前Windows時區）",due);
     const repeat=make("select");for(const [value,text] of [[0,"單次"],[1,"每24小時"],[7,"每7天"]]){const option=make("option",text);option.value=value;repeat.append(option);}
     field(form,"重複間隔（固定時間差，非工作日／夏令時間日曆）",repeat);
+    const retry=make("input");retry.type="checkbox";
+    field(form,"連線錯誤時持續重試（固定流程執行中防止睡眠）",retry);
     form.append(make("pre",JSON.stringify(parameters,null,2)));
     const preview=make("button","預覽固定步驟與權限");preview.id="schedule-preview";
     confirmButton=make("button","確認授權並保存排程");confirmButton.id="schedule-confirm";confirmButton.disabled=true;
     previewBox=make("pre");previewBox.id="schedule-plan";
     formStatus=make("p");formStatus.setAttribute("role","status");
-    const invalidate=()=>{previewId=null;confirmButton.disabled=true;previewBox.textContent="時間已變更，請重新預覽。";};
-    due.oninput=invalidate;repeat.onchange=invalidate;
+    const invalidate=()=>{previewId=null;confirmButton.disabled=true;previewBox.textContent="排程設定已變更，請重新預覽。";};
+    due.oninput=invalidate;repeat.onchange=invalidate;retry.onchange=invalidate;
     preview.onclick=()=>{
       const time=Math.floor(new Date(due.value).getTime()/1000);
       if(!Number.isFinite(time)||time<=Date.now()/1000){formStatus.textContent="請選未來時間。";return;}
-      pending=true;previewId=null;confirmButton.disabled=true;preview.disabled=true;due.disabled=true;repeat.disabled=true;
+      pending=true;previewId=null;confirmButton.disabled=true;preview.disabled=true;due.disabled=true;repeat.disabled=true;retry.disabled=true;
       formStatus.textContent="正在由原生核對範本…";
       previewRequestId=crypto.randomUUID();
-      sendCommand({action:"preview",request_id:previewRequestId,conversation,template:flow.id,parameters,due_at:time,repeat_days:Number(repeat.value)});
+      sendCommand({action:"preview",request_id:previewRequestId,conversation,template:flow.id,parameters,due_at:time,repeat_days:Number(repeat.value),continuous_retry:retry.checked});
     };
     form.addEventListener("close",()=>{previewId=null;pending=false;});
     confirmButton.onclick=()=>{if(!previewId)return;const id=previewId;previewId=null;confirmButton.disabled=true;sendCommand({action:"confirm",preview_id:id});};

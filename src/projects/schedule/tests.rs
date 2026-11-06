@@ -27,6 +27,7 @@ fn grant() -> Grant {
         parameters: BTreeMap::new(),
         due_at: 1000,
         repeat_days: 1,
+        continuous_retry: true,
     }
 }
 fn root() -> std::path::PathBuf {

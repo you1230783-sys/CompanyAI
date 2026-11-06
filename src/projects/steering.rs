@@ -22,9 +22,18 @@ pub struct Instruction {
 struct State {
     entries: Vec<Instruction>,
     #[serde(default)]
+    retry: RetryState,
+    #[serde(default)]
     questions: Vec<Question>,
     #[serde(skip)]
     closed: bool,
+}
+
+/// 同一執行 ID 共用的重試額度，隨補充指示的加密紀錄獨立保存。
+#[derive(Clone, Copy, Default, Serialize, Deserialize)]
+pub struct RetryState {
+    pub enabled: bool,
+    pub total: usize,
 }
 #[derive(Clone)]
 pub struct Inbox {
@@ -63,6 +72,38 @@ impl Inbox {
         storage::atomic_write(&self.path, &storage::protect(&bytes, true)?)?;
         *guard = next;
         Ok(value)
+    }
+
+    pub fn retry_state(&self) -> AppResult<RetryState> {
+        self.state
+            .lock()
+            .map(|state| state.retry)
+            .map_err(|_| "無法讀取任務重試狀態。".into())
+    }
+
+    pub fn set_continuous_retry(&self, enabled: bool) -> AppResult<()> {
+        self.change(|state| {
+            if state.closed {
+                return Err("任務正在結束，重試設定已無法修改。".into());
+            }
+            state.retry.enabled = enabled;
+            Ok(())
+        })
+    }
+
+    /// 在檢查勾選狀態的同一個鎖內計次，避免切換選項和多個子請求競爭同一額度。
+    pub(crate) fn reserve_retry(&self, attempts: usize) -> AppResult<(RetryState, Option<u64>)> {
+        self.change(|state| {
+            let seconds = if state.retry.total >= jobs::retry::PROJECT_RETRY_LIMIT {
+                None
+            } else {
+                jobs::retry::project_delay(attempts, state.retry.enabled)?
+            };
+            if seconds.is_some() {
+                state.retry.total += 1;
+            }
+            Ok((state.retry, seconds))
+        })
     }
     pub fn entries(&self) -> AppResult<Vec<Instruction>> {
         Ok(self

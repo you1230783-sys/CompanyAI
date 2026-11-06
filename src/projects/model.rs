@@ -30,18 +30,27 @@ pub(super) fn receive(
 ) -> AppResult<Reply> {
     let (mut checkpoint, mut notify) = hooks;
     super::runner::check_cancel(&run.cancel)?;
+    let control = run.retry_control()?;
     // 只有一次 receive 完整耗盡後才回 Pending；再次進入代表使用者手動續接。
     // 等待途中退出則保留原次數與到期時間，不因重啟重設。
+    let manual_replace = task.project_retry.exhausted && retry::replaceable(task);
     if task.project_retry.exhausted {
         task.project_retry.attempts = 0;
         task.project_retry.exhausted = false;
         task.project_retry.due_at_millis = 0;
         task.project_retry.replace_failed = false;
+        if manual_replace {
+            // 只有已確認暫時失敗才可用新的 ID。原結果不明時，手動繼續仍只查原 ID。
+            retry::replace(task)?;
+        }
         checkpoint(task)?;
+        if manual_replace {
+            super::events::register(&run.root, &task.request_id)?;
+        }
     }
     // 手動續接只 GET 原 request/task ID；即使連續 404，也不能再次 POST。
     let (mut submitted_status, submit_error) =
-        if lookup_only || task.project_retry.due_at_millis > 0 {
+        if (lookup_only && !manual_replace) || task.project_retry.due_at_millis > 0 {
             (task.remote.clone().filter(|s| s.terminal()), None)
         } else if let Some(caps) = agent_caps {
             match super::agent::submit(&run.config, &run.session, task, caps) {
@@ -64,16 +73,27 @@ pub(super) fn receive(
             return Ok(Reply::Pending(super::runner::TIME_LIMIT_REASON.into()));
         }
         if task.project_retry.due_at_millis > 0 {
-            let waited = retry::wait(&run.cancel, task, deadline, &mut notify);
+            let waited = retry::wait(&run.cancel, &control, task, deadline, &mut notify);
             // 等待中的停止也沿用原生取消流程；可能仍在執行的原請求不能被漏掉。
             if run.cancel.load(std::sync::atomic::Ordering::Relaxed) {
                 if let Some(caps) = agent_caps {
                     super::agent::cancel(&run.config, &run.session, task, caps);
                 }
             }
-            if !waited? {
-                checkpoint(task)?;
-                return Ok(Reply::Pending(super::runner::TIME_LIMIT_REASON.into()));
+            match waited? {
+                retry::Wait::Ready => (),
+                retry::Wait::Deadline => {
+                    checkpoint(task)?;
+                    return Ok(Reply::Pending(super::runner::TIME_LIMIT_REASON.into()));
+                }
+                retry::Wait::Disabled => {
+                    task.project_retry.exhausted = true;
+                    task.project_retry.due_at_millis = 0;
+                    checkpoint(task)?;
+                    return Ok(Reply::Pending(
+                        "已取消持續重試，且本輪已超過兩次等待，任務已暫停。".into(),
+                    ));
+                }
             }
             let replace = task.project_retry.replace_failed;
             if replace {
@@ -158,12 +178,15 @@ pub(super) fn receive(
                             .unwrap_or(&serde_json::Value::Null)
                     );
                     if retry::replaceable(task) {
-                        let more = retry::schedule(task, true, &reason);
+                        let summary = match status.agent_envelope["error"]["error_code"].as_str() {
+                            Some("UPSTREAM_TIMEOUT") => "排隊逾時",
+                            Some("UPSTREAM_UNAVAILABLE") => "上游服務暫時無法連線",
+                            _ => "伺服器暫時無法處理推論",
+                        };
+                        let stopped = retry::schedule_project(&control, task, true, summary)?;
                         checkpoint(task)?;
-                        if !more {
-                            return Ok(Reply::Pending(format!(
-                                "上游推論經五次自動重試仍失敗，已保存進度，可稍後按繼續。{reason}"
-                            )));
+                        if let Some(stopped) = stopped {
+                            return Ok(Reply::Pending(stopped));
                         }
                         continue;
                     }
@@ -179,11 +202,11 @@ pub(super) fn receive(
                     )));
                 }
                 let error = error.message;
-                let more = retry::schedule(task, false, &error);
+                let stopped = retry::schedule_project(&control, task, false, "原請求暫時無法查詢")?;
                 checkpoint(task)?;
-                if !more {
+                if let Some(stopped) = stopped {
                     return Ok(Reply::Pending(format!(
-                        "無法確認原請求 {} 的結果，未另建請求或重播工具。{}最後一次{error}",
+                        "{stopped} 無法確認原請求 {} 的結果，未另建請求或重播工具。{}最後一次{error}",
                         task.request_id,
                         submit_error
                             .as_ref()

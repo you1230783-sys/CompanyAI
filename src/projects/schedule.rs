@@ -19,6 +19,8 @@ pub struct Grant {
     pub parameters: BTreeMap<String, Value>,
     pub due_at: u64,
     pub repeat_days: u32,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub continuous_retry: bool,
 }
 impl Grant {
     pub fn validate(&self) -> AppResult<()> {
