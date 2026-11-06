@@ -120,6 +120,7 @@
               <label id="plan-mode-label" hidden><input id="plan-mode" type="checkbox">先提出計畫</label>
               <label id="project-retry-label" title="需保持程式開啟。公司電源設定可能仍會讓電腦睡眠。" hidden><input id="project-retry" type="checkbox">連線錯誤時持續重試</label>
               <button id="project-tools-open" type="button" aria-haspopup="dialog">專案工具</button>
+              <button id="batch-enqueue" type="button" hidden>排入今晚批次</button>
             </div>
             <div id="attachment-list" class="attachment-list"></div>
             <div id="project-queued-message" class="project-queued-message" hidden></div>
@@ -724,8 +725,15 @@
                 <button id="project-methods" hidden>重用分析方法</button>
                 <button id="project-artifacts" hidden>成果與流程</button>
                 <button id="work-settings-open" hidden>工作偏好與條件</button>
+                <button id="batch-open" type="button" hidden>晚間批次佇列</button>
               <button id="project-outlook-start" hidden title="查看您選擇的 Outlook 信件，整理需要您處理、回覆或追蹤的事項。">Outlook 助理</button>
               <p id="project-capability-hint" hidden></p><p id="handoff-path-hint" hidden>需要處理本機路徑時，可帶入專案繼續。</p></dialog>
+    <dialog id="batch-dialog" class="pet-dialog" aria-labelledby="batch-heading">
+      <div class="dialog-heading"><h2 id="batch-heading">晚間批次佇列</h2><button id="batch-close" type="button">關閉</button></div>
+      <p>批次任務約 21:00 後依序執行。請保持 LM_AI 開啟（可縮到托盤），不要關機、登出或讓電腦睡眠，並先關閉會用到的 Office 文件。</p>
+      <section id="batch-summary" hidden></section>
+      <section id="batch-entries" aria-label="批次任務"></section>
+    </dialog>
     <script src="vendor/markdown-it.min.js"></script>
     <script src="vendor/footnote.min.js"></script>
     <script src="vendor/task-lists.min.js"></script>

@@ -30,5 +30,29 @@
   const scheduled=[...$('task-list').querySelectorAll('button')].find(b=>b.textContent==='停止流程排程');
   scheduled.click();check(commands.at(-1).type==='schedule' && commands.at(-1).command.action==='stop_execution' && commands.at(-1).command.execution==='scheduled-run','schedule stop binds execution identity');
   check(![...scheduled.parentElement.querySelectorAll('button')].some(b=>['取消任務','停止追蹤','移除任務'].includes(b.textContent)),'schedule card does not expose remote task commands');
+  const deadline=Date.now()+20000;
+  const retry=(id,reason)=>({text:'等待重試',at:'2026-11-07 00:00:00',retry:{id,attempt:4,limit:50,continuous:true,reason,total_seconds:500,due_at_millis:deadline,waiting:true}});
+  fixture.projects={...fixture.projects,retry_enabled:true,retry_run_id:'run-a',activity:[retry('retry-a','排隊逾時')]};await show();
+  const activity=$('project-activity');activity.open=true;
+  const clock=activity.querySelector('li .project-retry-clock');
+  check(clock?.textContent.includes('排隊逾時') && activity.querySelectorAll('li').length===1,'retry countdown is one activity row');
+  const beforeTick=clock.textContent;
+  for(let tick=0;tick<25 && clock.textContent===beforeTick;tick++) await new Promise(resolve=>setTimeout(resolve,100));
+  check(activity.querySelector('li .project-retry-clock')===clock && clock.textContent!==beforeTick,'retry timer updates the same text node');
+  $('project-retry').checked=false;$('project-retry').dispatchEvent(new Event('change'));
+  check(commands.at(-1).command.run_id==='run-a' && commands.at(-1).command.conversation==='a','retry preference change binds current run');
+  fixture.active_id='b';fixture.projects={...fixture.projects,running_id:'run-b',running_conversation:'b',retry_run_id:'run-b',activity:[retry('retry-b','請求過多')]};await show();
+  check(activity.querySelector('summary').textContent.includes('請求過多') && !activity.textContent.includes('排隊逾時'),'changing conversations switches to its own retry deadline');
+  const sent=retry('retry-b','請求過多');sent.retry.waiting=false;sent.text='已重新送出';
+  fixture.projects.activity=[sent];await show();
+  check(activity.querySelectorAll('li').length===1 && !activity.querySelector('.project-retry-clock') && activity.textContent.includes('已重新送出'),'finished retry keeps a single final row');
+  fixture.active_id='a';fixture.projects={...fixture.projects,running:false,running_count:0,capacity_full:false,running_id:null,
+    running_conversation:null,running_conversations:[],activity:[],batch:{entries:[],window:null,unread:null}};await show();
+  $('prompt').value='整理合成測試文件';$('batch-enqueue').click();
+  const queued=commands.at(-1);
+  check(queued.command?.command?.action==='enqueue' && queued.command.command.text==='整理合成測試文件' && $('batch-dialog').open,'batch button queues a draft without sending a chat');
+  fixture.projects.batch={window:'2026-11-06',unread:'2026-11-06',entries:[{id:'batch-test',conversation:'a',project:'共同專案',title:'合成測試',state:'waiting_user',detail:'等待計畫核准',window:'2026-11-06'}]};await show();
+  check($('batch-summary').textContent.includes('等待你處理 1 項') && $('batch-summary').textContent.includes('等待計畫核准'),'batch summary shows native waiting reason');
+  $('batch-close').click();
   return checks;
 })()

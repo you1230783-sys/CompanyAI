@@ -210,6 +210,9 @@ pub(super) unsafe extern "system" fn window_proc(
                             app.hide_to_tray();
                             return 0;
                         }
+                        if !app.confirm_batch_exit() {
+                            return 0;
+                        }
                         unsafe {
                             DestroyWindow(window);
                         }

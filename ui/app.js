@@ -731,6 +731,13 @@ function renderMessages() {
         }, () => resume.isConnected && !resume.disabled && !!state.retry?.enabled && state.messages.length === count && !state.projects?.running);
       };
       tools.append(resume);
+      if (state.projects?.batch && message.content.includes("可改為今晚批次處理")) {
+        resume.textContent = "稍後手動繼續";
+        const tonight = node("button", "", "今晚批次繼續");
+        tonight.disabled = !!state.projects.running;
+        tonight.onclick = () => window.BatchUI.enqueue(state.active_id, message.request_id);
+        tools.append(tonight);
+      }
     } else if (state.retry && index === state.messages.length - 1) {
       const retry = node("button", "retry-message", "重新再試一次");
       retry.innerHTML = icon("refresh") + "重新再試一次";

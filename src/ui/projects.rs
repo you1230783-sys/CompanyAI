@@ -3,6 +3,7 @@ use super::*;
 use crate::projects::{self, Store};
 mod artifacts;
 mod attention;
+mod batch;
 mod chart_edit;
 mod composer;
 mod composer_smoke;
@@ -16,6 +17,9 @@ mod work_settings;
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(super) enum ProjectCommand {
+    Batch {
+        command: batch::Command,
+    },
     RetryPreference {
         conversation: String,
         run_id: Option<String>,
@@ -333,6 +337,7 @@ pub(super) struct Running {
 }
 #[derive(Default)]
 pub(super) struct ProjectRuntime {
+    batch: batch::Runtime,
     recovered_retries: std::collections::BTreeMap<String, String>,
     attention_seen: std::collections::BTreeSet<String>,
     attention_conversation: Option<String>,
@@ -567,6 +572,12 @@ impl App {
             ) {
                 continue;
             }
+            if projects::steering::Inbox::open(&self.root, &id)?
+                .retry_state()?
+                .batch
+            {
+                continue;
+            }
             let Some(chat) = self
                 .archive
                 .conversations
@@ -610,7 +621,7 @@ impl App {
                 control.retry_state().ok().map(|state| state.enabled)
             })
             .unwrap_or(self.projects.store.continuous_retry);
-        json!({"plan_mode":self.projects.store.plan_mode,"retry_enabled":retry_enabled,"retry_run_id":retry_target,"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len(),"collapsed":self.projects.store.collapsed.contains(&p.id)})).collect::<Vec<_>>(),
+        json!({"plan_mode":self.projects.store.plan_mode,"retry_enabled":retry_enabled,"retry_run_id":retry_target,"batch":self.batch_state(),"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len(),"collapsed":self.projects.store.collapsed.contains(&p.id)})).collect::<Vec<_>>(),
             "preferences":self.projects.current(self.active_id.as_deref()).and_then(|r|r.instructions.questions().ok()),
             "chart_review":self.projects.current(self.active_id.as_deref()).and_then(|r|r.pending_chart.as_ref().map(|p|json!({"request_id":p.id,"review":p.review}))),
             "outlook_consent":self.projects.current(self.active_id.as_deref()).and_then(|r|r.pending_outlook.as_ref().map(|p|json!({"request_id":p.id,"folders":p.folders}))),
@@ -634,6 +645,9 @@ impl App {
             })
     }
     pub(super) fn project_command(&mut self, command: ProjectCommand) -> AppResult<()> {
+        if let ProjectCommand::Batch { command } = command {
+            return self.batch_command(command);
+        }
         if let ProjectCommand::RetryPreference {
             conversation,
             run_id,
@@ -1372,6 +1386,7 @@ impl App {
             | ProjectCommand::Supplement { .. }
             | ProjectCommand::WithdrawSupplement { .. }
             | ProjectCommand::CadReady { .. }
+            | ProjectCommand::Batch { .. }
             | ProjectCommand::RetryPreference { .. }
             | ProjectCommand::PlanPreference { .. }
             | ProjectCommand::PlanView { .. }
@@ -1505,9 +1520,20 @@ impl App {
     fn begin_project_for(
         &mut self,
         conversation: String,
+        messages: Vec<Message>,
+        resume_id: Option<String>,
+        queued_id: Option<&str>,
+    ) -> AppResult<()> {
+        self.launch_project(conversation, messages, resume_id, queued_id, None)
+    }
+
+    fn launch_project(
+        &mut self,
+        conversation: String,
         mut messages: Vec<Message>,
         resume_id: Option<String>,
         queued_id: Option<&str>,
+        batch: Option<&projects::batch::Entry>,
     ) -> AppResult<()> {
         if self.history_error.is_some() {
             return Err("本機對話尚未恢復保存，請先處理紀錄錯誤。".into());
@@ -1536,7 +1562,7 @@ impl App {
         }
         let id = match resume_id {
             Some(id) => id,
-            None => match queued_id {
+            None => match queued_id.or_else(|| batch.map(|entry| entry.run_id.as_str())) {
                 Some(id) => id.into(),
                 None => crate::jobs::new_id()?,
             },
@@ -1548,7 +1574,11 @@ impl App {
         };
         let cancel = Arc::new(AtomicBool::new(false));
         let instructions = projects::steering::Inbox::open(&self.root, &id)?;
-        if !resume && self.projects.store.continuous_retry {
+        let unattended = batch.is_some();
+        if unattended || instructions.retry_state()?.batch {
+            instructions.set_batch_mode(unattended)?;
+        }
+        if !resume && !unattended && self.projects.store.continuous_retry {
             instructions.set_continuous_retry(true)?;
         }
         let cad_tx = self.tx.clone();
@@ -1562,6 +1592,9 @@ impl App {
             )));
         });
         let cad_waiter: crate::cad::Waiter = Box::new(move |prompt, cancel, deadline| {
+            if unattended {
+                return Err(projects::batch::WAIT_CAD.into());
+            }
             let (reply, response) = mpsc::channel();
             let request_id = crate::jobs::new_id()?;
             cad_tx
@@ -1592,6 +1625,9 @@ impl App {
         let file_run = id.clone();
         let file_waiter: projects::interaction::FileWaiter =
             Box::new(move |message, cancel, deadline| {
+                if unattended {
+                    return Ok(false);
+                }
                 let (reply, response) = mpsc::channel();
                 file_tx
                     .send(Event::Project(ProjectEvent::FileBusy(
@@ -1616,6 +1652,9 @@ impl App {
         let consent_run = id.clone();
         let consent_root = self.root.clone();
         let outlook_consent: projects::mail::Consent = Box::new(move |cancel, deadline| {
+            if unattended {
+                return Err(projects::batch::WAIT_OUTLOOK.into());
+            }
             let previous = crate::outlook::privacy::Policy::load(&consent_root)?;
             let folders = crate::outlook::privacy::catalog(&previous, cancel)?;
             let (reply, response) = mpsc::channel();
@@ -1651,7 +1690,7 @@ impl App {
             message.request_id = Some(id.clone());
         }
         let run = projects::runner::Run {
-            plan_mode: self.projects.store.plan_mode,
+            plan_mode: batch.map_or(self.projects.store.plan_mode, |entry| entry.plan_mode),
             resume,
             id: id.clone(),
             project,
@@ -2125,6 +2164,7 @@ impl App {
                     .unwrap_or_default();
                 history::save(&self.root, &archive)?;
                 self.archive = archive;
+                self.batch_finished(&id, &final_text, paused, cancelled, succeeded && !partial)?;
                 if self.logged_in() && self.active_id.as_deref() == Some(&conversation) {
                     self.messages = self
                         .archive

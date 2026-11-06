@@ -378,6 +378,7 @@
     window.DiffPreviewUI?.sync();
     const showActivity = state.logged_in && projects.running && projects.running_conversation === state.active_id;
     window.TaskPlanUI?.sync();
+    window.BatchUI?.sync();
     renderSupplements(projects,showActivity);
     renderReview(projects,showActivity);
     renderOutlookConsent(projects,showActivity);
@@ -466,6 +467,93 @@
     }
     if (!projects.items?.length) list.append(node("p", "empty-small", "指定資料夾，開始文件工作"));
   }};
+})();
+
+// B1：批次由原生佇列派送；這裡只提交明確按鈕操作與呈現原生狀態。
+window.BatchUI = (() => {
+  const dialog = $("batch-dialog"), open = $("batch-open"), enqueueButton = $("batch-enqueue");
+  const summary = $("batch-summary"), entries = $("batch-entries");
+  const labels = { queued:"等待派送", running:"執行中", office_wait:"等待檔案解除占用", waiting_user:"等待你處理", completed:"完成", failed:"未完成" };
+  let lastRender = "", lastShown = null;
+  const command = value => send({type:"project",command:{action:"batch",command:value}});
+  const button = (text, onClick) => {
+    const item = node("button", "", text); item.type = "button"; item.onclick = onClick; return item;
+  };
+  function show() { if (!dialog.open) dialog.showModal(); sync(); }
+  open.onclick = show;
+  $("batch-close").onclick = () => dialog.close();
+  function enqueue(conversation, runId = null) {
+    if (!state.projects?.batch || conversation !== state.active_id) return;
+    const text = $("prompt").value.trim();
+    if (!runId && !text) { $("prompt").focus(); return; }
+    command(runId ? {action:"continue_tonight",conversation,run_id:runId} : {action:"enqueue",conversation,text});
+    show();
+  }
+  enqueueButton.onclick = () => enqueue(state.active_id);
+  function showConversation(id) {
+    dialog.close();
+    showView("chat");
+    send({type:"select_chat",id});
+  }
+  function renderSummary(batch) {
+    const rows = batch.entries.filter(entry => entry.window === batch.window);
+    summary.hidden = !rows.length;
+    if (!rows.length) return;
+    const completed = rows.filter(entry => entry.state === "completed").length;
+    const waiting = rows.filter(entry => entry.state === "waiting_user").length;
+    summary.append(node("h3", "", "昨晚批次結果"),
+      node("p", "", `共 ${rows.length} 項。完成 ${completed} 項，等待你處理 ${waiting} 項，未完成 ${rows.length-completed-waiting} 項。`));
+    const list = node("ul");
+    for (const entry of rows) {
+      const item = node("li");
+      item.append(button(entry.title, () => showConversation(entry.conversation)),
+        document.createTextNode(` ${labels[entry.state]}${entry.detail ? ` · ${entry.detail}` : ""}`));
+      list.append(item);
+    }
+    summary.append(list);
+    if (batch.unread) summary.append(button("標為已讀", () => command({action:"read_summary",window:batch.unread})));
+  }
+  function sync() {
+    const batch = state.projects?.batch;
+    const project = state.conversations?.some(chat => chat.id === state.active_id && chat.project_id);
+    enqueueButton.hidden = !batch || !project;
+    open.hidden = !batch;
+    if (!batch) {
+      if (dialog.open) dialog.close();
+      entries.replaceChildren(); summary.replaceChildren(); lastRender = ""; lastShown = null;
+      return;
+    }
+    if (batch.unread && batch.unread !== lastShown && document.visibilityState === "visible") {
+      lastShown = batch.unread;
+      if (!dialog.open) dialog.showModal();
+    }
+    const signature = JSON.stringify(batch);
+    if (signature === lastRender) return;
+    lastRender = signature;
+    entries.replaceChildren(); summary.replaceChildren();
+    renderSummary(batch);
+    if (!batch.entries.length) entries.append(node("p", "", "目前沒有批次任務。"));
+    for (const entry of batch.entries) {
+      const row = node("article", "batch-entry");
+      row.append(button(`${entry.project} · ${entry.title}`, () => showConversation(entry.conversation)),
+        node("p", "", `${labels[entry.state]}${entry.detail ? ` · ${entry.detail}` : ""}`));
+      if (entry.editable) {
+        row.append(button("往前移", () => command({action:"move",id:entry.id,earlier:true})),
+          button("往後移", () => command({action:"move",id:entry.id,earlier:false})),
+          button("取消排入", () => command({action:"cancel",id:entry.id})));
+        if (entry.draft != null) {
+          const edit = node("details"), text = node("textarea");
+          text.value = entry.draft; text.maxLength = 16000; text.rows = 4; text.setAttribute("aria-label", "修改批次草稿");
+          edit.append(node("summary", "", "修改草稿"), text,
+            button("保存修改", () => command({action:"edit",id:entry.id,text:text.value})));
+          row.append(edit);
+        }
+      }
+      entries.append(row);
+    }
+  }
+  document.addEventListener("visibilitychange", sync);
+  return {enqueue,sync};
 })();
 // M9：只顯示原生計畫紀錄；核准按鈕傳回版本與對話，權限由原生端核對。
 (() => {

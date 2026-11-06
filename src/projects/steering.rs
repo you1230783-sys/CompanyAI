@@ -34,6 +34,8 @@ struct State {
 pub struct RetryState {
     pub enabled: bool,
     pub total: usize,
+    #[serde(default)]
+    pub batch: bool,
 }
 #[derive(Clone)]
 pub struct Inbox {
@@ -86,7 +88,18 @@ impl Inbox {
             if state.closed {
                 return Err("任務正在結束，重試設定已無法修改。".into());
             }
+            if state.retry.batch && !enabled {
+                return Err("執行中的晚間批次一律持續重試。".into());
+            }
             state.retry.enabled = enabled;
+            Ok(())
+        })
+    }
+
+    pub(crate) fn set_batch_mode(&self, batch: bool) -> AppResult<()> {
+        self.change(|state| {
+            state.retry.batch = batch;
+            state.retry.enabled |= batch;
             Ok(())
         })
     }

@@ -42,6 +42,7 @@ outlook-folders.dpapi
 /installer/nsis-*.zip
 templates.dpapi
 workflow-schedules.dpapi
+batch-*.dpapi
 workflow-executions/
 
 # 開發機私有內容，與發行原始碼分開。

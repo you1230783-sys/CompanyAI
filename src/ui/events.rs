@@ -314,9 +314,21 @@ impl App {
         let mut changed = false;
         // 先處理到期，再接受 UI 命令或背景結果，不能因本機工作忙碌而繼續使用過期授權。
         if !self.smoke && self.session.is_some() && !self.logged_in() && self.busy != "login" {
+            if let Err(error) = self.batch_login_expired() {
+                self.fail(error);
+            }
             let _ = self.logout();
             self.fail("登入已到期，請重新登入。".into());
             changed = true;
+        }
+        if !self.smoke {
+            match self.batch_tick() {
+                Ok(updated) => changed |= updated,
+                Err(error) => {
+                    self.fail(error);
+                    changed = true;
+                }
+            }
         }
         if self.logged_in() && !self.versions.blocked() {
             changed |= self.site_tick();

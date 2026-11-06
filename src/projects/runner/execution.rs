@@ -27,6 +27,7 @@ pub(super) fn run_for(
         return Err("計畫仍在等待核准，請先使用計畫卡片確認或退回。".into());
     }
     let retry = run.retry_control()?;
+    let unattended = retry.retry_state()?.batch;
     let _awake = crate::keep_awake::KeepAwake::watch(move || {
         retry.retry_state().is_ok_and(|state| state.enabled)
     })?;
@@ -1076,13 +1077,27 @@ pub(super) fn run_for(
                             &mut |message| report(&mut activity, &mut progress, message.into()),
                         )?
                     };
-                    if result["result"]["waiting_for_user"] == true {
+                    let batch_wait = if unattended {
+                        [
+                            super::super::batch::WAIT_OUTLOOK,
+                            super::super::batch::WAIT_CAD,
+                        ]
+                        .into_iter()
+                        .find(|reason| {
+                            result["error"]
+                                .as_str()
+                                .is_some_and(|error| error.contains(reason))
+                        })
+                    } else {
+                        None
+                    };
+                    if result["result"]["waiting_for_user"] == true || batch_wait.is_some() {
                         // 預檢及等待未修改文件，不記為成功／失敗；續接重讀同一已完成的模型請求。
                         record["pending_operation"] = Value::Null;
                         checkpoint(&journal, &record)?;
                         return pause(
-                            result["result"]["wait_reason"]
-                                .as_str()
+                            batch_wait
+                                .or_else(|| result["result"]["wait_reason"].as_str())
                                 .unwrap_or("等待圖表資料處理選擇"),
                             &broker,
                             &progress_state,

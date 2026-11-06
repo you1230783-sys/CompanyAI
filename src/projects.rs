@@ -2,6 +2,7 @@
 pub(crate) mod agent;
 pub mod analysis;
 pub mod artifacts;
+pub(crate) mod batch;
 pub mod cad_index;
 pub mod charts;
 pub mod code_review;
