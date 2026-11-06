@@ -10,5 +10,7 @@
 
 ## 公司端追加回饋
 
-- read_excel_range 成功沒有接入閱讀筆記來源登記，既有錯誤訊息誤導模型反覆猜測 operation_id；待修。
-- read_work_log 出現工具原始結果校驗失敗，正在重現封存前後 JSON 數值序列化差異；原因未驗證前不宣稱已定位。
+- read_excel_range 成功沒有接入閱讀筆記來源登記，既有錯誤訊息誤導模型反覆猜測 operation_id。現已接入 Excel 結構化來源，記錄實際工作表／欄列／範圍；舊成功封存可補登記，失敗操作拒絕並列出可引用來源。
+- read_work_log 出現工具原始結果校驗失敗，以合成科學數值確實重現（.build/archive-numbers-0917-r1.log），原因為 JSON 預設浮點解碼後重新編碼產生差異。啟用 float_roundtrip，新封存保存原始 JSON 字串並先核對原文雜湊；舊格式相容、真正竄改仍拒絕。
+
+- v142 定向回歸：12項記憶／封存及2項Excel筆記引用通過（.build/memory-0917-r3.log、.build/excel-notes-0917-r3.log）。包含大結果分塊、原始小數／極小值／負零、舊格式、竄改拒絕、成功Excel封存補登記、不因錯誤ID部分保存筆記。尚待整合與公司資料實測。

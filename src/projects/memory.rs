@@ -380,8 +380,15 @@ impl Memory {
         let serialized = value.to_string();
         let hash = text::revision(&serialized);
         let tx = self.vault.transaction()?;
-        if serialized.len() <= 7_500_000 {
-            tx.write("operation-parts", &hash, value)?;
+        let envelope = json!({"storage":"json-text-v2","payload":serialized});
+        // 外層 JSON 會再次跳脫引號／反斜線；以實際封存大小決定分塊。
+        if serde_json::to_vec(&envelope)
+            .map_err(|e| e.to_string())?
+            .len()
+            <= 7_500_000
+        {
+            // 保存雜湊計算時的原始 JSON 字串；先校驗原文，再解析數值。
+            tx.write("operation-parts", &hash, &envelope)?;
         } else {
             // 合法大型圖表可能接近 8 MiB；分塊以免超過私有儲存單檔 8 MB 上限。
             let mut chars = serialized.chars();
@@ -405,7 +412,7 @@ impl Memory {
     }
     pub(super) fn archived_operation(&self, hash: &str) -> AppResult<Value> {
         let tx = self.vault.transaction()?;
-        let mut value: Value = tx
+        let value: Value = tx
             .read("operation-parts", hash)?
             .ok_or("工具原始結果遺失；停止續接，避免重複執行。")?;
         if value["storage"] == "chunks-v1" {
@@ -421,8 +428,19 @@ impl Memory {
                     return Err("操作原文超過可還原上限。".into());
                 }
             }
-            value = serde_json::from_str(&serialized).map_err(|_| "操作原文格式無效。")?;
+            if text::revision(&serialized) != hash {
+                return Err("工具原始結果校驗失敗；未重新執行。".into());
+            }
+            return serde_json::from_str(&serialized).map_err(|_| "操作原文格式無效。".into());
         }
+        if value["storage"] == "json-text-v2" {
+            let serialized = value["payload"].as_str().ok_or("操作原文封存格式無效。")?;
+            if text::revision(serialized) != hash {
+                return Err("工具原始結果校驗失敗；未重新執行。".into());
+            }
+            return serde_json::from_str(serialized).map_err(|_| "操作原文格式無效。".into());
+        }
+        // 相容舊版直接保存 Value 的封存；float_roundtrip 精確讀回原有 f64。
         if text::revision(&value.to_string()) != hash {
             return Err("工具原始結果校驗失敗；未重新執行。".into());
         }

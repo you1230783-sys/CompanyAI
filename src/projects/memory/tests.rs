@@ -398,3 +398,53 @@ fn reusable_methods_are_project_scoped_versioned_and_exclude_deleted_notes() {
         .unwrap()
         .is_empty());
 }
+
+/// 科學資料的 Value2 小數不可因 JSON 解碼後再編碼而被誤判成封存竄改。
+#[test]
+fn archived_scientific_numbers_preserve_exact_representation() {
+    let memory = Memory::open(fixture(), "numeric-archive").unwrap();
+    let mut bits = 0x3fe123456789abcd_u64;
+    let mut numbers = Vec::new();
+    for _ in 0..512 {
+        bits ^= bits << 13;
+        bits ^= bits >> 7;
+        bits ^= bits << 17;
+        let value = f64::from_bits(bits);
+        if value.is_finite() {
+            numbers.push(json!(value));
+        }
+    }
+    let raw = json!({"tool":"read_excel_range","result":{"cells":numbers}});
+    let hash = memory.archive_operation(&raw).unwrap();
+    let restored = memory.archived_operation(&hash).unwrap();
+    assert_eq!(raw.to_string(), restored.to_string());
+}
+
+#[test]
+fn legacy_numeric_archive_is_readable_and_v2_tampering_still_fails() {
+    let memory = Memory::open(fixture(), "legacy-numbers").unwrap();
+    let raw = json!({"value":1.2345678901234567e-21,"tiny":f64::MIN_POSITIVE,"negative_zero":-0.0});
+    let hash = text::revision(&raw.to_string());
+    memory
+        .vault
+        .transaction()
+        .unwrap()
+        .write("operation-parts", &hash, &raw)
+        .unwrap();
+    assert_eq!(memory.archived_operation(&hash).unwrap(), raw);
+    memory.archive_operation(&raw).unwrap();
+    memory
+        .vault
+        .transaction()
+        .unwrap()
+        .write(
+            "operation-parts",
+            &hash,
+            &json!({"storage":"json-text-v2","payload":"{\"changed\":true}"}),
+        )
+        .unwrap();
+    assert!(memory
+        .archived_operation(&hash)
+        .unwrap_err()
+        .contains("校驗失敗"));
+}

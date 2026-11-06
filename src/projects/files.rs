@@ -1118,6 +1118,12 @@ impl Broker {
     /// 來源筆記涵蓋原件文字、Office、PDF與圖片；副本驗證及郵件仍用各自契約。
     fn observe_reading(&mut self, id: &str, tool: &Tool, result: &Value) -> AppResult<()> {
         self.references.register(id);
+        if matches!(
+            tool,
+            Tool::ReadExcelRange { .. } | Tool::InspectExcel { .. }
+        ) {
+            return self.reading.observe_excel(id, result);
+        }
         if let Tool::AnalyzeImage { .. } = tool {
             return self.reading.observe_image(id, result);
         }

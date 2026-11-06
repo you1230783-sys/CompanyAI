@@ -69,9 +69,24 @@ impl Broker {
         &mut self,
         notes: &[crate::projects::reading::Digest],
     ) -> AppResult<Value> {
+        let mut reading = self.reading.clone();
         let mut resolved = notes.to_vec();
         for note in &mut resolved {
             note.operation_id = self.references.resolve(&note.operation_id)?;
+            // 舊 checkpoint 的 Excel 結果已成功，但當時沒有接入 Notebook。
+            // 僅從通過封存校驗的原生結果補登記，不重開 Excel，也不依模型自報範圍。
+            if !reading.pending.contains_key(&note.operation_id)
+                && !reading.notes.contains_key(&note.operation_id)
+            {
+                if let Some((request, result)) = self.recorded_operation(&note.operation_id)? {
+                    if matches!(
+                        request["tool"].as_str(),
+                        Some("read_excel_range" | "inspect_excel")
+                    ) {
+                        reading.observe_excel(&note.operation_id, &result)?;
+                    }
+                }
+            }
             let tool = self
                 .results
                 .get(&note.operation_id)
@@ -85,7 +100,12 @@ impl Broker {
                 return Err("Python 結果不是閱讀來源；原文請用read_file閱讀後再記錄，計算結果請用register_report_values登記。不要重跑已成功的計算。".into());
             }
         }
-        let mut result = self.reading.accept(&resolved)?;
+        let mut result = reading.accept(&resolved).map_err(|error| {
+            let ids: Vec<_> = reading.pending.keys().chain(reading.notes.keys())
+                .take(32).map(|id| self.references.alias(id)).collect();
+            format!("{error} 目前可引用來源：{}。只能使用 reading.pending／notes 中的來源 ID；失敗工具自己的 reference_id 不是閱讀來源。若列表為空，無須補存閱讀筆記，可用 compact_context 保存工作摘要並繼續下一步，不要為取得 ID 重讀。", if ids.is_empty() { "無".into() } else { ids.join("、") })
+        })?;
+        self.reading = reading;
         self.references.project(&mut result);
         Ok(result)
     }
@@ -192,5 +212,83 @@ mod python_note_tests {
         }
         assert!(include_str!("../skills/python-analysis.md")
             .contains("kind=text的衍生輸出不是閱讀來源"));
+    }
+}
+
+#[cfg(test)]
+mod excel_note_tests {
+    use super::*;
+    fn broker() -> Broker {
+        let root =
+            std::env::temp_dir().join(format!("excel-notes-{}", crate::jobs::new_id().unwrap()));
+        fs::create_dir(&root).unwrap();
+        let mut broker = Broker::new(
+            Project {
+                id: "p".into(),
+                name: "p".into(),
+                root,
+                imports: BTreeMap::new(),
+            },
+            "run".into(),
+        )
+        .unwrap();
+        broker.enable_memory("chat").unwrap();
+        broker.enable_reading_notes();
+        broker
+    }
+    fn outcome() -> Value {
+        json!({"ok":true,"result":{"path":"book.xlsx","revision":format!("excel:{}", "a".repeat(64)),
+            "sheet":1,"sheet_name":"資料","columns":["L","M"],"headers":[],"header_row":6,
+            "rows":[{"row":7,"cells":[{"value":1.2345678901234567e-21}]}],"next_row":8,
+            "scope":"僅本次選取欄列"}})
+    }
+    fn digest(id: String) -> crate::projects::reading::Digest {
+        crate::projects::reading::Digest {
+            operation_id: id,
+            summary: "L/M 第7列數值已讀；頻率未知".into(),
+            relationships: String::new(),
+            open_questions: String::new(),
+        }
+    }
+    #[test]
+    fn successful_excel_alias_is_accepted_after_archive_without_rereading() {
+        let mut broker = broker();
+        let id = "excel-read";
+        broker.references.register(id);
+        // 模擬舊 checkpoint：有成功原始結果但尚未登記 Notebook。
+        broker
+            .results
+            .insert(id.into(), (json!({"tool":"read_excel_range"}), outcome()));
+        broker.archive_results().unwrap();
+        let note = digest(broker.reference_id(id));
+        assert_eq!(broker.record_reading_notes(&[note]).unwrap()["saved"], 1);
+        let source = &broker.reading.notes[id].source;
+        assert_eq!(source.evidence["first_row"], 7);
+        assert_eq!(source.evidence["row_count"], 1);
+        assert_eq!(source.evidence["columns"], json!(["L", "M"]));
+        assert!(broker.reading.pending.is_empty());
+    }
+    #[test]
+    fn wrong_or_failed_alias_does_not_replace_valid_source_or_mutate_notes() {
+        let mut broker = broker();
+        let good = "successful";
+        let bad = "failed-note";
+        let good_alias = broker.references.register(good);
+        let bad_alias = broker.references.register(bad);
+        broker
+            .results
+            .insert(good.into(), (json!({"tool":"read_excel_range"}), outcome()));
+        broker.results.insert(
+            bad.into(),
+            (json!({"tool":"record_reading_notes"}), json!({"ok":false})),
+        );
+        let before = serde_json::to_value(&broker.reading).unwrap();
+        let error = broker
+            .record_reading_notes(&[digest(good_alias.clone()), digest(bad_alias)])
+            .unwrap_err();
+        assert!(error.contains(&good_alias) && error.contains("失敗工具自己的 reference_id"));
+        assert_eq!(before, serde_json::to_value(&broker.reading).unwrap());
+        broker.record_reading_notes(&[digest(good_alias)]).unwrap();
+        assert_eq!(broker.reading.notes.len(), 1);
     }
 }

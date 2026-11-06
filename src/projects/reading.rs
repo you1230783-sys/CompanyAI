@@ -64,6 +64,58 @@ fn precision_window(data: &Value) -> bool {
 }
 
 impl Notebook {
+    /// Excel 選欄工具回傳結構化儲存格，不能套用一般文字的 64 位 revision／字元頁協定。
+    /// 只登記工具實際交付的範圍；UsedRange 不代表全部讀取，數值原文仍從操作封存查回。
+    pub fn observe_excel(&mut self, id: &str, result: &Value) -> AppResult<()> {
+        if !self.enabled
+            || result["ok"] != true
+            || self.pending.contains_key(id)
+            || self.notes.contains_key(id)
+        {
+            return Ok(());
+        }
+        let data = &result["result"];
+        let path = data["path"].as_str().ok_or("Excel 閱讀缺少來源路徑。")?;
+        let revision = data["revision"]
+            .as_str()
+            .ok_or("Excel 閱讀缺少來源版本。")?;
+        if !revision
+            .strip_prefix("excel:")
+            .is_some_and(|hash| hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
+        {
+            return Err("Excel 閱讀來源版本格式無效。".into());
+        }
+        let headers = data["headers"]
+            .as_array()
+            .ok_or("Excel 閱讀缺少實際表頭。")?;
+        let rows = data["rows"].as_array();
+        if rows.is_some_and(|rows| rows.is_empty()) && headers.is_empty() {
+            return Ok(());
+        }
+        if self.pending.len() >= 8 || self.notes.len() >= 400 {
+            return Err("閱讀筆記已達待整理8段或保存400段上限，請先整理現有成果。".into());
+        }
+        let count = data.to_string().chars().count();
+        let normalized = path.replace('\\', "/");
+        self.pending.retain(|_, source| {
+            !source.path.eq_ignore_ascii_case(&normalized) || source.revision == revision
+        });
+        self.notes.retain(|_, note| {
+            !note.source.path.eq_ignore_ascii_case(&normalized) || note.source.revision == revision
+        });
+        self.pending.insert(id.into(), Source {
+            operation_id: id.into(), path: normalized, revision: revision.into(),
+            offset: 0, end: count, total: count, first_line: None, last_line: None,
+            evidence: json!({"kind":"excel","sheet":data["sheet"],"sheet_name":data["sheet_name"],
+                "columns":data["columns"],"header_row":data["header_row"],"header_count":headers.len(),
+                "first_row":rows.and_then(|rows| rows.first()).map(|row| &row["row"]),
+                "last_row":rows.and_then(|rows| rows.last()).map(|row| &row["row"]),
+                "row_count":rows.map_or(0, Vec::len),"next_row":data["next_row"],
+                "scope":data["scope"],"coverage_unit":"本次實際交付的結構化 JSON 字元，非工作表總列數；表頭檢查不代表已讀資料列"}),
+        });
+        Ok(())
+    }
+
     /// 將實際辨識文字接入同一筆記契約；範圍是辨識文字，並非圖片像素已全部讀懂。
     pub fn observe_image(&mut self, id: &str, result: &Value) -> AppResult<()> {
         let data = &result["result"];

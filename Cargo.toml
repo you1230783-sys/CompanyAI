@@ -35,7 +35,8 @@ windows-core = "=0.62.2"
 # PDF 文字擷取編入 EXE，在既有 AppContainer 執行，不依賴 Python。
 pdf-extract = "=0.12.1"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+# 科學數值封存必須精確還原 f64，避免重新編碼後雜湊誤判。
+serde_json = { version = "1.0", features = ["float_roundtrip"] }
 url = "2.5"
 webview2-com = "=0.39.1"
 windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Imaging", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Ole", "Win32_System_Variant", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_Accessibility"] }

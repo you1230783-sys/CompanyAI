@@ -118,9 +118,18 @@ impl Broker {
                             "already_recalled":true,"notice":"此封存頁已補查。請把剛取得的細節更新至record_reading_notes，再完成答覆；不要重複查同頁。"}));
                     }
                     let (_, result) = self.recorded_operation(id)?.ok_or("閱讀來源封存遺失。")?;
+                    let excel = self
+                        .reading
+                        .notes
+                        .get(id)
+                        .map(|note| &note.source)
+                        .or_else(|| self.reading.pending.get(id))
+                        .is_some_and(|source| source.evidence["kind"] == "excel")
+                        .then(|| result["result"].to_string());
                     let text = result["result"]["text"]
                         .as_str()
                         .or_else(|| result["result"]["analysis"].as_str())
+                        .or(excel.as_deref())
                         .ok_or("來源沒有可讀原文。")?;
                     let total = text.chars().count();
                     if *offset > total {
