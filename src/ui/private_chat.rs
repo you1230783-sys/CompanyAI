@@ -7,6 +7,7 @@ use crate::private_chat::{
 use windows_sys::Win32::System::RemoteDesktop::{
     WTSRegisterSessionNotification, WTSUnRegisterSessionNotification, NOTIFY_FOR_THIS_SESSION,
 };
+mod messaging;
 
 const CONTACTS: &str = "contacts.gcm";
 const CONTACTS_LIMIT: u64 = 4 * 1024 * 1024;
@@ -15,23 +16,49 @@ const REFRESH_SECONDS: u64 = 20;
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(super) enum Command {
-    Enable { enabled: bool },
+    Enable {
+        enabled: bool,
+    },
     Open,
     Leave,
     Lock,
-    Policy { policy: LockPolicy },
-    Unlock { password: Password },
-    ChangePassword { old: Password, new: Password },
-    Reset { confirmed: bool },
-    Erase { confirmed: bool },
+    Policy {
+        policy: LockPolicy,
+    },
+    Unlock {
+        password: Password,
+    },
+    ChangePassword {
+        old: Password,
+        new: Password,
+    },
+    Reset {
+        confirmed: bool,
+    },
+    Erase {
+        confirmed: bool,
+    },
     Refresh,
     CopyId,
     Regenerate,
-    Lookup { code: String },
+    Lookup {
+        code: String,
+    },
     Invite,
-    Answer { id: String, response: Answer },
-    Unblock { employee_no: String },
-    RemoveFriend { id: String },
+    Answer {
+        id: String,
+        response: Answer,
+    },
+    Unblock {
+        employee_no: String,
+    },
+    RemoveFriend {
+        id: String,
+    },
+    #[serde(rename = "message")]
+    Message {
+        command: messaging::Command,
+    },
 }
 
 #[derive(Deserialize)]
@@ -49,6 +76,7 @@ pub(super) enum Reply {
     Lookup(Profile),
     Refreshed(Profile, Vec<Friend>, Invitations),
     PasswordChanged,
+    Message(messaging::Reply),
     Updated(&'static str),
 }
 
@@ -71,6 +99,7 @@ pub(super) struct Runtime {
     left_at: Option<u64>,
     windows_events: bool,
     status: String,
+    messaging: messaging::Runtime,
 }
 
 impl Runtime {
@@ -97,6 +126,7 @@ impl Runtime {
             left_at: None,
             windows_events,
             status: String::new(),
+            messaging: messaging::Runtime::default(),
         }
     }
 
@@ -110,6 +140,7 @@ impl Runtime {
         self.unlocked_at = 0;
         self.verified = true;
         self.left_at = None;
+        self.messaging.lock();
         if let Some(account) = &self.account {
             if let Err(error) = account.lock() {
                 // 記憶體已上鎖。檔案移除失敗時由下一次 tick 再嘗試。
@@ -156,6 +187,12 @@ impl App {
         self.private_chat_principal().is_some() && !self.private_chat.suspended
     }
 
+    pub(super) fn private_chat_effective(&self) -> bool {
+        self.private_chat_available()
+            && self.config.private_chat_enabled
+            && self.private_chat.active()
+    }
+
     pub(super) fn private_chat_capability_updated(&mut self) {
         self.private_chat.suspended = false;
     }
@@ -163,7 +200,7 @@ impl App {
     fn publish_private_chat(&self) {
         let state = &self.private_chat;
         let available = self.private_chat_available();
-        let enabled = available && self.config.private_chat_enabled && state.active();
+        let enabled = self.private_chat_effective();
         let open = enabled && state.requested && state.vault.is_some();
         let _ = self.view.post(&json!({
             "type": "private_chat_state",
@@ -188,6 +225,7 @@ impl App {
                 self.private_chat.lock()?;
                 self.private_chat.account = None;
                 self.private_chat.device = None;
+                self.private_chat.messaging = messaging::Runtime::default();
                 self.private_chat.verified = false;
                 self.private_chat.attempts = Attempts::default();
                 return Ok(true);
@@ -206,6 +244,7 @@ impl App {
         self.private_chat.lock()?;
         self.private_chat.device = Device::load(&account)?;
         self.private_chat.account = Some(account);
+        self.private_chat.messaging = messaging::Runtime::default();
         self.private_chat.verified = false;
         self.private_chat.next_poll = 0;
         self.private_chat.attempts = Attempts::default();
@@ -244,13 +283,8 @@ impl App {
     }
 
     fn private_chat_refresh(&mut self) -> AppResult<()> {
-        self.private_chat.next_poll = crate::unix_now().saturating_add(REFRESH_SECONDS);
-        if self.private_chat.vault.is_none() {
-            return self.private_chat_start(|api| {
-                api.profile()?;
-                Ok(Reply::Verified)
-            });
-        }
+        self.private_chat.messaging.next_contacts =
+            crate::unix_now().saturating_add(REFRESH_SECONDS);
         let blocked = self.private_chat.contacts.blocked.clone();
         self.private_chat_start(move |api| {
             let (profile, friends, invitations) = api.refresh_contacts(&blocked)?;
@@ -279,15 +313,7 @@ impl App {
                 }
                 state.cached_until = None;
             }
-            if self.private_chat_available()
-                && self.config.private_chat_enabled
-                && self.private_chat.active()
-                && !self.private_chat.busy
-                && now >= self.private_chat.next_poll
-            {
-                self.private_chat_refresh()?;
-                changed = true;
-            }
+            changed |= self.poll_private_messages(now)?;
             Ok::<bool, String>(changed)
         })();
         match result {
@@ -324,7 +350,12 @@ impl App {
     }
 
     fn load_private_contacts(&mut self, vault: Vault, unlocked_at: u64) -> AppResult<()> {
-        self.private_chat.contacts = vault.read(CONTACTS, CONTACTS_LIMIT)?;
+        let contacts: Contacts = vault.read(CONTACTS, CONTACTS_LIMIT)?;
+        vault
+            .account
+            .save_notice_guard(!contacts.blocked.is_empty())?;
+        self.private_chat.messaging.load(&vault)?;
+        self.private_chat.contacts = contacts;
         self.private_chat.vault = Some(vault);
         self.private_chat.unlocked_at = unlocked_at;
         self.private_chat.attempts = Attempts::default();
@@ -337,6 +368,17 @@ impl App {
         operation: u64,
         result: Result<Reply, chat::Error>,
     ) {
+        let state = &self.private_chat;
+        if state.vault.is_some()
+            && self
+                .config
+                .private_chat_lock
+                .deadline(state.unlocked_at, state.left_at)
+                .is_some_and(|deadline| crate::unix_now() >= deadline)
+        {
+            self.lock_private_chat();
+            return;
+        }
         if operation != self.private_chat.operation
             || self.bind_private_chat().unwrap_or(true)
             || !self.private_chat_available()
@@ -363,6 +405,7 @@ impl App {
                         }
                     }
                     let _ = self.set_private_chat_enabled(false);
+                    self.toast("私聊已在另一台電腦啟用。");
                 } else {
                     self.private_chat.suspended = true;
                 }
@@ -427,15 +470,24 @@ impl App {
             }
             Reply::Refreshed(profile, friends, invitations) => {
                 let mut contacts = self.private_chat.contacts.clone();
+                let new_invite = invitations.incoming.iter().any(|item| {
+                    !contacts
+                        .invites
+                        .incoming
+                        .iter()
+                        .any(|old| old.invite_id == item.invite_id)
+                });
                 contacts.profile = Some(profile);
                 contacts.merge_friends(friends);
                 contacts.invites = invitations;
                 self.save_private_contacts(contacts)?;
+                self.private_friend_invite_notice(new_invite);
             }
             Reply::PasswordChanged => {
                 self.private_chat.attempts = Attempts::default();
                 self.private_chat.status = "聊天密碼已更新，請用新密碼解鎖。".into();
             }
+            Reply::Message(reply) => self.apply_private_message_reply(reply)?,
             Reply::Updated(status) => {
                 self.private_chat.lookup = None;
                 self.private_chat.next_poll = 0;
@@ -499,6 +551,9 @@ impl App {
                 self.private_chat.left_at = None;
                 self.private_chat.status.clear();
                 self.cache_private_chat()?;
+                if self.private_chat.vault.is_some() {
+                    self.post_private_timeline()?;
+                }
             }
             Command::Leave => {
                 if matches!(self.config.private_chat_lock.when, chat::LockWhen::Leave)
@@ -508,6 +563,7 @@ impl App {
                 }
                 self.private_chat.requested = false;
                 self.private_chat.lookup = None;
+                self.private_chat.messaging.leave();
                 self.private_chat.left_at = Some(now);
                 self.cache_private_chat()?;
             }
@@ -576,6 +632,7 @@ impl App {
                 account.erase()?;
                 self.private_chat.status = "已清除本機聊天資料。".into();
             }
+            Command::Message { command } => self.private_message_command(command)?,
             Command::Reset { .. } | Command::Erase { .. } => {
                 return Err("請先確認永久清除本機聊天紀錄。".into());
             }
@@ -586,7 +643,17 @@ impl App {
 
     fn save_private_contacts(&mut self, contacts: Contacts) -> AppResult<()> {
         if contacts != self.private_chat.contacts {
-            self.private_chat.unlocked()?.write(CONTACTS, &contacts)?;
+            let vault = self.private_chat.unlocked()?;
+            let blacklist_changed =
+                self.private_chat.contacts.blocked.is_empty() != contacts.blocked.is_empty();
+            if blacklist_changed && !contacts.blocked.is_empty() {
+                // 先禁止鎖定預覽；即使後續索引寫入失敗，也不洩露封鎖者的存在。
+                vault.account.save_notice_guard(true)?;
+            }
+            vault.write(CONTACTS, &contacts, CONTACTS_LIMIT)?;
+            if blacklist_changed && contacts.blocked.is_empty() {
+                vault.account.save_notice_guard(false)?;
+            }
             self.private_chat.contacts = contacts;
         }
         Ok(())

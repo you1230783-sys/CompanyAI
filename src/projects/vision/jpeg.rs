@@ -1,7 +1,7 @@
 //! Windows 內建 WIC 轉檔；不安裝套件、不覆寫來源、不把原始圖片附到後續上下文。
 use crate::AppResult;
 use windows::{
-    core::{w, PWSTR},
+    core::{w, Interface, PWSTR},
     Win32::{
         Foundation::HGLOBAL,
         Graphics::Imaging::*,
@@ -20,13 +20,31 @@ pub struct Jpeg {
 }
 
 pub fn convert(bytes: &[u8], extension: &str) -> AppResult<Jpeg> {
+    convert_with_limits(bytes, extension, None)
+}
+
+/// 私聊保留原生像素解碼與 EXIF 方向處理，限制輸出長邊與位元組數。
+pub(crate) fn convert_private(bytes: &[u8], extension: &str) -> AppResult<Jpeg> {
+    convert_with_limits(bytes, extension, Some(4096))
+}
+
+fn convert_with_limits(
+    bytes: &[u8],
+    extension: &str,
+    private_edge: Option<u32>,
+) -> AppResult<Jpeg> {
     // 若呼叫執行緒已在 STA，沿用其 apartment；只平衡本次成功的初始化。
     let _apartment = crate::com_apartment::Apartment::for_imaging()
         .map_err(|e| format!("無法初始化圖片轉檔：{:?}", e.code()))?;
-    unsafe { convert_inner(bytes, extension) }.map_err(|e| format!("圖片轉 JPG 失敗：{e}"))
+    unsafe { convert_inner(bytes, extension, private_edge) }
+        .map_err(|e| format!("圖片轉 JPG 失敗：{e}"))
 }
 
-unsafe fn convert_inner(bytes: &[u8], extension: &str) -> AppResult<Jpeg> {
+unsafe fn convert_inner(
+    bytes: &[u8],
+    extension: &str,
+    private_edge: Option<u32>,
+) -> AppResult<Jpeg> {
     let result = (|| -> windows::core::Result<Jpeg> {
         let factory: IWICImagingFactory =
             CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)?;
@@ -60,20 +78,36 @@ unsafe fn convert_inner(bytes: &[u8], extension: &str) -> AppResult<Jpeg> {
         let frame = decoder.GetFrame(0)?;
         let (mut width, mut height) = (0, 0);
         frame.GetSize(&mut width, &mut height)?;
+        let max_pixels = if private_edge.is_some() {
+            32_000_000
+        } else {
+            16_000_000
+        };
         if width == 0
             || height == 0
             || width > 8192
             || height > 8192
-            || u64::from(width) * u64::from(height) > 16_000_000
+            || u64::from(width) * u64::from(height) > max_pixels
         {
             return Err(windows::core::Error::new(
                 windows::Win32::Foundation::E_INVALIDARG,
-                "圖片限8192×8192以内、總計1600萬像素",
+                format!("圖片限8192×8192以内、總計{max_pixels}像素"),
             ));
         }
+        let source: IWICBitmapSource =
+            if let Some(edge) = private_edge.filter(|&edge| width.max(height) > edge) {
+                let previous = width.max(height);
+                width = (width * edge / previous).max(1);
+                height = (height * edge / previous).max(1);
+                let scaler = factory.CreateBitmapScaler()?;
+                scaler.Initialize(&frame, width, height, WICBitmapInterpolationModeFant)?;
+                scaler.cast()?
+            } else {
+                frame.cast()?
+            };
         let converter = factory.CreateFormatConverter()?;
         converter.Initialize(
-            &frame,
+            &source,
             &GUID_WICPixelFormat32bppRGBA,
             WICBitmapDitherTypeNone,
             None,
@@ -127,10 +161,15 @@ unsafe fn convert_inner(bytes: &[u8], extension: &str) -> AppResult<Jpeg> {
         encoder.Commit()?;
         let mut stat = STATSTG::default();
         output.Stat(&mut stat, STATFLAG_NONAME)?;
-        if stat.cbSize == 0 || stat.cbSize > super::input::MAX_BYTES as u64 {
+        let max_bytes = if private_edge.is_some() {
+            crate::private_chat::messages::MAX_IMAGE
+        } else {
+            super::input::MAX_BYTES
+        };
+        if stat.cbSize == 0 || stat.cbSize > max_bytes as u64 {
             return Err(windows::core::Error::new(
                 windows::Win32::Foundation::E_INVALIDARG,
-                "轉成JPG後仍超過5 MB（5,000,000 bytes），請先縮小圖片",
+                format!("轉成JPG後仍超過{max_bytes} bytes，請先縮小圖片"),
             ));
         }
         let mut bytes = vec![0; stat.cbSize as usize];

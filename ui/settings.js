@@ -13,6 +13,8 @@ window.SettingsUI = (() => {
   const petOption = notificationMode.querySelector('[value="pet"]');
   const legacyOption = notificationMode.querySelector('[value="legacy"]');
   const categories = [...document.querySelectorAll("[data-notice-category]")];
+  const chatPreview = $("private-chat-notice-preview");
+  chatPreview.onchange = () => send({type:"chat_notification_preview", enabled:chatPreview.value === "detail"});
   notificationMode.onchange = () => send({type:"notification_mode", mode:notificationMode.value});
   categories.forEach(input => {
     input.onchange = () => send({type:"notification_category", category:input.dataset.noticeCategory, enabled:input.checked});
@@ -21,6 +23,7 @@ window.SettingsUI = (() => {
     ChartAppearance.set(config.chart_palette);
     if(!paletteDirty) colorInputs.forEach((input,i)=>input.value=ChartAppearance.palette()[i]);
     const preferences = config.notification_preferences || {mode:"windows", categories:{}};
+    chatPreview.value = preferences.chat_preview ? "detail" : "generic";
     const petAvailable = Boolean(features?.pet && config.extra_features_enabled);
     petOption.hidden = petOption.disabled = !petAvailable;
     legacyOption.hidden = preferences.mode !== "legacy";

@@ -58,7 +58,7 @@ impl Account {
         })
     }
 
-    fn aad(&self, role: &[u8]) -> Vec<u8> {
+    pub(super) fn aad(&self, role: &[u8]) -> Vec<u8> {
         [FORMAT.as_slice(), self.scope.as_slice(), role].concat()
     }
 
@@ -189,12 +189,24 @@ impl Account {
     pub(crate) fn erase(&self) -> AppResult<()> {
         self.lock()?;
         remove(&self.wrapped_path())?;
-        remove(&self.directory.join("contacts.gcm"))
+        for name in [
+            "contacts.gcm",
+            "messages.gcm",
+            "receipts.dpapi",
+            "chat-notices.dpapi",
+        ] {
+            remove(&self.directory.join(name))?;
+        }
+        let payloads = self.directory.join("payloads");
+        if payloads.is_dir() {
+            fs::remove_dir_all(payloads).map_err(|error| format!("無法移除私聊影像檔：{error}"))?;
+        }
+        Ok(())
     }
 }
 
 pub(crate) struct Vault {
-    account: Account,
+    pub(crate) account: Account,
     key: Key,
 }
 
@@ -225,9 +237,12 @@ impl Vault {
         serde_json::from_slice(&bytes.0).map_err(|_| "私聊本機資料格式錯誤。".into())
     }
 
-    pub(crate) fn write<T: Serialize>(&self, file: &str, value: &T) -> AppResult<()> {
+    pub(crate) fn write<T: Serialize>(&self, file: &str, value: &T, max: u64) -> AppResult<()> {
         let data = Secret(serde_json::to_vec(value).map_err(|_| "無法編碼私聊本機資料。")?);
         let ciphertext = crypto::seal(&self.key, &self.account.aad(file.as_bytes()), &data.0)?;
+        if ciphertext.len() as u64 > max {
+            return Err("私聊索引已達大小上限，請先清理部分本機資料。".into());
+        }
         durable_write(&self.account.directory.join(file), &ciphertext)
     }
 }
@@ -335,7 +350,7 @@ mod tests {
         };
         let vault = account.create("Test123", &secret).unwrap();
         let contents = vec!["不應出現在磁碟的測試文字".to_string(), "合成暱稱".into()];
-        vault.write("contacts.gcm", &contents).unwrap();
+        vault.write("contacts.gcm", &contents, 4096).unwrap();
         let encrypted = fs::read(account.directory.join("contacts.gcm")).unwrap();
         for value in &contents {
             assert!(!encrypted

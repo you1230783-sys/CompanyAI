@@ -200,6 +200,9 @@ enum Command {
         category: crate::notification_preferences::Category,
         enabled: bool,
     },
+    ChatNotificationPreview {
+        enabled: bool,
+    },
     PrivateChat {
         command: private_chat::Command,
     },

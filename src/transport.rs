@@ -638,7 +638,13 @@ fn exchange_inner(
                 }
             }
             // 代理完整訊息與共用 task 查詢需容納契約的 2 MiB 外層；其他路由維持舊限制。
-            let response_limit = if url.path().contains("/api/desktop/agent/")
+            let response_limit = if options.chat_device.is_some()
+                && method == "GET"
+                && url.path() == "/lm_server/api/desktop/chat/messages"
+            {
+                // 私聊每次最多取一張 10 MB 圖片；留出 Base64 與小型 JSON 外層。
+                14_000_000
+            } else if url.path().contains("/api/desktop/agent/")
                 || url.path().contains("/api/desktop/tasks/")
             {
                 2_097_152

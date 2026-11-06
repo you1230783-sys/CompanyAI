@@ -13,6 +13,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, ptr};
 use url::Url;
+mod messages;
+pub(crate) use messages::{encode_image, IncomingMessage, Sent, Status};
 
 #[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct Profile {
@@ -170,14 +172,24 @@ impl Api {
 
     #[cfg(test)]
     fn fixture(base: Url, test_pins: Pins) -> Self {
+        Self::fixture_account(
+            base,
+            test_pins,
+            "fixture-private-chat",
+            "d9b0160f-dedb-4a44-8c31-5c6a6f9a3af2",
+        )
+    }
+
+    #[cfg(test)]
+    fn fixture_account(base: Url, test_pins: Pins, token: &str, device: &str) -> Self {
         Self {
             base,
             session: Session {
-                access_token: "fixture-private-chat".into(),
+                access_token: token.into(),
                 expires_at: crate::unix_now() + 600,
                 binding: String::new(),
             },
-            device: "d9b0160f-dedb-4a44-8c31-5c6a6f9a3af2".into(),
+            device: device.into(),
             test_pins: Some(test_pins),
         }
     }
@@ -242,6 +254,12 @@ impl Api {
                 false,
             ),
             (409, Some("already_friends")) => ("你們已經是好友。".into(), false, false),
+            (409, Some("recipient_queue_full")) => (
+                "對方待收訊息已達上限，無法寄送，請等待對方收取訊息。".into(),
+                false,
+                false,
+            ),
+            (409, Some("recipient_disabled")) => ("對方帳號已停用。".into(), false, false),
             (status, _) => (
                 format!("私聊服務拒絕此操作（HTTP {status}）。"),
                 false,

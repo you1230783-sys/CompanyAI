@@ -7,6 +7,10 @@ window.PrivateChatUI = (() => {
   const labels = {active:"可聊天", offline:"離線", disabled:"帳號已停用", removed:"已解除好友"};
   const request = (action, fields = {}) => send({type:"private_chat", command:{action, ...fields}});
   const text = (element, value) => { element.textContent = value ?? ""; };
+  function askInChat(title, description, action) {
+    ask(title, description, action);
+    $("confirm-dialog").dataset.privateChat = "true";
+  }
   let current = {}, selected = null;
 
   const pane = document.createElement("dialog");
@@ -27,6 +31,8 @@ window.PrivateChatUI = (() => {
           <button data-lock type="button">上鎖</button>
         </header>
         <p data-pane-status role="status"></p>
+        <p data-thread-state></p>
+        <button data-remove-friend type="button" hidden>解除好友</button>
         <div data-thread class="private-chat-thread" aria-live="polite"></div>
         <footer>
           <p>聊天內容僅加密儲存於本機，刪除後無法復原。雙方各存一份。</p>
@@ -35,6 +41,7 @@ window.PrivateChatUI = (() => {
     </div>`;
   document.body.append(pane);
   const inPane = selector => pane.querySelector(selector);
+  const messages = window.PrivateChatMessages.mount(pane, command => request("message", {command}), askInChat);
 
   const contacts = document.createElement("dialog");
   contacts.id = "private-chat-contacts";
@@ -154,14 +161,12 @@ window.PrivateChatUI = (() => {
 
   function renderThread(friend) {
     text(inPane("[data-friend-title]"), friend ? shortPerson(friend) : "私聊");
-    const thread = inPane("[data-thread]");
-    if (!friend) { text(thread, "從左側選擇好友。"); return; }
-    text(thread, labels[friend.status] ?? "目前無法聊天");
-    if (friend.status !== "removed") {
-      thread.append(button("解除好友", () => ask("解除好友", "確定要解除此好友？", () => {
-        request("remove_friend", {id:friend.friend_id});
-      })));
-    }
+    text(inPane("[data-thread-state]"), friend ? labels[friend.status] ?? "目前無法聊天" : "從左側選擇好友。");
+    const remove = inPane("[data-remove-friend]");
+    remove.hidden = !friend || friend.status === "removed";
+    remove.disabled = Boolean(current.busy);
+    remove.onclick = friend ? () => askInChat("解除好友", "確定要解除此好友？", () => request("remove_friend", {id:friend.friend_id})) : null;
+    messages.renderFriend(friend, current.busy);
   }
 
   function renderPeople(snapshot) {
@@ -173,8 +178,10 @@ window.PrivateChatUI = (() => {
     list.replaceChildren();
     for (const friend of friends) {
       const item = button(shortPerson(friend) + (friend.status === "active" ? "" : " · " + (labels[friend.status] || "暫不可用")), () => {
+        if (selected === friend.friend_id) return;
         selected = friend.friend_id;
         renderPeople(snapshot);
+        messages.select(selected);
       });
       item.disabled = false;
       item.setAttribute("aria-pressed", String(selected === friend.friend_id));
@@ -199,17 +206,26 @@ window.PrivateChatUI = (() => {
   }
 
   function clearScreen() {
+    const confirmation = $("confirm-dialog");
+    if (pane.open && confirmation.open && confirmation.dataset.privateChat) {
+      confirmation.close();
+      delete confirmation.dataset.privateChat;
+    }
     if (contacts.open) contacts.close();
     inContacts("[data-lookup]").reset();
     if (pane.open) pane.close();
     selected = null;
+    messages.clear();
     renderPeople({});
     text(inPane("[data-pane-status]"), "");
     text(inContacts("[data-contacts-status]"), "");
   }
 
   function receive(message) {
-    if (message.type !== "private_chat_state") return;
+    if (message.type !== "private_chat_state") {
+      if (pane.open && current.enabled) messages.receive(message);
+      return;
+    }
     current = message;
     renderAvailability(state);
     text($("private-chat-settings-status"), message.status);
@@ -252,6 +268,7 @@ window.PrivateChatUI = (() => {
     $("private-chat-enabled").disabled = Boolean(current.busy);
     $("private-chat-lock-settings").hidden = !enabled;
     $("show-private-chat").hidden = !enabled;
+    $("private-chat-notices").hidden = !enabled;
     inPane("[data-vnc]").hidden = !appState.config.vnc_enabled || !featureEnabled("vnc");
     const policy = appState.config.private_chat_lock || defaultPolicy;
     when.value = policy.when;
@@ -281,7 +298,7 @@ window.PrivateChatUI = (() => {
   pane.addEventListener("cancel", event => { event.preventDefault(); request("leave"); });
   inContacts("[data-close]").onclick = () => contacts.close();
   inContacts("[data-copy]").onclick = () => request("copy_id");
-  inContacts("[data-regenerate]").onclick = () => ask("重新產生聊天 ID", "舊 ID 立即失效，既有好友不受影響。", () => request("regenerate"));
+  inContacts("[data-regenerate]").onclick = () => askInChat("重新產生聊天 ID", "舊 ID 立即失效，既有好友不受影響。", () => request("regenerate"));
   inContacts("[data-lookup]").onsubmit = event => {
     event.preventDefault();
     request("lookup", {code:event.currentTarget.elements.namedItem("code").value});

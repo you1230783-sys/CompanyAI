@@ -62,6 +62,7 @@ function toast(text) {
   }, 3000);
 }
 function ask(title, message, action) {
+  delete $("confirm-dialog").dataset.privateChat;
   $("confirm-title").textContent = title;
   $("confirm-message").textContent = message;
   confirmAction = action;

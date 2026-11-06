@@ -94,6 +94,12 @@ fn read_dib() -> AppResult<Option<Vec<u8>>> {
     }
 }
 
+/// 只在使用者於私聊貼上時讀取目前剪貼簿，不建立明文暫存檔。
+pub(crate) fn private_clipboard_image() -> AppResult<Vec<u8>> {
+    let dib = read_dib()?.ok_or("剪貼簿目前沒有可用的截圖。")?;
+    Ok(jpeg::convert_private(&dib_to_bmp(&dib)?, "bmp")?.bytes)
+}
+
 /// 僅接受常見未壓縮 24/32-bit DIB；嚴格檢查長度，拒絕惡意標頭或超大圖片。
 fn dib_to_bmp(dib: &[u8]) -> AppResult<Vec<u8>> {
     if dib.len() < 40 || dib.len() > MAX_DIB {

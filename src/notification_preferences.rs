@@ -25,6 +25,8 @@ pub enum Category {
     AiInbox,
     SiteInbox,
     TrayHint,
+    ChatMessage,
+    ChatInvite,
 }
 
 impl Category {
@@ -38,6 +40,7 @@ impl Category {
 pub struct Preferences {
     pub mode: Mode,
     pub categories: BTreeMap<Category, bool>,
+    pub chat_preview: bool,
     legacy_popups: bool,
 }
 
@@ -46,6 +49,7 @@ impl Default for Preferences {
         Self {
             mode: Mode::Windows,
             categories: BTreeMap::new(),
+            chat_preview: false,
             legacy_popups: true,
         }
     }
@@ -143,6 +147,8 @@ mod tests {
             Category::AiInbox,
             Category::SiteInbox,
             Category::TrayHint,
+            Category::ChatMessage,
+            Category::ChatInvite,
         ];
         for category in categories {
             let mut prefs = Preferences::default();

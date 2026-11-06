@@ -1,5 +1,5 @@
 """私聊契約 fixture，只使用臨時憑證與 loopback。參數為 cargo test --lib 產生的 EXE。"""
-from base64 import b64encode
+from base64 import b64decode, b64encode
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -94,10 +94,95 @@ class ChatFixture(BaseHTTPRequestHandler):
     do_DELETE = do_GET
 
 
+class MessageFixture(ChatFixture):
+    devices = {
+        "fixture-private-chat": DEVICE,
+        "fixture-private-recipient": "48fc54f7-ea9f-4d55-a445-bdfd660cc040",
+    }
+    active = set()
+    queue = []
+    sent = {}
+    receipts = []
+    acked = []
+    sequence = []
+    time = "2026-10-31T12:00:00Z"
+
+    def route(self):
+        fixture = type(self)
+        if not self.path.startswith(PREFIX):
+            return 404, {"error": "not_found"}
+        token = self.headers.get("Authorization", "").removeprefix("Bearer ")
+        device = self.headers.get("X-LMAI-Device")
+        if fixture.devices.get(token) != device or not device:
+            return 409, {"error": "device_replaced"}
+        path = self.path[len(PREFIX):]
+        length = int(self.headers.get("Content-Length", "0"))
+        body = json.loads(self.rfile.read(length)) if length else None
+        if self.command == "POST" and path == "devices/activate" and body == {"device_id": device}:
+            fixture.active.add(token)
+            return 200, {}
+        if token not in fixture.active:
+            return 409, {"error": "device_replaced"}
+        sender = token == "fixture-private-chat"
+        if self.command == "GET" and path == "key-secret":
+            return 200, {"version": 1, "secret": b64encode(bytes([17 if sender else 23] * 32)).decode("ascii")}
+        if self.command == "GET" and path == "status":
+            fixture.sequence.append("sender_status" if sender else "recipient_status")
+            receipts = fixture.receipts[:] if sender else []
+            if sender:
+                fixture.receipts.clear()
+            return 200, {"pending_messages": 0 if sender else len(fixture.queue),
+                         "pending_invites": 0, "receipts": receipts}
+        if self.command == "POST" and path == "messages" and sender:
+            if body.get("to_friend_id") != "friend-bob" or "encryption" not in body or body["encryption"] is not None:
+                return 400, {"error": "invalid_body"}
+            uid = body["client_message_id"]
+            if uid in fixture.sent:
+                return 200, fixture.sent[uid]
+            scenario = body.get("text")
+            rejections = {"paused-fixture": "recipient_paused", "queue-full-fixture": "recipient_queue_full",
+                          "disabled-fixture": "recipient_disabled"}
+            if scenario in rejections:
+                return 409, {"error": rejections[scenario], "message": "fixture"}
+            server_id = f"server-message-{len(fixture.sent) + 1}"
+            response = {"server_message_id": server_id, "server_time": fixture.time}
+            entry = {**response, "kind": body["kind"], "from_friend_id": "friend-alice",
+                     "client_message_id": uid}
+            if body["kind"] == "image":
+                jpeg = b64decode(body["image_base64"], validate=True)
+                if body["mime"] != "image/jpeg" or not jpeg.startswith(b"\xff\xd8"):
+                    return 400, {"error": "invalid_image"}
+                entry.update(image_base64=body["image_base64"], mime="image/jpeg")
+            elif scenario == "expire-fixture":
+                entry.update(kind="expired", original_kind="text")
+                fixture.receipts.append({"client_message_id": uid, "state": "expired", "reason": "ttl"})
+            else:
+                entry["text"] = scenario
+            fixture.queue.append(entry)
+            fixture.sent[uid] = response
+            return 200, response
+        if self.command == "GET" and path == "messages?limit=1" and not sender:
+            fixture.sequence.append("recipient_get")
+            return 200, fixture.queue[:1]
+        if self.command == "POST" and path == "messages/ack" and not sender:
+            ids = body["server_message_ids"]
+            if len(ids) != 1 or not fixture.queue or fixture.queue[0]["server_message_id"] != ids[0]:
+                return 400, {"error": "wrong_ack"}
+            fixture.sequence.append("recipient_ack")
+            entry = fixture.queue.pop(0)
+            fixture.acked.append(entry["server_message_id"])
+            if entry["kind"] != "expired":
+                fixture.receipts.append({"client_message_id": entry["client_message_id"],
+                                         "state": "delivered", "at": fixture.time})
+            return 200, {}
+        return 404, {"error": "not_found"}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("test_exe", type=Path)
     parser.add_argument("--openssl", default=r"C:\Program Files\Git\usr\bin\openssl.exe")
+    parser.add_argument("--messages", action="store_true")
     arguments = parser.parse_args()
     test_exe = arguments.test_exe.resolve(strict=True)
     certificate = runpy.run_path(str(Path(__file__).with_name("Test-HttpsPins.py")))["certificate"]
@@ -110,21 +195,34 @@ def main():
         tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         tls.minimum_version = ssl.TLSVersion.TLSv1_2
         tls.load_cert_chain(root / "primary.crt", root / "primary.key")
-        with ThreadingHTTPServer(("127.0.0.1", 0), ChatFixture) as server:
+        handler = MessageFixture if arguments.messages else ChatFixture
+        test = ("private_chat::api::messages::tests::tls_messages_fixture" if arguments.messages
+                else "private_chat::api::tests::tls_private_chat_fixture")
+        with ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
             server.socket = tls.wrap_socket(server.socket, server_side=True)
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             environment = dict(os.environ, LMAI_CHAT_FIXTURE_PRIMARY=primary, LMAI_CHAT_FIXTURE_BACKUP=backup,
-                               LMAI_CHAT_FIXTURE_URL=f"https://localhost:{server.server_port}{PREFIX}")
+                               LMAI_CHAT_FIXTURE_URL=f"https://localhost:{server.server_port}{PREFIX}",
+                               LMAI_CHAT_FIXTURE_DATA=str(root / "accounts"))
             try:
-                subprocess.run([test_exe, "private_chat::api::tests::tls_private_chat_fixture",
-                                "--exact", "--ignored"], env=environment, timeout=120, check=True)
+                subprocess.run([test_exe, test, "--exact", "--ignored"],
+                               env=environment, timeout=180, check=True)
             finally:
                 server.shutdown()
                 thread.join(timeout=10)
-        assert ChatFixture.answers == {"block-fixture": "reject", "accept-fixture": "accept",
-                                       "reject-fixture": "reject"}
-        print("PASS private chat: TLS, device header, friend lifecycle, blacklist, secret reset and device replacement")
+        if arguments.messages:
+            assert MessageFixture.sequence[:7] == [
+                "recipient_status", "recipient_get", "recipient_status", "sender_status",
+                "recipient_get", "recipient_get", "recipient_ack",
+            ]
+            assert len(MessageFixture.sent) == len(MessageFixture.acked) == 4
+            assert not MessageFixture.queue
+            print("PASS messages: two pinned TLS accounts, retries, durable write before ack, image, receipts, expiration and blacklist")
+        else:
+            assert ChatFixture.answers == {"block-fixture": "reject", "accept-fixture": "accept",
+                                           "reject-fixture": "reject"}
+            print("PASS private chat: TLS, device header, friend lifecycle, blacklist, secret reset and device replacement")
 
 
 if __name__ == "__main__":

@@ -1,13 +1,20 @@
 //! 私聊與 AI 工具的資料路徑完全分開；WebView 只收到目前解鎖的私聊畫面。
 mod api;
 mod crypto;
+pub(crate) mod messages;
 mod vault;
 
+pub(crate) use api::{encode_image, IncomingMessage, Sent, Status};
 pub(crate) use api::{Api, Contacts, Error, Friend, Invitations, Profile};
 pub(crate) use vault::{password_rule, Account, Vault};
 
 use crate::AppResult;
 use serde::{Deserialize, Serialize};
+
+pub(crate) fn convert_private_image(path: &std::path::Path, extension: &str) -> AppResult<Vec<u8>> {
+    let raw = crypto::Secret(vault::read_limited(path, messages::MAX_IMAGE as u64)?);
+    Ok(crate::projects::vision::jpeg::convert_private(&raw.0, extension)?.bytes)
+}
 
 #[derive(Deserialize)]
 #[serde(transparent)]
@@ -25,7 +32,7 @@ impl Drop for Password {
     }
 }
 
-fn clear_text(value: &mut String) {
+pub(crate) fn clear_text(value: &mut String) {
     // SAFETY: 將已配置字串的位元組覆寫為 NUL，仍符合 UTF-8。
     for byte in unsafe { value.as_bytes_mut() } {
         unsafe { std::ptr::write_volatile(byte, 0) };

@@ -435,6 +435,17 @@
     <label class="check-row"><input type="checkbox" data-notice-category="site_inbox" />網站全站通知</label>
     <label class="check-row"><input type="checkbox" data-notice-category="tray_hint" />縮到系統托盤的提示</label>
   </section>
+  <section id="private-chat-notices" hidden>
+    <h3>私聊通知</h3>
+    <label class="check-row"><input type="checkbox" data-notice-category="chat_message" />收到私聊訊息</label>
+    <label for="private-chat-notice-preview">訊息通知內容</label>
+    <select id="private-chat-notice-preview">
+      <option value="generic">只顯示「收到新訊息」</option>
+      <option value="detail">顯示訊息內容（僅解鎖期間）</option>
+    </select>
+    <p class="subtle">Windows 可能保留已顯示的通知。</p>
+    <label class="check-row"><input type="checkbox" data-notice-category="chat_invite" />收到好友邀請</label>
+  </section>
 </div>
 <div id="settings-panel-1" class="settings-panel" role="tabpanel" aria-labelledby="settings-tab-1" hidden><section>
           <h3>選取文字快捷鍵</h3>
@@ -814,6 +825,7 @@
     <script src="schedules.js"></script>
     <script src="artifacts.js"></script>
     <script src="settings.js"></script>
+    <script src="private-chat-messages.js"></script>
     <script src="private-chat.js"></script>
     <script src="tutorial-lessons.js"></script>
     <script src="project-tutorial.js"></script>

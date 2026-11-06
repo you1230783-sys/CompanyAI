@@ -461,6 +461,15 @@ impl App {
                 storage::save_config(&self.root, &config)?;
                 self.config = config;
             }
+            Command::ChatNotificationPreview { enabled } => {
+                if !self.private_chat_effective() {
+                    return Err("請先啟用私聊。".into());
+                }
+                let mut config = self.config.clone();
+                config.notification_preferences.chat_preview = enabled;
+                storage::save_config(&self.root, &config)?;
+                self.config = config;
+            }
             Command::ChartPalette { colors } => {
                 if !crate::config::valid_chart_palette(&colors) {
                     return Err("圖表預設配色需為八個 #RRGGBB 色碼。".into());
