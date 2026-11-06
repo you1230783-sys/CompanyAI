@@ -55,26 +55,70 @@ pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResul
         let mut request = json!({"tool":"read_excel_range","path":path,"revision":revision,"sheet":sheet,"columns":["A","F"],"start_row":2});
         let first = call(request.clone())?;
         assert_eq!(first["ok"], true, "{first}");
+        assert_eq!(first["result"]["format"], "excel-compact-v1");
         assert_eq!(first["result"]["row_count"], 100);
         assert_eq!(first["result"]["data_cells"], 200);
         assert_eq!(first["result"]["next_row"], 102);
         assert_eq!(first["result"]["columns"], json!(["A", "F"]));
-        assert_eq!(
-            first["result"]["rows"][0]["cells"][1]["value"].as_f64(),
-            Some(2.0)
-        );
-        assert_eq!(first["result"]["rows"][1]["row"], 3);
-        assert_eq!(first["result"]["rows"][1]["cells"][1]["kind"], "blank");
+        assert_eq!(first["result"]["rows"][0][2].as_f64(), Some(2.0));
+        assert_eq!(first["result"]["rows"][1][0], 3);
+        assert_eq!(first["result"]["rows"][1][2], Value::Null);
+        assert!(first["result"]["exceptions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["row"] == 3 && e["column"] == "F" && e["kind"] == "blank"));
         assert!(!first.to_string().contains("不應讀到的中間欄"));
         request["start_row"] = json!(102);
         let second = call(request.clone())?;
         assert_eq!(second["ok"], true, "{second}");
-        assert_eq!(second["result"]["rows"][0]["row"], 102);
-        assert_eq!(
-            second["result"]["rows"][0]["cells"][1]["value"].as_f64(),
-            Some(202.0)
-        );
+        assert_eq!(second["result"]["rows"][0][0], 102);
+        assert_eq!(second["result"]["rows"][0][2].as_f64(), Some(202.0));
         assert_eq!(second["result"]["revision"], revision);
+        let details = call(
+            json!({"tool":"read_excel_range","path":path,"revision":revision,
+            "sheet":sheet,"columns":["A","F","H","J"],"start_row":2,"row_count":1}),
+        )?;
+        assert_eq!(details["ok"], true, "{details}");
+        let data = &details["result"];
+        assert_eq!(data["format"], "excel-compact-v1");
+        assert_eq!(data["rows"][0][4], json!(45964.5));
+        assert_eq!(data["column_kinds"]["H"], "error");
+        assert_eq!(data["column_formats"]["J"], "yyyy/m/d hh:mm");
+        assert!(data["cell_texts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["column"] == "H" && c["text"] == "#DIV/0!"));
+        assert!(
+            data["cell_texts"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|c| c["column"] == "J"
+                    && c["text"].as_str().is_some_and(|s| s.contains("12:00")))
+        );
+        assert!(data["formulas"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["column"] == "H" && c["formula"] == "=1/0"));
+        assert!(data["exceptions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["header"] == true
+                && c["column"] == "J"
+                && c["cell"]["formula"] == "=\"日期\""));
+        println!("PASS compact Excel {ext}: original values, blank, date text/format, error and header/data formulas");
+        let recalled = call(
+            json!({"tool":"read_work_log","operation_id":details["operation_id"],"offset":0}),
+        )?;
+        assert_eq!(recalled["ok"], true, "{recalled}");
+        let log: Value =
+            serde_json::from_str(recalled["result"]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(log["result"]["result"]["format"], "excel-compact-v1");
+        assert_eq!(log["result"]["result"]["rows"], data["rows"]);
         let chart = call(
             json!({"tool":"chart_excel_range","path":path,"revision":revision,"sheet":sheet,"x_column":"A","y_columns":["F"],"start_row":2,"kind":"line","title":"量測趨勢","x_label":"序號","y_label":"數值"}),
         )?;

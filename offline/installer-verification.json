@@ -1,13 +1,10 @@
 {
-  "initial_install_attempt": ".build/release-0.9.17-r1.log",
-  "prior_failure": "One installed self-check exceeded the existing 45-second deadline; unchanged EXE retry passed in 21.69 seconds. No timeout relaxation.",
-  "resumed_validation": "same installed candidate; metadata, self-check, Python/CAD, update identity, user data and uninstall rechecked",
   "result": "PASS_RELEASE_PACKAGE",
-  "version": "0.9.17.0",
-  "recorded_at": "2026-11-06T12:10:59.8758659+08:00",
+  "version": "0.9.18.0",
+  "recorded_at": "2026-11-06T15:43:03.3422122+08:00",
   "toolset": "14.29.30133",
-  "setup_sha256": "a3455d8658c2797ed03c5265923db144d8ab2427dcc8a75aa814e6912514185e",
-  "app_sha256": "30cadc769eed4318e58c402ed59c6a6d33394b35aa9e05231ae97cc12f8a82d1",
+  "setup_sha256": "3c6ce78eb293ec7bd17fa3be69e144343ad298b3098b36fd312887be19d54da5",
+  "app_sha256": "f293ff697b5482063788b936a2ced45e61b75780a506a484b5a747aff6cbe19b",
   "install_path": "C:\\largan\\LM_AI",
   "checks": [
     "actual candidate Setup install",

@@ -1,6 +1,6 @@
 [package]
 name = "company-ai"
-version = "0.9.17"
+version = "0.9.18"
 edition = "2021"
 rust-version = "1.98"
 
@@ -22,7 +22,7 @@ required-features = ["vnc"]
 
 [profile.release]
 strip = "debuginfo"
-# 實測比較與限制見 docs/RELEASE_PROFILES.md；保留回呼 panic 回復能力。
+# 實測比較與限制見 docs/development/RELEASE_PROFILES.md；保留回呼 panic 回復能力。
 lto = "thin"
 codegen-units = 16
 panic = "unwind"

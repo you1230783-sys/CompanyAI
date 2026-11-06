@@ -1,4 +1,4 @@
-//! 對外 JSON 契約集中在這裡，網站實作者可對照 docs/WEB_INTEGRATION.md。
+//! 對外 JSON 契約集中在這裡，網站實作者可對照 docs/contracts/WEB_INTEGRATION.md。
 use crate::{config::MAX_SESSION_SECONDS, AppResult};
 use serde::{Deserialize, Serialize};
 

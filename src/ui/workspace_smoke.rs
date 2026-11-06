@@ -151,6 +151,7 @@ impl App {
             steps: vec![projects::workflows::Step {
                 id: "read".into(),
                 request: json!({"tool":"read_file","path":"test.txt","offset":0}),
+                result_format: None,
                 bindings: Default::default(),
             }],
         };

@@ -13,6 +13,7 @@ use windows::{
 };
 
 mod authoring;
+mod availability;
 pub mod excel;
 pub mod export;
 pub mod images;
@@ -206,7 +207,7 @@ fn invoke(object: &IDispatch, name: &str, mut args: Vec<VARIANT>, put: bool) -> 
                     None,
                 )
             })
-            .map_err(|e| exception.describe(&format!("Office 操作 {name} 失敗"), &e))?;
+            .map_err(|e| format!("Office 操作 {name}：{}", exception.describe("呼叫失敗", &e)))?;
     }
     Ok(result)
 }
@@ -312,25 +313,7 @@ impl Session {
         // Word/Excel 可以建立新的 COM 實例；只查新實例的 Count 會漏掉使用者文件。
         // 先查 ROT 中已登錄的實例，唯讀取得 Count，不更改設定，也不取得其生命週期。
         if collection != "Presentations" {
-            use windows::core::Interface;
-            let mut active = None;
-            match unsafe { windows::Win32::System::Ole::GetActiveObject(&class, None, &mut active) }
-            {
-                Ok(()) => {
-                    let existing: IDispatch = active
-                        .ok_or("Office 實例查詢回傳空值。")?
-                        .cast()
-                        .map_err(|e| e.to_string())?;
-                    if integer(&child(&existing, collection)?, "Count")? > 0 {
-                        return Err(format!(
-                            "{} Office 正在使用中，請先儲存並關閉相關視窗後重試。",
-                            super::interaction::BUSY
-                        ));
-                    }
-                }
-                Err(error) if error.code().0 == 0x800401E3u32 as i32 => (),
-                Err(error) => return Err(format!("無法確認 Office 是否占用：{error}")),
-            }
+            availability::ensure_idle(&class, collection, prog)?;
         }
         // PowerPoint 是單一實例；避免改變使用者現有簡報或共用的巨集設定。
         if collection == "Presentations" {

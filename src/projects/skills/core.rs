@@ -5,7 +5,7 @@ pub(super) fn guide(id: &str) -> &'static str {
         "python-edit" => "Python修改：create_working_copy後先plan_code_change保存user/preserve/added需求。find_text定位、read_code_section讀小段、edit_code_section優先只傳copy_id/section_id/replacement，避免行號與hash配错；每段立即保存同一草稿，續接沿用copy_id，不重讀全文。check_python只檢查語法。完成後review_code_change(checks=[])看真實差異與需求，讀相關函式及呼叫處；test_python用unittest.TestCase和load_target()測真正副本，涵蓋預設/正常/邊界/錯誤與輸出，mock要列出。active_code每輪附目前區段原文、原生狀態與測試格式。資訊足夠直接提交一組最小需求測試，成功後再補其他必要案例，不為寫全部測試重讀全文／指南。同版語法結果可重用。最後review_code_change逐項提交tested/reviewed/unverified/incomplete與行號證據，才能save_copy；缺依賴或外部環境明示未驗證，不無限重試。測試失敗只修相關段，任何修改使舊驗證失效。交付不可只憑笔記或語法宣稱功能完成。",
         "chart-edit" => "圖表編輯：inspect_chart(null,null)列本輪及同對話歷史圖；指定message_index/chart_index查目前樣式，不重讀來源。edit_chart傳完整style，只改需要欄位，保留其他設定。歷史圖會另建本輪版本，原圖保留；後續用回傳chart_index、message_index=null。layout位置為圖框左上角0–1比例；annotations支援文字/字型/粗斜底線/字色底色。詳細限制見read_skill_guide(chart-edit)。PNG請重新export_chart_png。",
         "python-analysis" => include_str!("python-analysis.md"),
-        "excel-read" => "Excel：先 inspect_excel 核對真實欄名與樣本，再 plan_excel_analysis 規劃 x/y/time；用原始欄字母，不重新編號。export_planned_excel 沿用計畫匯出本機CSV。時間序號不能當量測值；欄位意義有多種合理解釋才詢問。一般閱讀 read_excel_range；需要統計切 python-analysis，需要圖表切 dataset-charts。",
+        "excel-read" => "Excel：先 inspect_excel 核對真實欄名與樣本，再 plan_excel_analysis 規劃 x/y/time；用原始欄字母，不重新編號。export_planned_excel 沿用計畫匯出本機CSV。時間序號不能當量測值；欄位意義有多種合理解釋才詢問。少量樣本用 read_excel_range；非畫圖的大量分析先 export_excel_dataset 匯出 CSV（已規劃則沿用 export_planned_excel），再切 python-analysis 用 run_python(kind=csv) 分析，需要圖表切 dataset-charts。",
         "dataset-charts" => include_str!("dataset-charts.md"),
         "charts" => include_str!("charts.md"),
         "log-analysis" => include_str!("log-analysis.md"),

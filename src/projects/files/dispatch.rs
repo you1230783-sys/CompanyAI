@@ -379,7 +379,7 @@ impl Broker {
                 let (page, _) = self.with_excel(path, Some(revision), |target| {
                     office::excel::read(target, &selection, cancel)
                 })?;
-                let mut value = serde_json::to_value(&page).map_err(|e| e.to_string())?;
+                let mut value = office::excel::compact::compact(&page);
                 value["path"] = json!(path);
                 value["revision"] = json!(revision);
                 value["row_count"] = json!(page.rows.len());

@@ -10,6 +10,7 @@ fn grant() -> Grant {
         steps: vec![Step {
             id: "read".into(),
             request: json!({"tool":"read_file","path":"source.md"}),
+            result_format: None,
             bindings: BTreeMap::new(),
         }],
     };

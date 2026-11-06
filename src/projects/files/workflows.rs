@@ -21,6 +21,7 @@ impl Broker {
                 id: capture.step_id.clone(),
                 request,
                 bindings,
+                result_format: result["result"]["format"].as_str().map(str::to_owned),
             });
         }
         let mut template = Template {

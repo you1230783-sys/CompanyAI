@@ -379,7 +379,7 @@
       "type": "function",
       "function": {
         "name": "read_excel_range",
-        "description": "只讀指定欄與列，預設 100 列，資料最多 2000 格／批。columns=[A,F] 不讀 B–E；保留空白、原列號及下一批 next_row。含選取欄的表頭。不是全文閱讀，不強制建立全文件摘要；表頭及資料都依同一原檔版本。",
+        "description": "只用於查看少量樣本或確認格式；大量資料請先 export_excel_dataset 再用 run_python(kind=csv) 分析，不要依 next_row 逐批讀完整份資料。只讀指定欄與列，預設 100 列，資料最多 2000 格／批。columns=[A,F] 不讀 B–E；保留空白、原列號及下一批 next_row。含選取欄的表頭。不是全文閱讀，不強制建立全文件摘要；表頭及資料都依同一原檔版本。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -3075,7 +3075,7 @@
       "type": "function",
       "function": {
         "name": "export_excel_dataset",
-        "description": "一般選欄匯出；Excel分析／畫圖優先plan_excel_analysis與export_planned_excel，已規劃來源不得使用此舊入口。先檢視表頭確認選欄，再由 Excel COM 將 Value2、型別、顯示文字與來源列號存成 CSV。只回欄名、筆數、統計、首尾各10筆；成功後移出舊工具原文。日期仍為序號，未更新外部連結。",
+        "description": "非畫圖的一般分析用此工具匯出選定欄為本機 CSV，再用 run_python(kind=csv) 分析；畫圖請用 plan_excel_analysis／export_planned_excel。已建立規劃的來源必須沿用該規劃匯出，不可繞過規劃限制。先檢視表頭確認選欄，再由 Excel COM 將 Value2、型別、顯示文字與來源列號存成 CSV。只回欄名、筆數、統計、首尾各10筆；成功後移出舊工具原文。日期仍為序號，未更新外部連結。",
         "parameters": {
           "type": "object",
           "properties": {

@@ -89,6 +89,13 @@ impl Notebook {
             .as_array()
             .ok_or("Excel 閱讀缺少實際表頭。")?;
         let rows = data["rows"].as_array();
+        let row_number = |row: &Value| {
+            if data["format"] == super::office::excel::compact::FORMAT {
+                row[0].clone()
+            } else {
+                row["row"].clone()
+            }
+        };
         if rows.is_some_and(|rows| rows.is_empty()) && headers.is_empty() {
             return Ok(());
         }
@@ -108,8 +115,8 @@ impl Notebook {
             offset: 0, end: count, total: count, first_line: None, last_line: None,
             evidence: json!({"kind":"excel","sheet":data["sheet"],"sheet_name":data["sheet_name"],
                 "columns":data["columns"],"header_row":data["header_row"],"header_count":headers.len(),
-                "first_row":rows.and_then(|rows| rows.first()).map(|row| &row["row"]),
-                "last_row":rows.and_then(|rows| rows.last()).map(|row| &row["row"]),
+                "first_row":rows.and_then(|rows| rows.first()).map(row_number),
+                "last_row":rows.and_then(|rows| rows.last()).map(row_number),
                 "row_count":rows.map_or(0, Vec::len),"next_row":data["next_row"],
                 "scope":data["scope"],"coverage_unit":"本次實際交付的結構化 JSON 字元，非工作表總列數；表頭檢查不代表已讀資料列"}),
         });

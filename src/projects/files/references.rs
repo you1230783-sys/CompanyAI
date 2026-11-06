@@ -269,6 +269,46 @@ mod excel_note_tests {
         assert!(broker.reading.pending.is_empty());
     }
     #[test]
+    fn excel_old_and_compact_archive_notes_and_analysis_keep_exact_evidence() {
+        for compact in [false, true] {
+            let mut broker = broker();
+            let mut result = outcome();
+            let pointer = if compact {
+                result["result"]["format"] = json!("excel-compact-v1");
+                result["result"]["headers"] = json!(["值", "量"]);
+                result["result"]["rows"] = json!([[7, 1.2345678901234567e-21, 2.0]]);
+                "/rows/0/1"
+            } else {
+                "/rows/0/cells/0/value"
+            };
+            let id = "excel-evidence";
+            broker.references.register(id);
+            broker.reading.observe_excel(id, &result).unwrap();
+            assert_eq!(broker.reading.pending[id].evidence["first_row"], 7);
+            assert_eq!(broker.reading.pending[id].evidence["last_row"], 7);
+            broker.results.insert(
+                id.into(),
+                (json!({"tool":"read_excel_range"}), result.clone()),
+            );
+            broker.archive_results().unwrap();
+            let (_, recalled) = broker.recorded_operation(id).unwrap().unwrap();
+            assert_eq!(recalled, result);
+            let report = serde_json::from_value(json!({"goal":"核對","current_step":"引用",
+                "open_questions":[],"superseded":[],"checks":[],"method":null,
+                "findings":[{"claim":"原始值","status":"confirmed","evidence":[{"operation_id":id,"pointer":pointer}]}]})).unwrap();
+            assert!(broker.record_analysis(&report).is_ok());
+            assert_eq!(
+                crate::projects::analysis::select(&recalled, pointer).unwrap(),
+                json!(1.2345678901234567e-21)
+            );
+            let saved = broker.saved().unwrap();
+            let mut restored = Broker::new(broker.project.clone(), "restore".into()).unwrap();
+            restored.enable_memory("chat").unwrap();
+            restored.restore(saved, &AtomicBool::new(false)).unwrap();
+            assert_eq!(restored.recorded_operation(id).unwrap().unwrap().1, result);
+        }
+    }
+    #[test]
     fn wrong_or_failed_alias_does_not_replace_valid_source_or_mutate_notes() {
         let mut broker = broker();
         let good = "successful";

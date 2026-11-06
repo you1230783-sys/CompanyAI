@@ -1,0 +1,38 @@
+{
+  "version": "0.9.18",
+  "result": "PASS_RELATED_SCOPE",
+  "recorded_at": "2026-11-06T15:43:03.6398131+08:00",
+  "build": {
+    "recorded_at": "2026-11-06T15:35:03.6373125+08:00",
+    "result": "BUILD_ONLY",
+    "msvc": "14.29.30133",
+    "compiler_report": [
+      "v142.c",
+      "Verified _MSC_FULL_VER=192930159 x64"
+    ],
+    "linker": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\link.exe",
+    "empty_cargo_cache": true,
+    "default_features": true,
+    "requested_features": [],
+    "exe": "Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\company-ai.exe",
+    "exe_sha256": "f293ff697b5482063788b936a2ced45e61b75780a506a484b5a747aff6cbe19b",
+    "tests_run": false,
+    "installer_built": false
+  },
+  "exe_sha256": "f293ff697b5482063788b936a2ced45e61b75780a506a484b5a747aff6cbe19b",
+  "setup_sha256": "3c6ce78eb293ec7bd17fa3be69e144343ad298b3098b36fd312887be19d54da5",
+  "full_regression_run": false,
+  "company_acceptance": false,
+  "scope": "X1/X2 Excel compact output and CSV guidance; M7 mixed stdout; application lock nested-expansion guard; actual candidate installer",
+  "not_validated": [
+    "full unrelated Rust regression",
+    "full browser frontend suite",
+    "CAD drawings",
+    "Outlook mailbox",
+    "VNC",
+    "SMB",
+    "company models and token usage",
+    "full NSIS rollback/repair/PID matrix",
+    "same-source full hosted CI"
+  ]
+}

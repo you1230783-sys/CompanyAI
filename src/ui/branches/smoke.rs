@@ -31,8 +31,17 @@ impl Fixture {
                     std::thread::sleep(Duration::from_millis(20));
                     continue;
                 };
-                let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
                 let result = (|| -> AppResult<()> {
+                    // Windows accept 會沿用監聽 socket 的 nonblocking 模式。
+                    // 連線建立不代表 HTTP 已到齊；此合成伺服器以有限阻塞讀完整要求，
+                    // 否則 WouldBlock 會被當成失敗，造成自檢隨封包時序中斷。
+                    stream.set_nonblocking(false).map_err(|e| e.to_string())?;
+                    stream
+                        .set_read_timeout(Some(Duration::from_secs(3)))
+                        .map_err(|e| e.to_string())?;
+                    stream
+                        .set_write_timeout(Some(Duration::from_secs(3)))
+                        .map_err(|e| e.to_string())?;
                     let mut bytes = Vec::new();
                     let mut buffer = [0u8; 4096];
                     let (header, end, length) = loop {
@@ -417,5 +426,37 @@ impl App {
             "executed project cannot fork",
             "unstarted project edit only updates draft",
         ])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::TcpStream;
+
+    #[test]
+    fn branch_fixture_accepts_delayed_and_split_http_requests() {
+        let fixture = Fixture::start().unwrap();
+        // 先建立連線，等 accept 有機會先讀，再分開送表頭與內容；不讓快速 localhost 掩蓋錯誤。
+        for id in ["delayed_one", "delayed_two"] {
+            let mut stream = TcpStream::connect(fixture.url.trim_start_matches("http://")).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            std::thread::sleep(Duration::from_millis(100));
+            let body = json!({"client_request_id":id}).to_string();
+            write!(stream, "POST {} HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", crate::config::CHAT_PATH, body.len()).unwrap();
+            std::thread::sleep(Duration::from_millis(100));
+            stream.write_all(body.as_bytes()).unwrap();
+            let mut response = String::new();
+            stream.read_to_string(&mut response).unwrap();
+            assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
+            let (_, body) = response.split_once("\r\n\r\n").unwrap();
+            let reply: serde_json::Value = serde_json::from_str(body).unwrap();
+            assert_eq!(reply["client_request_id"], id);
+            assert_eq!(reply["state"], "completed");
+        }
+        assert_eq!(fixture.requests.lock().unwrap().len(), 2);
+        assert!(!fixture.stop.load(Ordering::Relaxed));
     }
 }

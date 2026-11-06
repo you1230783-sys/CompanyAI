@@ -118,6 +118,98 @@ fn sorted_group_reentrancy_and_unwind_release() {
         .unwrap();
 }
 
+/// 重現 A 持 Excel、B 等 Excel+Word、A 再要 Word 的 FIFO 互等條件。
+#[test]
+fn nested_new_application_is_rejected_before_joining_fifo() {
+    let manager = Arc::new(Manager::default());
+    let owner = manager
+        .acquire(vec![Resource::Excel], None, TIMEOUT)
+        .unwrap();
+    let (tx, rx) = mpsc::channel();
+    let other = manager.clone();
+    let waiter = thread::spawn(move || {
+        let ctx = context("B", Arc::new(AtomicBool::new(false)), tx);
+        let _group = other
+            .acquire(
+                vec![Resource::Excel, Resource::Word],
+                Some(ctx),
+                Duration::from_secs(2),
+            )
+            .unwrap();
+    });
+    assert!(rx.recv_timeout(Duration::from_secs(2)).unwrap().is_some());
+    let next_ticket = manager.state.lock().unwrap().next;
+    // 零等待讓舊行為立即以「逾時」失敗；新行為必須在配置票券前明確拒絕巢狀擴充。
+    let error = manager
+        .acquire(vec![Resource::Excel, Resource::Word], None, Duration::ZERO)
+        .err()
+        .unwrap();
+    assert!(error.contains("不可巢狀新增"));
+    {
+        let state = manager.state.lock().unwrap();
+        assert_eq!(state.next, next_ticket);
+        assert_eq!(state.queue.len(), 1);
+        assert_eq!(state.owners[&Resource::Excel].depth, 1);
+        assert!(!state.owners.contains_key(&Resource::Word));
+    }
+    // B 已在等待時，A 仍能重入既有 Excel；釋放內層不得提早釋放外層擁有權。
+    let nested = manager
+        .acquire(vec![Resource::Excel], None, Duration::ZERO)
+        .unwrap();
+    assert_eq!(
+        manager.state.lock().unwrap().owners[&Resource::Excel].depth,
+        2
+    );
+    drop(nested);
+    assert_eq!(
+        manager.state.lock().unwrap().owners[&Resource::Excel].depth,
+        1
+    );
+    drop(owner);
+    waiter.join().unwrap();
+    let state = manager.state.lock().unwrap();
+    assert!(state.queue.is_empty());
+    assert!(state.owners.is_empty());
+}
+
+/// 沒有競爭者時也拒絕新增應用程式鎖，避免新工具僅在平行執行時才暴露錯誤。
+#[test]
+fn application_groups_allow_reentry_and_memory_but_not_nested_expansion() {
+    let applications = [
+        Resource::Outlook,
+        Resource::Excel,
+        Resource::Word,
+        Resource::PowerPoint,
+        Resource::Cad,
+    ];
+    for held in &applications {
+        let manager = Arc::new(Manager::default());
+        let _owner = manager
+            .acquire(vec![held.clone()], None, Duration::ZERO)
+            .unwrap();
+        for requested in &applications {
+            let result = manager.acquire(vec![requested.clone()], None, Duration::ZERO);
+            if requested == held {
+                drop(result.unwrap());
+            } else {
+                assert!(result.err().unwrap().contains("不可巢狀新增"));
+            }
+        }
+        let _memory = manager
+            .acquire(vec![Resource::Memory("test".into())], None, Duration::ZERO)
+            .unwrap();
+    }
+    let manager = Arc::new(Manager::default());
+    let _group = manager
+        .acquire(applications.to_vec(), None, Duration::ZERO)
+        .unwrap();
+    for application in applications {
+        let _nested = manager
+            .acquire(vec![application], None, Duration::ZERO)
+            .unwrap();
+    }
+}
+
 #[test]
 fn observer_panic_removes_waiting_ticket() {
     let manager = Arc::new(Manager::default());

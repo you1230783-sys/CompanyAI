@@ -18,6 +18,9 @@ pub struct Step {
     pub id: String,
     pub request: Value,
     pub bindings: BTreeMap<String, String>,
+    /// 擷取時工具結果的格式；舊範本缺省為 None，不能將舊儲存格 pointer 默套到新版陣列。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result_format: Option<String>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Template {
@@ -239,10 +242,30 @@ impl Active {
                     .ok_or("引用無效。")?
                     .split_once(':')
                     .ok_or("步驟引用無效。")?;
-                self.results
+                let result = self
+                    .results
                     .get(id)
                     .filter(|r| r["ok"] == true)
-                    .and_then(|r| r.pointer(path))
+                    .ok_or("前一步沒有成功結果，未猜值。")?;
+                let expected = self
+                    .template
+                    .steps
+                    .iter()
+                    .find(|step| step.id == id)
+                    .and_then(|step| step.result_format.as_deref());
+                // rows 與 headers 改了結構；即使舊 pointer 碰巧存在也不能沿用。
+                // path/revision 等格式未變的中繼資料仍可使用，舊封存結果本身也維持原解析。
+                if result["result"]["format"] == super::office::excel::compact::FORMAT
+                    && expected != Some(super::office::excel::compact::FORMAT)
+                    && (path == "/result/rows"
+                        || path.starts_with("/result/rows/")
+                        || path == "/result/headers"
+                        || path.starts_with("/result/headers/"))
+                {
+                    return Err("Excel 流程引用使用舊版儲存格結構；請核對 excel-compact-v1 的 columns／rows 與新 JSON Pointer，重新保存流程，未執行此步驟。".into());
+                }
+                result
+                    .pointer(path)
                     .ok_or("前一步沒有此成功結果，未猜值。")?
                     .clone()
             };
@@ -262,6 +285,51 @@ impl Active {
 mod tests {
     use super::*;
     #[test]
+    fn excel_workflow_preserves_old_results_and_requires_resave_for_changed_shape() {
+        let mut active: Active = serde_json::from_value(json!({
+            "execution_id":"run","parameters":{},"next":1,"blocked":false,
+            "template":{"id":"flow","name":"驗證","created":0,"steps":[
+                {"id":"excel","request":{"tool":"read_excel_range"},"bindings":{}},
+                {"id":"read","request":{"tool":"read_file","path":"file.txt","offset":0},
+                 "bindings":{"/offset":"step:excel:/result/rows/0/cells/0/value"}}
+            ]},
+            "results":{"excel":{"ok":true,"result":{"path":"file.txt","rows":[{"row":2,"cells":[{"value":42}]}]}}}
+        })).unwrap();
+        assert_eq!(
+            serde_json::to_value(active.request().unwrap()).unwrap()["offset"],
+            42
+        );
+        active.results.insert(
+            "excel".into(),
+            json!({"ok":true,"result":{"format":"excel-compact-v1",
+            "path":"file.txt","headers":["file.txt"],"rows":[[2,42]]}}),
+        );
+        assert!(active.request().err().unwrap().contains("重新保存流程"));
+        active.template.steps[1].bindings =
+            BTreeMap::from([("/path".into(), "step:excel:/result/headers/0".into())]);
+        assert!(
+            active.request().err().unwrap().contains("重新保存流程"),
+            "舊 pointer 碰巧存在也不能沿用"
+        );
+        active.template.steps[1].bindings =
+            BTreeMap::from([("/path".into(), "step:excel:/result/path".into())]);
+        assert!(active.request().is_ok(), "中繼資料不受影響");
+        active.template.steps[0].result_format =
+            Some(super::super::office::excel::compact::FORMAT.into());
+        active.template.steps[1].bindings =
+            BTreeMap::from([("/offset".into(), "step:excel:/result/rows/0/1".into())]);
+        assert_eq!(
+            serde_json::to_value(active.request().unwrap()).unwrap()["offset"],
+            42
+        );
+        let restored: Active =
+            serde_json::from_value(serde_json::to_value(active).unwrap()).unwrap();
+        assert_eq!(
+            serde_json::to_value(restored.request().unwrap()).unwrap()["offset"],
+            42
+        );
+    }
+    #[test]
     fn parameter_form_checks_names_types_and_unsigned_tool_fields_before_running() {
         let template = Template {
             id: "form".into(),
@@ -270,6 +338,7 @@ mod tests {
             steps: vec![Step {
                 id: "read".into(),
                 request: json!({"tool":"read_file","path":"old.txt","offset":0}),
+                result_format: None,
                 bindings: BTreeMap::from([
                     ("/path".into(), "param:file".into()),
                     ("/offset".into(), "param:start".into()),
@@ -303,6 +372,7 @@ mod tests {
                 steps: vec![Step {
                     id: "step1".into(),
                     request,
+                    result_format: None,
                     bindings: BTreeMap::new(),
                 }],
             };
@@ -319,11 +389,13 @@ mod tests {
                 Step {
                     id: "create".into(),
                     request: json!({"tool":"create_working_copy","source":"old.txt","name":"報告.txt"}),
+                    result_format: None,
                     bindings: BTreeMap::from([("/source".into(), "param:source".into())]),
                 },
                 Step {
                     id: "save".into(),
                     request: json!({"tool":"save_copy","copy_id":"old-copy","revision":"old"}),
+                    result_format: None,
                     bindings: BTreeMap::from([
                         ("/copy_id".into(), "step:create:/result/copy_id".into()),
                         ("/revision".into(), "step:create:/result/revision".into()),
@@ -365,6 +437,7 @@ mod tests {
             steps: vec![Step {
                 id: "first".into(),
                 request: json!({"tool":"read_file","path":"a.txt","offset":0}),
+                result_format: None,
                 bindings: BTreeMap::from([("/tool".into(), "param:tool".into())]),
             }],
         };

@@ -2,6 +2,7 @@
 //! 仍透過公司核准的 Excel COM 開啟文件；不自行解析可能加密的 XLSX 容器。
 use super::*;
 use serde_json::{json, Value};
+pub mod compact;
 pub mod planned;
 
 pub const MAX_CELLS: usize = 2000;

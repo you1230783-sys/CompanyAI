@@ -41,11 +41,13 @@ fn run() -> AppResult<()> {
         steps: vec![
             Step {
                 id: "copy".into(),
+                result_format: None,
                 request: json!({"tool":"create_working_copy","source":"source.md","name":"scheduled.md"}),
                 bindings: BTreeMap::new(),
             },
             Step {
                 id: "save".into(),
+                result_format: None,
                 request: json!({"tool":"save_copy","copy_id":"placeholder","revision":"placeholder"}),
                 bindings: BTreeMap::from([
                     ("/copy_id".into(), "step:copy:/result/copy_id".into()),

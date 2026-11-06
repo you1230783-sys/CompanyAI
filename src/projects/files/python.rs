@@ -8,10 +8,13 @@ fn summary_guidance(response: &Value) -> Option<&'static str> {
     let empty = response["summary"]
         .as_object()
         .is_some_and(|summary| summary.is_empty());
-    let printed_object = response["stdout"]
-        .as_str()
-        .and_then(|text| serde_json::from_str::<Value>(text).ok())
-        .is_some_and(|value| value.is_object());
+    let printed_object = response["stdout"].as_str().is_some_and(|text| {
+        let is_object =
+            |text: &str| serde_json::from_str::<Value>(text).is_ok_and(|value| value.is_object());
+        // 保留完整（含多行縮排）JSON 的辨識；科學計算的警告或進度可能混在輸出中，
+        // 再逐行找獨立 JSON 物件即可。此處只提示，不抽取或提升 stdout 為摘要證據。
+        is_object(text) || text.lines().any(is_object)
+    });
     (empty && printed_object).then_some("數值請指定給 `result = {...}`；`record_analysis` 證據與 `register_report_values` 都使用 `/summary/...`。不需重跑已成功的計算，下一次計算時改用 result。")
 }
 
@@ -281,13 +284,27 @@ mod tests {
 
     #[test]
     fn print_only_json_gets_guidance_without_promoting_stdout() {
-        let response = json!({"summary":{},"stdout":"{\"n\":121}\n"});
-        assert!(summary_guidance(&response).unwrap().contains("不需重跑"));
-        assert_eq!(response["summary"], json!({}));
+        for stdout in [
+            "{\"n\":121}\n",
+            "{\n  \"n\":121\n}\n",
+            "debug\n{\"n\":121}",
+            "{\"lam_sel\":0.0661}\n<company-ai-analysis>:65: RuntimeWarning: overflow encountered in power",
+            "RuntimeWarning: overflow\r\n  {\"n\":121}  \r\nfinished\r\n",
+            "{\"n\":121}\n{\"done\":true}\n",
+        ] {
+            let response = json!({"summary":{},"stdout":stdout});
+            assert!(summary_guidance(&response).unwrap().contains("不需重跑"));
+            assert_eq!(response["summary"], json!({}));
+            assert_eq!(response["stdout"], stdout);
+        }
         for response in [
             json!({"summary":{"n":121},"stdout":"{\"n\":0}"}),
+            json!({"summary":{"n":121},"stdout":"debug\n{\"n\":0}\nwarning"}),
             json!({"summary":{},"stdout":"[121]"}),
-            json!({"summary":{},"stdout":"debug\n{\"n\":121}"}),
+            json!({"summary":{},"stdout":"warning\n[121]\n42\nnull"}),
+            json!({"summary":{},"stdout":"debug {\"n\":121}"}),
+            json!({"summary":{},"stdout":"{\"n\":121"}),
+            json!({"summary":{},"stdout":"RuntimeWarning: overflow"}),
             json!({"summary":{},"stdout":""}),
         ] {
             assert!(summary_guidance(&response).is_none());

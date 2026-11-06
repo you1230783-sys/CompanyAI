@@ -1,75 +1,50 @@
-# 技術文件索引
+# 文件索引
 
 [專案首頁](../README.md) · [使用指南](USER_GUIDE.md) · [版本更新](../CHANGELOG.md)
 
-## 保留版本與驗證
+文件以用途分類；版本驗證依版本排序，日期只用於一次性的實測與歷史紀錄。先從下方入口找資料，不需要逐份翻閱歷史報告。
 
-- [0.9.10合併驗證與發行收據](VALIDATION_0_9_10.md)
-- [固定流程排程](SCHEDULED_WORKFLOWS.md)
+## 常用入口
 
-- [0.9.9來源交付（未單獨驗證）](IMPLEMENTATION_0_9_9.md)
-
-- [0.9.8：發行建置最佳化](VALIDATION_0_9_8.md)
-- [建置配置量測](RELEASE_PROFILES.md)
-
-- [0.9.7 完成後交接與停止點](HANDOFF_AFTER_0_9_7.md)
-- [0.9.7：CI與依賴檢查](VALIDATION_0_9_7.md)
-- [CI與依賴政策](CI_AND_DEPENDENCIES.md)
-
-- [0.9.6：Cargo選用模組](VALIDATION_0_9_6.md)
-- [Cargo選用模組與建置矩陣](CARGO_FEATURES.md)
-- [0.9.4：可靠度小修與純搬移拆分](VALIDATION_0_9_4.md)
-
-- [0.9.5：Windows COM邊界整理](VALIDATION_0_9_5.md)
-- [Windows綁定分工與COM生命週期](WINDOWS_BINDINGS.md)
-
-- [0.9.3：文件工作、工作區與流程提醒](VALIDATION_0_9_3.md)
-- [0.9.2：對話交接、統一清單與任務總覽](VALIDATION_0_9_2.md)
-- [0.9.1：指令範本、截圖與Releases](VALIDATION_0_9_1.md)
-- [0.9.0：可靠度、診斷與更新體驗](VALIDATION_0_9_0.md)
-- [0.8.79：本機提醒、桌寵字型與輸入體驗](VALIDATION_0_8_79.md)
-
-- [0.8.78：桌寵泡泡、塔羅續問與進階功能](VALIDATION_0_8_78.md)
-
-- [0.8.77：桌寵、塔羅、Office、聊天恢復與 CAD](VALIDATION_0_8_77.md)
-- [0.8.76：專案工作與來源筆記](VALIDATION_0_8_76.md)
-- [0.8.75：互動教學](VALIDATION_0_8_75.md)
-- [近期非 CAD 模型驗證與限制](VALIDATION_2026_11_02_NONCAD.md)
-- [近期專案改善實作紀錄](IMPLEMENTATION_2026_11_02.md)
-
-## 開發與維護
-
-| 文件 | 用途 |
+| 想找的內容 | 文件 |
 | --- | --- |
-| [開發說明](DEVELOPMENT.md) | v142、離線依賴、建置選項與程式碼位置 |
-| [專案指引](../AGENTS.md) | 目前工作界線與長期維護規則 |
-| [離線交付與 Git](OFFLINE_AND_GIT.md) | 發行成品、重建依賴及遠端核對 |
-| [封存政策](ARCHIVE_POLICY.md) | 本機舊版留存、保留範圍與還原方式 |
-| [本機模型驗證](LOCAL_MODEL_VALIDATION.md) | 真模型與原生驗證的判定界線 |
-| [Luna 測試入口](LOCAL_LUNA_TEST.md) | 本機模型轉接與測試方式 |
-| [Python 執行環境](PYTHON_RUNTIME.md) | 固定輸入、隔離與重建 |
-| [互動教學覆蓋](TUTORIAL_COVERAGE.md) | 57 個主題與維護入口 |
-| [教學預覽](PROJECT_TUTORIAL_PREVIEW.md) | 不登入的假資料預覽 |
+| 安裝與日常操作 | [使用指南](USER_GUIDE.md) |
+| 支援哪些功能 | [功能總覽](FEATURES.md) |
+| 出現錯誤時如何處理 | [錯誤代碼](ERROR_CODES.md) |
+| 現在做到哪裡、接下來驗什麼 | [實作總計畫](IMPLEMENTATION_PLAN.md) |
+| 最新已發布版本與公司端待驗項目 | [0.9.18 驗證紀錄](validation/VALIDATION_0_9_18.md) |
+| 如何建置與維護 | [開發說明](development/DEVELOPMENT.md) · [專案指引](../AGENTS.md) |
 
-## 串接與功能規格
+0.9.18 完成本機相關驗證與封裝，包含 X1／X2、M7 混合 stdout 及資源鎖補強；完整回歸與公司模型效果不在本次驗證範圍。Git／Release 狀態以實作總計畫與版本驗證紀錄為準。
 
-| 文件 | 用途 |
+## 分類瀏覽
+
+| 目錄 | 內容與用途 |
 | --- | --- |
-| [網站串接](WEB_INTEGRATION.md) | 登入、聊天、版本與模型路由 |
-| [原生代理契約](DESKTOP_AGENT_V1_CONTRACT.md) | 專案工具、能力協商與持久任務 |
-| [更新契約](UPDATE_CONTRACT.md) | EXE／NSIS、清單簽章與安裝 |
-| [結構化回答](STRUCTURED_REPLY_CONTRACT.md) | 正文、章節與來源保留 |
-| [通知與 Outlook](NOTIFICATIONS_AND_OUTLOOK.md) | 通知同步及郵件介面 |
-| [Outlook 查詢](OUTLOOK_SEARCH.md) | 日期、範圍與資料欄位 |
-| [VNC](VNC_QUICK_CONNECT.md) | Viewer 與機台設定 |
-| [CAD舊環境清理（待驗證）](CAD_RUNTIME_CLEANUP.md) | 安裝目錄、保留條件與後續測試 |
-| [CAD 能力](CAD_CAPABILITIES.md) | 支援操作與限制 |
-| [CAD 繪圖](CAD_DRAWING.md) | 新圖與原生驗證 |
-| [CAD 快照查詢](CAD_SNAPSHOT_QUERY.md) | 索引、範圍與局部預覽 |
-| [CAD 離線測試](CAD_OFFLINE_TEST.md) | 獨立副本測試 |
-| [Mermaid](MERMAID.md) | 圖源、版本與匯出 |
-| [錯誤代碼](ERROR_CODES.md) | 診斷與匯出 |
+| [development](development/README.md) | 工具鏈、離線建置、依賴、Python runtime、回歸與模型驗證方法 |
+| [features](features/README.md) | Outlook、通知、排程、VNC、Mermaid 與教學規格 |
+| [contracts](contracts/README.md) | 網站／桌面代理／更新／結構化回覆契約與請求範例 |
+| [cad](cad/README.md) | CAD 能力、繪圖、快照查詢、環境及測試 |
+| [validation](validation/README.md) | 各版實際驗證結果、發行證據與未驗範圍，按新到舊排列 |
+| [history](history/README.md) | 已結案實作、交接、搬移對照與舊指南；不代表目前授權 |
+| [refactors](refactors/README.md) | 純搬移重構的機器可讀對照表 |
+| [images](images/) | 文件引用的畫面與圖片 |
 
-0.8.74 及以前的版本專屬紀錄已從目前目錄封存。仍有效的功能規格保留；少量歷史引用指向整理前的固定 Git 提交，不會誤連到不存在的本機文件。
+## 修改需求與未來構想
 
-- [0.9.4驗證](VALIDATION_0_9_4.md)與[純搬移對照](REFACTOR_0_9_4.md)。
+這些文件保留在本層，方便交接與查找。需求手冊保留原文；實作狀態與驗證結果另外記錄。
+
+- [EIS 回饋修改手冊](CHANGE_HANDBOOK_EIS_FEEDBACK.md)
+- [0.9.18 Excel 閱讀精簡手冊](CHANGE_HANDBOOK_0_9_18_EXCEL_READ.md)
+- [0.9.14～0.9.17 修改手冊](CHANGE_HANDBOOK_0_9_14_TO_0_9_17.md)
+- [未來構想（未排期）](FUTURE_IDEAS.md)
+- [實作總計畫](IMPLEMENTATION_PLAN.md)
+
+## 後續文件放置原則
+
+- 一般操作更新使用指南；功能細節放 `features`，CAD 細節放 `cad`，串接格式放 `contracts`。
+- 建置、維護與可重複使用的驗證方法放 `development`；某一版的實際驗證結果放 `validation/VALIDATION_版本.md`，同步更新該目錄索引。
+- 當前進度只維護實作總計畫；已結案的獨立實作紀錄放 `history`。舊文件中的「待辦／目前」須依當時版本理解。
+- 機器驗證收據仍在專案的 `offline`，圖片仍在 `images`；文件以相對連結引用，不複製一份形成多個版本。
+- 本次整理保留既有檔名，搜尋檔名仍可定位；除了必要路徑更新，需求與歷史結論不改寫。手冊中的舊路徑可依檔名到分類目錄查找。
+- 本次只整理文件與引用，沒有編譯、進版、打包或發布。0.8.74 以前的既有封存規則見 [封存政策](development/ARCHIVE_POLICY.md)。

@@ -18,7 +18,7 @@ use std::{
 const TIMEOUT: Duration = Duration::from_secs(600);
 const POLL: Duration = Duration::from_millis(25);
 
-/// 順序是取得多種資源的契約；新增資源時不可讓呼叫端反向巢狀取得。
+/// 順序是取得多種資源的契約；Office／CAD 必須一次取得，內層只能重入已持有者。
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Resource {
     Source(String),
@@ -30,6 +30,14 @@ pub enum Resource {
     Cad,
 }
 impl Resource {
+    /// 應用程式鎖共用禁止巢狀擴充的規則，包含 Outlook；來源與短暫記憶交易另守既有順序。
+    fn is_application(&self) -> bool {
+        matches!(
+            self,
+            Self::Outlook | Self::Excel | Self::Word | Self::PowerPoint | Self::Cad
+        )
+    }
+
     fn label(&self) -> &'static str {
         match self {
             Self::Source(_) => "同一來源的副本",
@@ -124,6 +132,7 @@ impl Drop for Guard {
 }
 
 /// 一次取得全部資源，排序、去重且不先占住其中一把；獨立資源可以同時進行。
+/// 已持有 Office／CAD 時不得新增其他應用程式鎖，必須由外層一次取得完整集合。
 pub fn acquire(resources: impl IntoIterator<Item = Resource>) -> AppResult<Guard> {
     manager().acquire(resources.into_iter().collect(), Context::current(), TIMEOUT)
 }
@@ -159,6 +168,16 @@ impl Manager {
             .filter(|r| !held.contains(r))
             .cloned()
             .collect();
+        // 固定排序仍不足以防止 FIFO 互等：A 持 Excel，B 排隊等 Excel+Word，
+        // A 再要 Word 會排在 B 後面。入隊前拒絕擴充應用程式鎖，避免等待到逾時。
+        // 已持有的鎖可重入；記憶提交不呼叫 Office／CAD，仍可依下方既有規則短暫取得。
+        if held.iter().any(Resource::is_application) && needed.iter().any(Resource::is_application)
+        {
+            return Err(
+                "不可巢狀新增 Office／CAD 資源鎖；請在操作前一次取得全部所需資源，內層只能重入已持有的鎖。"
+                    .into(),
+            );
+        }
         // 記憶交易只持有檔案／DPAPI，不會在持鎖時呼叫 Office；可在工具提交摘要時短暫取得。
         // 來源與 Office 仍遵守固定順序；若未來記憶交易要呼叫工具，必須先重設這個邊界。
         if needed

@@ -228,6 +228,10 @@ fn create_large_excel(folder: &Path) -> AppResult<()> {
         ("H3", "Value2", "339".into()),
         ("H4", "Value2", "NG".into()),
         ("H6", "Value2", "12 mm".into()),
+        ("J1", "Formula", "=\"日期\"".into()),
+        ("J2", "Value2", 45964.5f64.into()),
+        ("J2", "NumberFormat", "yyyy/m/d hh:mm".into()),
+        ("J:J", "ColumnWidth", 24f64.into()),
     ] {
         let range = obj(invoke(&sheet, "Range", vec![address.into()], false)?)?;
         set(&range, property, value)?;

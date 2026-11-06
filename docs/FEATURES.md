@@ -45,4 +45,4 @@
 
 專案列出所有副檔名；INI、BAT、CMD、PS1及未知純文字可依內容閱讀／另存副本，Word、Excel、PowerPoint、PDF、MSG、CAD及圖片仍使用專用工具。各格式的可讀取／可修改範圍，請見 [使用指南](USER_GUIDE.md)。
 
-開發者可使用[Cargo選用模組](CARGO_FEATURES.md)建立精簡預覽；正式安裝包預設提供完整功能。
+開發者可使用[Cargo選用模組](development/CARGO_FEATURES.md)建立精簡預覽；正式安裝包預設提供完整功能。

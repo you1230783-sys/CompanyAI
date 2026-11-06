@@ -1,0 +1,32 @@
+{
+  "version": "0.9.18.0",
+  "result": "PASS",
+  "office_version": "16.0.20527.20112",
+  "fixture": "Y:\\Rust\\Project\\CompanyAI\\.build\\office-test-e9a6ab0a210046b682e7e9ace071f46e",
+  "checks": [
+    "DOC/DOCX/DOCM/XLS/XLSX/XLSM/XLSB/PPT/PPTX/PPTM COM read/edit/save/reopen",
+    "source bytes unchanged",
+    "readable filename and numbered second revision",
+    "duplicate save idempotent",
+    "Excel formula protected and literal = text",
+    "Excel numeric edit",
+    "Word and Excel bold retained",
+    "untouched paragraph/shape retained",
+    "blank DOCX/XLSX/PPTX creation",
+    "Word paragraphs/table/styles and Chinese font",
+    "Excel worksheets/ranges/number formats/borders",
+    "PPT title/content/two-column layouts and text styles",
+    "Office batch commit and failed-batch rollback",
+    "Excel chart reads numeric cells from checked snapshot",
+    "large XLS/XLSX bounded headers and noncontiguous A/F 100-row pages",
+    "range chart uses Excel numeric formula results and preserves missing rows",
+    "range revision mismatch, path escape and cell-budget rejection",
+    "excel-compact-v1: value, blank, date text/number_format, error, data/header formulas; XLS/XLSX",
+    "read_work_log preserves compact rows",
+    "no nested application lock refusal in successful Office regression"
+  ],
+  "company_encryption_tested": false,
+  "screenshots_verified": false,
+  "tested_exe_sha256": "c403944814bf0ab321753c160d2120d74825d962270c7cdb3df0c0ff39d063e5",
+  "final_change_after_this_native_run": "Self-check HTTP fixture only; production Office/Excel/locks/Python unchanged; final installer self-check separately verified."
+}

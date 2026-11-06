@@ -1,6 +1,18 @@
 //! 只接受實際成功閱讀操作作為節點依據；對話描述沒有來源操作，維持一般圖形。
 use super::*;
 use crate::projects::diagram_sources::{Link, Origin};
+
+/// 新舊閱讀結果都以原始 JSON 摘錄；精簡列必須同時帶欄名，不能把陣列位置誤當 Excel 欄字母。
+fn excel_excerpt(data: &Value) -> AppResult<String> {
+    Ok(
+        serde_json::to_string(&json!({"format":data["format"],"columns":data["columns"],
+        "headers":data["headers"],"rows":data["rows"]}))
+        .map_err(|e| e.to_string())?
+        .chars()
+        .take(500)
+        .collect(),
+    )
+}
 impl Broker {
     pub(super) fn link_diagram_sources(
         &mut self,
@@ -95,11 +107,7 @@ impl Broker {
                         "工作表 {}；欄 {}；起始列 {}，實際已讀 {} 列",
                         data["sheet_name"], data["columns"], data["start_row"], data["row_count"]
                     ),
-                    serde_json::to_string(&json!({"headers":data["headers"],"rows":data["rows"]}))
-                        .map_err(|e| e.to_string())?
-                        .chars()
-                        .take(500)
-                        .collect(),
+                    excel_excerpt(data)?,
                     None,
                     None,
                 )
@@ -182,5 +190,23 @@ impl Broker {
             // 完整摘錄只留原生圖形／checkpoint，避免多個節點引用同段原文時重送數十KB。
             json!({"diagram_index":index,"revision":revision,"linked_nodes":self.diagrams[index].node_sources.iter().map(|origin|&origin.node_id).collect::<Vec<_>>(),"linked_count":self.diagrams[index].node_sources.len(),"notice":"完整來源與摘錄已保留在圖形，可點節點查看；模型僅回傳成功節點索引。來源不代表語意正確性；描述節點不綁檔案。"}),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn excel_excerpt_keeps_old_and_compact_column_mapping() {
+        for data in [
+            json!({"columns":["A","F"],"headers":[{"text":"值"}],"rows":[{"row":7,"cells":[{"value":42}]}]}),
+            json!({"format":"excel-compact-v1","columns":["A","F"],"headers":["值","量"],"rows":[[7,42,1.5]]}),
+        ] {
+            let excerpt = excel_excerpt(&data).unwrap();
+            assert!(excerpt.contains("42") && excerpt.contains("\"F\"") && excerpt.contains("值"));
+            assert!(excerpt.chars().count() <= 500);
+            let restored: Value = serde_json::from_str(&excerpt).unwrap();
+            assert_eq!(restored["rows"], data["rows"]);
+        }
     }
 }

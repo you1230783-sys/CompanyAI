@@ -2,21 +2,25 @@
 
 ## 目前工作
 
-- **0.9.17 已發布：v0.9.17 固定於 3b6c5c1838e8a0c7cdbdd8e5996af51b4b1c8b76，同提交CI 42159015062 通過。M11與Excel筆記／封存兩項修正，v142空快取frozen、492項非CAD Rust、80項前端、原生多任務／Office／Python／panic、實際Setup生命週期與五項公開下載通過。詳見 docs/VALIDATION_0_9_17.md。依使用者指示到此停止，等待公司驗收回饋；不實作0.9.18。**
+- **2026-11-06 最新授權：依 CHANGE_HANDBOOK_0_9_18_EXCEL_READ.md 實作 X1／X2，納入 M7 混合 stdout 與 Office／CAD 巢狀鎖補強，進版0.9.18。跳過完整回歸，只做相關單元／schema／原生 Excel／Office 與候選安裝包驗證，v142 x64 空快取 frozen 建置；完成後打包、Git與可下載安裝包交付。FUTURE_IDEAS.md 及新手冊一起提交，三份手冊均保留原文。此授權取代前一輪不編譯／不發布及停在0.9.17的界線；本版未做的完整項目必須明列，不宣稱完整驗收。**
 
-- **0.9.16 已發布：v0.9.16 固定於 6fd91557427bbe613be7a3085601bbcd33533bc0，同提交 CI 42151446993 通過。v142 空快取 frozen、481項非CAD Rust、65項前端、原生HTTP/DPAPI分支及專案交接、實際Setup生命週期與五項公開下載通過。詳見 docs/VALIDATION_0_9_16.md；公司模型與附件跨對話沿用另驗。接續0.9.17，完成後停止。**
+- **2026-11-06 發布後補強：依使用者提供的 Claude 建議，修改 M7 的混合 stdout JSON 提示，以及 Office／CAD 鎖的巢狀擴充防護。僅本機原始碼與待驗案例，不編譯、不進版、不打包、不推送／發布；等待公司端實測回饋後再整合。已發布 0.9.17 與其驗證證據維持原樣，本次修改尚未編譯或執行測試；進度見 docs/IMPLEMENTATION_PLAN.md。**
 
-- **0.9.15 已發布：v0.9.15 固定於 33a07acb4a060997883dd9a0cbba202e4df05336，同提交 CI 42145350765 通過。v142 空快取 frozen、478 項非 CAD Rust、M9 前端／原生計畫及恢復／NSIS、五項公開下載通過。詳見 docs/VALIDATION_0_9_15.md；公司模型另驗。接續0.9.16，最終做到0.9.17並停止。**
+- **0.9.17 已發布：v0.9.17 固定於 3b6c5c1838e8a0c7cdbdd8e5996af51b4b1c8b76，同提交CI 42159015062 通過。M11與Excel筆記／封存兩項修正，v142空快取frozen、492項非CAD Rust、80項前端、原生多任務／Office／Python／panic、實際Setup生命週期與五項公開下載通過。詳見 docs/validation/VALIDATION_0_9_17.md。依使用者指示到此停止，等待公司驗收回饋；不實作0.9.18。**
 
-- **0.9.14 已發布：v0.9.14 固定於 77bf1bb3e0187c457fa86a7b3896301130498507，同提交 CI 42139510276 通過。v142 空快取 frozen、473 項非 CAD Rust、M8 前端／AppContainer、Office／NSIS 相關驗證與五項公開下載核對通過。詳見 docs/VALIDATION_0_9_14.md，並非完整長任務／Python 科學矩陣。依最新授權接續 0.9.15，直到 0.9.17 發布後停止。**
+- **0.9.16 已發布：v0.9.16 固定於 6fd91557427bbe613be7a3085601bbcd33533bc0，同提交 CI 42151446993 通過。v142 空快取 frozen、481項非CAD Rust、65項前端、原生HTTP/DPAPI分支及專案交接、實際Setup生命週期與五項公開下載通過。詳見 docs/validation/VALIDATION_0_9_16.md；公司模型與附件跨對話沿用另驗。接續0.9.17，完成後停止。**
+
+- **0.9.15 已發布：v0.9.15 固定於 33a07acb4a060997883dd9a0cbba202e4df05336，同提交 CI 42145350765 通過。v142 空快取 frozen、478 項非 CAD Rust、M9 前端／原生計畫及恢復／NSIS、五項公開下載通過。詳見 docs/validation/VALIDATION_0_9_15.md；公司模型另驗。接續0.9.16，最終做到0.9.17並停止。**
+
+- **0.9.14 已發布：v0.9.14 固定於 77bf1bb3e0187c457fa86a7b3896301130498507，同提交 CI 42139510276 通過。v142 空快取 frozen、473 項非 CAD Rust、M8 前端／AppContainer、Office／NSIS 相關驗證與五項公開下載核對通過。詳見 docs/validation/VALIDATION_0_9_14.md，並非完整長任務／Python 科學矩陣。依最新授權接續 0.9.15，直到 0.9.17 發布後停止。**
 
 - **2026-11-06 最新恢復授權：使用者要求繼續直到 0.9.17 完成（使用者已更正終點），取代先前暫停。依手冊先逐版完成 0.9.14～0.9.17，每版相關驗證、v142 空快取 frozen、必要封裝、Git／Release 及下載核對完成後才進下一版。不實作 0.9.18。公司驗收不阻止本機進度。手冊不修改，進度及結果記在 IMPLEMENTATION_PLAN.md 與各版 VALIDATION。**
 
-- **0.9.13 已發布：v0.9.13 固定於 5f89ae0da50c4469332df69d3871ad7f06b0b377，同提交 CI 42127495093 通過。v142 空快取 frozen r1、468 項非 CAD Rust、32 組原生 HTTP、5 組前端、M7 真 AppContainer／通知自檢、Office／NSIS 與五項公開下載校驗通過。見 docs/VALIDATION_0_9_13.md；真實模型比較仍留公司端；依使用者最新指示在本版發布後暫停，0.9.14～0.9.17 保留待辦，等待再次指示。**
+- **0.9.13 已發布：v0.9.13 固定於 5f89ae0da50c4469332df69d3871ad7f06b0b377，同提交 CI 42127495093 通過。v142 空快取 frozen r1、468 項非 CAD Rust、32 組原生 HTTP、5 組前端、M7 真 AppContainer／通知自檢、Office／NSIS 與五項公開下載校驗通過。見 docs/validation/VALIDATION_0_9_13.md；真實模型比較仍留公司端；依使用者最新指示在本版發布後暫停，0.9.14～0.9.17 保留待辦，等待再次指示。**
 
 - **0.9.13 本輪授權：依 docs/CHANGE_HANDBOOK_EIS_FEEDBACK.md 的 M7 與第二節「0.9.12 複核補充」兩項修正，完成後進版、v142 空快取 frozen 驗證／封裝並推送 Git 與 Release。M7、通用技能詞彙、暫停通知各自提交；真實模型比較仍由公司端驗收。本版完整驗證與發布已完成，結果見上項。**
 
-- **0.9.12已發布：v0.9.12固定於42fc74f5a0f725426ce98afdf71da48224c69625，同提交CI 42053066119通過。v142空快取frozen r3、466項非CAD Rust、31組原生HTTP、5組前端、Python／Office／排程及NSIS生命週期完成，五項公開下載SHA256核對通過。先前檔案鎖／Schema與測試參數失敗已如實記錄，見docs/VALIDATION_0_9_12.md。真實模型比較由公司端驗收，M4第二階段偵測另排；不自行進版。**
+- **0.9.12已發布：v0.9.12固定於42fc74f5a0f725426ce98afdf71da48224c69625，同提交CI 42053066119通過。v142空快取frozen r3、466項非CAD Rust、31組原生HTTP、5組前端、Python／Office／排程及NSIS生命週期完成，五項公開下載SHA256核對通過。先前檔案鎖／Schema與測試參數失敗已如實記錄，見docs/validation/VALIDATION_0_9_12.md。真實模型比較由公司端驗收，M4第二階段偵測另排；不自行進版。**
 
 - **0.9.12 目前授權：依 docs/CHANGE_HANDBOOK_EIS_FEEDBACK.md 實作 M1–M6，每項獨立 commit 並記錄測試／限制，完成後進版、v142 空快取 frozen 編譯、必要封裝驗證、GitHub 與 Release 發布。使用者已明確指定真實模型 EIS 比較留待公司端驗收；本機用合成回歸，不宣稱公司資料已驗收。M4 第二階段數值不一致偵測另行排期，不變更 50K 輸入預算、不重建 checkpoint、不新增 AI 刪檔能力。**
 
@@ -24,14 +28,14 @@
 
 - **2026-11-05 後續授權：使用者明確要求發布 0.9.11 安裝包到 Release。接續已通過的來源驗證，封裝前以 v142／空快取 frozen 核對相同 EXE，補做 NSIS 生命週期、同來源提交 GitHub CI 與公開下載 SHA256；先前「不含安裝包／Release」僅描述來源交付階段，不再是禁止發布。**
 
-- **來源交付階段紀錄：0.9.11已完成本機來源整合驗證：v142／空快取frozen、非CAD456項／核心472項Rust、14組前端、Python科學套件與版本串接、Office Markdown格式讀回、排程Excel占用安全略過。詳見docs/VALIDATION_0_9_11.md，列有分段接續、兩個EXE雜湊與PDF彩色emoji文字抽取限制。當時交付Git來源與證據，尚未封裝；後續發布已完成，見上項。**
+- **來源交付階段紀錄：0.9.11已完成本機來源整合驗證：v142／空快取frozen、非CAD456項／核心472項Rust、14組前端、Python科學套件與版本串接、Office Markdown格式讀回、排程Excel占用安全略過。詳見docs/validation/VALIDATION_0_9_11.md，列有分段接續、兩個EXE雜湊與PDF彩色emoji文字抽取限制。當時交付Git來源與證據，尚未封裝；後續發布已完成，見上項。**
 
 - **2026-11-05追加授權：使用者已回報一般功能大致正常，要求完成0.9.11全部待辦與Python科學計算串接修正，完成驗證後提交推送Git；不再等待公司端測試才開始實作。持續保留v142與離線驗證規則。**
 
-- **先前階段授權（已由上項接續）：先實作0.9.11桌寵狀態／點擊與右鍵捷徑、對話／專案工具精簡、Markdown匯出與開啟資料夾、範本教學及排程安全略過／通知修正。完成必要本機檢查後等待使用者公司實測回饋；本輪先不封裝、推送或發布Release，不沿用0.9.10的發布授權。版本號與正式公告留待整合發行，工作清單見docs/IMPLEMENTATION_0_9_11.md。**
+- **先前階段授權（已由上項接續）：先實作0.9.11桌寵狀態／點擊與右鍵捷徑、對話／專案工具精簡、Markdown匯出與開啟資料夾、範本教學及排程安全略過／通知修正。完成必要本機檢查後等待使用者公司實測回饋；本輪先不封裝、推送或發布Release，不沿用0.9.10的發布授權。版本號與正式公告留待整合發行，工作清單見docs/history/IMPLEMENTATION_0_9_11.md。**
 
 - **最新指示（2026-11-05，節奏調整）：0.9.8繼續完整驗證／封裝並發布Git與Release。0.9.9完成F08／F09／C01後只提交推送程式碼，明示未編譯／未驗證，跳過編譯、封裝及驗證、不發布Release；提交加[skip ci]避免自動CI。接著完成0.9.10 D03，再對包含0.9.9改動的整體版本完整驗證／封裝／推送Git與Release。每個commit詳列改動與證據狀態，供Claude二次驗證。**
-- 0.9.8本機完整v142／空快取frozen、499完整／455核心Rust、Office／NSIS與九組前端已通過；28份證據見docs/VALIDATION_0_9_8.md。同提交GitHub CI 41959105102及五項Release公開下載SHA256也已通過，v0.9.8標籤2b6ece3；0.9.9 F08／F09／C01已寫入來源與待驗案例，依指示未編譯／未驗證／不發布Release；來源提交b3bbfe9已推送。0.9.10 D03與0.9.9合併範圍已通過本機v142空快取完整511／核心467項Rust、十組前端、Office與NSIS；同提交GitHub CI 41976149119、v0.9.10 Release及五項公開下載SHA256也已通過，見docs/VALIDATION_0_9_10.md。本輪已完成，等待Claude二次驗證與公司實測；不自行進版。
+- 0.9.8本機完整v142／空快取frozen、499完整／455核心Rust、Office／NSIS與九組前端已通過；28份證據見docs/validation/VALIDATION_0_9_8.md。同提交GitHub CI 41959105102及五項Release公開下載SHA256也已通過，v0.9.8標籤2b6ece3；0.9.9 F08／F09／C01已寫入來源與待驗案例，依指示未編譯／未驗證／不發布Release；來源提交b3bbfe9已推送。0.9.10 D03與0.9.9合併範圍已通過本機v142空快取完整511／核心467項Rust、十組前端、Office與NSIS；同提交GitHub CI 41976149119、v0.9.10 Release及五項公開下載SHA256也已通過，見docs/validation/VALIDATION_0_9_10.md。本輪已完成，等待Claude二次驗證與公司實測；不自行進版。
 - 0.9.7已發布，tag為`5fb110822ca461d92df867da48e57cd4c93a9751`；本機v142空快取、499完整／455核心Rust、Office／NSIS、最終GitHub CI及五項公開資產SHA256均通過。
 - 本輪順序：0.9.8 D02b → 0.9.9 F08／F09／C01 → 0.9.10 D03（僅app開啟／托盤）。C01為50,000 tokens軟目標、超標整理至約40,000，放寬原文移出，技能與筆記維持。M02擱置。先前停止、僅記錄及每版均完整驗證發行的節奏已由最新授權取代；細節見docs/IMPLEMENTATION_PLAN.md。
 
@@ -39,7 +43,7 @@
 
 - 0.9.7首次GitHub CI（41936574844）失敗：11項記憶原子替換共享衝突、2項ANSI語系假設。記憶目錄改READ_ATTRIBUTES並保留不分享DELETE／獨占anchor；補明確碼頁與目錄保護測試。300專案定向測試、499完整／455核心Rust及完整本機r2 Office／NSIS通過；遠端CI須核對同提交成功，發布r2新成品。
 
-- 0.9.7修正後本機完整v142空快取、499項完整／455項核心Rust、Office與NSIS已通過，28份公開證據見docs/VALIDATION_0_9_7.md。CI腳本與12項漏洞政策案例已驗；推送後須核對GitHub hosted CI才發布。ttf-parser停止維護公告保留有期限精確例外，不宣稱零警告。發布及公開下載核對後接續0.9.8 LTO。
+- 0.9.7修正後本機完整v142空快取、499項完整／455項核心Rust、Office與NSIS已通過，28份公開證據見docs/validation/VALIDATION_0_9_7.md。CI腳本與12項漏洞政策案例已驗；推送後須核對GitHub hosted CI才發布。ttf-parser停止維護公告保留有期限精確例外，不宣稱零警告。發布及公開下載核對後接續0.9.8 LTO。
 
 - 2026-11-05追加0.9.9 F09：額外功能預設關閉，側欄以Outlook助理直達入口呈現；開啟後恢復進階功能入口。VNC獨立開關／外部入口保留；塔羅與桌寵教學受額外功能開關控制，VNC教學受VNC開關控制。與Word內容對齊同版實作，不提前混入0.9.7。
 
@@ -47,23 +51,25 @@
 
 - 0.9.5已發布並核對公開下載。0.9.6已完成Cargo features、16種組合、核心453項／完整497項Rust、Office與NSIS驗證；正式安裝包預設全功能，自訂features只供BuildOnly且輸出獨立目錄。完成本版驗證／封裝／推送後再進行0.9.7 CI與漏洞檢查。
 
-- 0.9.5已完成本機v142空快取、495項Rust、Office與NSIS驗證，COM生命週期統一、Windows綁定分工保留；證據見docs/VALIDATION_0_9_5.md及docs/WINDOWS_BINDINGS.md。發布後接續0.9.6，後續仍逐版驗證／封裝／推送。
+- 0.9.5已完成本機v142空快取、495項Rust、Office與NSIS驗證，COM生命週期統一、Windows綁定分工保留；證據見docs/validation/VALIDATION_0_9_5.md及docs/development/WINDOWS_BINDINGS.md。發布後接續0.9.6，後續仍逐版驗證／封裝／推送。
 
 - 最新授權：依待辦順序逐版修改、完整驗證、封裝、推送main及Releases，再接續下一版，直到可完成項目結束。先前「本輪不提前開始」只屬0.9.4歷史範圍；本輪可繼續0.9.5之後版本。缺少公司後端／實機的項目如實記錄並詢問必要資訊，不宣稱完成，不動NAS備份。
 
-- 0.9.4本機修改、純搬移核對與完整v142空快取／Office／NSIS驗證已完成（494項Rust）；證據見docs/VALIDATION_0_9_4.md及docs/REFACTOR_0_9_4.md。後續Windows綁定、features、CI／漏洞、LTO依計畫分版，本輪不提前開始；Word內容對齊固定排在LTO之後的下一版。
+- 0.9.4本機修改、純搬移核對與完整v142空快取／Office／NSIS驗證已完成（494項Rust）；證據見docs/validation/VALIDATION_0_9_4.md及docs/history/REFACTOR_0_9_4.md。後續Windows綁定、features、CI／漏洞、LTO依計畫分版，本輪不提前開始；Word內容對齊固定排在LTO之後的下一版。
 
 - 2026-11-04本輪授權0.9.4：先修正批次panic保護一致性與Word位置比較提示，再純搬移拆分files.rs／ui.rs／runner.rs；每個拆分commit列出函式原位置→新位置及必要可見性／路徑調整。完整v142驗證、封裝後推送main及Releases。Windows綁定、Cargo features、CI／漏洞、LTO分開後續版本；Word內容對齊排在LTO之後的下一版。NAS備份由使用者自行處理。
-- 0.9.3的F01～F07已完成本機實作、v142空快取完整建置、Office與NSIS驗證；證據見docs/VALIDATION_0_9_3.md。公司模型翻譯品質與公司實機仍待驗。後續0.9.4依實作計畫處理維護工作，不混入已移除的Authenticode待辦。
-- 2026-11-04 使用者調整並授權0.9.3一次完成F01～F07：匯出、Word翻譯、文件比較、流程定時提醒、預設工作區、Word原樣式副本翻譯及新建Markdown；逐功能提交，完整驗證封裝後推送main與Releases。0.9.2已發行，證據見docs/VALIDATION_0_9_2.md。0.9.4才做純搬移拆分、Windows綁定／Cargo features、CI、LTO與漏洞檢查；以docs/IMPLEMENTATION_PLAN.md最新順序為準。
-- 0.9.0本機驗證包已用v142空快取完成全Rust／原生整合與NSIS生命週期驗證；VNC入口、桌寵字級／描邊已納入。本輪已獲授權推送GitHub main；公司環境與桌寵人工DPI缺項見docs/VALIDATION_0_9_0.md。
+- 0.9.3的F01～F07已完成本機實作、v142空快取完整建置、Office與NSIS驗證；證據見docs/validation/VALIDATION_0_9_3.md。公司模型翻譯品質與公司實機仍待驗。後續0.9.4依實作計畫處理維護工作，不混入已移除的Authenticode待辦。
+- 2026-11-04 使用者調整並授權0.9.3一次完成F01～F07：匯出、Word翻譯、文件比較、流程定時提醒、預設工作區、Word原樣式副本翻譯及新建Markdown；逐功能提交，完整驗證封裝後推送main與Releases。0.9.2已發行，證據見docs/validation/VALIDATION_0_9_2.md。0.9.4才做純搬移拆分、Windows綁定／Cargo features、CI、LTO與漏洞檢查；以docs/IMPLEMENTATION_PLAN.md最新順序為準。
+- 0.9.0本機驗證包已用v142空快取完成全Rust／原生整合與NSIS生命週期驗證；VNC入口、桌寵字級／描邊已納入。本輪已獲授權推送GitHub main；公司環境與桌寵人工DPI缺項見docs/validation/VALIDATION_0_9_0.md。
 - 完整建置與必要封裝、相關驗證成功才可稱完成；公司實機缺項如實記錄。不能把舊發行授權當作本輪測試通過證據。
 - 安裝路徑 C:\largan\LM_AI、公司HTTP、machines.json明文格式與匯入匯出、公司更新同源與簽章檢查均不變。使用者於0.9.1授權GitHub Releases與歷史清理：安裝包及更新JSON移至Releases，Git不再使用LFS；CI、LTO與漏洞檢查仍延後。
 - 大檔案純搬移延後至獨立commit；不混入功能變更。
 - main歷史已以0.8.75的`9f8febc`重建，後續原始碼保留至0.9.1；對照見offline/history-cleanup-0.9.1.json。不要將本機備份、舊clone或改寫前提交merge／force-push回main。
-- 歷史授權與驗證已移至 docs/history/AGENTS_BEFORE_0_9_0.md；逐段對照見 docs/AGENTS_MIGRATION.md。
+- 歷史授權與驗證已移至 docs/history/AGENTS_BEFORE_0_9_0.md；逐段對照見 docs/history/AGENTS_MIGRATION.md。
 
 ## 專案界線與程式碼風格
+
+- 文件入口為 `docs/README.md`；開發方法放 `docs/development/`、功能放 `docs/features/`、串接放 `docs/contracts/`、CAD 放 `docs/cad/`、版本驗證放 `docs/validation/`、歷史實作放 `docs/history/`。當前進度仍記 `docs/IMPLEMENTATION_PLAN.md`；三份修改手冊留在 docs 根目錄且不改原文。新增文件同步更新分類索引。
 
 - `Y:\Rust` 是共用根目錄，本專案是 `Project/CompanyAI` 內的獨立 Cargo workspace。原始碼、Cargo.lock、vendor、.cargo、target、dist 與 scripts 留在專案內。
 - 不移動或修改其他專案、`.local-ai`、共用 `.tools`、安裝下載與共用環境腳本；不在共用根目錄建立 Cargo workspace 或 .cargo/config.toml。
@@ -76,7 +82,7 @@
 - 使用 scripts/Enter-DevShell.ps1（vcvars64.bat -vcvars_ver=14.2）及 scripts/Build.ps1；確認實際 cl/link 與 x64，不使用新版 VS 預設工具集或 target-cpu=native。
 - 離線依賴保留 Cargo.lock、vendor、.cargo/config.toml，以空 Cargo 快取及 --frozen 驗證。不要把歷史離線 ZIP 當成目前依賴。
 - BuildOnly 僅編譯；ValidateOnly 不更新發行產物；BasicValidation 不代表完整驗證。Office、VNC、SMB、CAD 與 NSIS 依變更範圍及當次授權實測，缺少環境如實回報。
-- 真模型、固定參數原生工具、幾何／內容及畫面核對分開記錄。保留原始參數與失敗，不由測試程式替模型補正；流程見 docs/LOCAL_MODEL_VALIDATION.md。
+- 真模型、固定參數原生工具、幾何／內容及畫面核對分開記錄。保留原始參數與失敗，不由測試程式替模型補正；流程見 docs/development/LOCAL_MODEL_VALIDATION.md。
 - CAD 使用獨立新圖或副本，保留使用者原圖。修改、Undo、保存重開及文件身分分開核對；工具成功不代表圖面設計核准。
 - 0.8.77 完整建置與 NSIS 通過，但 Luna 多檔交付及 CAD 結尾仍有未完成案例；桌寵拖曳／通知點擊、公司模型、真 Outlook 及加密文件仍需現場驗收。不得把原生測試 PASS 當成上述情境通過。
 

@@ -52,9 +52,9 @@
 
 ## 目前狀態與授權
 
-- 上一個發行版為 **0.8.77**，提交 `fa2833f641694554aac25483979becc17cb5c59d`；EXE／NSIS 已推送並以固定提交下載核對。驗證範圍與限制見 docs/VALIDATION_0_8_77.md。
+- 上一個發行版為 **0.8.77**，提交 `fa2833f641694554aac25483979becc17cb5c59d`；EXE／NSIS 已推送並以固定提交下載核對。驗證範圍與限制見 docs/validation/VALIDATION_0_8_77.md。
 - 2026-11-03 使用者授權整理本機及 Git：0.8.74 及以前的版本專屬成品與歷史紀錄移至 `Y:\Rust\舊版留存\CompanyAI\`，不提交封存內容；保留 0.8.75～0.8.77、現行規格及建置依賴。
-- 本次只整理檔案與文件，提交／推送既有 origin/main；不進版、不編譯、不重製 EXE／NSIS，也不操作使用者正在測試的應用程式。Git 歷史不改寫，整理政策見 docs/ARCHIVE_POLICY.md。
+- 本次只整理檔案與文件，提交／推送既有 origin/main；不進版、不編譯、不重製 EXE／NSIS，也不操作使用者正在測試的應用程式。Git 歷史不改寫，整理政策見 docs/development/ARCHIVE_POLICY.md。
 - 使用者正在實測。後續待討論事項是多成果任務進度、工具識別資訊及 CAD 未存檔成果的完成判定；本次未授權實作這些功能。
 
 ## 專案界線與程式碼風格
@@ -70,7 +70,7 @@
 - 使用 scripts/Enter-DevShell.ps1（vcvars64.bat -vcvars_ver=14.2）及 scripts/Build.ps1；確認實際 cl/link 與 x64，不使用新版 VS 預設工具集或 target-cpu=native。
 - 離線依賴保留 Cargo.lock、vendor、.cargo/config.toml，以空 Cargo 快取及 --frozen 驗證。不要把歷史離線 ZIP 當成目前依賴。
 - BuildOnly 僅編譯；ValidateOnly 不更新發行產物；BasicValidation 不代表完整驗證。Office、VNC、SMB、CAD 與 NSIS 依變更範圍及當次授權實測，缺少環境如實回報。
-- 真模型、固定參數原生工具、幾何／內容及畫面核對分開記錄。保留原始參數與失敗，不由測試程式替模型補正；流程見 docs/LOCAL_MODEL_VALIDATION.md。
+- 真模型、固定參數原生工具、幾何／內容及畫面核對分開記錄。保留原始參數與失敗，不由測試程式替模型補正；流程見 docs/development/LOCAL_MODEL_VALIDATION.md。
 - CAD 使用獨立新圖或副本，保留使用者原圖。修改、Undo、保存重開及文件身分分開核對；工具成功不代表圖面設計核准。
 - 0.8.77 完整建置與 NSIS 通過，但 Luna 多檔交付及 CAD 結尾仍有未完成案例；桌寵拖曳／通知點擊、公司模型、真 Outlook 及加密文件仍需現場驗收。不得把原生測試 PASS 當成上述情境通過。
 

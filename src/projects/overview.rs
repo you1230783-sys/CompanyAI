@@ -200,6 +200,21 @@ mod tests {
     use super::*;
     use serde_json::json;
     #[test]
+    fn excel_overview_reads_metadata_for_legacy_and_compact_pages() {
+        let mut pages = Vec::new();
+        for format in [Value::Null, json!("excel-compact-v1")] {
+            pages.push(json!({"request":{"tool":"read_excel_range","path":"book.xlsx"},
+                "result":{"ok":true,"result":{"format":format,"start_row":7,"row_count":2,
+                    "rows":if format.is_null() {json!([{"row":7,"cells":[]}])} else {json!([[7,42]])}}}}));
+        }
+        let summary = Overview::from_operations(&json!(pages), &[], "completed");
+        assert_eq!(summary.reads.len(), 2);
+        for read in summary.reads {
+            assert_eq!(read.path, "book.xlsx");
+            assert!(read.range.contains("起始列 7") && read.range.contains("列數 2"));
+        }
+    }
+    #[test]
     fn section_reads_and_image_pairs_keep_the_actual_source_paths() {
         let tools = [
             super::super::Tool::ReadCodeSection {
