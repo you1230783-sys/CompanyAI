@@ -259,8 +259,14 @@ impl App {
             let mut queue = self.projects.batch.queue.clone();
             queue.notified = Some(window);
             self.batch_commit(queue)?;
-            if self.config.notification_popups && !self.is_foreground() {
-                self.desktop_notice("昨晚批次結果已整理，可在晚間批次佇列查看。");
+            if !self.is_foreground() {
+                use crate::notification_preferences::{Category, Delivery};
+                self.popup(
+                    Category::OvernightBatch,
+                    "昨晚批次結果已整理，可在晚間批次佇列查看。",
+                    Delivery::Pet,
+                    crate::ui::popup::Target::Window,
+                );
             }
             changed = true;
         }

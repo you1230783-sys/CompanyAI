@@ -416,7 +416,6 @@ impl App {
                 ui_font,
                 interface_scale,
                 sidebar_collapsed,
-                notification_popups,
                 minimize_to_taskbar,
                 dark_mode,
             } => {
@@ -429,7 +428,6 @@ impl App {
                     config.interface_scale = crate::config::interface_scale(scale);
                 }
                 config.sidebar_collapsed = sidebar_collapsed;
-                config.notification_popups = notification_popups;
                 if let Some(enabled) = minimize_to_taskbar {
                     config.minimize_to_taskbar = enabled;
                 }
@@ -440,6 +438,27 @@ impl App {
                 self.config = config;
                 self.view.set_interface_scale(self.config.interface_scale)?;
                 apply_window_theme(self.window, self.config.dark_mode);
+            }
+            Command::NotificationMode { mode } => {
+                use crate::notification_preferences::Mode;
+                if mode == Mode::Pet && !self.pet_notification_option() {
+                    return Err("請先開啟額外功能並使用包含桌寵的版本。".into());
+                }
+                if mode != Mode::Legacy {
+                    let mut config = self.config.clone();
+                    config.notification_preferences.mode = mode;
+                    storage::save_config(&self.root, &config)?;
+                    self.config = config;
+                }
+            }
+            Command::NotificationCategory { category, enabled } => {
+                let mut config = self.config.clone();
+                config
+                    .notification_preferences
+                    .categories
+                    .insert(category, enabled);
+                storage::save_config(&self.root, &config)?;
+                self.config = config;
             }
             Command::ChartPalette { colors } => {
                 if !crate::config::valid_chart_palette(&colors) {

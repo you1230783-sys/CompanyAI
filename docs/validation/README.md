@@ -6,6 +6,7 @@
 
 | 版本 | 紀錄 |
 | --- | --- |
+| 0.9.22 | [通知盤點與驗證](VALIDATION_0_9_22.md) |
 | 0.9.21 | [HTTPS v2 本機驗證與限制](VALIDATION_0_9_21.md) |
 | 0.9.20 | [相關驗證與限制](VALIDATION_0_9_20.md) |
 | 0.9.19 | [完整本機驗證與限制](VALIDATION_0_9_19.md) · [公告逐版對照](RELEASE_NOTES_0_9_19_DIFF.md) |

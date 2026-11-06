@@ -154,12 +154,14 @@ impl App {
                         self.site.retry_seconds = 60;
                         self.site.not_before = None;
                         self.site.status = "全站鈴鐺已同步，已讀與刪除以網站為準".into();
-                        if added > 0 && self.config.notification_popups && !self.is_foreground() {
-                            self.work.tray_restore_only = false;
-                            self.work.task_balloon = false;
-                            self.desktop_notice(&format!(
-                                "收到 {added} 則全站新通知，點一下查看。"
-                            ));
+                        if added > 0 && !self.is_foreground() {
+                            use crate::notification_preferences::{Category, Delivery};
+                            self.popup(
+                                Category::SiteInbox,
+                                &format!("收到 {added} 則全站新通知，點一下查看。"),
+                                Delivery::Pet,
+                                super::popup::Target::Inbox,
+                            );
                         }
                     }
                     Err(e) => self.site_failure(e),

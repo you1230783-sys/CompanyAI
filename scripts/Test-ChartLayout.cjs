@@ -26,7 +26,7 @@ const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
       window.check=(ok,message)=>{if(!ok)throw Error(message);};window.sent=[];send=message=>sent.push(message);
       window.fixture={...LMUI.getState(),logged_in:true,can_send:true,busy:'none',models:[],messages:[],
         config:{...LMUI.getState().config,chart_palette:ChartAppearance.defaults()}};
-      LMUI.receive(fixture);document.querySelectorAll('dialog[open]').forEach(d=>d.close());$('settings-dialog').showModal();SettingsUI.select(0);
+      LMUI.receive(fixture);document.querySelectorAll('dialog[open]').forEach(d=>d.close());$('settings-dialog').showModal();SettingsUI.select('settings-tab-0');
       const inputs=[...$('chart-palette').querySelectorAll('input')];check(inputs.length===8,'eight palette entries');
       inputs[0].value='#c02090';inputs[0].dispatchEvent(new Event('input'));LMUI.receive(fixture);
       check(inputs[0].value==='#c02090','incoming state preserves color draft');$('chart-palette-save').click();

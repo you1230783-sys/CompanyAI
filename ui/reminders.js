@@ -6,15 +6,16 @@ window.ReminderUI = (() => {
   dialog.dataset.offline = "true";
   dialog.className = "reminders-dialog";
   dialog.innerHTML = `<div class="tarot-heading"><h2>提醒事項</h2><button data-close aria-label="關閉提醒事項">✕</button></div>
-    <p>新增一則提醒，選擇時間與通知方式；也可編輯或刪除。所有資料只保存在這台電腦。</p>
-    <p class="subtle">程式需保持執行，縮到托盤仍可提醒；完全退出期間到期的項目，會在下次啟動時依序補送。Windows 勿擾或系統通知設定可能影響顯示。桌寵泡泡設為0秒或全透明時，改用 Windows 通知。提醒使用此處選擇的方式。</p>
+    <p>新增一則提醒，選擇時間後即可保存；也可編輯或刪除。所有資料只保存在這台電腦。</p>
+    <p class="subtle">程式需保持執行，縮到托盤仍可提醒；完全退出期間到期的項目，會在下次啟動時依序處理。通知方式可在「設定 → 通知」調整。</p>
     <form data-form><label>提醒內容<input data-title type="text" maxlength="180" required placeholder="例如：下午開會、休息一下或回覆文件"></label>
-    <div class="reminder-fields"><label>提醒時間（本機時間）<input data-time type="datetime-local" required></label><label>通知方式<select data-channel><option value="pet">桌寵</option><option value="windows">Windows 通知</option></select></label></div>
+    <div class="reminder-fields"><label>提醒時間（本機時間）<input data-time type="datetime-local" required></label><label data-legacy-channel>通知方式<select data-channel><option value="pet">桌寵</option><option value="windows">Windows 通知</option></select></label></div>
     <div class="dialog-actions"><button data-save type="submit" class="primary-button">新增提醒</button><button data-reset type="button">取消編輯／清空</button></div></form>
     <p data-status role="status" aria-live="polite"></p><div data-list class="reminder-list"></div>`;
   document.body.append(dialog);
   const find = selector => dialog.querySelector(selector);
   let entries = [], editing = null, pending = null, ready = false, workflow = null;
+  const useLegacyChannels = () => state.config.notification_preferences?.mode === "legacy";
   const repeat=document.createElement("select"); repeat.innerHTML='<option value="0">單次</option><option value="1">每24小時</option><option value="7">每7天</option>';
   const repeatLabel=document.createElement("label");repeatLabel.textContent="重複週期（固定間隔，夏令時間變更後請重新設定）";repeatLabel.append(repeat);find("[data-form]").prepend(repeatLabel);
   const workflowHint=document.createElement("p");find("[data-form]").prepend(workflowHint);
@@ -47,7 +48,8 @@ window.ReminderUI = (() => {
       const row = document.createElement("article"), details = document.createElement("div"), title = document.createElement("strong"), subtitle = document.createElement("p"), actions = document.createElement("div");
       row.className = "reminder-row";
       title.textContent = entry.title;
-      subtitle.textContent = `${new Date(entry.due_at*1000).toLocaleString()} · ${entry.channel === "pet" ? "桌寵" : "Windows"} · ${entry.notified_at != null ? "已送出提醒" : "等待提醒"}`;
+      const channel = useLegacyChannels() ? (entry.channel === "pet" ? " · 桌寵" : " · Windows") : "";
+      subtitle.textContent = `${new Date(entry.due_at*1000).toLocaleString()}${channel} · ${entry.notified_at != null ? "已到期" : "等待提醒"}`;
       details.append(title,subtitle);
       for (const [label, action] of [["編輯", () => {
         editing = entry.id; repeat.value=String(entry.repeat_days||0);workflow=entry.workflow?{conversation:entry.workflow.conversation,template:entry.workflow.template}:null;workflowHint.textContent=workflow?"流程提醒：只通知，不自動執行；載入後填入參數與確認。":"";
@@ -78,6 +80,7 @@ window.ReminderUI = (() => {
     transmit({action:"save",id:editing,title,due_at,channel:find("[data-channel]").value,repeat_days:Number(repeat.value),workflow});
   };
   function open() {
+    find("[data-legacy-channel]").hidden = !useLegacyChannels();
     const petOption = find('[data-channel] option[value="pet"]');
     petOption.textContent = featureEnabled("pet") ? "桌寵" : "桌寵（此建置改用Windows通知）";
     if (!editing && !featureEnabled("pet")) find("[data-channel]").value = "windows";

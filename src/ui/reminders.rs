@@ -195,8 +195,6 @@ impl App {
         }
         // 先保存送出記錄，避免重開後每次重播。Windows是否顯示仍由通知／勿擾設定決定。
         self.reminders.store = Ok(next);
-        self.work.tray_restore_only = true;
-        self.schedules.notice = false;
         #[cfg(feature = "pet")]
         let pet_available = {
             let pet = self.pet.settings();
@@ -205,12 +203,18 @@ impl App {
         // 精簡版保留舊提醒資料，原桌寵通知改由Windows呈現，不遺失提醒。
         #[cfg(not(feature = "pet"))]
         let pet_available = false;
-        let delivered = if entry.channel == Channel::Pet && pet_available {
-            self.desktop_notice(&format!("提醒：{}", entry.title));
-            true
+        use crate::notification_preferences::{Category, Delivery};
+        let legacy = if entry.channel == Channel::Pet && pet_available {
+            Delivery::Pet
         } else {
-            windows_notice(self.window, &entry.title)
+            Delivery::Windows
         };
+        let delivered = self.popup(
+            Category::Reminder,
+            &entry.title,
+            legacy,
+            super::popup::Target::Window,
+        );
         if !delivered {
             // Shell拒絕接收時保留未送出狀態，稍後再試；不可一直每50ms重試。
             if previous.save(&self.root).is_ok() {
@@ -225,8 +229,8 @@ impl App {
     }
 }
 
-/// 沿用應用程式托盤圖示，文字只來自使用者明確設定的提醒。
-pub(super) fn windows_notice(window: HWND, title: &str) -> bool {
+/// 沿用應用程式托盤圖示；是否顯示由 Windows 通知／勿擾設定決定。
+pub(super) fn windows_notice(window: HWND, title: &str, message: &str) -> bool {
     let mut data = NOTIFYICONDATAW {
         cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
         hWnd: window,
@@ -235,8 +239,8 @@ pub(super) fn windows_notice(window: HWND, title: &str) -> bool {
         dwInfoFlags: NIIF_INFO,
         ..Default::default()
     };
-    copy_notice_text(&mut data.szInfoTitle, "LM_AI 提醒事項");
-    copy_notice_text(&mut data.szInfo, title);
+    copy_notice_text(&mut data.szInfoTitle, title);
+    copy_notice_text(&mut data.szInfo, message);
     unsafe { Shell_NotifyIconW(NIM_MODIFY, &data) != 0 }
 }
 
@@ -284,7 +288,8 @@ mod tests {
                 ..Default::default()
             };
             let added = Shell_NotifyIconW(NIM_ADD, &data);
-            let delivered = added != 0 && windows_notice(window, "LM_AI 本機提醒功能測試");
+            let delivered =
+                added != 0 && windows_notice(window, "LM_AI 提醒事項", "LM_AI 本機提醒功能測試");
             Shell_NotifyIconW(NIM_DELETE, &data);
             DestroyWindow(window);
             assert_ne!(added, 0, "Windows未接受測試托盤圖示");

@@ -1,5 +1,9 @@
 //! 待用戶確認的提示與完成通知分開；只在背景提醒，不搶焦點、不替用戶同意。
 use super::*;
+use crate::{
+    notification_preferences::{Category, Delivery},
+    ui::popup::Target,
+};
 
 /// 看過的前景提示也記住，避免用戶讀到問題後切去別的程式又收到同一通知。
 fn record_requests(
@@ -57,14 +61,21 @@ impl App {
         })?;
         crate::notifications::save(&self.root, &self.inbox)?;
         self.toast(&self.projects.status.clone());
-        if self.config.notification_popups
-            && !(self.is_foreground() && self.active_id.as_deref() == Some(conversation))
-        {
-            self.projects.attention_conversation =
-                (paused || waiting).then(|| conversation.to_owned());
-            self.work.tray_restore_only = false;
-            self.work.task_balloon = true;
-            self.desktop_notice(&self.projects.status.clone());
+        if !(self.is_foreground() && self.active_id.as_deref() == Some(conversation)) {
+            self.popup(
+                if waiting {
+                    Category::Attention
+                } else {
+                    Category::ProjectResult
+                },
+                &self.projects.status.clone(),
+                Delivery::Pet,
+                if paused || waiting {
+                    Target::Project(conversation)
+                } else {
+                    Target::Tasks
+                },
+            );
         }
         Ok(())
     }
@@ -113,11 +124,14 @@ impl App {
         let Some(conversation) = notifications.into_iter().next() else {
             return;
         };
-        self.projects.attention_conversation = Some(conversation);
-        if self.config.notification_popups {
-            self.desktop_notice(&format!(
-                "{count} 個專案工作需要您確認，請回到 LM_AI 切換執行中的對話查看。"
-            ));
+        self.popup(
+            Category::Attention,
+            &format!("{count} 個專案工作需要您確認，請回到 LM_AI 切換執行中的對話查看。"),
+            Delivery::Pet,
+            Target::Project(&conversation),
+        );
+        if !self.config.notification_preferences.flash_attention() {
+            return;
         }
         let info = FLASHWINFO {
             cbSize: std::mem::size_of::<FLASHWINFO>() as u32,

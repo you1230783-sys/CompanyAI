@@ -72,15 +72,36 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
       testFixture.projects.preferences=[];LMUI.receive(testFixture);
       $('settings-dialog').showModal();
       const tabs=[...document.querySelectorAll('.settings-tabs [role=tab]')];
-      check(tabs.map(t=>t.textContent.trim()).join(',')==='一般,操作,進階,教學與更新日誌','four settings tabs');
-      $('hotkey').value='Win+F11';tabs[1].click();tabs[2].click();tabs[0].click();
+      check(tabs.map(t=>t.textContent.trim()).join(',')==='一般,通知,操作,進階,教學與更新日誌','notification tab follows general');
+      tabs[0].dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
+      const mode = $('notification-mode'), pet = mode.querySelector('[value=pet]');
+      check(document.activeElement===tabs[1] && !$('settings-panel-notifications').hidden,'notification tab keyboard access');
+      const toggles = [...document.querySelectorAll('[data-notice-category]')];
+      check(toggles.length===9 && new Set(toggles.map(input=>input.dataset.noticeCategory)).size===9,'all popup sources have independent toggles');
+      testFixture.config.notification_preferences={mode:'legacy',categories:{},legacy_popups:false};
+      testFixture.build_features={cad:true,tarot:true,vnc:true,pet:false};LMUI.receive(testFixture);
+      check(mode.value==='legacy' && pet.hidden && pet.disabled,'legacy mode shown; missing pet feature hides option');
+      check(toggles.filter(input=>input.checked).map(input=>input.dataset.noticeCategory).join(',')==='reminder,tray_hint','legacy disabled setting keeps reminders and tray hint');
+      testFixture.build_features.pet=true;testFixture.config.extra_features_enabled=false;LMUI.receive(testFixture);
+      check(pet.hidden && pet.disabled,'disabled extra features hide pet option');
+      testFixture.config.extra_features_enabled=true;LMUI.receive(testFixture);
+      check(!pet.hidden && !pet.disabled,'both flags expose pet option');
+      mode.value='off';mode.dispatchEvent(new Event('change'));
+      check(testCommands.at(-1).type==='notification_mode' && testCommands.at(-1).mode==='off','master preference routes to native code');
+      for (const toggle of toggles) {
+        toggle.click();
+        const command = testCommands.at(-1);
+        check(command.type==='notification_category' && command.category===toggle.dataset.noticeCategory
+          && command.enabled===toggle.checked,'independent native preference: '+toggle.dataset.noticeCategory);
+      }
+      $('hotkey').value='Win+F11';tabs[2].click();tabs[3].click();tabs[0].click();
       check($('hotkey').value==='Win+F11','tabs preserve input drafts');
       tabs[0].dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}));
       check(!$('settings-panel-3').hidden && $('settings-panel-0').hidden,'End selects the last tutorial tab');
       check($('tutorial-catalog').closest('#settings-panel-3') && $('updates-replay').closest('#settings-panel-3'),'tutorials and release history have their own panel');
       check(document.querySelectorAll('#tutorial-catalog .tutorial-topic').length===58,'all 58 interactive tutorial topics rendered');
       check(!$('release-history'),'no duplicate inline release history');
-      tabs[3].dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));
+      tabs.at(-1).dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));
       check(!$('settings-panel-2').hidden && $('settings-panel-3').hidden,'ArrowLeft returns to Advanced');
       check($('vnc-enabled').closest('#settings-panel-2') && $('advanced-settings').closest('#settings-panel-2'),'VNC and diagnostics in Advanced');
       $('project-diagnostics-run').value='old-run';
@@ -117,9 +138,9 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
       fs.writeFileSync('.build/settings-'+name+'.png',Buffer.from(png.data,'base64'));checks.push({name,...measure});
     }
     await capture('diagnostics-light',1180,'light');
-    await evaluate(`$('project-diagnostics-dialog').close();$('settings-dialog').showModal();SettingsUI.select(2);`);
+    await evaluate(`$('project-diagnostics-dialog').close();$('settings-dialog').showModal();SettingsUI.select('settings-tab-2');`);
     await capture('advanced-light',1180,'light');await capture('advanced-dark',1180,'dark');await capture('advanced-narrow',520,'light');
-    await evaluate(`SettingsUI.select(3);`);await capture('tutorials-narrow',520,'light');
+    await evaluate(`SettingsUI.select('settings-tab-3');`);await capture('tutorials-narrow',520,'light');
     await evaluate(`document.querySelector('#tutorial-catalog .tutorial-topic').click();check($('project-tutorial').open && !$('settings-dialog').open,'topic replay opens interactive practice');`);
     await capture('tutorial-card-narrow',520,'light');
     await evaluate(`ProjectTutorial.close();`);await delay(100);
@@ -182,8 +203,9 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
     })()`);
     checks.push('all 58 tutorials completed in real browser; input/select/checkbox gates, focus, isolation and search');
     fs.writeFileSync('.build/tutorials-review.json',JSON.stringify({result:'PASS',...tutorialChecks},null,2));
-    await evaluate(`SettingsUI.select(1);`);await capture('operations-narrow',520,'light');
-    await evaluate(`SettingsUI.select(0);`);await capture('general-light',1180,'light');
+    await evaluate(`SettingsUI.select('settings-tab-1');`);await capture('operations-narrow',520,'light');
+    await evaluate(`SettingsUI.select('settings-tab-notifications');`);await capture('notifications-narrow',520,'light');
+    await evaluate(`SettingsUI.select('settings-tab-0');`);await capture('general-light',1180,'light');
     const chartPng = await evaluate(`(() => {
       const data={kind:'scatter',title:'參數切換點',x_label:'時間（秒）',y_label:'量測值',source:'合成資料',
         x:[0,100,200,300,400,500,600,700],series:[{name:'量測',values:[1,1.1,2,2.2,2.1,3,2.9,3.1]}],

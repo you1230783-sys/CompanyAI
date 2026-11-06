@@ -501,13 +501,13 @@ impl App {
     }
 
     fn schedule_notice(&mut self, message: &str) {
-        if self.smoke || !self.config.notification_popups {
-            return;
-        }
-        self.desktop_notice(message);
-        self.schedules.notice = true;
-        self.work.tray_restore_only = false;
-        super::reminders::windows_notice(self.window, message);
+        use crate::notification_preferences::{Category, Delivery};
+        self.popup(
+            Category::Schedule,
+            message,
+            Delivery::Both,
+            super::popup::Target::Schedule,
+        );
     }
 
     /// 通知僅導覽到目前帳號可看的審計；舊帳號內容不放進通知點擊參數。

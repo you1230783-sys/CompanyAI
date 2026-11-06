@@ -269,10 +269,14 @@ impl App {
                         notifications::save(&self.root, &inbox)?;
                         self.inbox = inbox;
                         self.notification_status = "通知已同步；即時通道與定期補查並行".into();
-                        if added > 0 && self.config.notification_popups && !self.is_foreground() {
-                            self.work.tray_restore_only = false;
-                            self.work.task_balloon = false;
-                            self.desktop_notice(&format!("收到 {added} 則新通知，點一下查看。"));
+                        if added > 0 && !self.is_foreground() {
+                            use crate::notification_preferences::{Category, Delivery};
+                            self.popup(
+                                Category::AiInbox,
+                                &format!("收到 {added} 則新通知，點一下查看。"),
+                                Delivery::Pet,
+                                super::popup::Target::Inbox,
+                            );
                         }
                         if more || self.notifications_pending {
                             self.notifications_pending = false;

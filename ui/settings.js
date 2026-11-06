@@ -9,27 +9,48 @@ window.SettingsUI = (() => {
   });
   $("chart-palette-save").onclick=()=>{paletteDirty=false;send({type:"chart_palette",colors:colorInputs.map(input=>input.value)});};
   $("chart-palette-reset").onclick=()=>{colorInputs.forEach((input,i)=>input.value=ChartAppearance.defaults()[i]);paletteDirty=true;};
-  function render(config) {
+  const notificationMode = $("notification-mode");
+  const petOption = notificationMode.querySelector('[value="pet"]');
+  const legacyOption = notificationMode.querySelector('[value="legacy"]');
+  const categories = [...document.querySelectorAll("[data-notice-category]")];
+  notificationMode.onchange = () => send({type:"notification_mode", mode:notificationMode.value});
+  categories.forEach(input => {
+    input.onchange = () => send({type:"notification_category", category:input.dataset.noticeCategory, enabled:input.checked});
+  });
+  function render(config, features) {
     ChartAppearance.set(config.chart_palette);
     if(!paletteDirty) colorInputs.forEach((input,i)=>input.value=ChartAppearance.palette()[i]);
+    const preferences = config.notification_preferences || {mode:"windows", categories:{}};
+    const petAvailable = Boolean(features?.pet && config.extra_features_enabled);
+    petOption.hidden = petOption.disabled = !petAvailable;
+    legacyOption.hidden = preferences.mode !== "legacy";
+    const petFallback = preferences.mode === "pet" && !petAvailable;
+    notificationMode.value = petFallback ? "windows" : preferences.mode;
+    $("notification-mode-legacy").hidden = legacyOption.hidden;
+    $("notification-mode-pet-fallback").hidden = !petFallback;
+    categories.forEach(input => {
+      const category = input.dataset.noticeCategory;
+      const legacyEnabled = preferences.legacy_popups !== false || ["reminder", "tray_hint"].includes(category);
+      input.checked = preferences.categories?.[category] ?? legacyEnabled;
+    });
   }
   const buttons = [...document.querySelectorAll(".settings-tabs [role=tab]")];
-  function select(index, focus = false) {
-    buttons.forEach((button, position) => {
-      const active = position === index;
+  function select(id, focus = false) {
+    buttons.forEach(button => {
+      const active = button.id === id;
       button.setAttribute("aria-selected", String(active));
       button.tabIndex = active ? 0 : -1;
       $(button.getAttribute("aria-controls")).hidden = !active;
+      if (active && focus) button.focus();
     });
     document.querySelector(".settings-content").scrollTop = 0;
-    if (focus) buttons[index].focus();
   }
   buttons.forEach((button, index) => {
-    button.onclick = () => select(index);
+    button.onclick = () => select(button.id);
     button.onkeydown = event => {
       const count = buttons.length;
       const next = {ArrowRight:(index+1)%count, ArrowLeft:(index+count-1)%count, Home:0, End:count-1}[event.key];
-      if (next !== undefined) { event.preventDefault(); select(next, true); }
+      if (next !== undefined) { event.preventDefault(); select(buttons[next].id, true); }
     };
   });
   $("diagnostics-export").onclick = () => {

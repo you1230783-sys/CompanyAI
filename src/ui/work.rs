@@ -1603,14 +1603,14 @@ impl App {
             if !task.title_generation && remote.state != "cancelled" && !self.is_foreground() {
                 self.toast(label);
             }
-            if !task.title_generation
-                && remote.state != "cancelled"
-                && self.config.notification_popups
-                && !self.is_foreground()
-            {
-                self.work.tray_restore_only = false;
-                self.work.task_balloon = true;
-                self.desktop_notice(label);
+            if !task.title_generation && remote.state != "cancelled" && !self.is_foreground() {
+                use crate::notification_preferences::{Category, Delivery};
+                self.popup(
+                    Category::AiResult,
+                    label,
+                    Delivery::Pet,
+                    super::popup::Target::Tasks,
+                );
             }
         }
         Ok(())

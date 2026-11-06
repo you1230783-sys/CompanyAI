@@ -2,12 +2,18 @@
 use super::*;
 
 impl App {
-    /// 先由呼叫端保存草稿；提示不受一般網站通知設定影響，也不代表程式已退出。
+    /// 先由呼叫端保存草稿；視窗隱藏後程式仍繼續執行。
     pub(super) fn hide_to_tray(&mut self) {
         unsafe { ShowWindow(self.window, SW_HIDE) };
         self.work.tray_restore_only = true;
         if !self.smoke {
-            self.desktop_notice("應用程式已縮小至系統托盤，如需離開，請在托盤圖示按右鍵 → 離開。");
+            use crate::notification_preferences::{Category, Delivery};
+            self.popup(
+                Category::TrayHint,
+                "應用程式已縮小至系統托盤，如需離開，請在托盤圖示按右鍵 → 離開。",
+                Delivery::Pet,
+                super::popup::Target::Window,
+            );
         }
     }
 }

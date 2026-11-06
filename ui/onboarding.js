@@ -29,7 +29,7 @@ window.OnboardingUI = (() => {
       onComplete: id => send({type:"onboarding_ack", topic:id}),
       onClose: () => {
         if (fromSettings && allowed()) {
-          $("settings-dialog").showModal(); window.SettingsUI.select(3);
+          $("settings-dialog").showModal(); window.SettingsUI.select("settings-tab-3");
         }
       },
     });
@@ -155,7 +155,7 @@ window.OnboardingUI = (() => {
   dialog.addEventListener("close", () => {
     if (returnToSettings && allowed()) {
       $("settings-dialog").showModal();
-      window.SettingsUI.select(3);
+      window.SettingsUI.select("settings-tab-3");
     }
     returnToSettings = false;
     if (previousFocus?.isConnected && allowed()) previousFocus.focus();

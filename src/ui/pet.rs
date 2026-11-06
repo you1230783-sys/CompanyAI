@@ -28,8 +28,7 @@ pub(super) enum PetCommand {
 }
 impl App {
     #[cfg(feature = "pet")]
-    pub(super) fn desktop_notice(&mut self, message: &str) {
-        self.schedules.notice = false;
+    pub(super) fn pet_notice(&mut self, message: &str) {
         if !self.smoke {
             self.pet.typography(self.config.ui_font);
             self.pet.notify(message);
@@ -94,8 +93,13 @@ impl App {
                         .post(&json!({"type":"pet_imported","message":"提示詞已複製。"}))?;
                 }
                 PetCommand::Preview => {
-                    self.work.tray_restore_only = true;
-                    self.desktop_notice("這是桌寵通知。點一下可回到主視窗；拖曳角色可移動位置。");
+                    if self.config.notification_preferences.mode
+                        != crate::notification_preferences::Mode::Off
+                    {
+                        self.schedules.notice = false;
+                        self.work.tray_restore_only = true;
+                        self.pet_notice("這是桌寵通知。點一下可回到主視窗；拖曳角色可移動位置。");
+                    }
                 }
             }
             let mut state = if include_images {
@@ -237,8 +241,5 @@ fn choose_png(owner: HWND) -> AppResult<Option<PathBuf>> {
 // 核心通知中心仍保存通知；未編入桌寵時不建立透明視窗或載入角色圖片。
 #[cfg(not(feature = "pet"))]
 impl App {
-    pub(super) fn desktop_notice(&mut self, _message: &str) {
-        self.schedules.notice = false;
-    }
     pub(super) fn tick_pet(&mut self) {}
 }

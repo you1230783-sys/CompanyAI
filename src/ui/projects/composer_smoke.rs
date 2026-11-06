@@ -53,7 +53,7 @@ impl App {
         let server = crate::demo::DemoServer::start()?;
         self.config = server.config();
         self.config.model = "fast".into();
-        self.config.notification_popups = false;
+        self.config.notification_preferences.mode = crate::notification_preferences::Mode::Off;
         self.session = Some(crate::storage::Session {
             access_token: "composer-fixture-not-a-real-token".into(),
             expires_at: crate::unix_now() + 3600,
@@ -87,7 +87,11 @@ impl App {
             let (chat, old) = self.composer_fixture()?;
             self.projects.running.clear();
             self.projects.status = "專案已暫停，可按繼續。".into();
-            self.config.notification_popups = popups;
+            self.config.notification_preferences.mode = if popups {
+                crate::notification_preferences::Mode::Windows
+            } else {
+                crate::notification_preferences::Mode::Off
+            };
             self.inbox = crate::notifications::Inbox::for_session(
                 self.session.as_ref().ok_or("缺少測試登入")?,
             );
@@ -125,7 +129,7 @@ impl App {
                 verify(!self.open_project_attention()?, "通知導向消耗一次")?;
             }
         }
-        self.config.notification_popups = false;
+        self.config.notification_preferences.mode = crate::notification_preferences::Mode::Off;
         cases.push("paused notice: persisted and visible, popup preference, click selects resumable conversation once; delivery suppressed in self-check");
 
         let (chat, old) = self.composer_fixture()?;

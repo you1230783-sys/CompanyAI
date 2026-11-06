@@ -340,7 +340,7 @@ pub(super) struct ProjectRuntime {
     batch: batch::Runtime,
     recovered_retries: std::collections::BTreeMap<String, String>,
     attention_seen: std::collections::BTreeSet<String>,
-    attention_conversation: Option<String>,
+    pub(super) attention_conversation: Option<String>,
     weekly: Option<weekly::PendingWeekly>,
     quick: Option<quick::Pending>,
     pub store: Store,

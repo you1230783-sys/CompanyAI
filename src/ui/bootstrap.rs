@@ -366,7 +366,7 @@ pub fn run_local(local: crate::local_test::LocalTest) -> AppResult<()> {
 
 /// 本機模型情境沿用正式控制器與離線呈現器；不使用一般使用者資料目錄。
 pub fn run_local_scenario(mut local: crate::local_test::LocalTest, path: &Path) -> AppResult<()> {
-    local.config.notification_popups = false;
+    local.config.notification_preferences.mode = crate::notification_preferences::Mode::Off;
     run_with_local(None, false, Some(local), Some(path), None)
 }
 

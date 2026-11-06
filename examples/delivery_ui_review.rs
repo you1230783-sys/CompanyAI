@@ -51,7 +51,7 @@ fn run() -> AppResult<()> {
         return Err("目視驗證只接受本專案.build測試目錄。".into());
     }
     let mut local = LocalTest::load(&request.connection, &request.destination)?;
-    local.config.notification_popups = false;
+    local.config.notification_preferences.mode = company_ai::notification_preferences::Mode::Off;
     for name in ["history.dpapi", "projects.dpapi"] {
         fs::copy(source.join(name), request.destination.join(name)).map_err(|e| e.to_string())?;
     }

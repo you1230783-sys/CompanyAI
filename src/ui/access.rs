@@ -108,7 +108,6 @@ mod tests {
                 ui_font: None,
                 interface_scale: None,
                 sidebar_collapsed: false,
-                notification_popups: true,
                 dark_mode: None,
             },
             Command::Copy {

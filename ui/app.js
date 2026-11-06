@@ -12,7 +12,6 @@ let state = {
     interface_scale: 100,
     hotkey: "Win+Esc",
     sidebar_collapsed: false,
-    notification_popups: true,
     minimize_to_taskbar: true,
   },
   busy: "none",
@@ -951,7 +950,7 @@ function receive(next) {
   for (const name of ["pet", "tarot"]) {
     $("show-" + name).hidden = !state.config.extra_features_enabled || !featureEnabled(name);
   }
-  window.SettingsUI?.render(state.config);
+  window.SettingsUI?.render(state.config, state.build_features);
   document.documentElement.dataset.theme = state.config.dark_mode ? "dark" : "light";
   $("dark-mode").checked = !!state.config.dark_mode;
   document.documentElement.style.setProperty(
@@ -996,7 +995,6 @@ function receive(next) {
   if (!hotkeyRecording) $("hotkey").value = hotkeyDraft ?? state.config.hotkey;
   $("version-label").textContent =
     `LM_AI ${state.version} · ${state.version_status}`;
-  $("notification-popups").checked = state.config.notification_popups;
   $("minimize-to-taskbar").checked = state.config.minimize_to_taskbar !== false;
   $("save-label").textContent = state.history_error
     ? "尚未保存"
@@ -1126,7 +1124,6 @@ $("collapse").onclick = () =>
     type: "preferences",
     font_size: state.config.font_size,
     sidebar_collapsed: !state.config.sidebar_collapsed,
-    notification_popups: state.config.notification_popups,
   });
 $("settings-button").onclick = () => {
   $("settings-dialog").showModal();
@@ -1146,14 +1143,12 @@ $("font-size").addEventListener("change", () =>
     type: "preferences",
     font_size: Number($("font-size").value),
     sidebar_collapsed: state.config.sidebar_collapsed,
-    notification_popups: state.config.notification_popups,
   }),
 );
-// 舊的通知／側欄命令未帶新欄位時，原生層會保留既有字體與縮放設定。
+// 偏好命令只套用指定的字體與縮放欄位。
 function saveDisplayPreference(extra) {
   send({ type: "preferences", font_size: state.config.font_size,
-    sidebar_collapsed: state.config.sidebar_collapsed,
-    notification_popups: state.config.notification_popups, ...extra });
+    sidebar_collapsed: state.config.sidebar_collapsed, ...extra });
 }
 $("ui-font").onchange = () => {
   applyUiFont($("ui-font").value);
@@ -1178,18 +1173,10 @@ const fontLicenseText = node("pre", "font-license-text", window.BundledFontLicen
 fontLicenseDialog.append(node("h2", "", "字型授權"), fontLicenseText, fontLicenseClose);
 document.body.append(fontLicenseDialog);
 $("font-licenses-open").onclick = () => fontLicenseDialog.showModal();
-$("notification-popups").onchange = () =>
-  send({
-    type: "preferences",
-    font_size: state.config.font_size,
-    sidebar_collapsed: state.config.sidebar_collapsed,
-    notification_popups: $("notification-popups").checked,
-  });
 $("dark-mode").onchange = () => {
   document.documentElement.dataset.theme = $("dark-mode").checked ? "dark" : "light";
   send({ type: "preferences", font_size: state.config.font_size,
     sidebar_collapsed: state.config.sidebar_collapsed,
-    notification_popups: state.config.notification_popups,
     dark_mode: $("dark-mode").checked });
 };
 $("save-hotkey").onclick = () =>

@@ -190,7 +190,7 @@ window.runSelfTest = async (structuredFixture) => {
         font_size: 14,
         hotkey: "Ctrl+Alt+Q",
         sidebar_collapsed: false,
-        notification_popups: true,
+        notification_preferences: {mode:"windows", categories:{}},
         model: "fast",
       },
       models: [{ id: "fast", label: "快速" }],

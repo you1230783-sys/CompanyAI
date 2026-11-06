@@ -90,7 +90,7 @@ pub struct Config {
     pub sidebar_collapsed: bool,
     pub projects_collapsed: bool,
     pub recent_collapsed: bool,
-    pub notification_popups: bool,
+    pub notification_preferences: crate::notification_preferences::Preferences,
     /// 勾選時最小化保留工作列；關閉按鈕仍一律收到托盤。
     pub minimize_to_taskbar: bool,
     pub dark_mode: bool,
@@ -122,7 +122,9 @@ struct Preferences {
     sidebar_collapsed: bool,
     projects_collapsed: bool,
     recent_collapsed: bool,
+    #[serde(skip_serializing)]
     notification_popups: Option<bool>,
+    notification_preferences: Option<crate::notification_preferences::Preferences>,
     minimize_to_taskbar: Option<bool>,
     dark_mode: bool,
     hotkey_enabled: Option<bool>,
@@ -147,7 +149,8 @@ impl Serialize for Config {
             sidebar_collapsed: self.sidebar_collapsed,
             projects_collapsed: self.projects_collapsed,
             recent_collapsed: self.recent_collapsed,
-            notification_popups: Some(self.notification_popups),
+            notification_popups: None,
+            notification_preferences: Some(self.notification_preferences.clone()),
             minimize_to_taskbar: Some(self.minimize_to_taskbar),
             dark_mode: self.dark_mode,
             hotkey_enabled: Some(self.hotkey_enabled),
@@ -175,7 +178,9 @@ impl<'de> Deserialize<'de> for Config {
             sidebar_collapsed: saved.sidebar_collapsed,
             projects_collapsed: saved.projects_collapsed,
             recent_collapsed: saved.recent_collapsed,
-            notification_popups: saved.notification_popups.unwrap_or(true),
+            notification_preferences: saved.notification_preferences.unwrap_or_else(|| {
+                crate::notification_preferences::Preferences::migrate(saved.notification_popups)
+            }),
             minimize_to_taskbar: saved.minimize_to_taskbar.unwrap_or(true),
             dark_mode: saved.dark_mode,
             hotkey_enabled: saved.hotkey_enabled.unwrap_or(true),
@@ -213,7 +218,7 @@ impl Default for Config {
             sidebar_collapsed: false,
             projects_collapsed: false,
             recent_collapsed: false,
-            notification_popups: true,
+            notification_preferences: crate::notification_preferences::Preferences::default(),
             minimize_to_taskbar: true,
             dark_mode: false,
             hotkey_enabled: true,

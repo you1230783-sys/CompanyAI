@@ -357,6 +357,7 @@
       </div>
       <div class="settings-tabs" role="tablist" aria-label="設定分類">
 <button type="button" id="settings-tab-0" role="tab" aria-controls="settings-panel-0" aria-selected="true" tabindex="0">一般</button>
+<button type="button" id="settings-tab-notifications" role="tab" aria-controls="settings-panel-notifications" aria-selected="false" tabindex="-1">通知</button>
 <button type="button" id="settings-tab-1" role="tab" aria-controls="settings-panel-1" aria-selected="false" tabindex="-1">操作</button>
 <button type="button" id="settings-tab-2" role="tab" aria-controls="settings-panel-2" aria-selected="false" tabindex="-1">進階</button>
 <button type="button" id="settings-tab-3" role="tab" aria-controls="settings-panel-3" aria-selected="false" tabindex="-1">教學與更新日誌</button>
@@ -395,19 +396,6 @@
           <p class="subtle">取消勾選後，縮小會收到系統托盤。按 X 一律收到托盤；如需離開，請在托盤圖示按右鍵 → 離開。</p>
         </section>
 <section>
-          <h3>通知</h3>
-          <label class="check-row"
-            ><input
-              id="notification-popups"
-              type="checkbox"
-              checked
-            />新通知與等待確認時顯示 Windows 提示</label
-          >
-          <p class="subtle">
-            程式在背景時，專案詢問、CAD修改確認及檔案等待也會提醒；點通知可返回。Windows可能依通知設定或勿擾模式隱藏彈出提示，工作列仍會提示。
-          </p>
-        </section>
-<section>
           <h3>版本與服務</h3>
           <p>Largan, Inc. · 公司 AI 助理 · Dev: 1230783</p>
           <p class="subtle">Copyright © 2026 Largan, Inc. All rights reserved.</p>
@@ -421,6 +409,32 @@
             </button>
           </div>
         </section></div>
+<div id="settings-panel-notifications" class="settings-panel" role="tabpanel" aria-labelledby="settings-tab-notifications" hidden>
+  <section>
+    <h3><label for="notification-mode">通知方式</label></h3>
+    <select id="notification-mode" aria-describedby="notification-mode-detail">
+      <option value="legacy" hidden>沿用舊設定</option>
+      <option value="windows">Windows 通知</option>
+      <option value="pet" hidden disabled>桌寵通知</option>
+      <option value="off">全部關閉</option>
+    </select>
+    <p class="subtle" id="notification-mode-detail">Windows 的通知設定與勿擾模式也會影響彈出提示。通知中心仍會保存通知。</p>
+    <p class="subtle" id="notification-mode-legacy" hidden>沿用舊設定時，各則提醒保留原先選擇的桌寵或 Windows 通知。</p>
+    <p class="subtle" id="notification-mode-pet-fallback" hidden>額外功能關閉或此版本未包含桌寵時，暫時使用 Windows 通知。</p>
+  </section>
+  <section>
+    <h3>各類通知</h3>
+    <label class="check-row"><input type="checkbox" data-notice-category="ai_result" />AI 回覆完成</label>
+    <label class="check-row"><input type="checkbox" data-notice-category="project_result" />專案任務結果</label>
+    <label class="check-row"><input type="checkbox" data-notice-category="attention" />專案等待使用者確認</label>
+    <label class="check-row"><input type="checkbox" data-notice-category="reminder" />本機提醒</label>
+    <label class="check-row"><input type="checkbox" data-notice-category="schedule" />流程排程結果</label>
+    <label class="check-row"><input type="checkbox" data-notice-category="overnight_batch" />晚間批次結果</label>
+    <label class="check-row"><input type="checkbox" data-notice-category="ai_inbox" />AI 服務通知</label>
+    <label class="check-row"><input type="checkbox" data-notice-category="site_inbox" />網站全站通知</label>
+    <label class="check-row"><input type="checkbox" data-notice-category="tray_hint" />縮到系統托盤的提示</label>
+  </section>
+</div>
 <div id="settings-panel-1" class="settings-panel" role="tabpanel" aria-labelledby="settings-tab-1" hidden><section>
           <h3>選取文字快捷鍵</h3>
           <div class="input-row">

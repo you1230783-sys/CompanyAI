@@ -51,6 +51,7 @@ mod handoff;
 mod mail_batch;
 mod onboarding;
 mod pet;
+mod popup;
 mod projects;
 mod reminders;
 mod retry;
@@ -186,11 +187,17 @@ enum Command {
         #[serde(default)]
         interface_scale: Option<u16>,
         sidebar_collapsed: bool,
-        notification_popups: bool,
         #[serde(default)]
         minimize_to_taskbar: Option<bool>,
         #[serde(default)]
         dark_mode: Option<bool>,
+    },
+    NotificationMode {
+        mode: crate::notification_preferences::Mode,
+    },
+    NotificationCategory {
+        category: crate::notification_preferences::Category,
+        enabled: bool,
     },
     Hotkey {
         value: String,
