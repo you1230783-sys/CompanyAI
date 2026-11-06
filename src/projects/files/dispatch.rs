@@ -9,6 +9,8 @@ impl Broker {
         cancel: &AtomicBool,
     ) -> AppResult<Value> {
         match tool {
+            Tool::ProposePlan { plan } => self.propose_task_plan(plan, false, "首次計畫"),
+            Tool::RevisePlan { plan, reason } => self.propose_task_plan(plan, true, reason),
             Tool::DocumentTask { command } => self.document_task(command, worker, cancel),
             Tool::OfficeAction { operation, .. }
                 if matches!(

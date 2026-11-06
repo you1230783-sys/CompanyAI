@@ -12846,6 +12846,257 @@
           "additionalProperties": false
         }
       }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "propose_plan",
+        "description": "計畫模式專用。提交後由程式等待使用者核准；只調整原步驟parameters時可直接記入歷程，不能假稱核准或擴大權限。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "plan": {
+              "type": "object",
+              "properties": {
+                "goal": {
+                  "type": "string",
+                  "maxLength": 1000
+                },
+                "steps": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "method": {
+                        "type": "string",
+                        "maxLength": 600
+                      },
+                      "tools": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "maxItems": 10
+                      },
+                      "parameters": {
+                        "type": "string",
+                        "maxLength": 1000
+                      }
+                    },
+                    "required": [
+                      "method",
+                      "tools",
+                      "parameters"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 20
+                },
+                "sources": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "maxItems": 30
+                },
+                "outputs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "maxLength": 100
+                      },
+                      "description": {
+                        "type": "string",
+                        "maxLength": 300
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "file",
+                          "answer"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "description",
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 20
+                },
+                "assumptions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "maxItems": 20
+                },
+                "questions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "maxItems": 20
+                }
+              },
+              "required": [
+                "goal",
+                "steps",
+                "sources",
+                "outputs",
+                "assumptions",
+                "questions"
+              ],
+              "additionalProperties": false
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "plan"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "revise_plan",
+        "description": "計畫模式專用。提交後由程式等待使用者核准；只調整原步驟parameters時可直接記入歷程，不能假稱核准或擴大權限。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "plan": {
+              "type": "object",
+              "properties": {
+                "goal": {
+                  "type": "string",
+                  "maxLength": 1000
+                },
+                "steps": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "method": {
+                        "type": "string",
+                        "maxLength": 600
+                      },
+                      "tools": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "maxItems": 10
+                      },
+                      "parameters": {
+                        "type": "string",
+                        "maxLength": 1000
+                      }
+                    },
+                    "required": [
+                      "method",
+                      "tools",
+                      "parameters"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 20
+                },
+                "sources": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "maxItems": 30
+                },
+                "outputs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "maxLength": 100
+                      },
+                      "description": {
+                        "type": "string",
+                        "maxLength": 300
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "file",
+                          "answer"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "description",
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 20
+                },
+                "assumptions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "maxItems": 20
+                },
+                "questions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "maxItems": 20
+                }
+              },
+              "required": [
+                "goal",
+                "steps",
+                "sources",
+                "outputs",
+                "assumptions",
+                "questions"
+              ],
+              "additionalProperties": false
+            },
+            "reason": {
+              "type": "string",
+              "maxLength": 1000
+            },
+            "progress_note": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "plan",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      }
     }
   ]
 }

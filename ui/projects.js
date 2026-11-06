@@ -346,6 +346,7 @@
   window.ProjectUI = {
     openDiagnostics,
     receive(message) {
+      if (window.TaskPlanUI?.receive(message)) return;
       if (message.type === "project_diagnostics") {
         if (diagnosticsRequest && $("project-diagnostics-dialog").open && message.conversation === state.active_id &&
             message.conversation === diagnosticsRequest.conversation && message.run_id === diagnosticsRequest.run_id &&
@@ -376,6 +377,7 @@
     window.ReviewUI?.sync();
     window.DiffPreviewUI?.sync();
     const showActivity = state.logged_in && projects.running && projects.running_conversation === state.active_id;
+    window.TaskPlanUI?.sync();
     renderSupplements(projects,showActivity);
     renderReview(projects,showActivity);
     renderOutlookConsent(projects,showActivity);
@@ -464,4 +466,105 @@
     }
     if (!projects.items?.length) list.append(node("p", "empty-small", "指定資料夾，開始文件工作"));
   }};
+})();
+// M9：只顯示原生計畫紀錄；核准按鈕傳回版本與對話，權限由原生端核對。
+(() => {
+  const cards = new Map();
+  const make = (tag, text = '') => { const e = document.createElement(tag); e.textContent = text; return e; };
+  const command = value => send({type:'project',command:value});
+  const preference = document.getElementById('plan-mode');
+  preference.onchange = () => command({action:'plan_preference',enabled:preference.checked});
+  function textField(parent, label, value, multiline = true) {
+    const field = make('label', label), input = document.createElement(multiline ? 'textarea' : 'input');
+    input.value = value || ''; field.append(input); parent.append(field); return input;
+  }
+  function showPlan(parent, plan) {
+    parent.append(make('p',plan.goal));
+    const steps=make('ol');
+    for(const step of plan.steps || []) steps.append(make('li',`${step.method}\n工具：${(step.tools||[]).join('、')}\n參數：${step.parameters || '未指定'}`));
+    parent.append(steps);
+    for(const [key,title] of [['sources','預計讀取'],['outputs','預計產出'],['assumptions','主要假設'],['questions','待確認問題']]) {
+      parent.append(make('strong',title)); const list=make('ul');
+      for(const item of plan[key] || []) list.append(make('li',typeof item==='string' ? item : `${item.description}（${item.kind==='file'?'檔案':'文字回答'}）`));
+      if(!list.children.length) list.append(make('li','無')); parent.append(list);
+    }
+  }
+  function editor(parent, plan) {
+    const goal=textField(parent,'目標',plan.goal), rows=[], outputs=[];
+    const steps=make('fieldset'); steps.append(make('legend','執行步驟'));parent.append(steps);
+    function addStep(step={method:'',tools:['read_file'],parameters:''}) {
+      const group=make('div'); steps.append(group);
+      const row={group,method:textField(group,'方法',step.method),tools:textField(group,'工具類型（以逗號分隔）',step.tools.join(', '),false),parameters:textField(group,'參數',step.parameters)};
+      const remove=make('button','移除此步驟');remove.type='button';remove.onclick=()=>group.remove();group.append(remove);rows.push(row);
+    }
+    plan.steps.forEach(addStep);const add=make('button','新增步驟');add.type='button';add.onclick=()=>addStep();steps.append(add);
+    const source=textField(parent,'預計來源（每行一項）',plan.sources.join('\n'));
+    const target=make('fieldset');target.append(make('legend','交付項目'));parent.append(target);
+    function addOutput(output={id:`output_${Date.now()}_${outputs.length}`,description:'',kind:'file'}) {
+      const group=make('div'); target.append(group);const description=textField(group,'說明',output.description),kind=make('select');
+      for(const [value,label] of [['file','檔案'],['answer','文字回答']]) {const option=make('option',label);option.value=value;kind.append(option);}kind.value=output.kind;group.append(kind);
+      const remove=make('button','移除此項');remove.type='button';remove.onclick=()=>group.remove();group.append(remove);outputs.push({group,id:output.id,description,kind});
+    }
+    plan.outputs.forEach(addOutput);const addTarget=make('button','新增交付項目');addTarget.type='button';addTarget.onclick=()=>addOutput();target.append(addTarget);
+    const assumptions=textField(parent,'假設（每行一項）',plan.assumptions.join('\n')), questions=textField(parent,'問題（每行一項）',plan.questions.join('\n'));
+    const lines=text=>text.split('\n').map(s=>s.trim()).filter(Boolean);
+    return ()=>({goal:goal.value,steps:rows.filter(r=>r.group.isConnected).map(r=>({method:r.method.value,tools:r.tools.value.split(/[,，]/).map(s=>s.trim()).filter(Boolean),parameters:r.parameters.value})),sources:lines(source.value),outputs:outputs.filter(r=>r.group.isConnected).map(r=>({id:r.id,description:r.description.value,kind:r.kind.value})),assumptions:lines(assumptions.value),questions:lines(questions.value)});
+  }
+  function draw(card, planState) {
+    const {host,target,latest}=card;host.replaceChildren();
+    if(!planState?.enabled)return;
+    host.append(make('h3',planState.pending ? '工作計畫等待確認' : '工作計畫'));
+    host.append(make('p','核准前只允許閱讀與閱讀筆記。核准計畫不會增加原件修改、刪除或其他權限。'));
+    const pending=planState.pending, current=pending?.plan || planState.approved;
+    if(current)showPlan(host,current);
+    if(pending && planState.approved) {
+      const change=make('details'),summary=make('summary','與上次核准計畫比較');change.append(summary);
+      const before=make('section');before.append(make('h4','上次核准'));showPlan(before,planState.approved);change.append(before);
+      const after=make('section');after.append(make('h4','此次修訂'));showPlan(after,pending.plan);change.append(after);host.append(change);
+    }
+    const history=make('details');history.append(make('summary',`計畫歷程（${planState.history?.length || 0}筆）`));
+    const names={pending:'待核准',approved:'使用者核准',rejected:'使用者退回',parameter_update:'參數調整'};
+    for(const entry of planState.history || []) {const item=make('details');item.append(make('summary',`第${entry.revision}版 · ${names[entry.status] || entry.status} · ${entry.local_time}`));item.append(make('p',entry.note));showPlan(item,entry.plan);history.append(item);}host.append(history);
+    if(!pending || !latest)return;
+    const edits=make('details');edits.append(make('summary','修改計畫內容後核准'));const readEdit=editor(edits,pending.plan);host.append(edits);
+    const feedback=textField(host,'補充說明（退回時必填）','');const buttons=[];
+    function submit(approved,edited) {
+      if(state.active_id!==target.conversation || state.projects?.running)return;
+      if(!approved && !feedback.value.trim()) {feedback.setCustomValidity('請填寫退回原因');feedback.reportValidity();return;}feedback.setCustomValidity('');
+      window.confirmFastModelSend(()=>{
+        buttons.forEach(b=>b.disabled=true);
+        command({action:'plan_review',...target,revision:pending.revision,edited:approved ? (edited ? readEdit() : pending.plan) : null,feedback:feedback.value});
+      },()=>host.isConnected && state.active_id===target.conversation && !state.projects?.running);
+    }
+    for(const [label,approve,edit] of [['核准並繼續',true,false],['修改後核准',true,true],['退回並補充',false,false]]) {
+      const b=make('button',label);b.type='button';b.disabled=!state.logged_in || !!state.projects?.running || !state.retry?.enabled;b.onclick=()=>submit(approve,edit);host.append(b);buttons.push(b);
+    }
+    const refresh=make('button','重新讀取計畫狀態');refresh.type='button';refresh.onclick=()=>command({action:'plan_view',...target});host.append(refresh);
+  }
+  window.TaskPlanUI={
+    sync() {
+      const project=state.conversations?.find(c=>c.id===state.active_id)?.project_id;
+      document.getElementById('plan-mode-label').hidden=!project;
+      preference.checked=!!state.projects?.plan_mode;preference.disabled=!state.logged_in;
+      for(const [key,card] of cards)if(!card.host.isConnected || card.target.conversation!==state.active_id)cards.delete(key);
+    },
+    render(parent,message,index) {
+      const plan=message.project_overview?.task_plan;if(!plan?.enabled)return;
+      const target={conversation:state.active_id,run_id:message.request_id,message_index:index};
+      const host=make('section');host.className='task-plan-card';parent.append(host);
+      const card={host,target,latest:!!message.project_paused && index===state.messages.length-1};cards.set(`${target.conversation}:${target.run_id}:${index}`,card);draw(card,plan);
+      if(card.latest)command({action:'plan_view',...target});
+    },
+    receive(message) {
+      if(message.type!=='project_plan')return false;
+      const card=cards.get(`${message.conversation}:${message.run_id}:${message.message_index}`);
+      if(card?.host.isConnected && state.active_id===message.conversation && message.plan) {
+        draw(card,message.plan);
+        // checkpoint 才是核准狀態的來源；歷史畫面可能來自核准前的保存點。
+        const m=state.messages[message.message_index];if(m?.project_overview)m.project_overview.task_plan=message.plan;
+        const resume=card.host.parentElement.querySelector('.resume-project');if(resume)resume.disabled=!!message.plan.pending || !state.retry?.enabled || !!state.projects?.running;
+      }
+      return true;
+    }
+  };
 })();

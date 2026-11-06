@@ -38,6 +38,7 @@ mod server_pdf;
 pub mod setup;
 mod skills;
 pub mod steering;
+pub mod task_plan;
 pub mod text;
 pub mod timeline;
 mod tool_calls;
@@ -65,6 +66,9 @@ pub struct Project {
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Store {
+    /// 新任務的偏好；續接以原生 checkpoint 的計畫狀態為準。
+    #[serde(default)]
+    pub plan_mode: bool,
     #[serde(default)]
     pub default_workspace: Option<String>,
     pub projects: Vec<Project>,
@@ -132,6 +136,13 @@ impl Store {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "tool", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Tool {
+    ProposePlan {
+        plan: Box<task_plan::Plan>,
+    },
+    RevisePlan {
+        plan: Box<task_plan::Plan>,
+        reason: String,
+    },
     /// 原生逐段翻譯與可追溯文件比較，沿用副本和操作去重契約。
     DocumentTask {
         command: documents::Command,
@@ -697,6 +708,8 @@ impl Tool {
     /// 使用者可讀的操作名稱，避免將 JSON 或文件全文當進度訊息。
     pub fn label(&self) -> &'static str {
         match self {
+            Self::ProposePlan { .. } => "提出工作計畫",
+            Self::RevisePlan { .. } => "修訂工作計畫",
             Self::BindDeliverable { .. } => "綁定交付路徑",
             Self::SupersedeArtifact { .. } => "標記已取代成果（保留未刪除）",
             Self::UpdateDeliverables { .. } => "更新交付清單",

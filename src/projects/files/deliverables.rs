@@ -52,6 +52,16 @@ impl Broker {
         &mut self,
         items: &[super::super::deliverables::Item],
     ) -> AppResult<Value> {
+        if let Some(plan) = &self.task_plan.approved {
+            if items.iter().any(|i| {
+                !plan
+                    .outputs
+                    .iter()
+                    .any(|o| o.id == i.id && o.description == i.description && o.kind == i.kind)
+            }) {
+                return Err("交付項目與核准計畫不同；請先 revise_plan 並取得核准。".into());
+            }
+        }
         for item in items {
             if let Some(target) = &item.target {
                 if !self.copies.contains_key(target) && !self.known_output(target) {

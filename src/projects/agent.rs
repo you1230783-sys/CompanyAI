@@ -479,6 +479,18 @@ pub fn parse(
     principal: &str,
     run: &str,
 ) -> AppResult<Parsed> {
+    parse_with_plan(status, task, principal, run, None)
+}
+
+/// 計畫唯讀階段把未提供的單項寫入回覆轉為「確認未執行」；身分與封套驗證仍先完成。
+/// 一般任務沿用嚴格拒絕未知工具，不因計畫功能放寬執行契約。
+pub(crate) fn parse_with_plan(
+    status: &jobs::TaskStatus,
+    task: &jobs::Task,
+    principal: &str,
+    run: &str,
+    plan: Option<&crate::projects::task_plan::State>,
+) -> AppResult<Parsed> {
     validate_status(status, task)?;
     let result = status.result.as_ref().ok_or("原生回覆缺少 result。")?;
     if result["object"] != "chat.completion"
@@ -567,8 +579,17 @@ pub fn parse(
     let name = call["function"]["name"].as_str().ok_or("缺少工具名稱。")?;
     let definition = task.request["tools"]
         .as_array()
-        .and_then(|tools| tools.iter().find(|t| t["function"]["name"] == name))
-        .ok_or("模型要求未提供的工具，已停止。")?;
+        .and_then(|tools| tools.iter().find(|t| t["function"]["name"] == name));
+    let Some(definition) = definition else {
+        if plan.is_some_and(|p| p.enabled && p.read_only && !p.name_allowed(name)) {
+            return Ok(Parsed::Repair {
+                reason: "Error Code: 14：計畫尚未核准，此工具未執行；請先提出計畫。".into(),
+                message: Some(message),
+                call_id: Some(call_id),
+            });
+        }
+        return Err("模型要求未提供的工具，已停止。".into());
+    };
     let encoded = call["function"]["arguments"].as_str().ok_or("缺少參數。")?;
     if encoded.len() > 262144 {
         return Err("工具參數超過桌面大小上限。".into());

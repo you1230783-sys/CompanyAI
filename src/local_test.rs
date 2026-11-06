@@ -84,6 +84,7 @@ impl LocalTest {
         let mut events = Vec::new();
         let result = runner::run(
             Run {
+                plan_mode: false,
                 id: id.clone(),
                 resume: false,
                 project,

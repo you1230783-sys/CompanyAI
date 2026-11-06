@@ -26,7 +26,9 @@ pub(super) fn system_prompt_for(model: &str) -> AppResult<String> {
             !matches!(
                 t["function"]["name"].as_str(),
                 Some(
-                    "bind_deliverable"
+                    "propose_plan"
+                        | "revise_plan"
+                        | "bind_deliverable"
                         | "supersede_artifact"
                         | "document_task"
                         | "write_excel_formulas"
@@ -807,6 +809,16 @@ mod tests {
             ("link_diagram_sources",json!({"diagram_index":0,"revision":"r","nodes":[{"node_id":"A","operation_id":"read-1","first_line":1,"last_line":5,"block_id":null,"detail_diagram_index":null}]})),
             ("export_cad_comparison",json!({"source_operation":"cad-edit","name":"修改比較.txt"})),
             ("document_task",json!({"command":{"action":"compare","left":"a.docx","right":"b.docx","key_column":null}})),
+        ]);
+        samples.extend([
+            (
+                "propose_plan",
+                json!({"plan":crate::projects::task_plan::tests::plan()}),
+            ),
+            (
+                "revise_plan",
+                json!({"plan":crate::projects::task_plan::tests::plan(),"reason":"更新參數"}),
+            ),
         ]);
         let definitions: Value = serde_json::from_str(DEFINITIONS).unwrap();
         assert_eq!(

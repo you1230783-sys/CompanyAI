@@ -1707,3 +1707,12 @@ dialog textarea:focus, dialog input:focus { outline: 2px solid var(--accent); ou
 .diff-preview-change { margin-block: 1rem; border-top: 1px solid var(--border, #888); padding-top: .5rem; }
 .diff-preview-change[data-kind="added"] { border-left: 3px solid #238636; }
 .diff-preview-change[data-kind="deleted"] { border-left: 3px solid #cf222e; }
+.task-plan-card { margin: 12px 0; padding: 16px; border: 1px solid var(--line); background: var(--panel); border-radius: 10px; overflow-wrap: anywhere; }
+.task-plan-card p, .task-plan-card li { white-space: pre-wrap; }
+.task-plan-card details { margin: 10px 0; }
+.task-plan-card label { display: block; margin: 8px 0; }
+.task-plan-card textarea, .task-plan-card input { display: block; width: 100%; box-sizing: border-box; min-height: 3em; padding: 8px; border: 1px solid var(--muted); border-radius: 6px; background: var(--canvas); color: var(--ink); }
+.task-plan-card fieldset { margin: 10px 0; min-width: 0; }
+.task-plan-card button { margin: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); color: var(--ink); }
+.task-plan-card button:disabled { opacity: .45; }
+#plan-mode-label { white-space: nowrap; font-size: 13px; }

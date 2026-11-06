@@ -595,3 +595,28 @@ fn pending_old_request_keeps_nullable_note_but_new_request_requires_string() {
         .unwrap()
         .contains("progress_note"));
 }
+
+#[test]
+fn plan_read_only_rejects_unoffered_write_without_weakening_identity() {
+    let task = task(request());
+    let mut response = status(&task, "{}");
+    response.result.as_mut().unwrap()["choices"][0]["message"]["tool_calls"][0]["function"]
+        ["name"] = json!("create_working_copy");
+    let mut task = task;
+    task.request["tools"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|t| t["function"]["name"] != "create_working_copy");
+    assert!(parse(&response, &task, "owner", "run").is_err());
+    let plan = crate::projects::task_plan::State::new(true);
+    let Parsed::Repair { reason, .. } =
+        parse_with_plan(&response, &task, "owner", "run", Some(&plan)).unwrap()
+    else {
+        panic!("must not produce executable operation")
+    };
+    assert!(reason.contains("Error Code: 14"));
+    response
+        .agent_envelope
+        .insert("conversation_id".into(), json!("other"));
+    assert!(parse_with_plan(&response, &task, "owner", "run", Some(&plan)).is_err());
+}

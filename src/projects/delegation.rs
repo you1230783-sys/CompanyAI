@@ -86,6 +86,7 @@ pub fn summarize(
     let mut child_config = run.config.clone();
     child_config.model = "fast".into();
     let child = Run {
+        plan_mode: false,
         id: run.id.clone(),
         resume: false,
         project: run.project.clone(),

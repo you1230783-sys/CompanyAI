@@ -11,6 +11,8 @@ pub struct Overview {
     /// 本機副本預覽入口，只含數量與狀態，不含差異原文。
     #[serde(default)]
     pub previews: Vec<super::review::preview::Entry>,
+    #[serde(default)]
+    pub task_plan: Option<super::task_plan::State>,
     pub failures: Vec<Failure>,
     pub truncated: bool,
     pub unavailable: bool,
@@ -36,6 +38,10 @@ fn short(text: &str) -> String {
     value
 }
 impl Overview {
+    pub fn with_task_plan(mut self, plan: &super::task_plan::State) -> Self {
+        self.task_plan = plan.enabled.then(|| plan.clone());
+        self
+    }
     pub fn unavailable(state: &str) -> Self {
         Self {
             state: state.into(),

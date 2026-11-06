@@ -7,6 +7,7 @@ impl Broker {
         validate_root(&project.root)?;
         Ok(Self {
             task_id: task,
+            task_plan: Default::default(),
             delivery_plan: Default::default(),
             work_context: None,
             analysis: Default::default(),
@@ -73,7 +74,7 @@ impl Broker {
     pub(in crate::projects) fn saved(&self) -> AppResult<SavedBroker> {
         // 經序列化建立不含程序資源的快照；授權與執行中的 COM 物件不保存。
         serde_json::from_value(
-            json!({"translations":self.translations,"delivery_plan":self.delivery_plan,"work_context":self.work_context,"comparison_records":self.comparison_records,"comparison_artifacts":self.comparison_artifacts,"source_versions":self.source_versions,"workflow":self.workflow,"report_values":self.report_values,"reading":self.reading,"analysis":self.analysis,"mail_notes":self.mail_notes,"mail_draft":self.mail_draft,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
+            json!({"task_plan":self.task_plan,"translations":self.translations,"delivery_plan":self.delivery_plan,"work_context":self.work_context,"comparison_records":self.comparison_records,"comparison_artifacts":self.comparison_artifacts,"source_versions":self.source_versions,"workflow":self.workflow,"report_values":self.report_values,"reading":self.reading,"analysis":self.analysis,"mail_notes":self.mail_notes,"mail_draft":self.mail_draft,"excel_plans":self.excel_plans,"outlook":self.outlook.saved,"log_cursors":self.log_cursors,"output_folder":self.output_folder,"copies":self.copies,
             "cad_design":self.cad_design,"cad_copy_version":self.cad_copy_version,
             "results":self.results,"archived_results":self.archived_results,"work_log_index":self.work_log_index,"references":self.references,"published":self.published,"txt_context":self.txt_context,"loaded_skills":self.loaded_skills,"charts":self.charts,"diagrams":self.diagrams,"diagram_sources":self.diagram_sources,"diagram_exports":self.diagram_exports,"chart_exports":self.chart_exports,"datasets":self.datasets,"python_artifacts":self.python_artifacts,"cad_artifacts":self.cad_artifacts,"cad_failed":self.cad_failed,"cad_last_result":self.cad_last_result,"cad_attempts":self.cad_attempts,"cad_partial_plans":self.cad_partial_plans,"cad_reads":self.cad_reads,"cad_previews":self.cad_previews}),
         )
@@ -84,6 +85,7 @@ impl Broker {
         state: SavedBroker,
         cancel: &AtomicBool,
     ) -> AppResult<()> {
+        self.task_plan = state.task_plan;
         self.reading = state.reading;
         if state.translations.len() > 10 {
             return Err("保存的翻譯任務超過上限。".into());

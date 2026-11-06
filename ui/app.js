@@ -660,6 +660,7 @@ function renderMessages() {
     if (toolHistory) projectDetails.append(toolHistory);
     content.append(bubble);
     window.ConversationUI?.overview(content,message,!!state.conversations.find(c=>c.id===state.active_id)?.project_id,index);
+    window.TaskPlanUI?.render(content, message, index);
     if(message.request_id)window.DiffPreviewUI?.attach(bubble,{conversation:state.active_id,message_index:index,request_id:message.request_id},message.project_overview?.previews);
     if (message.project_analysis) {
       const analysis = node("div");
@@ -691,7 +692,7 @@ function renderMessages() {
     tools.append(copy);
     if (message.project_paused && index === state.messages.length - 1 && state.conversations.some(c => c.id === state.active_id && c.project_id)) {
       const resume = node("button", "resume-project", "繼續");
-      resume.disabled = !state.retry?.enabled || state.projects?.running;
+      resume.disabled = !state.retry?.enabled || state.projects?.running || !!message.project_overview?.task_plan?.pending;
       resume.title = "從暫存的工作副本與進度繼續，不重新執行整個任務";
       resume.onclick = () => {
         if (resume.disabled) return;

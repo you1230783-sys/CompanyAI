@@ -85,6 +85,7 @@ fn run() -> AppResult<()> {
             let inbox = company_ai::projects::steering::Inbox::open(&local.root, &id)?;
             let answer = runner::run(
                 Run {
+                    plan_mode: false,
                     id: id.clone(),
                     resume: continuation > 0,
                     project: project.clone(),

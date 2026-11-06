@@ -195,6 +195,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         &config,
     )?;
     let make = |resume| Run {
+        plan_mode: false,
         id: id.clone(),
         resume,
         project: Project {

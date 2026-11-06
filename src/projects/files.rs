@@ -31,6 +31,7 @@ pub mod export;
 mod mail_notes;
 mod output;
 mod state;
+mod task_plan;
 #[cfg(test)]
 mod tests;
 pub use output::conversation_folder_name;
@@ -957,6 +958,8 @@ struct ChartExport {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(super) struct SavedBroker {
     #[serde(default)]
+    pub(in crate::projects) task_plan: super::task_plan::State,
+    #[serde(default)]
     translations: BTreeMap<String, super::documents::Translation>,
     #[serde(default)]
     delivery_plan: super::deliverables::Plan,
@@ -1033,6 +1036,7 @@ pub(super) struct SavedBroker {
     cad_previews: BTreeMap<String, Value>,
 }
 pub struct Broker {
+    pub(in crate::projects) task_plan: super::task_plan::State,
     translations: BTreeMap<String, super::documents::Translation>,
     delivery_plan: super::deliverables::Plan,
     work_context: Option<super::work_settings::Snapshot>,
@@ -1293,6 +1297,9 @@ impl Broker {
         if let Some(tools) = request["tools"].as_array_mut() {
             tools.retain(|tool| {
                 let name = tool["function"]["name"].as_str().unwrap_or("");
+                if !self.task_plan.name_allowed(name) {
+                    return false;
+                }
                 if self.reading.enabled
                     && !self.reading.pending.is_empty()
                     && !matches!(name, "record_reading_notes" | "read_reading_notes")

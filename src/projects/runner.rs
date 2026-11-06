@@ -4,11 +4,13 @@
 mod execution;
 use execution::*;
 mod recovery;
+mod task_plan;
 use recovery::*;
 pub use recovery::{
     recover, recover_activity, recover_analysis, recover_charts, recover_diagrams,
     recover_local_time, recover_overview, recover_review,
 };
+pub use task_plan::{pending_plan, review_plan};
 #[cfg(test)]
 mod pause_tests;
 use super::{files::Broker, sandbox::Worker, Decision, Project};
@@ -31,6 +33,7 @@ use std::{
 };
 
 pub struct Run {
+    pub plan_mode: bool,
     pub id: String,
     pub resume: bool,
     pub project: Project,

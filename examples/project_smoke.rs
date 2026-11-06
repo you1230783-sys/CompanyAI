@@ -25,6 +25,8 @@ mod server_pdf;
 mod skills;
 #[path = "project_smoke/source_code.rs"]
 mod source_code;
+#[path = "project_smoke/task_plan.rs"]
+mod task_plan;
 #[path = "project_smoke/vision.rs"]
 mod vision;
 
@@ -69,6 +71,9 @@ fn run() -> AppResult<()> {
     if args.get(3).is_some_and(|value| value == "--recovery-only") {
         pause::verify(&root)?;
         return interruption::verify(&root);
+    }
+    if args.get(3).is_some_and(|value| value == "--plan-only") {
+        return task_plan::verify(&root);
     }
     let cancel = AtomicBool::new(false);
     let mut worker = Worker::start(&exe, &cancel)?;

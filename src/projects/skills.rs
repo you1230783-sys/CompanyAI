@@ -256,7 +256,9 @@ pub fn enabled(tool: &str, ids: &[String]) -> bool {
         "cad_excel_plan" | "cad_excel_apply" => has("cad-excel") || has("cad-drawing"),
         "record_log_events" => has("log-analysis") || has("python-analysis"),
         "run_python" => has("python-analysis"),
-        "analyze_image"
+        "propose_plan"
+        | "revise_plan"
+        | "analyze_image"
         | "read_mail_notes"
         | "set_work_stage"
         | "run_batch"

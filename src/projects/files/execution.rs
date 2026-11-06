@@ -49,6 +49,9 @@ impl Broker {
         id: &str,
         tool: &Tool,
     ) -> AppResult<Option<Value>> {
+        if let Some(result) = self.task_plan.deny(tool) {
+            return Ok(Some(result));
+        }
         self.outlook.check_policy()?;
         crate::jobs::validate_id(id)?;
         let request = serde_json::to_value(tool).map_err(|e| e.to_string())?;
@@ -158,6 +161,9 @@ impl Broker {
         notify: &mut dyn FnMut(&str),
     ) -> AppResult<Value> {
         crate::projects::runner::check_cancel(cancel)?;
+        if let Some(result) = self.task_plan.deny(tool) {
+            return Ok(result);
+        }
         let request = serde_json::to_value(tool).map_err(|e| e.to_string())?;
         if !crate::build_features::tool_available(request["tool"].as_str().unwrap_or_default()) {
             return Err("此建置未包含CAD功能，尚未執行或重播CAD操作。".into());
@@ -294,7 +300,9 @@ impl Broker {
             && (registration_contract
                 || matches!(
                     tool,
-                    Tool::UpdateDeliverables { .. }
+                    Tool::ProposePlan { .. }
+                        | Tool::RevisePlan { .. }
+                        | Tool::UpdateDeliverables { .. }
                         | Tool::RecordReadingNotes { .. }
                         | Tool::BindDeliverable { .. }
                         | Tool::SupersedeArtifact { .. }

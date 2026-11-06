@@ -269,6 +269,7 @@ fn verify_case(root: &Path, mode: u8) -> AppResult<()> {
     )?;
     let result = runner::run_legacy_test(
         Run {
+            plan_mode: false,
             resume: false,
             id: run_id.clone(),
             project: Project {

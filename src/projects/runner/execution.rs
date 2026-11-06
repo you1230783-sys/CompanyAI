@@ -16,6 +16,16 @@ pub(super) fn run_for(
 ) -> AppResult<String> {
     let (mut charts, mut analysis, diagram_renderer) = hooks;
     run.project.root = crate::projects::setup::resolve_project_path(&run.project.root)?;
+    // 在任何日誌或專案記憶寫入前拒絕繞過計畫卡片，保留原暫停狀態供重新開啟後核准。
+    if run.resume
+        && load_pause(&run.root, &run.id)?
+            .broker
+            .task_plan
+            .pending
+            .is_some()
+    {
+        return Err("計畫仍在等待核准，請先使用計畫卡片確認或退回。".into());
+    }
     // 續接保留先前歷程；不能在建立新段日誌時把中斷前的診斷資訊清掉。
     let mut activity = if run.resume {
         recover_activity(&run.root, &run.id)?
@@ -30,6 +40,7 @@ pub(super) fn run_for(
     record["activity"] = json!(activity);
     checkpoint(&journal, &record)?;
     let mut broker = Broker::new(run.project.clone(), run.id.clone())?;
+    broker.task_plan = crate::projects::task_plan::State::new(run.plan_mode);
     broker.set_chart_history(&run.messages, &run.config.chart_palette);
     broker.set_diagram_history(&run.messages);
     if let Some(renderer) = diagram_renderer {
@@ -97,6 +108,9 @@ pub(super) fn run_for(
                 if task.conversation_id != run.conversation {
                     return Err("待查請求不屬於本次對話，未續接。".into());
                 }
+            }
+            if saved.broker.task_plan.pending.is_some() {
+                return Err("計畫仍在等待核准，請先使用計畫卡片確認或退回。".into());
             }
             broker.restore(saved.broker, &run.cancel)?;
             broker.reauthorize_outlook(&run.cancel, Instant::now() + budget)?;
@@ -166,6 +180,14 @@ pub(super) fn run_for(
             )
         });
         progress_state.update_system(&prompt);
+        if let Some(notice) = broker.task_plan.notice.take() {
+            progress_state.add_instructions(vec![crate::projects::steering::Instruction {
+                id: crate::jobs::new_id()?,
+                text: notice,
+                status: "staged".into(),
+                local_time: Some(crate::calendar::local_timestamp()),
+            }]);
+        }
         if !run.resume {
             progress_state
                 .task_references(run.messages.iter().map(|m| m.request_id.clone()).collect());
@@ -446,6 +468,9 @@ pub(super) fn run_for(
             if batch_replies >= MAX_REPLIES - 4 || tool_calls >= MAX_TOOLS - 4 {
                 messages.push(crate::projects::agent::Message::user(&format!("本批即將整理：剩餘 {} 次模型回覆、{} 次工具操作。請在這次 arguments.progress_note 總結已完成、來源與版本、未完成事項及下一步；保持正常工具呼叫，不要假裝完成。程式會保存工作副本與 checkpoint；新協定任務在時限內繼續下一批。",MAX_REPLIES-batch_replies,MAX_TOOLS-tool_calls)));
             }
+            if broker.task_plan.enabled {
+                messages.push(crate::projects::agent::Message::user(&format!("原生計畫模式：唯讀階段={}。未核准前只能閱讀及保存閱讀筆記，請用propose_plan提交目標、步驟（method/tools/parameters）、來源、產出、假設與問題。已有核准版本後改用revise_plan；方法或交付改變必須再核准，同步驟參數微調也記入歷程。計畫不授予額外權限。目前核准版本：{}", broker.task_plan.read_only, serde_json::to_string(&broker.task_plan.approved).map_err(|e|e.to_string())?)));
+            }
             record["progress"] = progress_state.snapshot(broker.progress_snapshot());
             let lookup_only = pending_model.is_some();
             let id = pending_model
@@ -652,8 +677,13 @@ pub(super) fn run_for(
                         .as_ref()
                         .map(Value::to_string)
                         .unwrap_or_default();
-                    match crate::projects::agent::parse(status, &task, &caps.principal_id, &run.id)?
-                    {
+                    match crate::projects::agent::parse_with_plan(
+                        status,
+                        &task,
+                        &caps.principal_id,
+                        &run.id,
+                        Some(&broker.task_plan),
+                    )? {
                         crate::projects::agent::Parsed::Operation {
                             parsed,
                             message,
@@ -693,7 +723,7 @@ pub(super) fn run_for(
                                 continue;
                             }
                             if let (Some(message), Some(call_id)) = (message, call_id) {
-                                // parse 已確認這是本輪提供的單一工具；參數錯誤歸入該工具的失敗預算。
+                                // parse 已核對單項回覆身分；參數錯誤或核准前拒絕均確認未執行。
                                 repair_tool_is_python = message
                                     .tool_calls
                                     .first()
@@ -701,7 +731,8 @@ pub(super) fn run_for(
                                 progress_state.push_native(
                                     message,
                                     &call_id,
-                                    &json!({"ok":false,"error":reason,"executed":false}),
+                                    &json!({"ok":false,"error":reason,"executed":false,
+                                        "error_kind":if reason.starts_with("Error Code: 14：") { "contract" } else { "argument" }}),
                                 );
                             }
                             (raw, None, reason)
@@ -835,6 +866,13 @@ pub(super) fn run_for(
             }
             // 已知終態才可發起修復；多 JSON、空白完成均不執行候選工具。
             let Some(parsed) = parsed else {
+                if broker.task_plan.enabled && broker.task_plan.read_only {
+                    report(
+                        &mut activity,
+                        &mut progress,
+                        format!("Error Code: 14：核准前工具或參數不符合唯讀契約，未執行。{reason}"),
+                    );
+                }
                 if let Some(python) = repair_tool_is_python {
                     progress_state.tool_outcome(python, true);
                     progress_state.tool_repair(&reason);
@@ -1139,6 +1177,14 @@ pub(super) fn run_for(
                     checkpoint(&journal, &record)?;
                     // 寫入結果與副本版本都已核對，才能重新提供可恢復 checkpoint。
                     broker.archive_results()?;
+                    if broker.task_plan.pending.is_some() {
+                        return pause(
+                            "工作計畫等待使用者核准或退回",
+                            &broker,
+                            &progress_state,
+                            None,
+                        );
+                    }
                     if result["ok"] == true {
                         if let crate::projects::Tool::CompactContext {
                             working_note,
@@ -1178,6 +1224,15 @@ pub(super) fn run_for(
                     }
                 }
                 Decision::Finish { message, artifacts } => {
+                    if broker.task_plan.enabled && broker.task_plan.read_only {
+                        let error = "Error Code: 14：計畫尚未核准，請先提出計畫；尚未執行交付。";
+                        if let Some((message, call_id)) = native_call {
+                            progress_state.push_native(message, &call_id, &json!({"ok":false,"error_kind":"contract","executed":false,"error":error}));
+                        }
+                        progress_state.tool_repair(error);
+                        report(&mut activity, &mut progress, error.into());
+                        continue;
+                    }
                     report(&mut activity, &mut progress, "正在核對成果…".into());
                     match broker.finish_cancellable(&artifacts, &run.cancel) {
                         Ok(paths) => {
@@ -1311,7 +1366,8 @@ pub(super) fn run_for(
     record["overview"] = json!(match &operations {
         Ok(rows) =>
             crate::projects::overview::Overview::from_operations(rows, broker.published(), state)
-                .with_previews(&broker.review_snapshots()),
+                .with_previews(&broker.review_snapshots())
+                .with_task_plan(&broker.task_plan),
         Err(_) => crate::projects::overview::Overview::unavailable(state),
     });
     checkpoint(&journal, &record)?;

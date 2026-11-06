@@ -132,6 +132,7 @@ pub fn verify(root: &Path) -> AppResult<()> {
         &config,
     )?;
     let run = |resume| Run {
+        plan_mode: false,
         resume,
         id: "pause_limit".into(),
         project: Project {

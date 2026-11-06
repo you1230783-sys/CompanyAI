@@ -9,12 +9,29 @@ mod composer_smoke;
 mod diagrams;
 pub(in crate::ui) mod local_scenario;
 mod quick;
+mod task_plan;
 mod weekly;
 mod work_settings;
 
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(super) enum ProjectCommand {
+    PlanPreference {
+        enabled: bool,
+    },
+    PlanView {
+        conversation: String,
+        run_id: String,
+        message_index: usize,
+    },
+    PlanReview {
+        conversation: String,
+        run_id: String,
+        message_index: usize,
+        revision: u32,
+        edited: Option<Box<projects::task_plan::Plan>>,
+        feedback: String,
+    },
     SetCollapsed {
         id: String,
         collapsed: bool,
@@ -499,7 +516,7 @@ impl App {
         self.projects.running.as_ref().map(|run| json!({"id":run.id,"conversation_id":run.conversation,"title":"專案工作","mode":"background","state":"running","active":true,"project":true,"created_at":run.started,"message":self.projects.status,"can_retry":false}))
     }
     pub(super) fn project_state(&self) -> serde_json::Value {
-        json!({"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len(),"collapsed":self.projects.store.collapsed.contains(&p.id)})).collect::<Vec<_>>(),
+        json!({"plan_mode":self.projects.store.plan_mode,"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len(),"collapsed":self.projects.store.collapsed.contains(&p.id)})).collect::<Vec<_>>(),
             "preferences":self.projects.running.as_ref().and_then(|r|r.instructions.questions().ok()),
             "chart_review":self.projects.running.as_ref().and_then(|r|r.pending_chart.as_ref().map(|p|json!({"request_id":p.id,"review":p.review}))),
             "outlook_consent":self.projects.running.as_ref().and_then(|r|r.pending_outlook.as_ref().map(|p|json!({"request_id":p.id,"folders":p.folders}))),
@@ -512,6 +529,9 @@ impl App {
             "running":self.projects.running.is_some(),"running_id":self.projects.running.as_ref().map(|r|&r.id),"activity":self.projects.running.as_ref().map(|r|&r.activity),"charts":self.projects.running.as_ref().map(|r|&r.charts),"analysis":self.projects.running.as_ref().and_then(|r|r.analysis.as_ref()),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
     }
     pub(super) fn project_command(&mut self, command: ProjectCommand) -> AppResult<()> {
+        if self.task_plan_command(&command)? {
+            return Ok(());
+        }
         if let ProjectCommand::SetCollapsed { id, collapsed } = &command {
             if !self.logged_in() || self.versions.blocked() {
                 return Err("請登入後調整專案顯示。".into());
@@ -1205,7 +1225,10 @@ impl App {
             | ProjectCommand::SendQueued { .. }
             | ProjectCommand::Supplement { .. }
             | ProjectCommand::WithdrawSupplement { .. }
-            | ProjectCommand::CadReady { .. } => (),
+            | ProjectCommand::CadReady { .. }
+            | ProjectCommand::PlanPreference { .. }
+            | ProjectCommand::PlanView { .. }
+            | ProjectCommand::PlanReview { .. } => (),
         }
         Ok(())
     }
@@ -1475,6 +1498,7 @@ impl App {
             message.request_id = Some(id.clone());
         }
         let run = projects::runner::Run {
+            plan_mode: self.projects.store.plan_mode,
             resume,
             id: id.clone(),
             project,

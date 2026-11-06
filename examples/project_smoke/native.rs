@@ -1150,6 +1150,7 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
         &config,
     )?;
     let make_run = |resume| Run {
+        plan_mode: false,
         id: id.clone(),
         resume,
         project: Project {

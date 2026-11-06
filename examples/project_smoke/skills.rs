@@ -219,6 +219,7 @@ fn delegation(root: &Path, pending: bool) -> AppResult<()> {
         &config,
     )?;
     let run = |resume| Run {
+        plan_mode: false,
         id: id.clone(),
         resume,
         project: Project {

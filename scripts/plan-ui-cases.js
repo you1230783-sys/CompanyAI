@@ -1,0 +1,37 @@
+(async () => {
+  const checks=[], commands=[], old=LMUI.getState();
+  const check=(ok,label)=>{if(!ok)throw Error(label);checks.push(label);};
+  const frame=()=>new Promise(resolve=>setTimeout(resolve,60));
+  send=value=>commands.push(value);
+  const plan={goal:'核對來源 <img src=x onerror=alert(1)>',steps:[{method:'確認資料並計算',tools:['read_file','run_python'],parameters:'lambda=0.1'}],sources:['input.csv'],outputs:[{id:'report',description:'分析報告',kind:'file'}],assumptions:['頻率單位為Hz'],questions:[]};
+  const revision={revision:1,plan,status:'pending',note:'首次計畫',local_time:'2026-11-06 12:00'};
+  const planned={enabled:true,read_only:true,approved:null,pending:revision,history:[revision],notice:null};
+  const message={role:'assistant',content:'等待確認',request_id:'plan-run',project_paused:true,project_overview:{state:'paused',operations:1,reads:[],outputs:[],failures:[],previews:[],task_plan:planned}};
+  let renderVersion=0;
+  const show=async(data=planned)=>{LMUI.receive({...old,logged_in:true,can_send:true,update_required:false,active_id:'plan-chat',config:{...old.config,model:'quality'},retry:{enabled:true},messages:[{...message,content:'等待確認 '+(++renderVersion),project_overview:{...message.project_overview,task_plan:data}}],conversations:[{id:'plan-chat',title:'計畫測試',project_id:'project'}],projects:{items:[],running:false,plan_mode:false}});await frame();};
+  await show();
+  check(!document.getElementById('plan-mode').checked,'plan preference defaults off');
+  document.getElementById('plan-mode').click();
+  check(commands.at(-1).command.action==='plan_preference' && commands.at(-1).command.enabled,'plan preference uses native persistence');
+  const card=()=>document.querySelector('.task-plan-card');
+  check(card() && !card().querySelector('img') && card().textContent.includes('<img'),'plan text is inert company content');
+  check(document.querySelector('.resume-project').disabled,'manual resume disabled until native approval');
+  check(commands.every(c=>c.type==='project'),'showing plan does not submit model or tools');
+  const before=card().textContent;
+  TaskPlanUI.receive({type:'project_plan',conversation:'other-chat',run_id:'plan-run',message_index:0,plan:{...planned,pending:null}});
+  check(card().textContent===before,'foreign conversation response ignored');
+  const click=label=>[...card().querySelectorAll('button')].find(b=>b.textContent===label).click();
+  const n=commands.length;click('退回並補充');await frame();check(commands.length===n,'rejection requires feedback');
+  const edit=[...card().querySelectorAll('details')].find(d=>d.querySelector('summary')?.textContent==='修改計畫內容後核准');
+  edit.open=true;edit.querySelector('textarea').value='使用者修改目標';click('修改後核准');await frame();
+  check(commands.at(-1).command.action==='plan_review' && commands.at(-1).command.edited.goal==='使用者修改目標' && commands.at(-1).command.revision===1,'edited approval sends exact edited plan and revision');
+  await show();const textareas=card().querySelectorAll('textarea');textareas[textareas.length-1].value='請先確認單位';click('退回並補充');await frame();
+  check(commands.at(-1).command.edited===null && commands.at(-1).command.feedback==='請先確認單位','rejection sends feedback without authorization');
+  const revised=structuredClone(planned);revised.approved=plan;revised.pending.plan={...plan,goal:'新方法'};revised.pending.revision=2;
+  await show(revised);
+  check(card().textContent.includes('與上次核准計畫比較') && card().textContent.includes('上次核准') && card().textContent.includes('此次修訂'),'major revision shows before and after');
+  TaskPlanUI.receive({type:'project_plan',conversation:'plan-chat',run_id:'plan-run',message_index:0,plan:{...revised,pending:null,read_only:false}});
+  check(!card().textContent.includes('核准並繼續') && !document.querySelector('.resume-project').disabled,'native approved checkpoint refresh removes stale approval and enables resume');
+  await show(revised);
+  return checks;
+})()
