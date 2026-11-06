@@ -1,5 +1,51 @@
 use super::*;
 #[test]
+fn parallel_project_note_transactions_preserve_both_writers_after_cancel() {
+    let project = fixture();
+    let barrier = std::sync::Barrier::new(2);
+    std::thread::scope(|scope| {
+        for task in ["task_a", "task_b"] {
+            let project = project.clone();
+            let barrier = &barrier;
+            scope.spawn(move || {
+                let memory = Memory::open(project, task).unwrap();
+                // 取消後仍須完成已發生操作的紀錄提交。
+                let _context =
+                    crate::resource_locks::Context::enter(Some(crate::resource_locks::Context {
+                        label: task.into(),
+                        cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+                        notify: std::sync::Arc::new(|_| {}),
+                    }));
+                barrier.wait();
+                for n in 0..12 {
+                    memory
+                        .create_note("project", &format!("{task}-{n}"), "已完成操作")
+                        .unwrap();
+                }
+            });
+        }
+    });
+    let memory = Memory::open(project, "reader").unwrap();
+    let index: Index = memory
+        .vault
+        .transaction()
+        .unwrap()
+        .read("project", "index")
+        .unwrap()
+        .unwrap();
+    assert_eq!(index.notes.len(), 24);
+    for task in ["task_a", "task_b"] {
+        assert_eq!(
+            index
+                .notes
+                .iter()
+                .filter(|note| note.title.starts_with(task))
+                .count(),
+            12
+        );
+    }
+}
+#[test]
 fn long_cross_task_history_keeps_requirements_and_bounds_optional_memory() {
     let memory = Memory::open(fixture(), "chat").unwrap();
     let mut messages = Vec::new();

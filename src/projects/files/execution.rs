@@ -222,8 +222,16 @@ impl Broker {
                 json!({"ok":false,"operation_id":id,"error":"上一批閱讀尚未保存成果。先record_reading_notes，逐項引用目前reading.pending的operation_id，保存實際流程／分區／關係／疑問；不可只重述已讀完。"}),
             );
         }
+        // 必須早於 perform／計畫消耗／成果寫入；不能把執行中的未知錯誤標成未執行。
         let mut registration_contract = false;
         let outcome = loop {
+            let ownership = match self.operation_ownership(tool) {
+                Ok(guard) => guard,
+                Err(error) => {
+                    registration_contract = true;
+                    break Err(error);
+                }
+            };
             let result = if let Tool::RunBatch { tasks } = tool {
                 self.run_batch(id, tasks, worker.executable(), cancel)
             } else if matches!(
@@ -247,6 +255,9 @@ impl Broker {
             } else {
                 self.perform(tool, worker, cancel)
             };
+            // 使用者尚未關閉外部文件時，不占著本機鎖等待確認卡片。
+            // 重試會回到迴圈開頭重新排隊，再重新執行原有版本與權限檢查。
+            drop(ownership);
             let Err(error) = &result else {
                 break result;
             };

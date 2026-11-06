@@ -229,6 +229,9 @@ impl Reader<'_> {
         cancel: &AtomicBool,
     ) -> AppResult<T> {
         super::batch::check_cancel(cancel)?;
+        // 在父程序協調獨立 Outlook worker，子程序內的 COM guard 無法跨程序互斥。
+        let _ownership =
+            crate::resource_locks::acquire([crate::resource_locks::Resource::Outlook])?;
         if self.process.is_none() {
             *self.process = Some(Process::start(self.executable)?);
         }

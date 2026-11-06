@@ -127,6 +127,15 @@ impl Drop for Guard {
 pub fn acquire(resources: impl IntoIterator<Item = Resource>) -> AppResult<Guard> {
     manager().acquire(resources.into_iter().collect(), Context::current(), TIMEOUT)
 }
+/// 停止任務後仍須保存審計與 checkpoint；短暫儲存交易不沿用工具取消旗標。
+pub(crate) fn acquire_storage(resource: Resource) -> AppResult<Guard> {
+    manager().acquire(vec![resource], None, TIMEOUT)
+}
+
+/// 派送前探測只在沒有本機擁有者時執行，避免把另一任務的文件當成使用者占用。
+pub(crate) fn try_acquire(resource: Resource) -> Option<Guard> {
+    manager().acquire(vec![resource], None, Duration::ZERO).ok()
+}
 impl Manager {
     fn acquire(
         self: &Arc<Self>,
@@ -150,8 +159,11 @@ impl Manager {
             .filter(|r| !held.contains(r))
             .cloned()
             .collect();
+        // 記憶交易只持有檔案／DPAPI，不會在持鎖時呼叫 Office；可在工具提交摘要時短暫取得。
+        // 來源與 Office 仍遵守固定順序；若未來記憶交易要呼叫工具，必須先重設這個邊界。
         if needed
-            .first()
+            .iter()
+            .find(|resource| !matches!(resource, Resource::Memory(_)))
             .zip(held.last())
             .is_some_and(|(new, old)| new < old)
         {

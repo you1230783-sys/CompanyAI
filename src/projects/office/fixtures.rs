@@ -1,5 +1,7 @@
 //! 僅 debug 驗收程式使用的固定資料建立器；不提供給模型，release 不包含此入口。
 use super::*;
+mod concurrency;
+pub use concurrency::verify as verify_concurrency;
 
 /// 只供文件工作回歸：混合字型、表格、頁首與圖片均留在測試資料夾。
 pub fn translation(folder: &Path) -> AppResult<()> {

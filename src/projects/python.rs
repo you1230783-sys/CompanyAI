@@ -19,6 +19,11 @@ pub(super) use png::validate as validate_png;
 pub const MAX_INPUT: usize = 32 * 1024 * 1024;
 pub const MAX_OUTPUT: usize = 8 * 1024 * 1024;
 
+#[cfg(debug_assertions)]
+mod concurrency;
+#[cfg(debug_assertions)]
+pub use concurrency::verify_parallel_workers;
+
 /// read_file 的 source_revision 回傳原始 SHA-256；revision 仍是解碼文字版本。
 /// 三種表示必須指向完全相同的原始位元組雜湊，不接受其他命名空間或略過版本核對。
 fn source_revision_matches(requested: &str, actual: &str) -> bool {

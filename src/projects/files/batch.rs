@@ -81,7 +81,11 @@ fn pair_map<T: Sync, R: Send>(items: &[T], work: impl Fn(&T) -> R + Sync) -> Vec
             .iter()
             .map(|item| {
                 let work = &work;
-                scope.spawn(move || work(item))
+                let context = crate::resource_locks::Context::current();
+                scope.spawn(move || {
+                    let _context = crate::resource_locks::Context::enter(context);
+                    work(item)
+                })
             })
             .collect();
         handles

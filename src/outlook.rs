@@ -82,6 +82,7 @@ fn text(item: &IDispatch, name: &str, maximum: usize) -> AppResult<String> {
 
 /// 必須由背景工作執行緒呼叫。讀正文前再次比對 EntryID，避免選取變動造成誤送。
 pub fn read_selected(expected_id: Option<&str>, include_body: bool) -> AppResult<MailPreview> {
+    let _ownership = crate::resource_locks::acquire([crate::resource_locks::Resource::Outlook])?;
     let _apartment = ComApartment::sta().map_err(|_| "無法初始化 Outlook COM 連線。")?;
     let class = unsafe { CLSIDFromProgID(PCWSTR(wide("Outlook.Application").as_ptr())) }
         .map_err(|_| "找不到 Classic Outlook，請先安裝並開啟它。")?;

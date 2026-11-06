@@ -1,6 +1,43 @@
 use super::*;
 
 #[test]
+fn project_directory_pin_allows_sibling_atomic_history_updates() {
+    let root = std::env::current_dir()
+        .unwrap()
+        .join(".build")
+        .join(format!("parallel-pin-{}", crate::jobs::new_id().unwrap()));
+    let project = root.join("project");
+    fs::create_dir_all(&project).unwrap();
+    let history = root.join("history.dpapi");
+    crate::storage::atomic_write(&history, b"before").unwrap();
+    let guards = pin(&project).unwrap();
+    crate::storage::atomic_write(&history, b"after").unwrap();
+    assert_eq!(fs::read(&history).unwrap(), b"after");
+    {
+        // 負向改名探針本身會短暫開啟共用 .build 父目錄，不干擾其他平行測試的 pin。
+        let _transition = crate::storage::path_transition();
+        assert!(fs::rename(&project, root.join("moved")).is_err());
+        assert!(fs::rename(&root, root.with_extension("moved")).is_err());
+    }
+    let worker_project = project.clone();
+    let worker = std::thread::spawn(move || {
+        for _ in 0..64 {
+            let _guard = pin(&worker_project).unwrap();
+            std::thread::yield_now();
+        }
+    });
+    for _ in 0..64 {
+        crate::storage::atomic_write(&history, b"concurrent").unwrap();
+    }
+    worker.join().unwrap();
+    assert_eq!(fs::read(&history).unwrap(), b"concurrent");
+    drop(guards);
+    fs::remove_file(history).unwrap();
+    fs::remove_dir(project).unwrap();
+    fs::remove_dir(root).unwrap();
+}
+
+#[test]
 fn analysis_registration_distinguishes_validation_from_method_storage() {
     let mut broker = Broker::new(
         Project {

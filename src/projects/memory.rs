@@ -347,6 +347,8 @@ impl Memory {
         let body = format!("【適用條件】{}\n【方法與步驟】{}\n【驗證方式】{}\n【限制／失效條件】{}\n【來源任務】{}（原對話可用 read_task_result／operations 查回程式與結果）\n【本次筆數核對】{} 項，{} 項未通過；無核對不代表通過。\n這是過往方法，不是新資料的結論或授權。下次先檢查格式、欄位、時間與少量樣本，再決定是否沿用。",
             method.applicability, method.steps, method.validation, method.limitations, task, checks.len(), checks.iter().filter(|c|c["passed"]!=true).count());
         check_text(&body, 2000)?;
+        // 查找與新增／修訂是同一操作，避免兩個任務同時建立相同方法筆記。
+        let _ownership = self.vault.ownership()?;
         let old = {
             let index: Index = self
                 .vault

@@ -30,6 +30,7 @@ mod execution;
 pub mod export;
 mod mail_notes;
 mod output;
+mod ownership;
 mod state;
 mod task_plan;
 #[cfg(test)]
@@ -119,9 +120,11 @@ pub(super) fn work_log_outcome(result: &Value) -> Value {
     Value::Object(outcome)
 }
 
-/// 回傳的 handle 保持到操作結束，拒絕目錄本身的寫入／刪除共用，
-/// 避免檢查後被重新命名、替換或改成 Junction；仍可在目錄內建立成果。
+/// 逐層檢查期間鎖住整條路徑，完成後保留末層 handle 到操作結束。
+/// Windows 不允許改名包含未分享 DELETE 子 handle 的祖先；祖先因受保護子目錄
+/// 而非空，也不能改成 Junction。末層仍拒絕 WRITE／DELETE，不鎖住無關兄弟檔案。
 pub(crate) fn pin(path: &Path) -> AppResult<Vec<File>> {
+    let _transition = crate::storage::path_transition();
     let path = super::setup::resolve_project_path(path)?;
     let mut current = PathBuf::new();
     let mut guards = Vec::new();
@@ -162,7 +165,7 @@ pub(crate) fn pin(path: &Path) -> AppResult<Vec<File>> {
             _ => return Err("只支援磁碟或 UNC 資料夾，不接受裝置路徑或上層跳轉。".into()),
         }
     }
-    Ok(guards)
+    Ok(guards.pop().into_iter().collect())
 }
 
 /// 以 Windows 正規化後的 handle 路徑排除私有資料；8.3 別名亦不可繞過名稱檢查。

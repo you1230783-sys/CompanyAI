@@ -18,6 +18,8 @@ pub(super) struct Transaction {
     root: PathBuf,
     _pins: Vec<File>,
     _lock: File,
+    // 最後才解除本機排隊；外部程序的 share_mode(0) 防護仍保留。
+    _ownership: crate::resource_locks::Guard,
 }
 impl Vault {
     pub fn new(root: &Path) -> AppResult<Self> {
@@ -41,7 +43,14 @@ impl Vault {
         let _transaction = vault.transaction()?;
         Ok(vault)
     }
+    /// 多個短交易組成同一讀改寫時，外層先持有此鎖；不先開啟獨占 store.lock。
+    pub fn ownership(&self) -> AppResult<crate::resource_locks::Guard> {
+        crate::resource_locks::acquire_storage(crate::resource_locks::Resource::file(
+            &self.root, true,
+        )?)
+    }
     pub fn transaction(&self) -> AppResult<Transaction> {
+        let ownership = self.ownership()?;
         let pins = files::pin(&self.root)?;
         let lock = OpenOptions::new()
             .read(true)
@@ -64,6 +73,7 @@ impl Vault {
             root: self.root.clone(),
             _pins: pins,
             _lock: lock,
+            _ownership: ownership,
         })
     }
 }

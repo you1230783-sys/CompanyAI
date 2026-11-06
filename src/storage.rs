@@ -62,12 +62,21 @@ pub fn load_config(root: &Path) -> AppResult<Config> {
 
 /// 先寫暫存檔再替換，避免程式中途關閉時留下半份 JSON 或憑證。
 pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> AppResult<()> {
+    let _transition = path_transition();
     let parent = path.parent().ok_or("設定路徑無效。")?;
     fs::create_dir_all(parent).map_err(|error| format!("無法建立設定資料夾：{error}"))?;
     let temp = path.with_extension(format!("{}.tmp", std::process::id()));
     fs::write(&temp, bytes)
         .and_then(|()| fs::rename(&temp, path))
         .map_err(|error| format!("無法保存設定或憑證：{error}"))
+}
+
+/// 只協調建立目錄保護與私有檔案原子替換的短區間。
+/// pin 尚在逐層檢查時會暫持祖先目錄；不能讓另一執行緒在這個交接窗口替換兄弟檔案。
+/// 不在工具執行、COM、模型請求或使用者確認期間持有此鎖。
+pub(crate) fn path_transition() -> std::sync::MutexGuard<'static, ()> {
+    static TRANSITION: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    TRANSITION.lock().unwrap_or_else(|error| error.into_inner())
 }
 
 pub fn save_config(root: &Path, config: &Config) -> AppResult<()> {

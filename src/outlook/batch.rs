@@ -169,7 +169,13 @@ fn received_date(days: f64) -> AppResult<NaiveDate> {
         .checked_add_signed(Duration::days(days.floor() as i64))
         .ok_or("郵件日期超出範圍。".into())
 }
-pub(super) fn connect() -> AppResult<(ComApartment, IDispatch)> {
+/// app 由呼叫端先釋放，之後釋放 COM apartment，最後才交還 Outlook 擁有權。
+pub(super) struct ConnectionScope {
+    _apartment: ComApartment,
+    _ownership: crate::resource_locks::Guard,
+}
+pub(super) fn connect() -> AppResult<(ConnectionScope, IDispatch)> {
+    let ownership = crate::resource_locks::acquire([crate::resource_locks::Resource::Outlook])?;
     let apartment = ComApartment::sta().map_err(|_| "無法初始化 Outlook COM。")?;
     let class = unsafe { CLSIDFromProgID(PCWSTR(wide("Outlook.Application").as_ptr())) }
         .map_err(|_| "找不到 Classic Outlook。")?;
@@ -180,7 +186,13 @@ pub(super) fn connect() -> AppResult<(ComApartment, IDispatch)> {
         .ok_or("找不到 Outlook。")?
         .cast()
         .map_err(|_| "無法連接 Outlook。")?;
-    Ok((apartment, app))
+    Ok((
+        ConnectionScope {
+            _apartment: apartment,
+            _ownership: ownership,
+        },
+        app,
+    ))
 }
 fn snapshot(item: &IDispatch) -> AppResult<Mail> {
     super::privacy::require_item(&super::privacy::Policy::current()?, item)?;

@@ -24,6 +24,8 @@ mod fixtures;
 pub use fixtures::create as create_test_fixtures;
 #[cfg(debug_assertions)]
 pub use fixtures::translation as create_translation_fixture;
+#[cfg(debug_assertions)]
+pub use fixtures::verify_concurrency as verify_resource_concurrency;
 
 const MAX_BLOCKS: usize = 2000;
 
@@ -37,6 +39,15 @@ pub(crate) fn busy_before_dispatch() -> AppResult<Option<String>> {
         ("Excel.Application", "Workbooks"),
         ("PowerPoint.Application", "Presentations"),
     ] {
+        let resource = match collection {
+            "Documents" => crate::resource_locks::Resource::Word,
+            "Workbooks" => crate::resource_locks::Resource::Excel,
+            _ => crate::resource_locks::Resource::PowerPoint,
+        };
+        let Some(_ownership) = crate::resource_locks::try_acquire(resource) else {
+            // 本程式管理的工作會在實際工具派送時排隊，不算外部使用者占用。
+            continue;
+        };
         let Ok(class) = (unsafe { CLSIDFromProgID(PCWSTR(wide(program).as_ptr())) }) else {
             continue;
         };
@@ -241,6 +252,8 @@ struct Session {
     ext: String,
     collection: &'static str,
     restore: Vec<(IDispatch, &'static str, VARIANT)>,
+    // 結構欄位依宣告順序釋放；最後才交還擁有權，確保 COM 已關檔並釋放。
+    _ownership: crate::resource_locks::Guard,
 }
 impl Drop for Session {
     fn drop(&mut self) {
@@ -288,8 +301,37 @@ impl Session {
             "pptx" | "ppt" | "pptm" => ("PowerPoint.Application", "Presentations"),
             _ => return Err("不支援此 Office 副檔名。".into()),
         };
+        let resource = match collection {
+            "Documents" => crate::resource_locks::Resource::Word,
+            "Workbooks" => crate::resource_locks::Resource::Excel,
+            _ => crate::resource_locks::Resource::PowerPoint,
+        };
+        let ownership = crate::resource_locks::acquire([resource])?;
         let class = unsafe { CLSIDFromProgID(PCWSTR(wide(prog).as_ptr())) }
             .map_err(|_| format!("請先安裝 {prog} 對應的桌面版 Office。"))?;
+        // Word/Excel 可以建立新的 COM 實例；只查新實例的 Count 會漏掉使用者文件。
+        // 先查 ROT 中已登錄的實例，唯讀取得 Count，不更改設定，也不取得其生命週期。
+        if collection != "Presentations" {
+            use windows::core::Interface;
+            let mut active = None;
+            match unsafe { windows::Win32::System::Ole::GetActiveObject(&class, None, &mut active) }
+            {
+                Ok(()) => {
+                    let existing: IDispatch = active
+                        .ok_or("Office 實例查詢回傳空值。")?
+                        .cast()
+                        .map_err(|e| e.to_string())?;
+                    if integer(&child(&existing, collection)?, "Count")? > 0 {
+                        return Err(format!(
+                            "{} Office 正在使用中，請先儲存並關閉相關視窗後重試。",
+                            super::interaction::BUSY
+                        ));
+                    }
+                }
+                Err(error) if error.code().0 == 0x800401E3u32 as i32 => (),
+                Err(error) => return Err(format!("無法確認 Office 是否占用：{error}")),
+            }
+        }
         // PowerPoint 是單一實例；避免改變使用者現有簡報或共用的巨集設定。
         if collection == "Presentations" {
             let mut active = None;
@@ -310,6 +352,7 @@ impl Session {
             ext,
             collection,
             restore: Vec::new(),
+            _ownership: ownership,
         };
         if integer(&child(&session.app, collection)?, "Count")? != 0 {
             return Err(format!(

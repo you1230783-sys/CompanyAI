@@ -73,6 +73,18 @@ impl Broker {
         let mut resolved = notes.to_vec();
         for note in &mut resolved {
             note.operation_id = self.references.resolve(&note.operation_id)?;
+            let tool = self
+                .results
+                .get(&note.operation_id)
+                .map(|(request, _)| &request["tool"])
+                .or_else(|| {
+                    self.archived_results
+                        .get(&note.operation_id)
+                        .map(|entry| &entry["tool"])
+                });
+            if tool.is_some_and(|name| name == "run_python") {
+                return Err("Python 結果不是閱讀來源；原文請用read_file閱讀後再記錄，計算結果請用register_report_values登記。不要重跑已成功的計算。".into());
+            }
             // 舊 checkpoint 的 Excel 結果已成功，但當時沒有接入 Notebook。
             // 僅從通過封存校驗的原生結果補登記，不重開 Excel，也不依模型自報範圍。
             if !reading.pending.contains_key(&note.operation_id)
@@ -86,18 +98,6 @@ impl Broker {
                         reading.observe_excel(&note.operation_id, &result)?;
                     }
                 }
-            }
-            let tool = self
-                .results
-                .get(&note.operation_id)
-                .map(|(request, _)| &request["tool"])
-                .or_else(|| {
-                    self.archived_results
-                        .get(&note.operation_id)
-                        .map(|entry| &entry["tool"])
-                });
-            if tool.is_some_and(|name| name == "run_python") {
-                return Err("Python 結果不是閱讀來源；原文請用read_file閱讀後再記錄，計算結果請用register_report_values登記。不要重跑已成功的計算。".into());
             }
         }
         let mut result = reading.accept(&resolved).map_err(|error| {

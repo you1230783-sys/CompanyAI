@@ -144,6 +144,28 @@ fn pipe() -> AppResult<(File, File)> {
 }
 
 impl Worker {
+    /// debug 原生驗收讀取真實 Job 限制及尖峰；不提供給模型或前端。
+    #[cfg(debug_assertions)]
+    pub(super) fn memory_evidence(&self) -> AppResult<serde_json::Value> {
+        let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        if unsafe {
+            QueryInformationJobObject(
+                self.job.0,
+                JobObjectExtendedLimitInformation,
+                (&mut limits as *mut JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                size_of_val(&limits) as u32,
+                ptr::null_mut(),
+            )
+        } == 0
+        {
+            return Err(error("無法讀取 Job 記憶體證據"));
+        }
+        Ok(
+            serde_json::json!({"pid":unsafe { GetProcessId(self.process.0) },
+            "job_handle":self.job.0 as usize,"memory_limit":limits.ProcessMemoryLimit,
+            "peak_process_memory":limits.PeakProcessMemoryUsed,"active_process_limit":limits.BasicLimitInformation.ActiveProcessLimit}),
+        )
+    }
     /// 系統為每次隨機 AppContainer 建立並配置 ACL 的私有資料夾。
     /// 只將此路徑交給功能測試，不授權專案或使用者 TEMP；Profile drop 負責清理。
     pub(super) fn test_workspace(&mut self) -> AppResult<String> {

@@ -14,16 +14,11 @@ use std::{
     os::windows::{fs::MetadataExt, process::CommandExt},
     path::PathBuf,
     process::{Command, Stdio},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Mutex,
-    },
+    sync::atomic::{AtomicBool, Ordering},
     thread,
     time::{Duration, Instant},
 };
 
-// CAD 的目前文件與 COM 伺服器是共享狀態，同一應用程式只允許一個 CAD 工作。
-static ACTIVE: Mutex<()> = Mutex::new(());
 const MANIFEST: &str = include_str!("../assets/cad-runtime-manifest.json");
 const FINGERPRINT: &str = include_str!("../assets/cad-runtime-sha256.txt");
 
@@ -189,9 +184,7 @@ fn execute_with_progress(
     cancel: &AtomicBool,
     progress: Option<&mut Progress>,
 ) -> AppResult<Value> {
-    let _active = ACTIVE
-        .try_lock()
-        .map_err(|_| "另一個 CAD 工作仍在執行，請稍後手動重試。")?;
+    let _active = crate::resource_locks::acquire([crate::resource_locks::Resource::Cad])?;
     let reading = is_drawing_read(&request);
     request["read_progress"] = json!(reading || progress.is_some());
     let input = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
