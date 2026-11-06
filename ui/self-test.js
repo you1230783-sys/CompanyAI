@@ -1337,7 +1337,8 @@ window.runSelfTest = async (structuredFixture) => {
         const controls = [...$("task-list").querySelectorAll("button")];
         check(!controls.some(b => ["取消任務","停止追蹤","移除任務"].includes(b.textContent)), "project does not expose server child task actions");
         controls.find(b => b.textContent === "停止專案任務").click();
-        check(retryCommands.pop()?.command?.action === "stop", "project card stops the project runner");
+        const stoppedProject = retryCommands.pop()?.command;
+        check(stoppedProject?.action === "stop_task" && stoppedProject.conversation === "project-chat" && stoppedProject.run_id === "run-one", "project card stops only its bound conversation and runner");
       } finally { toast = projectToast; fixture.work.tasks = projectTasks; }
       LMUI.receive(fixture);
       check($("project-activity").open && $("project-activity").querySelectorAll("li").length === 3, "progress preserves expanded history");

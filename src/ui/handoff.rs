@@ -294,7 +294,7 @@ impl App {
             || self.panic_fault
             || self.busy != "none"
             || self.work.incoming.is_some()
-            || self.projects.is_running()
+            || self.projects.active(self.active_id.as_deref())
             || self.work.store.pending(Some(source))
             || self.history_error.is_some()
             || (self.projects.store.project_for(source).is_some() && through.is_none())

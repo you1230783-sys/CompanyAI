@@ -3,23 +3,11 @@ use super::*;
 
 impl App {
     pub(super) fn command(&mut self, command: Command) -> AppResult<()> {
-        // 固定排程不接受模型補充或並行操作；草稿仍可編輯，停止／登出／離開可隨時使用。
-        if self.schedules.active()
-            && !matches!(
-                command,
-                Command::Schedule { .. }
-                    | Command::Draft { .. }
-                    | Command::Exit
-                    | Command::Logout
-                    | Command::CopyError
-                    | Command::ExportDiagnostics { .. }
-                    | Command::SaveDiagnostics { .. }
-                    | Command::CancelDiagnostics
-                    | Command::Ready
-                    | Command::Copy { .. }
-            )
+        // 排程與專案共用兩個名額；只阻止安裝更新，其他命令仍由各自的對話／權限守衛判斷。
+        if (self.schedules.active() || self.projects.is_running())
+            && matches!(command, Command::Download)
         {
-            return Err("固定流程排程執行中；請先在設定＞進階功能＞流程排程停止，再操作其他工作。草稿可繼續編輯。".into());
+            return Err("請先完成或停止本機任務，再安裝更新。".into());
         }
         if self.workspace_import.is_some()
             && !matches!(
@@ -536,7 +524,7 @@ impl App {
                 }
             }
             Command::DeleteChat { id } => {
-                if self.projects.active(Some(&id)) {
+                if self.projects.active(Some(&id)) || self.schedules.active_conversation(&id) {
                     return Err("請先停止此專案任務再刪除對話。".into());
                 }
                 if self.mail_flow.phase != "idle"

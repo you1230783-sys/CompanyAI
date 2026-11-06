@@ -108,7 +108,7 @@ impl Scenario {
         if !app.ready || !app.logged_in() || app.models.is_none() {
             return None;
         }
-        if let Some(run) = &app.projects.running {
+        if let Some(run) = app.projects.current(app.active_id.as_deref()) {
             if run.pending_cad.is_some()
                 || run.pending_file.is_some()
                 || run.pending_outlook.is_some()

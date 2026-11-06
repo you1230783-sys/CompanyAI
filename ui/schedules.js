@@ -17,7 +17,7 @@ window.ScheduleUI = (() => {
   function open(flow,conversation,parameters) {
     if(form)form.remove();
     previewId=null;pending=false;form=dialog("設定固定流程排程");form.id="schedule-create";
-    form.append(make("p",`流程：${flow.name}。只在程式開啟／托盤、登入有效且沒有其他工作時執行。超過到期時間5分鐘不補跑；不會啟動AI改寫流程。`));
+    form.append(make("p",`流程：${flow.name}。只在程式開啟／托盤、登入有效且尚有任務名額時執行（與專案合計最多2項）。超過到期時間5分鐘不補跑；不會啟動AI改寫流程。`));
     const due=make("input");due.type="datetime-local";
     const now=new Date(Date.now()+600000);due.value=new Date(now-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
     field(form,"首次時間（目前Windows時區）",due);
@@ -64,6 +64,7 @@ window.ScheduleUI = (() => {
       if(form?.open && !previewId && !pending){formStatus.textContent="排程狀態已更新。";}
       if(!listBody)return;
       listBody.replaceChildren();
+      if(event.waiting)listBody.append(make("p",event.waiting));
       if(event.running)action(listBody,"停止目前排程",{action:"stop"});
       if(!event.entries?.length)listBody.append(make("p","目前帳號沒有排程。"));
       for(const entry of event.entries||[]) {

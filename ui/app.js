@@ -745,7 +745,7 @@ function renderHistory() {
   const list = $("history-list");
   const projects=state.projects?.items||[];
   if(!["all","general","projects"].includes(historyFilter) && !projects.some(p=>`project:${p.id}`===historyFilter))historyFilter="all";
-  const signature = JSON.stringify([state.conversations, state.active_id, state.busy,projects,historyFilter]);
+  const signature = JSON.stringify([state.conversations, state.active_id, state.busy,projects,historyFilter,state.projects?.running_conversations]);
   // 背景進度推播不重建相同清單，保留鍵盤焦點與滑鼠所在的操作列。
   if (signature === historySignature) return;
   historySignature = signature;
@@ -763,6 +763,7 @@ function renderHistory() {
       "history-item",
       c.title,
     );
+    if(state.projects?.running_conversations?.includes(c.id)) button.append(node("span","conversation-tag running-task","執行中"));
     const projectName=projects.find(p=>p.id===c.project_id)?.name;
     button.append(node("span","conversation-tag",c.project_id ? `專案：${projectName||"已移除"}` : "一般對話"));
     button.title = (c.pinned ? "已置頂 · " : "") + c.title;
@@ -949,6 +950,7 @@ function receive(next) {
     : "使用瀏覽器取得公司服務授權";
   $("account-dot").classList.toggle("online", state.logged_in);
   $("send").disabled = !state.can_send;
+  $("send").title = state.projects?.capacity_full && state.conversations.some(c=>c.id===state.active_id && c.project_id) ? "已有 2 個任務執行中，請等待其中一項完成" : "傳送";
   document
     .querySelectorAll("[data-action]")
     .forEach((button) => (button.disabled = !state.can_send));

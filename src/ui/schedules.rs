@@ -26,6 +26,9 @@ pub(super) enum ScheduleCommand {
         id: String,
     },
     Stop,
+    StopExecution {
+        execution: String,
+    },
 }
 struct Preview {
     id: String,
@@ -33,6 +36,9 @@ struct Preview {
     expires: Instant,
 }
 struct Running {
+    conversation: String,
+    wait_events: mpsc::Receiver<Option<String>>,
+    waiting: Option<String>,
     execution: String,
     cancel: Arc<AtomicBool>,
     result: mpsc::Receiver<AppResult<()>>,
@@ -61,6 +67,14 @@ impl Runtime {
     pub(super) fn active(&self) -> bool {
         self.running.is_some()
     }
+    pub(super) fn conversation(&self) -> Option<&str> {
+        self.running.as_ref().map(|run| run.conversation.as_str())
+    }
+    pub(super) fn active_conversation(&self, conversation: &str) -> bool {
+        self.running
+            .as_ref()
+            .is_some_and(|run| run.conversation == conversation)
+    }
     pub(super) fn cancel(&self) {
         if let Some(run) = &self.running {
             run.cancel.store(true, Ordering::Relaxed);
@@ -68,6 +82,53 @@ impl Runtime {
     }
 }
 impl App {
+    /// 隱藏視窗自檢只注入受控排程，不派送 Office 或模型。
+    pub(super) fn verify_schedule_slot_accounting(&mut self) -> AppResult<()> {
+        if !self.smoke || self.projects.count() != 1 || self.schedules.active() {
+            return Err("排程名額自檢前置條件不符。".into());
+        }
+        let (_tx, result) = mpsc::channel();
+        let (_wait_tx, wait_events) = mpsc::channel();
+        let cancel = Arc::new(AtomicBool::new(false));
+        self.schedules.running = Some(Running {
+            conversation: "schedule-chat".into(),
+            execution: "schedule-run".into(),
+            cancel: cancel.clone(),
+            result,
+            wait_events,
+            waiting: None,
+        });
+        let result = (|| {
+            if !self.project_slots_full() || self.schedule_task().is_none() {
+                return Err("排程未占用第二名額。".into());
+            }
+            if self
+                .schedule_command(ScheduleCommand::StopExecution {
+                    execution: "stale".into(),
+                })
+                .is_ok()
+                || cancel.load(Ordering::Relaxed)
+            {
+                return Err("過期排程卡片停止了新任務。".into());
+            }
+            self.schedule_command(ScheduleCommand::StopExecution {
+                execution: "schedule-run".into(),
+            })?;
+            if !cancel.load(Ordering::Relaxed) {
+                return Err("排程停止旗標未設置。".into());
+            }
+            Ok(())
+        })();
+        self.schedules.running = None;
+        result
+    }
+    pub(super) fn schedule_task(&self) -> Option<Value> {
+        self.schedules.running.as_ref().map(|run| {
+            json!({"id":run.execution,"conversation_id":run.conversation,
+            "title":"流程排程","mode":"background","state":"running","active":true,"schedule":true,
+            "message":run.waiting.as_deref().unwrap_or("正在執行固定流程"),"can_retry":false})
+        })
+    }
     fn schedule_available(&self) -> AppResult<()> {
         if !self.logged_in() || self.versions.blocked() || self.work.store.principal_id.is_empty() {
             return Err("請登入並完成能力同步後使用流程排程。".into());
@@ -79,7 +140,7 @@ impl App {
     }
     fn schedule_idle(&self) -> bool {
         self.busy == "none"
-            && !self.projects.is_running()
+            && !self.project_slots_full()
             && self.work.incoming.is_none()
             && self.workspace_import.is_none()
             && !self.mail_busy
@@ -102,6 +163,18 @@ impl App {
             match command {
                 ScheduleCommand::State => {}
                 ScheduleCommand::Stop => self.schedules.cancel(),
+                ScheduleCommand::StopExecution { execution } => {
+                    if self
+                        .schedules
+                        .running
+                        .as_ref()
+                        .is_some_and(|r| r.execution == execution)
+                    {
+                        self.schedules.cancel();
+                    } else {
+                        return Err("排程已變更，請重新查看任務卡片。".into());
+                    }
+                }
                 ScheduleCommand::Preview {
                     request_id,
                     conversation,
@@ -213,6 +286,9 @@ impl App {
                         .find(|entry| entry.id == id)
                         .ok_or("排程不存在。")?;
                     self.schedule_project(&entry.grant)?;
+                    if self.projects.active(Some(&entry.grant.target.conversation)) {
+                        return Err("請等待原對話工作完成再續接排程。".into());
+                    }
                     let execution = entry.execution.clone().ok_or("沒有可續接的執行。")?;
                     Journal::load(&self.root, &execution)?.can_resume(&entry.grant)?;
                     entry.enabled = true;
@@ -247,17 +323,31 @@ impl App {
             .iter()
             .filter(|audit| entries.iter().any(|entry| entry.id == audit.schedule))
             .collect();
-        self.view.post(&json!({"type":"schedule_state","entries":entries,"audit":audit,"running":self.schedules.active()}))
+        self.view.post(&json!({"type":"schedule_state","entries":entries,"audit":audit,"running":self.schedules.active(),"waiting":self.schedules.running.as_ref().and_then(|run|run.waiting.as_ref())}))
     }
     fn launch_schedule(&mut self, entry: Entry, execution: String, resume: bool) -> AppResult<()> {
+        if self.project_slots_full() || self.projects.active(Some(&entry.grant.target.conversation))
+        {
+            return Err("排程等待可用任務名額或原對話完成。".into());
+        }
+        let conversation = entry.grant.target.conversation.clone();
         let project = self.schedule_project(&entry.grant)?;
         let root = self.root.clone();
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
         let cancel = Arc::new(AtomicBool::new(false));
         let worker_cancel = cancel.clone();
+        let (wait_tx, wait_events) = mpsc::channel();
         let (tx, result) = mpsc::channel();
         let run_id = execution.clone();
         crate::reliability::spawn(move || {
+            let _resources =
+                crate::resource_locks::Context::enter(Some(crate::resource_locks::Context {
+                    label: "流程排程".into(),
+                    cancel: worker_cancel.clone(),
+                    notify: Arc::new(move |message| {
+                        let _ = wait_tx.send(message);
+                    }),
+                }));
             let outcome = schedule::execution::run(
                 &root,
                 &exe,
@@ -270,6 +360,9 @@ impl App {
             let _ = tx.send(outcome);
         });
         self.schedules.running = Some(Running {
+            conversation,
+            wait_events,
+            waiting: None,
             execution,
             cancel,
             result,
@@ -303,6 +396,17 @@ impl App {
         }
     }
     fn advance_schedules(&mut self) -> AppResult<()> {
+        let mut changed = false;
+        if let Some(run) = self.schedules.running.as_mut() {
+            while let Ok(message) = run.wait_events.try_recv() {
+                run.waiting = message;
+                changed = true;
+            }
+        }
+        if changed {
+            self.publish();
+            self.publish_schedules()?;
+        }
         let mut next = self.schedules.store.as_ref().map_err(Clone::clone)?.clone();
         let now = crate::unix_now();
         if let Some(run) = &self.schedules.running {
@@ -363,6 +467,7 @@ impl App {
             .iter()
             .find(|entry| {
                 entry.enabled
+                    && !self.projects.active(Some(&entry.grant.target.conversation))
                     && entry.execution.is_none()
                     && entry.grant.target.principal == self.work.store.principal_id
                     && entry.next_due.is_some_and(|due| due <= now)

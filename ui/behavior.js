@@ -76,7 +76,11 @@
       const enterHint = `${newlineKey} 換行，${sendKey} 送出`;
       $("enter-hint").textContent = enterHint;
       $("compose-enter-hint").textContent = enterHint;
-      $("send").title = `送出（${sendKey}）`;
+      if (!state.projects?.running) {
+        const full = state.projects?.capacity_full && state.conversations.some(c=>c.id===state.active_id && c.project_id);
+        $("send").title = full ? "已有 2 個任務執行中，請等待其中一項完成" : `送出（${sendKey}）`;
+        $("send").setAttribute("aria-label", $("send").title);
+      }
       $("hotkey-hint").textContent = `${c.hotkey} 選字帶入`;
       $("quick-model-hint").textContent = c.quick_actions_fast !== false
         ? "點擊翻譯、摘要或潤飾時，以快速模型送出該次請求，通常能縮短等待時間。"

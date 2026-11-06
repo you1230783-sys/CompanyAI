@@ -133,9 +133,8 @@ impl App {
             "can_retry":t.active()&&t.project_retry.due_at_millis==0&&t.remote.is_none()&&!self.work.streams.contains(&t.request_id),
             "tool_status":if t.active(){self.work.tool_status.get(&t.request_id)}else{None}
         })).collect();
-        if let Some(task) = self.project_task() {
-            tasks.push(task);
-        }
+        tasks.extend(self.project_tasks());
+        tasks.extend(self.schedule_task());
         // 身分代號、附件 Token 與完整請求不傳入 WebView2。
         json!({"attachments":attachments,"tasks":tasks,"rules":self.work.caps.as_ref().filter(|_|self.work.capability_model == self.config.model && !self.work.capability_loading).map(|c|&c.attachments),
             "modes":self.work.caps.as_ref().map(|c|&c.execution_modes),"mode":self.work.mode,"status":self.work.status,
@@ -981,9 +980,6 @@ impl App {
         Ok(())
     }
     pub(super) fn poll_work(&mut self, force: bool) {
-        if self.schedules.active() {
-            return;
-        }
         if let Err(error) = self.resume_chat_retries() {
             self.status = error;
         }

@@ -195,6 +195,10 @@ pub(super) enum ProjectCommand {
         retry: bool,
     },
     Stop,
+    StopTask {
+        conversation: String,
+        run_id: String,
+    },
     Compose {
         conversation: String,
         run_id: String,
@@ -246,6 +250,7 @@ pub(super) enum ProjectCommand {
     },
 }
 pub(super) enum ProjectEvent {
+    ResourceWait(String, std::thread::ThreadId, Option<String>),
     DiagramSource(String, AppResult<String>),
     ArtifactCenter(String, Option<String>, AppResult<String>),
     CadReadProgress(String, serde_json::Value),
@@ -304,6 +309,8 @@ struct PendingFile {
     reply: mpsc::Sender<bool>,
 }
 pub(super) struct Running {
+    status: String,
+    resource_wait: std::collections::HashMap<std::thread::ThreadId, String>,
     received_reply: bool,
     cad_read_progress: Option<serde_json::Value>,
     pending_cad: Option<PendingCad>,
@@ -327,7 +334,8 @@ pub(super) struct ProjectRuntime {
     quick: Option<quick::Pending>,
     pub store: Store,
     error: Option<String>,
-    running: Option<Running>,
+    running: std::collections::BTreeMap<String, Running>,
+    completed_status: std::collections::BTreeMap<String, String>,
     status: String,
 }
 impl ProjectRuntime {
@@ -340,28 +348,51 @@ impl ProjectRuntime {
         runtime
     }
     pub fn is_running(&self) -> bool {
-        self.running.is_some()
+        !self.running.is_empty()
+    }
+    pub fn count(&self) -> usize {
+        self.running.len()
+    }
+    pub fn current(&self, conversation: Option<&str>) -> Option<&Running> {
+        conversation.and_then(|id| self.running.get(id))
+    }
+    pub fn current_mut(&mut self, conversation: Option<&str>) -> Option<&mut Running> {
+        conversation.and_then(|id| self.running.get_mut(id))
+    }
+    fn run(&self, id: &str) -> Option<&Running> {
+        self.running.values().find(|run| run.id == id)
+    }
+    fn run_mut(&mut self, id: &str) -> Option<&mut Running> {
+        self.running.values_mut().find(|run| run.id == id)
     }
     #[cfg(feature = "pet")]
     pub(super) fn received_reply(&self) -> bool {
-        self.running.as_ref().is_some_and(|run| run.received_reply)
+        self.running.values().any(|run| run.received_reply)
     }
-    /// 發生panic後撤銷待確認操作；保留磁碟上的journal，不自動恢復寫入。
+    /// panic 撤銷全部待確認操作；保留 journal，不自動恢復寫入。
     pub fn quarantine(&mut self) {
         self.cancel();
-        self.running = None;
+        self.running.clear();
         self.status = "非預期中止，成果與操作結果待確認；未自動重試。".into();
     }
     pub fn cancel(&mut self) {
-        if let Some(run) = &self.running {
+        for run in self.running.values_mut() {
             run.cancel.store(true, Ordering::Relaxed);
-            self.status = "正在停止本機操作…".into();
+            run.status = "正在停止本機操作…".into();
         }
     }
+    fn cancel_one(&mut self, conversation: &str, id: &str) -> AppResult<()> {
+        let run = self
+            .running
+            .get_mut(conversation)
+            .filter(|run| run.id == id)
+            .ok_or("任務已結束或停止按鈕已失效。")?;
+        run.cancel.store(true, Ordering::Relaxed);
+        run.status = "正在停止本機操作…".into();
+        Ok(())
+    }
     pub fn active(&self, conversation: Option<&str>) -> bool {
-        self.running
-            .as_ref()
-            .is_some_and(|r| Some(r.conversation.as_str()) == conversation)
+        self.current(conversation).is_some()
     }
 }
 impl Drop for ProjectRuntime {
@@ -452,8 +483,7 @@ impl App {
         }
         let run = self
             .projects
-            .running
-            .as_ref()
+            .current(self.active_id.as_deref())
             .filter(|r| {
                 r.id == id && r.conversation == conversation && !r.cancel.load(Ordering::Relaxed)
             })
@@ -512,21 +542,26 @@ impl App {
         }
         Ok(())
     }
-    pub(super) fn project_task(&self) -> Option<serde_json::Value> {
-        self.projects.running.as_ref().map(|run| json!({"id":run.id,"conversation_id":run.conversation,"title":"專案工作","mode":"background","state":"running","active":true,"project":true,"created_at":run.started,"message":self.projects.status,"can_retry":false}))
+    pub(super) fn project_tasks(&self) -> Vec<serde_json::Value> {
+        self.projects.running.values().map(|run| json!({"id":run.id,"conversation_id":run.conversation,
+            "title":"專案工作","mode":"background","state":"running","active":true,"project":true,
+            "created_at":run.started,"message":run.resource_wait.values().next().unwrap_or(&run.status),"can_retry":false})).collect()
+    }
+    pub(super) fn project_slots_full(&self) -> bool {
+        self.projects.count() + usize::from(self.schedules.active()) >= 2
     }
     pub(super) fn project_state(&self) -> serde_json::Value {
         json!({"plan_mode":self.projects.store.plan_mode,"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len(),"collapsed":self.projects.store.collapsed.contains(&p.id)})).collect::<Vec<_>>(),
-            "preferences":self.projects.running.as_ref().and_then(|r|r.instructions.questions().ok()),
-            "chart_review":self.projects.running.as_ref().and_then(|r|r.pending_chart.as_ref().map(|p|json!({"request_id":p.id,"review":p.review}))),
-            "outlook_consent":self.projects.running.as_ref().and_then(|r|r.pending_outlook.as_ref().map(|p|json!({"request_id":p.id,"folders":p.folders}))),
-            "cad_connect":self.projects.running.as_ref().and_then(|r|r.pending_cad.as_ref().map(|p|json!({"request_id":p.id,"prompt":p.prompt}))),
-            "cad_read_progress":self.projects.running.as_ref().and_then(|r|r.cad_read_progress.as_ref()),
-            "file_busy":self.projects.running.as_ref().and_then(|r|r.pending_file.as_ref().map(|p|json!({"request_id":p.id,"message":p.message}))),
-            "supplements":self.projects.running.as_ref().and_then(|r|r.instructions.entries().ok()),
+            "preferences":self.projects.current(self.active_id.as_deref()).and_then(|r|r.instructions.questions().ok()),
+            "chart_review":self.projects.current(self.active_id.as_deref()).and_then(|r|r.pending_chart.as_ref().map(|p|json!({"request_id":p.id,"review":p.review}))),
+            "outlook_consent":self.projects.current(self.active_id.as_deref()).and_then(|r|r.pending_outlook.as_ref().map(|p|json!({"request_id":p.id,"folders":p.folders}))),
+            "cad_connect":self.projects.current(self.active_id.as_deref()).and_then(|r|r.pending_cad.as_ref().map(|p|json!({"request_id":p.id,"prompt":p.prompt}))),
+            "cad_read_progress":self.projects.current(self.active_id.as_deref()).and_then(|r|r.cad_read_progress.as_ref()),
+            "file_busy":self.projects.current(self.active_id.as_deref()).and_then(|r|r.pending_file.as_ref().map(|p|json!({"request_id":p.id,"message":p.message}))),
+            "supplements":self.projects.current(self.active_id.as_deref()).and_then(|r|r.instructions.entries().ok()),
             "queued":self.archive.conversations.iter().find(|c| Some(&c.id)==self.active_id.as_ref()).and_then(|c| c.project_queued.as_ref()).map(|q| json!({"id":q.id,"text":q.text,"after_run":q.after_run,"interrupt":q.interrupt,"auto_start":q.auto_start})),
-            "stopping":self.projects.running.as_ref().is_some_and(|r|r.cancel.load(Ordering::Relaxed)),
-            "running":self.projects.running.is_some(),"running_id":self.projects.running.as_ref().map(|r|&r.id),"activity":self.projects.running.as_ref().map(|r|&r.activity),"charts":self.projects.running.as_ref().map(|r|&r.charts),"analysis":self.projects.running.as_ref().and_then(|r|r.analysis.as_ref()),"running_conversation":self.projects.running.as_ref().map(|r|&r.conversation),"status":self.projects.status,"error":self.projects.error})
+            "stopping":self.projects.current(self.active_id.as_deref()).is_some_and(|r|r.cancel.load(Ordering::Relaxed)),
+            "running":self.projects.active(self.active_id.as_deref()),"running_count":self.projects.count()+usize::from(self.schedules.active()),"capacity_full":self.project_slots_full(),"running_conversations":self.projects.running.keys().map(String::as_str).chain(self.schedules.conversation()).collect::<Vec<_>>(),"running_id":self.projects.current(self.active_id.as_deref()).map(|r|&r.id),"activity":self.projects.current(self.active_id.as_deref()).map(|r|&r.activity),"charts":self.projects.current(self.active_id.as_deref()).map(|r|&r.charts),"analysis":self.projects.current(self.active_id.as_deref()).and_then(|r|r.analysis.as_ref()),"running_conversation":self.projects.current(self.active_id.as_deref()).map(|r|&r.conversation),"status":self.projects.current(self.active_id.as_deref()).map(|r|r.resource_wait.values().next().unwrap_or(&r.status)).or_else(||self.active_id.as_ref().and_then(|id|self.projects.completed_status.get(id))),"error":self.projects.error})
     }
     pub(super) fn project_command(&mut self, command: ProjectCommand) -> AppResult<()> {
         if self.task_plan_command(&command)? {
@@ -719,8 +754,7 @@ impl App {
             }
             let run = self
                 .projects
-                .running
-                .as_mut()
+                .current_mut(self.active_id.as_deref())
                 .filter(|r| {
                     r.id == *run_id
                         && r.conversation == *conversation
@@ -761,7 +795,7 @@ impl App {
                 .reply
                 .send(choice.clone())
                 .map_err(|_| "CAD 等待已結束。")?;
-            self.projects.status = "正在處理 CAD 回覆…".into();
+            run.status = "正在處理 CAD 回覆…".into();
             return Ok(());
         }
         if let ProjectCommand::FileReady {
@@ -779,8 +813,7 @@ impl App {
             }
             let run = self
                 .projects
-                .running
-                .as_mut()
+                .current_mut(self.active_id.as_deref())
                 .filter(|r| {
                     r.id == *run_id
                         && r.conversation == *conversation
@@ -800,7 +833,7 @@ impl App {
                 .reply
                 .send(*retry)
                 .map_err(|_| "讀取等待已結束。")?;
-            self.projects.status = if *retry {
+            run.status = if *retry {
                 "正在重新嘗試讀取檔案…"
             } else {
                 "正在保存目前讀取進度…"
@@ -824,8 +857,7 @@ impl App {
             }
             let run = self
                 .projects
-                .running
-                .as_mut()
+                .current_mut(self.active_id.as_deref())
                 .filter(|r| {
                     r.id == *run_id
                         && r.conversation == *conversation
@@ -856,7 +888,7 @@ impl App {
                 .reply
                 .send(allow.then(|| selected.clone()))
                 .map_err(|_| "Outlook 等待已結束，未新增授權。")?;
-            self.projects.status = if *allow {
+            run.status = if *allow {
                 "已同意本次 Outlook 讀取…"
             } else {
                 "已拒絕 Outlook 讀取…"
@@ -875,8 +907,7 @@ impl App {
             }
             let run = self
                 .projects
-                .running
-                .as_mut()
+                .current_mut(self.active_id.as_deref())
                 .filter(|r| r.id == *run_id && !r.cancel.load(Ordering::Relaxed))
                 .ok_or("任務已結束。")?;
             let pending = run
@@ -892,7 +923,7 @@ impl App {
                 .reply
                 .send(choices.clone())
                 .map_err(|_| "圖表等待已結束。")?;
-            self.projects.status = "正在套用圖表選擇…".into();
+            run.status = "正在套用圖表選擇…".into();
             return Ok(());
         }
         if let ProjectCommand::AnswerPreference {
@@ -903,8 +934,7 @@ impl App {
         {
             let run = self
                 .projects
-                .running
-                .as_ref()
+                .current(self.active_id.as_deref())
                 .filter(|r| r.id == *run_id && self.active_id.as_deref() == Some(&r.conversation))
                 .ok_or("請在原執行中的對話回答。")?;
             if !self.logged_in() {
@@ -1021,15 +1051,20 @@ impl App {
                 .ok_or("此對話已不屬於專案。")?;
             return projects::files::reveal(project, path);
         }
+        if let ProjectCommand::StopTask {
+            conversation,
+            run_id,
+        } = &command
+        {
+            self.projects.cancel_one(conversation, run_id)?;
+            self.hold_queued_project(conversation)?;
+            return Ok(());
+        }
         if matches!(command, ProjectCommand::Stop) {
-            // 先停止 worker；即使保存排程狀態失敗，也不讓停止按鈕失效。
-            self.projects.cancel();
-            if let Some(conversation) = self
-                .projects
-                .running
-                .as_ref()
-                .map(|r| r.conversation.clone())
-            {
+            if let Some(run) = self.projects.current(self.active_id.as_deref()) {
+                let conversation = run.conversation.clone();
+                let id = run.id.clone();
+                self.projects.cancel_one(&conversation, &id)?;
                 self.hold_queued_project(&conversation)?;
             }
             return Ok(());
@@ -1060,7 +1095,12 @@ impl App {
             }
             _ => (),
         }
-        if self.projects.running.is_some() {
+        if (self.projects.is_running() || self.schedules.active())
+            && !matches!(
+                command,
+                ProjectCommand::Resume { .. } | ProjectCommand::NewChat { .. }
+            )
+        {
             return Err("請先完成或停止專案任務，再修改專案設定。".into());
         }
         if self.busy != "none" || self.work.incoming.is_some() {
@@ -1209,6 +1249,7 @@ impl App {
                 unreachable!("handled above")
             }
             ProjectCommand::Stop
+            | ProjectCommand::StopTask { .. }
             | ProjectCommand::ChartCustomize { .. }
             | ProjectCommand::DiagramSave { .. }
             | ProjectCommand::DiagramSource { .. }
@@ -1362,15 +1403,18 @@ impl App {
         resume_id: Option<String>,
         queued_id: Option<&str>,
     ) -> AppResult<()> {
-        if self.schedules.active() {
-            return Err("固定流程排程執行中，未啟動另一個專案工作。".into());
-        }
         if self.history_error.is_some() {
             return Err("本機對話尚未恢復保存，請先處理紀錄錯誤。".into());
         }
-        if self.projects.running.is_some() {
-            return Err("第一版一次只執行一個專案任務，請先等待或停止。".into());
+        if self.projects.active(Some(&conversation))
+            || self.schedules.active_conversation(&conversation)
+        {
+            return Err("此對話已有執行中的任務，請先等待或停止。".into());
         }
+        if self.project_slots_full() {
+            return Err("已有 2 個任務執行中，請等待其中一項完成。".into());
+        }
+
         let project = self
             .projects
             .store
@@ -1545,30 +1589,47 @@ impl App {
         if self.active_id.as_deref() == Some(&conversation) {
             self.messages = messages;
         }
-        self.projects.attention_seen.clear();
-        self.projects.attention_conversation = None;
-        self.projects.running = Some(Running {
-            received_reply: false,
-            cad_read_progress: None,
-            pending_cad: None,
-            pending_file: None,
-            pending_outlook: None,
-            instructions,
-            pending_chart: None,
-            id: id.clone(),
-            conversation: conversation.clone(),
-            activity: initial_activity,
-            analysis: None,
-            charts: vec![],
-            started: crate::unix_now(),
-            cancel,
-        });
+        self.projects.running.insert(
+            conversation.clone(),
+            Running {
+                status: "正在建立受限制執行器…".into(),
+                resource_wait: Default::default(),
+                received_reply: false,
+                cad_read_progress: None,
+                pending_cad: None,
+                pending_file: None,
+                pending_outlook: None,
+                instructions,
+                pending_chart: None,
+                id: id.clone(),
+                conversation: conversation.clone(),
+                activity: initial_activity,
+                analysis: None,
+                charts: vec![],
+                started: crate::unix_now(),
+                cancel: cancel.clone(),
+            },
+        );
         if queued_id.is_none() && self.active_id.as_deref() == Some(&conversation) {
             self.set_draft(String::new());
         }
         self.projects.status = "正在建立受限制執行器…".into();
         let tx = self.tx.clone();
         crate::reliability::spawn(move || {
+            let wait_tx = tx.clone();
+            let wait_id = id.clone();
+            let _resources =
+                crate::resource_locks::Context::enter(Some(crate::resource_locks::Context {
+                    label: format!("專案任務 {}", &id[..id.len().min(8)]),
+                    cancel,
+                    notify: Arc::new(move |text| {
+                        let _ = wait_tx.send(Event::Project(ProjectEvent::ResourceWait(
+                            wait_id.clone(),
+                            std::thread::current().id(),
+                            text,
+                        )));
+                    }),
+                }));
             let export_tx = tx.clone();
             let export_id = id.clone();
             let renderer: projects::charts::png::Renderer = Box::new(move |chart, cancel| {
@@ -1687,16 +1748,25 @@ impl App {
     }
     pub(super) fn project_event(&mut self, event: ProjectEvent) -> AppResult<()> {
         match event {
+            ProjectEvent::ResourceWait(id, worker, text) => {
+                if let Some(run) = self.projects.run_mut(&id) {
+                    if let Some(text) = text {
+                        run.resource_wait.insert(worker, text);
+                    } else {
+                        run.resource_wait.remove(&worker);
+                    }
+                }
+            }
             ProjectEvent::CadReadProgress(id, progress) => {
                 // 過期任務與取消後的晚到進度不能重新顯示提示。
-                if let Some(run) = self.projects.running.as_mut().filter(|r| r.id == id) {
+                if let Some(run) = self.projects.run_mut(&id).filter(|r| r.id == id) {
                     run.cad_read_progress = (progress["active"] == true
                         && !run.cancel.load(Ordering::Relaxed))
                     .then_some(progress);
                 }
             }
             ProjectEvent::CadClosed(id, request_id) => {
-                if let Some(run) = self.projects.running.as_mut().filter(|r| r.id == id) {
+                if let Some(run) = self.projects.run_mut(&id).filter(|r| r.id == id) {
                     if run.pending_cad.as_ref().is_some_and(|p| p.id == request_id) {
                         run.pending_cad = None;
                     }
@@ -1711,8 +1781,7 @@ impl App {
             ProjectEvent::CadConnect(id, request_id, prompt, reply) => {
                 if let Some(run) = self
                     .projects
-                    .running
-                    .as_mut()
+                    .run_mut(&id)
                     .filter(|r| r.id == id && !r.cancel.load(Ordering::Relaxed))
                 {
                     run.pending_cad = Some(PendingCad {
@@ -1720,15 +1789,14 @@ impl App {
                         prompt,
                         reply,
                     });
-                    self.projects.status = "等待 CAD 就緒，原計畫已保留…".into();
-                    run.activity.push(self.projects.status.clone().into());
+                    run.status = "等待 CAD 就緒，原計畫已保留…".into();
+                    run.activity.push(run.status.clone().into());
                 }
             }
             ProjectEvent::FileBusy(id, request_id, message, reply) => {
                 if let Some(run) = self
                     .projects
-                    .running
-                    .as_mut()
+                    .run_mut(&id)
                     .filter(|r| r.id == id && !r.cancel.load(Ordering::Relaxed))
                 {
                     run.pending_file = Some(PendingFile {
@@ -1736,15 +1804,14 @@ impl App {
                         message,
                         reply,
                     });
-                    self.projects.status = "等待關閉檔案，再繼續讀取…".into();
-                    run.activity.push(self.projects.status.clone().into());
+                    run.status = "等待關閉檔案，再繼續讀取…".into();
+                    run.activity.push(run.status.clone().into());
                 }
             }
             ProjectEvent::OutlookConsent(id, request_id, folders, reply) => {
                 if let Some(run) = self
                     .projects
-                    .running
-                    .as_mut()
+                    .run_mut(&id)
                     .filter(|r| r.id == id && !r.cancel.load(Ordering::Relaxed))
                 {
                     run.pending_outlook = Some(PendingOutlook {
@@ -1752,15 +1819,14 @@ impl App {
                         folders,
                         reply,
                     });
-                    self.projects.status = "等待確認 AI 可使用的 Outlook 資料夾…".into();
-                    run.activity.push(self.projects.status.clone().into());
+                    run.status = "等待確認 AI 可使用的 Outlook 資料夾…".into();
+                    run.activity.push(run.status.clone().into());
                 }
             }
             ProjectEvent::ReviewChart(id, request_id, review, reply) => {
                 if let Some(run) = self
                     .projects
-                    .running
-                    .as_mut()
+                    .run_mut(&id)
                     .filter(|r| r.id == id && !r.cancel.load(Ordering::Relaxed))
                 {
                     run.pending_chart = Some(PendingChart {
@@ -1768,8 +1834,8 @@ impl App {
                         review,
                         reply,
                     });
-                    self.projects.status = "等待選擇圖表資料處理方式…".into();
-                    run.activity.push(self.projects.status.clone().into());
+                    run.status = "等待選擇圖表資料處理方式…".into();
+                    run.activity.push(run.status.clone().into());
                 }
             }
             ProjectEvent::Diagnostics(conversation, id, view_request, copy, result) => {
@@ -1807,8 +1873,7 @@ impl App {
             ProjectEvent::RenderMermaid(id, source, format, reply) => {
                 if !self
                     .projects
-                    .running
-                    .as_ref()
+                    .run(&id)
                     .is_some_and(|run| run.id == id && !run.cancel.load(Ordering::Relaxed))
                 {
                     let _ = reply.send(Err("任務已結束或取消。".into()));
@@ -1820,8 +1885,7 @@ impl App {
             ProjectEvent::ExportPng(id, chart, reply) => {
                 if !self
                     .projects
-                    .running
-                    .as_ref()
+                    .run(&id)
                     .is_some_and(|run| run.id == id && !run.cancel.load(Ordering::Relaxed))
                 {
                     let _ = reply.send(Err("任務已結束或取消，PNG 未匯出。".into()));
@@ -1830,37 +1894,40 @@ impl App {
                 }
             }
             ProjectEvent::Analysis(id, value) => {
-                if let Some(run) = self.projects.running.as_mut().filter(|r| r.id == id) {
+                if let Some(run) = self.projects.run_mut(&id).filter(|r| r.id == id) {
                     run.analysis = Some(value);
                 }
             }
             ProjectEvent::Charts(id, charts) => {
-                if let Some(run) = self.projects.running.as_mut().filter(|r| r.id == id) {
+                if let Some(run) = self.projects.run_mut(&id).filter(|r| r.id == id) {
                     run.charts = charts;
                 }
             }
             ProjectEvent::Progress(id, text) => {
-                if let Some(run) = self.projects.running.as_mut().filter(|r| r.id == id) {
+                if let Some(run) = self.projects.run_mut(&id).filter(|r| r.id == id) {
                     run.received_reply |= text.is_model_reply();
                     if !run.activity.last().is_some_and(|last| **last == *text) {
                         run.activity.push(text.clone());
                     }
-                    self.projects.status = text.to_string();
+                    run.status = text.to_string();
                 }
             }
             ProjectEvent::Finished(id, conversation, result) => {
-                if !self.projects.running.as_ref().is_some_and(|r| r.id == id) {
+                if !self
+                    .projects
+                    .current(Some(&conversation))
+                    .is_some_and(|r| r.id == id)
+                {
                     return Ok(());
                 }
                 let cancelled = self
                     .projects
-                    .running
-                    .as_ref()
+                    .run(&id)
                     .is_some_and(|r| r.cancel.load(Ordering::Relaxed));
                 let activity = self
                     .projects
                     .running
-                    .take()
+                    .remove(&conversation)
                     .map(|run| {
                         let _ = run.instructions.close(true);
                         run.activity
@@ -1888,6 +1955,9 @@ impl App {
                     "專案任務未完成，請查看對話。"
                 }
                 .into();
+                self.projects
+                    .completed_status
+                    .insert(conversation.clone(), self.projects.status.clone());
                 let succeeded = result.is_ok();
                 let text = result.unwrap_or_else(|error| {
                     if cancelled {

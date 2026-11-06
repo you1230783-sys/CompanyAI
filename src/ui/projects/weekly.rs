@@ -16,7 +16,7 @@ impl App {
     pub(super) fn weekly_project(&self, conversation: &str) -> AppResult<projects::Project> {
         if self.active_id.as_deref() != Some(conversation)
             || !self.can_send()
-            || self.projects.running.is_some()
+            || self.projects.active(self.active_id.as_deref())
             || self.work.incoming.is_some()
             || self.work.store.principal_id.is_empty()
         {

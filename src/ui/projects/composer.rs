@@ -63,7 +63,7 @@ impl App {
         self.archive = archive;
         // 保存成功才取消；新任務由 Finished 事件接手，不與舊檔案操作重疊。
         if pending.interrupt {
-            self.projects.cancel();
+            self.projects.cancel_one(conversation, run_id)?;
         }
         Ok(pending.id)
     }
@@ -120,7 +120,8 @@ impl App {
         if !self.logged_in()
             || self.versions.blocked()
             || self.busy != "none"
-            || self.projects.running.is_some()
+            || self.projects.active(Some(conversation))
+            || self.project_slots_full()
             || self.projects.error.is_some()
             || self.work.incoming.is_some()
             || self.work.capability_loading

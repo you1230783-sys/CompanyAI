@@ -26,7 +26,8 @@
         after_task:"先保存待送訊息；本次完成後自動開始新任務，可在送出前取消。"}[mode.value]);
     prompt.maxLength = active && mode.value === "next_turn" ? 4000 : 16000;
     prompt.placeholder = active ? "直接輸入補充或下一個任務，再選擇傳送方式…" : "輸入訊息，或用快捷鍵帶入選取文字…";
-    $("send").title = active ? mode.selectedOptions[0].textContent : "送出";
+    const full = state.projects?.capacity_full && state.conversations.some(c=>c.id===state.active_id && c.project_id);
+    $("send").title = active ? mode.selectedOptions[0].textContent : full ? "已有 2 個任務執行中，請等待其中一項完成" : "送出";
     $("send").setAttribute("aria-label", $("send").title);
     if (active) $("send").disabled = !allowed();
     else $("send").disabled = !!pending || !state.can_send || !!window.WorkUI?.getFileBusy();

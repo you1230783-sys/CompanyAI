@@ -62,7 +62,8 @@ impl App {
         else {
             return Ok(false);
         };
-        if self.projects.is_running()
+        if self.projects.active(Some(conversation))
+            || self.project_slots_full()
             || self.busy != "none"
             || self.work.incoming.is_some()
             || !self.can_send()

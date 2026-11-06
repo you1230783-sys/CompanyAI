@@ -373,7 +373,16 @@ impl App {
         !crate::reliability::faulted()
             && self.logged_in()
             && self.busy == "none"
-            && !self.schedules.active()
+            && !self
+                .active_id
+                .as_deref()
+                .is_some_and(|id| self.schedules.active_conversation(id))
+            && !(self
+                .active_id
+                .as_deref()
+                .and_then(|id| self.projects.store.project_for(id))
+                .is_some()
+                && self.project_slots_full())
             && !self.projects.active(self.active_id.as_deref())
             && self.work_ready()
             && !self.versions.blocked()

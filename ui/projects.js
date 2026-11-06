@@ -337,7 +337,7 @@
     $("project-import-text").value = ""; $("project-import-path").value = "";
     importProject = null; pickerRequest++;
   });
-  $("project-stop").onclick = () => command({action:"stop"});
+  $("project-stop").onclick = () => { const p=state.projects; if(p?.running_id) command({action:"stop_task",conversation:state.active_id,run_id:p.running_id}); };
 
   function button(label, action, disabled) {
     const result = node("button", "text-button", label); result.type = "button";
@@ -428,7 +428,7 @@
       if (showActivity && follow) bottom();
       else $("transcript").scrollTop = oldTop;
     }
-    $("new-project").disabled = !!projects.running || state.busy !== "none" || !!state.work?.incoming;
+    $("new-project").disabled = !!projects.running_count || state.busy !== "none" || !!state.work?.incoming;
     const notice = JSON.stringify([projects.error || projects.status || "", !!projects.error]);
     if (notice !== lastNotice) {
       lastNotice = notice;
@@ -437,17 +437,17 @@
     $("project-stop").hidden = !projects.running;
     $("project-stop").disabled = false;
     // 設定開啟後若任務開始，不保留可操作的舊設定視窗。
-    if (projects.running) {
+    if (projects.running_count) {
       for (const id of ["project-settings-dialog", "project-remove-dialog", "project-import-dialog"]) {
         if ($(id).open) $(id).close();
       }
     }
-    const next = JSON.stringify([projects.items, projects.running, state.conversations, state.active_id, state.busy, state.work?.incoming]);
+    const next = JSON.stringify([projects.items, projects.running_count, state.conversations, state.active_id, state.busy, state.work?.incoming]);
     if (next === signature) return;
     signature = next;
     const list = $("project-list"); list.replaceChildren();
     for (const project of projects.items || []) {
-      const disabled = !!projects.running || state.busy !== "none" || !!state.work?.incoming;
+      const disabled = !!projects.running_count || state.busy !== "none" || !!state.work?.incoming;
       const card = node("div", "project-card"), heading = node("div", "project-heading");
       const title = node("button", "project-title-toggle"); title.type="button";
       title.title = `篩選 ${project.name}的對話`;

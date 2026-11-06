@@ -3,6 +3,7 @@
 //! 舊任務終態由測試送入；接續則走正式控制器、DPAPI 與真實 runner 執行緒，
 //! 隨即取消並等待 Finished。此處不把模擬終態當成公司模型或 Office 的整合驗收。
 use super::{composer::ComposeMode, *};
+mod multi_task;
 
 fn verify(ok: bool, case: &str) -> AppResult<()> {
     if ok {
@@ -82,7 +83,7 @@ impl App {
         verify(!self.is_foreground(), "通知測試必須使用背景視窗")?;
         for popups in [false, true] {
             let (chat, old) = self.composer_fixture()?;
-            self.projects.running = None;
+            self.projects.running.clear();
             self.projects.status = "專案已暫停，可按繼續。".into();
             self.config.notification_popups = popups;
             self.inbox = crate::notifications::Inbox::for_session(
@@ -180,7 +181,9 @@ impl App {
             Ok("過期".into()),
         ))?;
         verify(
-            self.projects.running.as_ref().is_some_and(|r| r.id == old),
+            self.projects
+                .current(Some(&chat))
+                .is_some_and(|r| r.id == old),
             "忽略過期 Finished",
         )?;
         self.project_event(ProjectEvent::Progress(
@@ -194,8 +197,7 @@ impl App {
         ))?;
         verify(
             self.projects
-                .running
-                .as_ref()
+                .current(Some(&chat))
                 .is_some_and(|r| r.id == queued && r.conversation == chat)
                 && self.composer_queued(&chat).is_none()
                 && self.active_id.as_ref() == Some(&other)
@@ -239,8 +241,7 @@ impl App {
         )?;
         verify(
             self.projects
-                .running
-                .as_ref()
+                .current(self.active_id.as_deref())
                 .is_some_and(|r| r.id == old && r.cancel.load(Ordering::Relaxed)),
             "先停止原 worker",
         )?;
@@ -251,8 +252,7 @@ impl App {
         ))?;
         verify(
             self.projects
-                .running
-                .as_ref()
+                .current(self.active_id.as_deref())
                 .is_some_and(|r| r.id == queued),
             "停止終態後才啟動下一任務",
         )?;
@@ -269,7 +269,7 @@ impl App {
         self.cancel_queued_project(&chat, &queued)?;
         self.project_event(ProjectEvent::Finished(old, chat.clone(), Ok("完成".into())))?;
         verify(
-            self.projects.running.is_none() && self.composer_queued(&chat).is_none(),
+            self.projects.running.is_empty() && self.composer_queued(&chat).is_none(),
             "取消後不接續",
         )?;
         cases.push("queue cancellation does not start a new worker");
@@ -289,7 +289,7 @@ impl App {
             Err("已停止".into()),
         ))?;
         verify(
-            self.projects.running.is_none()
+            self.projects.running.is_empty()
                 && self.composer_queued(&chat).is_some_and(|q| !q.auto_start),
             "手動停止保留而不自動送出",
         )?;
@@ -333,7 +333,7 @@ impl App {
             self.compose_project_message(&chat, &old, ComposeMode::AfterTask, None, "保留文字")?;
             self.project_event(ProjectEvent::Finished(old, chat.clone(), result))?;
             verify(
-                self.projects.running.is_none()
+                self.projects.running.is_empty()
                     && self.composer_queued(&chat).is_some_and(|q| !q.auto_start),
                 "失敗／等待補充不自動接續",
             )?;
@@ -342,11 +342,11 @@ impl App {
 
         let (chat, old) = self.composer_fixture()?;
         self.compose_project_message(&chat, &old, ComposeMode::AfterTask, None, "重啟保留")?;
-        self.projects.running = None;
+        self.projects.running.clear();
         self.archive = history::load(&self.root)?;
         self.recover_project_history()?;
         verify(
-            self.projects.running.is_none()
+            self.projects.running.is_empty()
                 && self
                     .composer_queued(&chat)
                     .is_some_and(|q| !q.auto_start && q.text == "重啟保留"),
@@ -368,12 +368,11 @@ impl App {
                 && self.composer_queued(&chat).is_none()
                 && self
                     .projects
-                    .running
-                    .as_ref()
+                    .current(self.active_id.as_deref())
                     .is_some_and(|r| !r.cancel.load(Ordering::Relaxed)),
             "保存失敗不得停止舊任務",
         )?;
-        self.projects.running = None;
+        self.projects.running.clear();
         cases.push("history write failure leaves old worker and queue unchanged");
         let (chat, old) = self.composer_fixture()?;
         let (reply, receiver) = mpsc::channel();
@@ -432,16 +431,15 @@ impl App {
         )?;
         verify(
             self.projects
-                .running
-                .as_ref()
+                .current(self.active_id.as_deref())
                 .is_some_and(|r| r.pending_outlook.is_none()),
             "確認後移除待處理請求",
         )?;
-        self.projects.running = None;
+        self.projects.running.clear();
         cases.push("native Outlook folder selection rejects stale identity and unknown or hidden-parent ids");
         // 週報準備只建資料夾；取消、缺少確認與過期對話不可啟動模型。
         let (chat, _) = self.composer_fixture()?;
-        self.projects.running = None;
+        self.projects.running.clear();
         let request = crate::jobs::new_id()?;
         self.project_command(ProjectCommand::WeeklyPrepare {
             conversation: chat.clone(),
@@ -481,7 +479,7 @@ impl App {
                 .is_err(),
             "週報跨對話不可送出",
         )?;
-        verify(self.projects.running.is_none(), "准备資料夾未啟動 worker")?;
+        verify(self.projects.running.is_empty(), "准备資料夾未啟動 worker")?;
         self.project_command(submit(chat.clone(), true))?;
         verify(
             self.messages
@@ -500,7 +498,7 @@ impl App {
         {
             let kind = quick::Kind::Outlook;
             let (chat, _) = self.composer_fixture()?;
-            self.projects.running = None;
+            self.projects.running.clear();
             let request = crate::jobs::new_id()?;
             self.project_command(ProjectCommand::QuickPrepare {
                 conversation: chat.clone(),
@@ -514,7 +512,7 @@ impl App {
                 end: "2026-10-06".into(),
                 notes: "保留測試要求".into(),
             };
-            verify(self.projects.running.is_none(), "準備快速入口不啟動任務")?;
+            verify(self.projects.running.is_empty(), "準備快速入口不啟動任務")?;
             verify(
                 self.project_command(submit("other-chat")).is_err(),
                 "快速入口拒絕跨對話送出",
@@ -551,7 +549,7 @@ impl App {
         )?;
         cases.push("image quick commands removed; pictures use basic file reading");
         let (chat, run) = self.composer_fixture()?;
-        self.projects.running = None;
+        self.projects.running.clear();
         let chart:projects::charts::Chart=serde_json::from_value(json!({"kind":"line","title":"原圖","x_label":"時間","y_label":"量測","x":["12:00","12:01"],"series":[{"name":"原值","values":[168.4,169.1]}],"source":"測試.xlsx"})).map_err(|e|e.to_string())?;
         self.messages[0].project_charts = vec![chart];
         self.archive.conversations[0].messages = self.messages.clone();
@@ -609,12 +607,13 @@ impl App {
             "恢復原樣移除顯示設定",
         )?;
         cases.push("native chart customization: original values, stale target rejection, DPAPI persistence and reset");
+        cases.extend(self.verify_two_project_tasks()?);
         Ok(cases)
     }
 
     /// 每案建立新的歷史與授權目錄；Running 是受控舊任務，不持有 Office 或檔案。
     fn composer_fixture(&mut self) -> AppResult<(String, String)> {
-        verify(self.projects.running.is_none(), "上一案 worker 已釋放")?;
+        verify(self.projects.running.is_empty(), "上一案 worker 已釋放")?;
         self.archive = Default::default();
         self.projects = Default::default();
         self.work = Default::default();
@@ -640,22 +639,27 @@ impl App {
             .insert(chat.clone(), project);
         self.active_id = Some(chat.clone());
         self.messages = vec![question];
-        self.projects.running = Some(Running {
-            received_reply: false,
-            cad_read_progress: None,
-            pending_cad: None,
-            pending_file: None,
-            pending_outlook: None,
-            pending_chart: None,
-            instructions: projects::steering::Inbox::open(&self.root, &old)?,
-            id: old.clone(),
-            conversation: chat.clone(),
-            activity: vec![],
-            analysis: None,
-            charts: vec![],
-            started: crate::unix_now(),
-            cancel: Arc::new(AtomicBool::new(false)),
-        });
+        self.projects.running.insert(
+            chat.clone(),
+            Running {
+                status: String::new(),
+                resource_wait: Default::default(),
+                received_reply: false,
+                cad_read_progress: None,
+                pending_cad: None,
+                pending_file: None,
+                pending_outlook: None,
+                pending_chart: None,
+                instructions: projects::steering::Inbox::open(&self.root, &old)?,
+                id: old.clone(),
+                conversation: chat.clone(),
+                activity: vec![],
+                analysis: None,
+                charts: vec![],
+                started: crate::unix_now(),
+                cancel: Arc::new(AtomicBool::new(false)),
+            },
+        );
         history::save(&self.root, &self.archive)?;
         Ok((chat, old))
     }
@@ -672,13 +676,13 @@ impl App {
     fn await_composer_worker(&mut self) -> AppResult<()> {
         self.projects.cancel();
         let deadline = Instant::now() + Duration::from_secs(10);
-        while self.projects.running.is_some() && Instant::now() < deadline {
+        while !self.projects.running.is_empty() && Instant::now() < deadline {
             if let Ok(Event::Project(event)) = self.rx.recv_timeout(Duration::from_millis(50)) {
                 self.project_event(event)?;
             }
         }
         verify(
-            self.projects.running.is_none(),
+            self.projects.running.is_empty(),
             "取消後等待真實 runner 結束",
         )
     }

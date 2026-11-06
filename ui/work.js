@@ -287,7 +287,7 @@ function renderWork() {
         node(
           "p",
           "",
-          `${workLabels[task.state] || task.state}${task.queue_position ? " · 排隊順位 " + task.queue_position : ""}`,
+          `${task.schedule && task.state === "running" ? "排程執行中" : workLabels[task.state] || task.state}${task.queue_position ? " · 排隊順位 " + task.queue_position : ""}`,
         ),
       );
       if (task.progress !== null && task.progress !== undefined) {
@@ -306,8 +306,9 @@ function renderWork() {
           send({ type: "select_chat", id: task.conversation_id });
         }),
       );
-      if (task.project) actions.append(actionButton("停止專案任務", () => send({type:"project",command:{action:"stop"}})));
-      if (!task.project && task.active && task.state !== "submitting")
+      if (task.project) actions.append(actionButton("停止專案任務", () => send({type:"project",command:{action:"stop_task",conversation:task.conversation_id,run_id:task.id}})));
+      else if (task.schedule) actions.append(actionButton("停止流程排程", () => send({type:"schedule",command:{action:"stop_execution",execution:task.id}})));
+      if (!task.project && !task.schedule && task.active && task.state !== "submitting")
         actions.append(
           actionButton("取消任務", () =>
             ask("取消工作", "伺服器會嘗試取消；若已完成，仍會取回結果。", () =>
@@ -321,7 +322,7 @@ function renderWork() {
             workCommand({ action: "retry_task", id: task.id }),
           ),
         );
-      if (!task.project && task.active)
+      if (!task.project && !task.schedule && task.active)
         actions.append(
           actionButton("停止追蹤", () =>
             ask(
@@ -331,7 +332,7 @@ function renderWork() {
             ),
           ),
         );
-      if (!task.project) actions.append(
+      if (!task.project && !task.schedule) actions.append(
         actionButton("移除任務", () =>
           ask(
             "移除本機任務？",

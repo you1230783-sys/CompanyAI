@@ -43,7 +43,7 @@ impl App {
             created_at: crate::notifications::now_text(),
             expires_at: None,
             resource_id: Some(id.to_owned()),
-            read_at: if self.is_foreground() {
+            read_at: if self.is_foreground() && self.active_id.as_deref() == Some(conversation) {
                 Some(crate::notifications::now_text())
             } else {
                 None
@@ -57,7 +57,9 @@ impl App {
         })?;
         crate::notifications::save(&self.root, &self.inbox)?;
         self.toast(&self.projects.status.clone());
-        if self.config.notification_popups && !self.is_foreground() {
+        if self.config.notification_popups
+            && !(self.is_foreground() && self.active_id.as_deref() == Some(conversation))
+        {
             self.projects.attention_conversation =
                 (paused || waiting).then(|| conversation.to_owned());
             self.work.tray_restore_only = false;
@@ -72,43 +74,50 @@ impl App {
         if !self.logged_in() || self.versions.blocked() {
             return;
         }
-        let Some(run) = self
+        let foreground = self.is_foreground();
+        let mut notifications = Vec::new();
+        for run in self
             .projects
             .running
-            .as_ref()
+            .values()
             .filter(|r| !r.cancel.load(Ordering::Relaxed))
-        else {
+        {
+            let mut keys = Vec::new();
+            if let Some(p) = &run.pending_cad {
+                keys.push(format!("{}:cad:{}", run.id, p.id));
+            }
+            if let Some(p) = &run.pending_file {
+                keys.push(format!("{}:file:{}", run.id, p.id));
+            }
+            if let Some(p) = &run.pending_outlook {
+                keys.push(format!("{}:outlook:{}", run.id, p.id));
+            }
+            if let Some(p) = &run.pending_chart {
+                keys.push(format!("{}:chart:{}", run.id, p.id));
+            }
+            if let Ok(questions) = run.instructions.questions() {
+                keys.extend(
+                    questions
+                        .iter()
+                        .filter(|q| q.state == "pending")
+                        .map(|q| format!("{}:question:{}", run.id, q.id)),
+                );
+            }
+            let conversation = run.conversation.clone();
+            let viewing = foreground && self.active_id.as_deref() == Some(&conversation);
+            if record_requests(&mut self.projects.attention_seen, keys, viewing) {
+                notifications.push(conversation);
+            }
+        }
+        let count = notifications.len();
+        let Some(conversation) = notifications.into_iter().next() else {
             return;
         };
-        let mut keys = Vec::new();
-        if let Some(p) = &run.pending_cad {
-            keys.push(format!("{}:cad:{}", run.id, p.id));
-        }
-        if let Some(p) = &run.pending_file {
-            keys.push(format!("{}:file:{}", run.id, p.id));
-        }
-        if let Some(p) = &run.pending_outlook {
-            keys.push(format!("{}:outlook:{}", run.id, p.id));
-        }
-        if let Some(p) = &run.pending_chart {
-            keys.push(format!("{}:chart:{}", run.id, p.id));
-        }
-        if let Ok(questions) = run.instructions.questions() {
-            keys.extend(
-                questions
-                    .iter()
-                    .filter(|q| q.state == "pending")
-                    .map(|q| format!("{}:question:{}", run.id, q.id)),
-            );
-        }
-        let conversation = run.conversation.clone();
-        let foreground = self.is_foreground();
-        if !record_requests(&mut self.projects.attention_seen, keys, foreground) {
-            return;
-        }
         self.projects.attention_conversation = Some(conversation);
         if self.config.notification_popups {
-            self.desktop_notice("專案工作需要您確認，請回到 LM_AI 查看待處理的問題。");
+            self.desktop_notice(&format!(
+                "{count} 個專案工作需要您確認，請回到 LM_AI 切換執行中的對話查看。"
+            ));
         }
         let info = FLASHWINFO {
             cbSize: std::mem::size_of::<FLASHWINFO>() as u32,
