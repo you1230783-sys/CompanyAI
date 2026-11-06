@@ -1,0 +1,34 @@
+{
+  "version": "0.9.14",
+  "result": "PASS_RELATED_SCOPE",
+  "recorded_at": "2026-11-06T09:16:59.4768565+08:00",
+  "build": {
+    "recorded_at": "2026-11-06T08:53:21.0925398+08:00",
+    "result": "BUILD_ONLY",
+    "msvc": "14.29.30133",
+    "compiler_report": [
+      "v142.c",
+      "Verified _MSC_FULL_VER=192930159 x64"
+    ],
+    "linker": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\link.exe",
+    "empty_cargo_cache": true,
+    "default_features": true,
+    "requested_features": [],
+    "exe": "Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\company-ai.exe",
+    "exe_sha256": "0bdc2274a5bad83312ea155d99a8a34ed748a90ec25aabef4d626edeb6ef29f4",
+    "tests_run": false,
+    "installer_built": false
+  },
+  "exe_sha256": "0bdc2274a5bad83312ea155d99a8a34ed748a90ec25aabef4d626edeb6ef29f4",
+  "setup_sha256": "e872876c1655afb6f70e0fb9627070e673a96f2d3efeee14c36041a6feb6dfc6",
+  "empty_cargo_cache_frozen": true,
+  "scope": "M8: native file isolation/copy/edit/save/review, Office document comparison/translation/export, release EXE self-check and full NSIS lifecycle",
+  "model_requests_during_preview": 0,
+  "company_acceptance": false,
+  "not_rerun": [
+    "full native HTTP long-task matrix",
+    "Python scientific analysis matrix",
+    "CAD drawing",
+    "company mailbox/network/encrypted documents"
+  ]
+}
