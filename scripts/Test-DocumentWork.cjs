@@ -40,9 +40,11 @@ const delay = milliseconds => new Promise(resolve => setTimeout(resolve, millise
     };
     await call("Page.navigate",{url:pathToFileURL(path.resolve("ui/index.html")).href});
     for(let index=0;index<100;index++) {
-      if(await evaluate("!!window.WorkbenchUI && !!window.LMUI && !!window.ArtifactUI"))break;
+      // 工具入口的 click handler 在較後面的 navigation.js 註冊；不能只等工作表模組。
+      if(await evaluate("document.readyState === 'complete' && !!window.WorkbenchUI && !!window.LMUI && !!window.ArtifactUI && !!window.NavigationUI"))break;
       await delay(100);
     }
+    if (!await evaluate("document.readyState === 'complete' && !!window.NavigationUI")) throw Error('Document navigation did not finish loading');
 
     const checks = await evaluate(`(async () => {
       const checks=[],check=(ok,label)=>{if(!ok)throw Error(label);checks.push(label);};

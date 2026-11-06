@@ -225,8 +225,20 @@ impl Broker {
         // 必須早於 perform／計畫消耗／成果寫入；不能把執行中的未知錯誤標成未執行。
         let mut registration_contract = false;
         let outcome = loop {
+            crate::projects::runner::check_cancel(cancel)?;
             let ownership = match self.operation_ownership(tool) {
                 Ok(guard) => guard,
+                Err(error) if error.contains(crate::projects::interaction::BUSY) => {
+                    // 來源檔案可能在擁有權檢查時就被外部程式占用。
+                    // 此時尚未執行任何操作，也沒有持有資源鎖；沿用關閉檔案提示，
+                    // 確認後從頭核對來源與權限，不把可恢復狀態永久記成契約錯誤。
+                    if self.wait_for_file(&error, cancel)? {
+                        continue;
+                    }
+                    return Ok(
+                        json!({"ok":true,"result":{"waiting_for_user":true,"wait_reason":"等待關閉占用檔案後繼續讀取","executed":false}}),
+                    );
+                }
                 Err(error) => {
                     registration_contract = true;
                     break Err(error);

@@ -842,7 +842,10 @@ fn verify_case(root: &Path, case: usize) -> AppResult<()> {
                             json!({"source":"source.txt","name":"locked-copy.txt"}),
                         ),
                         3 => {
-                            copy = previous["result"]["copy_id"].as_str().unwrap().into();
+                            copy = previous["result"]["copy_id"]
+                                .as_str()
+                                .ok_or_else(|| format!("來源解鎖後建立副本失敗：{previous}"))?
+                                .into();
                             call(
                                 &body,
                                 "save_copy",
