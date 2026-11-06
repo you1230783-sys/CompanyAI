@@ -1725,7 +1725,9 @@ impl App {
         }
         chat.messages = messages.clone();
         chat.updated_at = crate::unix_now();
-        if queued_id.is_none() {
+        // 背景派送與 checkpoint 續接使用已授權的要求，當前輸入框可能已有另一份草稿。
+        let clear_draft = queued_id.is_none() && !unattended && !resume;
+        if clear_draft {
             chat.draft.clear();
         }
         history::save(&self.root, &archive)?;
@@ -1758,7 +1760,7 @@ impl App {
                 cancel: cancel.clone(),
             },
         );
-        if queued_id.is_none() && self.active_id.as_deref() == Some(&conversation) {
+        if clear_draft && self.active_id.as_deref() == Some(&conversation) {
             self.set_draft(String::new());
         }
         self.projects.status = "正在建立受限制執行器…".into();
@@ -1842,6 +1844,9 @@ impl App {
             let review_id = id.clone();
             let chooser: projects::charts::quality::Chooser =
                 Box::new(move |review, cancel, deadline| {
+                    if unattended {
+                        return Ok(None);
+                    }
                     let (reply, response) = mpsc::channel();
                     review_tx
                         .send(Event::Project(ProjectEvent::ReviewChart(
