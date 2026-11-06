@@ -28,6 +28,7 @@ pub mod projects;
 pub mod protocol;
 pub mod reliability;
 pub mod reminders;
+pub mod resource_locks;
 pub mod screenshot;
 pub mod selection;
 pub mod selection_popup;
