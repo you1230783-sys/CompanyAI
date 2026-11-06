@@ -3,6 +3,21 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {spawn} = require('node:child_process');
 const {pathToFileURL} = require('node:url');
+// 更新公告只保留使用者操作資訊；集中維護詞彙，避免日後再次加入內部細節。
+const releaseNotes = JSON.parse(fs.readFileSync('assets/release-notes.json', 'utf8').replace(/^\uFEFF/, ''));
+const excludedReleaseTerms = ['塔羅', '桌寵', '牌義', '抽牌', '回歸', '候選', 'NSIS', 'v142', 'ThinLTO', 'codegen', 'panic', 'AppContainer', 'DPAPI', 'SHA256', 'JSON Pointer', 'tokens', 'Cargo', 'COM', 'GitHub', '簽章', '雜湊', 'Junction', 'ACL'];
+for (const note of releaseNotes) {
+  const text = [note.section, ...note.items].join('\n').toLowerCase();
+  for (const term of excludedReleaseTerms) {
+    if (text.includes(term.toLowerCase())) throw Error(`Release ${note.version} contains internal wording: ${term}`);
+  }
+  if (!note.section || note.items.length < 1 || note.items.length > 4 || note.items.some(item => !item || [...item].length > 60)) {
+    throw Error(`Release ${note.version} must have a title and one to four short user-facing sentences`);
+  }
+}
+for (const version of ['0.8.75', '0.8.76', '0.8.77', '0.8.78', '0.8.79', ...Array.from({length:20}, (_, i) => `0.9.${i}`)]) {
+  if (releaseNotes.filter(note => note.version === version).length !== 1) throw Error(`Missing or duplicated release ${version}`);
+}
 const delay = ms => new Promise(r => setTimeout(r, ms));
 (async () => {
   const profile = path.resolve('.build', 'settings-review-' + Date.now());
