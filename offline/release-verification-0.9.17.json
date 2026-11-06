@@ -1,0 +1,348 @@
+{
+  "version": "0.9.17",
+  "build_result": "PASS",
+  "implementation_commit": "3b6c5c1838e8a0c7cdbdd8e5996af51b4b1c8b76",
+  "toolset": "MSVC v142 14.29.30133 x64",
+  "compiler_full_version": 192930159,
+  "empty_cargo_cache_frozen": true,
+  "rust_workspace_tests": 492,
+  "cad_unit_tests_filtered": 60,
+  "browser_groups": 4,
+  "browser_checks": 80,
+  "final_exe_sha256": "30cadc769eed4318e58c402ed59c6a6d33394b35aa9e05231ae97cc12f8a82d1",
+  "final_setup_sha256": "a3455d8658c2797ed03c5265923db144d8ab2427dcc8a75aa814e6912514185e",
+  "installer_built": true,
+  "scope": "M11 plus Excel reading-note references and exact JSON archive recovery. Related native tests and candidate installer lifecycle.",
+  "build": {
+    "version": "0.9.17",
+    "result": "PASS_RELATED_SCOPE",
+    "recorded_at": "2026-11-06T12:11:00.1884914+08:00",
+    "build": {
+      "recorded_at": "2026-11-06T11:54:57.2302825+08:00",
+      "result": "BUILD_ONLY",
+      "msvc": "14.29.30133",
+      "compiler_report": [
+        "v142.c",
+        "Verified _MSC_FULL_VER=192930159 x64"
+      ],
+      "linker": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\link.exe",
+      "empty_cargo_cache": true,
+      "default_features": true,
+      "requested_features": [],
+      "exe": "Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\company-ai.exe",
+      "exe_sha256": "30cadc769eed4318e58c402ed59c6a6d33394b35aa9e05231ae97cc12f8a82d1",
+      "tests_run": false,
+      "installer_built": false
+    },
+    "exe_sha256": "30cadc769eed4318e58c402ed59c6a6d33394b35aa9e05231ae97cc12f8a82d1",
+    "setup_sha256": "a3455d8658c2797ed03c5265923db144d8ab2427dcc8a75aa814e6912514185e",
+    "empty_cargo_cache_frozen": true,
+    "scope": "M11: two-task controller, bound prompts/cancellation and schedule slots; resource FIFO/RAII; Excel notes and exact JSON archive; release EXE self-check and candidate installer lifecycle",
+    "synthetic_model_fixture": true,
+    "company_acceptance": false,
+    "not_rerun": [
+      "Office document comparison/translation/export",
+      "full native HTTP long-task matrix",
+      "Python scientific analysis matrix",
+      "CAD drawing",
+      "company mailbox/network/encrypted documents",
+      "full NSIS PID/rollback/repair matrix retained from 0.9.15"
+    ]
+  },
+  "installer_lifecycle": {
+    "initial_install_attempt": ".build/release-0.9.17-r1.log",
+    "prior_failure": "One installed self-check exceeded the existing 45-second deadline; unchanged EXE retry passed in 21.69 seconds. No timeout relaxation.",
+    "resumed_validation": "same installed candidate; metadata, self-check, Python/CAD, update identity, user data and uninstall rechecked",
+    "result": "PASS_RELEASE_PACKAGE",
+    "version": "0.9.17.0",
+    "recorded_at": "2026-11-06T12:10:59.8758659+08:00",
+    "toolset": "14.29.30133",
+    "setup_sha256": "a3455d8658c2797ed03c5265923db144d8ab2427dcc8a75aa814e6912514185e",
+    "app_sha256": "30cadc769eed4318e58c402ed59c6a6d33394b35aa9e05231ae97cc12f8a82d1",
+    "install_path": "C:\\largan\\LM_AI",
+    "checks": [
+      "actual candidate Setup install",
+      "fixed path ignores /D",
+      "company metadata, registry and shortcut targets",
+      "missing WebView2 child-only guidance",
+      "installed WebView2/self-check including feature receipts",
+      "installed Python and CAD self-check",
+      "same-package update preserves user data and runtime identity",
+      "updated EXE/self-check/Python/CAD",
+      "uninstall preserves unknown user file"
+    ],
+    "not_rerun": [
+      "PID handoff and automatic restart",
+      "locked-file rollback",
+      "runtime repair matrix",
+      "obsolete CAD cleanup matrix"
+    ],
+    "prior_full_matrix": "offline/installer-verification-0.9.15.json",
+    "scope": "actual candidate only; installer and runtime unchanged; company environment remains separate"
+  },
+  "native": {
+    "composer": {
+      "cases": [
+        "paused notice: persisted and visible, popup preference, click selects resumable conversation once; delivery suppressed in self-check",
+        "native supplement persistence and stale run rejection",
+        "durable queue, duplicate rejection and no overlapping worker",
+        "completion starts original conversation, preserves other draft and archives progress separately",
+        "interrupt persists first and starts next worker only after Finished",
+        "queue cancellation does not start a new worker",
+        "manual stop holds queue; account, model and project bindings; manual retry succeeds",
+        "failure and waiting-for-user preserve pending text without starting",
+        "reloaded encrypted history disables automatic start after restart",
+        "history write failure leaves old worker and queue unchanged",
+        "native Outlook folder selection rejects stale identity and unknown or hidden-parent ids",
+        "native weekly folder preparation, confirmation, conversation binding, dated prompt and one-time start",
+        "native Outlook quick action: dates, identity, skill and one-time start",
+        "image quick commands removed; pictures use basic file reading",
+        "native chart customization: original values, stale target rejection, DPAPI persistence and reset",
+        "M11: two conversation slots and cards; third rejected before worker/history mutation",
+        "M11: pending file cards and replies bound to active conversation/run/request",
+        "M11: per-thread resource wait, independent stop, stale stop rejected, quarantine cancels both",
+        "M11: schedule shares second slot and execution-bound stop cannot stop replacement",
+        "M11: two real runner threads started on loopback fixture, separate cancellation, both Finished awaited"
+      ],
+      "company_service_tested": false,
+      "next_worker": "real runner, cancelled and awaited",
+      "prior_worker_completion": "controlled event",
+      "result": "PASS",
+      "version": "0.9.17"
+    },
+    "workspace": {
+      "cases": [
+        "login gate",
+        "existing default workspace reused",
+        "original conversation and draft retained",
+        "new project draft keeps source link",
+        "path escape rejected",
+        "account generation cancels import",
+        "encrypted chunk import/readback",
+        "duplicate finish rejected",
+        "no model run or website attachment",
+        "native export revision/root/cancel guards",
+        "workflow reminder stores identity without execution",
+        "wrong principal and changed template rejected",
+        "manual load only opens parameter draft"
+      ],
+      "company_service_tested": false,
+      "result": "PASS",
+      "version": "0.9.17"
+    },
+    "handoff": {
+      "cases": [
+        "project prefix excludes later messages and creates draft without execution or attachments",
+        "original project results retained",
+        "login gate",
+        "cancel does not create a conversation",
+        "conversation binding",
+        "changed source rejects stale preview",
+        "account generation binding",
+        "replaced project root rejected",
+        "only creates draft, no copied task or attachment",
+        "one-shot confirmation",
+        "encrypted restart retains drafts and source link without authority replay"
+      ],
+      "company_service_tested": false,
+      "result": "PASS",
+      "version": "0.9.17"
+    },
+    "branch": {
+      "cases": [
+        "native edit sends fresh request with selected prefix only",
+        "later turn isolates server context",
+        "manual retry uses same selected prefix and fresh identity",
+        "expired or foreign attachment rejected",
+        "DPAPI restart retains selected branch",
+        "switch restores old tail and draft without HTTP",
+        "stale branch rejected",
+        "missing attachment explicitly rejected",
+        "valid retained attachments rechecked over HTTP; old-tail token excluded",
+        "executed project cannot fork",
+        "unstarted project edit only updates draft"
+      ],
+      "company_service_tested": false,
+      "result": "PASS",
+      "transport": "native controller and loopback HTTP",
+      "version": "0.9.17"
+    },
+    "screenshot": {
+      "cases": [
+        "fast-model precheck",
+        "preview has no disk/network side effect",
+        "conversation binding",
+        "attachment without chat",
+        "one-shot acceptance",
+        "project copy and draft preservation",
+        "byte readback and source preservation",
+        "account generation binding",
+        "root replacement rejected before write",
+        "timeout clears pending state"
+      ],
+      "company_service_tested": false,
+      "real_desktop_capture_tested": false,
+      "result": "PASS",
+      "version": "0.9.17"
+    },
+    "task-tracking": {
+      "cases": [
+        "pending POST has no GET; 413 stops, survives DPAPI reload and ignores late events",
+        "third identical 404 with healthy models stops; partial answer and stopped state persist",
+        "503 retries original ID despite healthy model list; stops after five persisted waits",
+        "confirmed transient failure schedules replacement; stopping prevents restart",
+        "changing errors and successful GET reset the consecutive failure count",
+        "SSE task ID supersedes late by-request errors without counting them"
+      ],
+      "company_service_tested": false,
+      "result": "PASS",
+      "transport": "controlled events; loopback transport tested separately",
+      "version": "0.9.17"
+    }
+  },
+  "resources": {
+    "office": {
+      "company_documents": false,
+      "external_word": "existing BUSY marker preserved",
+      "files": [
+        "Y:\\Rust\\Project\\CompanyAI\\.build\\resources-0917-final\\task-a.docx",
+        "Y:\\Rust\\Project\\CompanyAI\\.build\\resources-0917-final\\task-b.docx",
+        "Y:\\Rust\\Project\\CompanyAI\\.build\\resources-0917-final\\independent.xlsx"
+      ],
+      "result": "PASS",
+      "word_excel": "Excel saved and read while A owns Word and B waits",
+      "word_word": "B waits until A closes; both files reopened and checked"
+    },
+    "python": {
+      "batch_worst_case_process_limits_bytes": 4294967296,
+      "excludes": "host process, Office and CAD memory",
+      "per_process_limit_bytes": 1073741824,
+      "result": "PASS",
+      "two_tasks_with_two_item_batches_max_python_processes": 4,
+      "two_worker_limit_bytes": 2147483648,
+      "workers": [
+        {
+          "active_process_limit": 1,
+          "job_handle": 29896,
+          "memory_limit": 1073741824,
+          "peak_process_memory": 148656128,
+          "pid": 35292
+        },
+        {
+          "active_process_limit": 1,
+          "job_handle": 29924,
+          "memory_limit": 1073741824,
+          "peak_process_memory": 151789568,
+          "pid": 36588
+        }
+      ]
+    },
+    "version": "0.9.17"
+  },
+  "reliability": {
+    "recorded_at": "2026-11-06T11:50:06.7783868+08:00",
+    "results": [
+      {
+        "mode": "background",
+        "exit_code": 0,
+        "records": 1,
+        "result": "PASS"
+      },
+      {
+        "mode": "callback",
+        "exit_code": 0,
+        "records": 1,
+        "result": "PASS"
+      },
+      {
+        "mode": "com",
+        "exit_code": 0,
+        "records": 1,
+        "result": "PASS"
+      },
+      {
+        "mode": "abort",
+        "exit_code": -1073740791,
+        "records": 2,
+        "result": "PASS"
+      }
+    ],
+    "scope": "native background, WndProc, WebView2, abort persistence; no company account"
+  },
+  "ci": {
+    "result": "PASS",
+    "head": "3b6c5c1838e8a0c7cdbdd8e5996af51b4b1c8b76",
+    "url": "https://github.com/you1230783-sys/CompanyAI/actions/runs/42159015062",
+    "run_id": 42159015062,
+    "artifact_id": 13476152793,
+    "archive_sha256": "7b3c7e8cb034a9de35ec7edd8b1ef95d0cdc40d4b26eb67754d0e2178473b181",
+    "build": {
+      "recorded_at": "2026-11-06T04:01:33.6988417+00:00",
+      "result": "PASS_CI_SCOPE",
+      "msvc": "14.29.30133",
+      "compiler_report": [
+        "v142.c",
+        "Verified _MSC_FULL_VER=192930159 x64"
+      ],
+      "empty_cargo_cache": true,
+      "lock_sha256": "a03af63a4db6df144289248059d70112f88984827e1c43f30c9e3e43f505d35d",
+      "checks": [
+        "v142 x64 release build --frozen",
+        "fmt",
+        "default/core all-targets Clippy -D warnings",
+        "default/core workspace Rust tests"
+      ],
+      "excluded_interactive_tests": [
+        "ui::reminders::tests::windows_shell_accepts_native_reminder_notification",
+        "pet::tests::native_notification_visibility_and_settings_survive_restart"
+      ],
+      "not_validated": [
+        "Office integration",
+        "company models/mailbox/network",
+        "NSIS lifecycle",
+        "interactive desktop/DPI"
+      ],
+      "installer_built": false
+    },
+    "audit_summary": {
+      "recorded_at": "2026-11-06T04:01:41.8990190+00:00",
+      "result": "PASS_WITH_REVIEWED_MAINTENANCE_NOTICE",
+      "tool": "cargo-audit 0.22.2 (official prebuilt tool)",
+      "lock_sha256": "a03af63a4db6df144289248059d70112f88984827e1c43f30c9e3e43f505d35d",
+      "database": {
+        "advisory-count": 1409,
+        "last-commit": "26fd2d43f7280a1fb925a3743ec463017afe7119",
+        "last-updated": "2026-11-05T08:50:49+00:00"
+      },
+      "exit_code": 0,
+      "policy": "All targets; vulnerabilities, yanked, unsound and unreviewed warnings fail.",
+      "reviewed_maintenance_notices": [
+        "RUSTSEC-2026-0192: ttf-parser 0.25.1; review before 2027-02-01"
+      ]
+    }
+  },
+  "build_log_sha256": "415b3edbb06c6ada8910b7ca335dcb0abdebd5a964b295a4184b9f60f8a5a7cb",
+  "validation_log_sha256": "7be7a35ebe318b173838c49589a05e4516916ecde1403ec4d1b566b1c1e758f8",
+  "checks": [
+    "492 non-CAD Rust tests; fmt and all-target Clippy",
+    "15 multi-task, 19 branch, 14 plan and 32 conversation browser checks",
+    "Two real loopback runner threads plus controlled pending-card, schedule-slot, stale-stop and quarantine checks",
+    "Actual Word FIFO, independent Excel save/read, external Word BUSY and output reopen",
+    "Two independent Python AppContainer/Job processes, memory measurement and cancellation isolation",
+    "Native background, WndProc, WebView2 and abort panic persistence",
+    "Excel success-source registration and legacy archive backfill, failed-ID rejection, exact scientific numbers and tamper rejection",
+    "Directory-pin regression preserves ancestor rename denial while concurrent history replacements succeed",
+    "Actual release EXE self-check, Python/CAD runtime, candidate install/update/startup/uninstall"
+  ],
+  "limits": [
+    "Company models, long EIS analysis and real company Excel files deferred to user",
+    "Actual Outlook mailbox, CAD drawing and network-share locks require company acceptance",
+    "Schedule shared capacity/controller tested with synthetic execution; real scheduled company workflow not run",
+    "Python per-process limit 1 GiB; two normal jobs 2 GiB; two two-item batches up to 4 GiB, excluding host/Office/CAD",
+    "Full Python scientific and Office document matrices not rerun",
+    "Unchanged installer full PID/rollback/repair matrix retained from 0.9.15",
+    "0.9.16 attachment reuse across server conversation remains company-backend dependent",
+    "Reviewed time-limited ttf-parser maintenance notice retained",
+    "GitHub manual downloads only; company update server not deployed"
+  ]
+}

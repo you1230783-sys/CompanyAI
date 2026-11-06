@@ -1,6 +1,6 @@
 # 0.9.17 驗證紀錄
 
-尚未完成、尚未發布。M11 依序處理資源鎖、兩個專案任務、排程名額。公司真模型驗收由使用者進行。
+M11 與兩項公司回饋修正已完成本機相關驗證、正式建置、封裝、Git／Release 發布及公開下載核對。公司真模型驗收由使用者進行。
 
 ## 資源鎖基礎
 
@@ -38,3 +38,30 @@
 ## 發布前候選檢查
 
 0.9.17 候選來源已通過 fmt、全目標 Clippy、492項非CAD Rust（60項CAD過濾）、80項前端、原生 UI 雙任務／排程名額、實際 Word／Excel 資源排隊、兩個 Python 沙箱與四項 panic 自檢。新負向改名測試在平行 Rust 測試中曾干擾其他 pin，已用同一短交易協調探針；最終完整測試通過。正式空快取 release 建置、候選安裝包、CI 與公開下載仍待後段收據，不以此段當成發布完成。
+
+## 發布與最終證據
+
+- 來源與 v0.9.17 標籤：`3b6c5c1838e8a0c7cdbdd8e5996af51b4b1c8b76`；後續僅補文件／驗證收據，不移動標籤。
+- scripts/Build.ps1 -BuildOnly -EmptyCargoCache：MSVC v142 14.29.30133、_MSC_FULL_VER=192930159、x64，Cargo.lock／vendor／.cargo/config.toml 齊備，空 Cargo 快取 frozen 成功。
+- fmt、全目標 Clippy 及492項非CAD Rust通過；60項CAD過濾。兩項桌面通知測試在本機實際桌面通過。最後平行測試曾被新增負向改名探針干擾，探針納入短交易協調後全數通過，原失敗留在 .build/test-0917-final-r1.log。
+- 80項前端通過：雙任務15、分支19、計畫14、對話32；亮／暗／650px畫面已檢查，任務卡片不溢出。
+- 正式EXE六組原生UI收據通過。雙任務包括實際loopback runner執行緒啟動與取消／Finished，以及受控卡片歸屬、過期停止拒絕、排程共用名額與全域quarantine。
+- 真實Word A／B依序開啟、保存與讀回；A占Word時Excel獨立讀寫；外部Word仍回既有BUSY。Outlook與CAD鎖已接入，但真實公司信箱／CAD圖面未實測。
+- 兩個Python AppContainer分別持有獨立Job與1GiB限制；合成64MiB陣列測得程序尖峰約141.77／144.76MiB，單方取消不影響另一方。兩個任務若各跑兩項batch，最多4個Python／4GiB上限，另計主程式及Office／CAD，不代表公司大型資料尖峰。
+- 四項獨立原生panic自檢（背景、WndProc、WebView2、abort持久化）通過；兩任務quarantine的控制器回歸另驗，不冒充公司長任務壓力測試。
+- Excel筆記成功來源登記、舊封存補登記、錯誤ID拒絕、科學數值／分塊封存精確讀回與真正竄改拒絕通過。
+- 實際Setup安裝／更新／啟動／解除安裝、WebView2缺失提示、EXE／Python／CAD runtime、runtime身分及使用者資料保留通過。安裝器未修改，完整PID／回復／修復矩陣沿用0.9.15。
+- [同來源CI](https://github.com/you1230783-sys/CompanyAI/actions/runs/42159015062)通過，下載CI報告確認v142、空快取frozen及依賴公告；有期限ttf-parser維護公告例外保留。
+- [v0.9.17 Release](https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.17)五項公開下載大小及SHA256均一致。
+- EXE SHA256：`30cadc769eed4318e58c402ed59c6a6d33394b35aa9e05231ae97cc12f8a82d1`。
+- Setup SHA256：`a3455d8658c2797ed03c5265923db144d8ab2427dcc8a75aa814e6912514185e`。
+
+證據：[發行](../offline/release-verification-0.9.17.json)、[正式建置](../offline/exe-verification-0.9.17.json)、[安裝包](../offline/installer-verification-0.9.17.json)、[資源並行](../offline/resource-verification-0.9.17.json)、[原生控制器](../offline/composer-verification-0.9.17.json)、[panic](../offline/reliability-verification-0.9.17.json)、[前端](../offline/frontend-verification-0.9.17.json)、[CI](../offline/github-ci-verification-0.9.17.json)、[公開下載](../offline/release-download-verification-0.9.17.json)。
+
+安裝後有一次自檢超過既有45秒上限；同一EXE未改碼、未放寬門檻，重驗約21.69秒通過。其後從同一受控安裝接續重驗安裝資料、更新、啟動及解除安裝；失敗與接續紀錄分別保留 .build/release-0.9.17-r1.log、r2.log 與 installed-ui0917-retry1.json。原因未完全確認，不將首次逾時寫成成功。
+
+## 公司端待驗與停止界線
+
+公司模型、長任務EIS、真實Excel／信箱／CAD／SMB與實際排程仍由使用者驗收。本機排程驗的是控制器名額與合成固定流程，未用真實公司排程。未重跑完整科學分析與Office文件矩陣。0.9.16附件跨網站對話仍受後端授權限制；失敗時須在新對話重新附加。GitHub提供手動下載，未部署公司更新伺服器。
+
+本輪到0.9.17完成後停止，等待公司回饋，不實作0.9.18。兩份手冊與FUTURE_IDEAS未修改。

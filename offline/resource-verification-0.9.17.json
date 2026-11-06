@@ -1,0 +1,39 @@
+{
+  "office": {
+    "company_documents": false,
+    "external_word": "existing BUSY marker preserved",
+    "files": [
+      "Y:\\Rust\\Project\\CompanyAI\\.build\\resources-0917-final\\task-a.docx",
+      "Y:\\Rust\\Project\\CompanyAI\\.build\\resources-0917-final\\task-b.docx",
+      "Y:\\Rust\\Project\\CompanyAI\\.build\\resources-0917-final\\independent.xlsx"
+    ],
+    "result": "PASS",
+    "word_excel": "Excel saved and read while A owns Word and B waits",
+    "word_word": "B waits until A closes; both files reopened and checked"
+  },
+  "python": {
+    "batch_worst_case_process_limits_bytes": 4294967296,
+    "excludes": "host process, Office and CAD memory",
+    "per_process_limit_bytes": 1073741824,
+    "result": "PASS",
+    "two_tasks_with_two_item_batches_max_python_processes": 4,
+    "two_worker_limit_bytes": 2147483648,
+    "workers": [
+      {
+        "active_process_limit": 1,
+        "job_handle": 29896,
+        "memory_limit": 1073741824,
+        "peak_process_memory": 148656128,
+        "pid": 35292
+      },
+      {
+        "active_process_limit": 1,
+        "job_handle": 29924,
+        "memory_limit": 1073741824,
+        "peak_process_memory": 151789568,
+        "pid": 36588
+      }
+    ]
+  },
+  "version": "0.9.17"
+}

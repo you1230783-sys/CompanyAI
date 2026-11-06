@@ -1,0 +1,36 @@
+{
+  "version": "0.9.17",
+  "result": "PASS_RELATED_SCOPE",
+  "recorded_at": "2026-11-06T12:11:00.1884914+08:00",
+  "build": {
+    "recorded_at": "2026-11-06T11:54:57.2302825+08:00",
+    "result": "BUILD_ONLY",
+    "msvc": "14.29.30133",
+    "compiler_report": [
+      "v142.c",
+      "Verified _MSC_FULL_VER=192930159 x64"
+    ],
+    "linker": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\link.exe",
+    "empty_cargo_cache": true,
+    "default_features": true,
+    "requested_features": [],
+    "exe": "Y:\\Rust\\Project\\CompanyAI\\target\\x86_64-pc-windows-msvc\\release\\company-ai.exe",
+    "exe_sha256": "30cadc769eed4318e58c402ed59c6a6d33394b35aa9e05231ae97cc12f8a82d1",
+    "tests_run": false,
+    "installer_built": false
+  },
+  "exe_sha256": "30cadc769eed4318e58c402ed59c6a6d33394b35aa9e05231ae97cc12f8a82d1",
+  "setup_sha256": "a3455d8658c2797ed03c5265923db144d8ab2427dcc8a75aa814e6912514185e",
+  "empty_cargo_cache_frozen": true,
+  "scope": "M11: two-task controller, bound prompts/cancellation and schedule slots; resource FIFO/RAII; Excel notes and exact JSON archive; release EXE self-check and candidate installer lifecycle",
+  "synthetic_model_fixture": true,
+  "company_acceptance": false,
+  "not_rerun": [
+    "Office document comparison/translation/export",
+    "full native HTTP long-task matrix",
+    "Python scientific analysis matrix",
+    "CAD drawing",
+    "company mailbox/network/encrypted documents",
+    "full NSIS PID/rollback/repair matrix retained from 0.9.15"
+  ]
+}

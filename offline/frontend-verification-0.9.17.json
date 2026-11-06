@@ -1,0 +1,120 @@
+{
+  "version": "0.9.17",
+  "result": "PASS",
+  "suites": {
+    "multi_task": {
+      "result": "PASS",
+      "checks": [
+        "sidebar marks exactly two running conversations",
+        "task cards preserve separate progress and waiting",
+        "each project card has a stop button",
+        "A card stop binds A identity",
+        "B card stop binds B identity",
+        "third conversation blocked with capacity explanation",
+        "inactive third conversation has no unrelated stop button",
+        "B file prompt displays only B",
+        "switch away closes stale prompt without authorizing it",
+        "conversation stop uses current run",
+        "schedule stop binds execution identity",
+        "schedule card does not expose remote task commands",
+        "multi-task visual light",
+        "multi-task visual dark",
+        "multi-task visual narrow"
+      ]
+    },
+    "branches": {
+      "result": "PASS",
+      "checks": [
+        "all general user messages offer edit",
+        "legacy single branch has no redundant selector",
+        "edit displays exact inert text without execution",
+        "cancel edit makes no request",
+        "edit binds exact conversation version index and request",
+        "edit does not send old tail from WebView",
+        "native attachment rejection keeps editable text",
+        "selected version renders after restore",
+        "switch emits only draft preservation and selection",
+        "inflight work prevents branching and switching",
+        "executed project edit disabled with reason",
+        "every project message has draft handoff",
+        "project handoff binds selected prefix and defaults project",
+        "handoff confirmation creates draft without send authority",
+        "unstarted project question is draft-only edit",
+        "conversation switch invalidates edit dialog",
+        "branch visual light",
+        "branch visual dark",
+        "branch visual narrow"
+      ]
+    },
+    "plan": {
+      "result": "PASS",
+      "checks": [
+        "plan preference defaults off",
+        "plan preference uses native persistence",
+        "plan text is inert company content",
+        "manual resume disabled until native approval",
+        "showing plan does not submit model or tools",
+        "foreign conversation response ignored",
+        "rejection requires feedback",
+        "edited approval sends exact edited plan and revision",
+        "rejection sends feedback without authorization",
+        "major revision shows before and after",
+        "native approved checkpoint refresh removes stale approval and enables resume",
+        "plan visual light",
+        "plan visual dark",
+        "plan visual narrow"
+      ]
+    },
+    "conversations": {
+      "result": "PASS",
+      "checks": [
+        "new conversation waits for type selection",
+        "unified picker includes general and project",
+        "project selection creates only selected project chat",
+        "general selection creates general chat",
+        "project management opens modal",
+        "tools modal groups templates and handoff",
+        "general composer keeps four quick actions",
+        "pet stale project cannot create conversation",
+        "pet shortcut opens selected project conversation",
+        "combined recent conversations",
+        "recent ordering retained",
+        "project label is visible",
+        "general filter",
+        "project management filters without switching",
+        "opening preserves originating draft",
+        "preview request binds source and target",
+        "stale preview ignored",
+        "untrusted handoff stays editable inert text",
+        "attachment boundary displayed",
+        "confirm submits only preview id and edited text",
+        "confirmation cannot send chat",
+        "closing clears handoff content",
+        "project composer only exposes screenshot and tools",
+        "source navigation retained",
+        "native overview is rendered as inert text",
+        "overview retains verification limits",
+        "old answer cannot invent execution evidence",
+        "tools grouped while stop stays directly accessible",
+        "switching conversations closes and revokes preview",
+        "handoff fits desktop and narrow viewport",
+        "compact toolbar and tools modal fit 1180",
+        "compact toolbar and tools modal fit 520"
+      ]
+    }
+  },
+  "screenshots": [
+    {
+      "path": ".build/multi-task-light.png",
+      "sha256": "12b3b8392dbed7c432d790659b54b19f43c39833835994dbaed15b73610cb7f3"
+    },
+    {
+      "path": ".build/multi-task-dark.png",
+      "sha256": "8fc6169669958007fb8ac18699814394a03f017ef1b0d680727427f3d98aadb6"
+    },
+    {
+      "path": ".build/multi-task-narrow.png",
+      "sha256": "f6f36cc45438e3282e8116e70971c2aa226044a6f538046a19efe6c59858e100"
+    }
+  ]
+}
