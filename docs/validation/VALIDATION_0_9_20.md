@@ -27,3 +27,9 @@
 ## 公司端驗收範圍
 
 使用合成 Excel 與本機 HTTP 服務。公司原始 EIS 檔案、實際尖峰排隊及整晚運行、公司電源原則需在公司環境核對。晚間派送時間以控制時鐘測試。依手冊略過真 Outlook 信箱、完整 CAD 圖面、VNC、SMB 與整套安裝生命週期矩陣。
+
+## GitHub 發布
+
+- `v0.9.20` 固定在 `562d8b8fcdec1d2217a02786f273830616bd58ec`。同提交 Windows CI 通過，下載並核對 v142 x64、空快取 frozen、Cargo.lock 與 RustSec 報告。[GitHub Actions](https://github.com/you1230783-sys/CompanyAI/actions/runs/42254190412)
+- 發布前首次比對發現本機與 CI 的 Cargo.lock 原始 SHA-256 不同。本機保留 Cargo 寫入的 LF，Windows CI checkout 使用 CRLF。核對兩者分別符合 Git 內容的 LF 與 CRLF 雜湊，依賴版本及內容相同。
+- 公開重新下載 `LM_AI_Setup.exe`、兩份簽署清單、`verification.json` 及 `SHA256SUMS.txt`，五項大小和 SHA-256 均符合上傳前成品。標籤提交已核對。[v0.9.20 Release](https://github.com/you1230783-sys/CompanyAI/releases/tag/v0.9.20) · [公開下載收據](../../offline/release-download-verification-0.9.20.json)
