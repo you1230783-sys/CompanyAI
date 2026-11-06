@@ -62,9 +62,10 @@ pub struct Window {
 }
 
 /// 忽略格式的引號文字、跳脫字元及色彩等區段，保留真正的時間格式碼。
-pub fn temporal_format(format: &str) -> bool {
+pub(super) fn temporal_codes(format: &str) -> (String, bool) {
     let mut chars = format.chars().peekable();
     let mut codes = String::new();
+    let mut elapsed = false;
     while let Some(c) = chars.next() {
         match c {
             '"' => {
@@ -86,13 +87,18 @@ pub fn temporal_format(format: &str) -> bool {
                     part.push(q.to_ascii_lowercase());
                 }
                 if matches!(part.as_str(), "h" | "hh" | "m" | "mm" | "s" | "ss") {
-                    return true;
+                    elapsed = true;
                 }
             }
             _ => codes.push(c.to_ascii_lowercase()),
         }
     }
-    codes.contains(['h', 's', 'y', 'd']) || codes.contains("mm")
+    (codes, elapsed)
+}
+
+pub fn temporal_format(format: &str) -> bool {
+    let (codes, elapsed) = temporal_codes(format);
+    elapsed || codes.contains(['h', 's', 'y', 'd']) || codes.contains("mm")
 }
 
 pub fn temporal(cell: &Cell) -> bool {

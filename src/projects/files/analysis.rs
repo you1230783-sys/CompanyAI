@@ -104,11 +104,16 @@ impl Broker {
                 } else {
                     request.clone()
                 };
+                let sample_notice = if data["format"] == office::excel::values::FORMAT {
+                    office::excel::values::SAMPLE_NOTICE
+                } else {
+                    "成功工具回傳的當時快照；不代表現在檔案未變更，也不代表程式已驗證此結論。"
+                };
                 evidence.push(json!({"operation_id":reference.operation_id,"pointer":reference.pointer,"tool":tool,
                     "kind":if tool=="run_python" {"calculation"} else if snapshot_only {"snapshot"} else {"source"},
                     "path":data.get("path").or_else(||request.get("path")),"revision":data["revision"],
                     "selection":selection,"sources":data["sources"],"excerpt":excerpt,
-                    "notice":"成功工具回傳的當時快照；不代表現在檔案未變更，也不代表程式已驗證此結論。"}));
+                    "format":data["format"],"notice":sample_notice}));
             }
             findings
                 .push(json!({"claim":finding.claim,"status":finding.status,"evidence":evidence}));

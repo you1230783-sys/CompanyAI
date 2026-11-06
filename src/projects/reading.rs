@@ -90,7 +90,7 @@ impl Notebook {
             .ok_or("Excel 閱讀缺少實際表頭。")?;
         let rows = data["rows"].as_array();
         let row_number = |row: &Value| {
-            if data["format"] == super::office::excel::compact::FORMAT {
+            if super::office::excel::row_array_format(&data["format"]).is_some() {
                 row[0].clone()
             } else {
                 row["row"].clone()
@@ -118,6 +118,7 @@ impl Notebook {
                 "first_row":rows.and_then(|rows| rows.first()).map(row_number),
                 "last_row":rows.and_then(|rows| rows.last()).map(row_number),
                 "row_count":rows.map_or(0, Vec::len),"next_row":data["next_row"],
+                "format":data["format"],"numeric_precision":data["numeric_precision"],
                 "scope":data["scope"],"coverage_unit":"本次實際交付的結構化 JSON 字元，非工作表總列數；表頭檢查不代表已讀資料列"}),
         });
         Ok(())

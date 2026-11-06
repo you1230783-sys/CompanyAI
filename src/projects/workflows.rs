@@ -253,16 +253,17 @@ impl Active {
                     .iter()
                     .find(|step| step.id == id)
                     .and_then(|step| step.result_format.as_deref());
-                // rows 與 headers 改了結構；即使舊 pointer 碰巧存在也不能沿用。
-                // path/revision 等格式未變的中繼資料仍可使用，舊封存結果本身也維持原解析。
-                if result["result"]["format"] == super::office::excel::compact::FORMAT
-                    && expected != Some(super::office::excel::compact::FORMAT)
+                // 兩種陣列格式的欄位結構相同，但純值樣本改了數值精度與日期的型別。
+                // 即使舊指標碰巧可讀，仍須先重新保存。path/revision 等中繼資料不受影響。
+                let actual = super::office::excel::row_array_format(&result["result"]["format"]);
+                if actual.is_some()
+                    && actual != expected
                     && (path == "/result/rows"
                         || path.starts_with("/result/rows/")
                         || path == "/result/headers"
                         || path.starts_with("/result/headers/"))
                 {
-                    return Err("Excel 流程引用使用舊版儲存格結構；請核對 excel-compact-v1 的 columns／rows 與新 JSON Pointer，重新保存流程，未執行此步驟。".into());
+                    return Err(format!("Excel 流程結果已改為 {}；請核對 columns／rows／headers、數值精度與 JSON Pointer，重新保存流程，未執行此步驟。", actual.unwrap_or_default()));
                 }
                 result
                     .pointer(path)
@@ -323,11 +324,17 @@ mod tests {
             42
         );
         let restored: Active =
-            serde_json::from_value(serde_json::to_value(active).unwrap()).unwrap();
+            serde_json::from_value(serde_json::to_value(&active).unwrap()).unwrap();
         assert_eq!(
             serde_json::to_value(restored.request().unwrap()).unwrap()["offset"],
             42
         );
+        active.results.get_mut("excel").unwrap()["result"]["format"] =
+            json!(super::super::office::excel::values::FORMAT);
+        assert!(active.request().err().unwrap().contains("重新保存流程"));
+        active.template.steps[0].result_format =
+            Some(super::super::office::excel::values::FORMAT.into());
+        assert!(active.request().is_ok());
     }
     #[test]
     fn parameter_form_checks_names_types_and_unsigned_tool_fields_before_running() {

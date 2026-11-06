@@ -379,7 +379,7 @@
       "type": "function",
       "function": {
         "name": "read_excel_range",
-        "description": "只用於查看少量樣本或確認格式；大量資料請先 export_excel_dataset 再用 run_python(kind=csv) 分析，不要依 next_row 逐批讀完整份資料。只讀指定欄與列，預設 100 列，資料最多 2000 格／批。columns=[A,F] 不讀 B–E；保留空白、原列號及下一批 next_row。含選取欄的表頭。不是全文閱讀，不強制建立全文件摘要；表頭及資料都依同一原檔版本。",
+        "description": "只用於查看少量樣本或確認格式。預設為四捨五入的樣本值，最終計算或報告數值請先 export_excel_dataset，再用 run_python(kind=csv) 分析。只讀指定欄與列，預設 100 列，最多 2000 資料格／批。columns=[A,F] 不讀 B–E；保留表頭、空白、原列號及下一批 next_row。不要逐批讀完整份資料；表頭及資料都依同一原檔版本。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -422,6 +422,17 @@
               },
               "minItems": 1,
               "maxItems": 100
+            },
+            "detail": {
+              "type": "string",
+              "enum": ["values", "full"],
+              "default": "values",
+              "description": "values 傳回六位有效數字的樣本；full 另帶儲存格格式、顯示文字與公式。"
+            },
+            "include_formulas": {
+              "type": "boolean",
+              "default": false,
+              "description": "只影響 values 模式；設為 true 時另列所選範圍內的公式。"
             },
             "progress_note": {
               "type": "string",

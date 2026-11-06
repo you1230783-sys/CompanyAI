@@ -269,14 +269,20 @@ mod excel_note_tests {
         assert!(broker.reading.pending.is_empty());
     }
     #[test]
-    fn excel_old_and_compact_archive_notes_and_analysis_keep_exact_evidence() {
-        for compact in [false, true] {
+    fn excel_formats_keep_archived_evidence_and_identify_samples() {
+        use crate::projects::office::excel::{compact, values};
+        for format in [None, Some(compact::FORMAT), Some(values::FORMAT)] {
             let mut broker = broker();
             let mut result = outcome();
-            let pointer = if compact {
-                result["result"]["format"] = json!("excel-compact-v1");
+            let expected = if format == Some(values::FORMAT) {
+                json!(1.23457e-21)
+            } else {
+                json!(1.2345678901234567e-21)
+            };
+            let pointer = if let Some(format) = format {
+                result["result"]["format"] = json!(format);
                 result["result"]["headers"] = json!(["值", "量"]);
-                result["result"]["rows"] = json!([[7, 1.2345678901234567e-21, 2.0]]);
+                result["result"]["rows"] = json!([[7, expected, 2.0]]);
                 "/rows/0/1"
             } else {
                 "/rows/0/cells/0/value"
@@ -297,9 +303,16 @@ mod excel_note_tests {
                 "open_questions":[],"superseded":[],"checks":[],"method":null,
                 "findings":[{"claim":"原始值","status":"confirmed","evidence":[{"operation_id":id,"pointer":pointer}]}]})).unwrap();
             assert!(broker.record_analysis(&report).is_ok());
+            if format == Some(values::FORMAT) {
+                assert_eq!(
+                    broker.analysis.report.as_ref().unwrap()["findings"][0]["evidence"][0]
+                        ["notice"],
+                    values::SAMPLE_NOTICE
+                );
+            }
             assert_eq!(
                 crate::projects::analysis::select(&recalled, pointer).unwrap(),
-                json!(1.2345678901234567e-21)
+                expected
             );
             let saved = broker.saved().unwrap();
             let mut restored = Broker::new(broker.project.clone(), "restore".into()).unwrap();

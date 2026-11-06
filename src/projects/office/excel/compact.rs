@@ -5,6 +5,10 @@ use std::collections::BTreeMap;
 
 pub const FORMAT: &str = "excel-compact-v1";
 
+fn general_format(format: &str) -> bool {
+    matches!(format, "General" | "G/通用格式")
+}
+
 /// 省略文字時唯一允許的還原規則。數值不能只比較 parse 後相等，否則會丟失 1.00 等顯示格式。
 fn default_text(value: &Value) -> String {
     match value {
@@ -40,6 +44,10 @@ fn most_common<'a>(values: impl Iterator<Item = &'a str>, fallback: &str) -> Str
 /// rows 為 [原列號, 各欄 Value2]；欄共用 kind／number_format，差異與顯示文字、公式另列。
 /// 表頭通常是一般文字；特殊表頭以完整 Cell 保存並標記 header，避免與同列資料格混淆。
 pub fn compact(page: &Page) -> Value {
+    compact_page(page, general_format)
+}
+
+fn compact_page(page: &Page, is_general: fn(&str) -> bool) -> Value {
     let mut kinds = Map::new();
     let mut formats = Map::new();
     for (index, column) in page.columns.iter().enumerate() {
@@ -68,7 +76,9 @@ pub fn compact(page: &Page) -> Value {
             if kinds[column] != cell.kind {
                 exception["kind"] = json!(cell.kind);
             }
-            if formats[column] != cell.number_format {
+            let same_general =
+                formats[column].as_str().is_some_and(is_general) && is_general(&cell.number_format);
+            if formats[column] != cell.number_format && !same_general {
                 exception["number_format"] = json!(cell.number_format);
             }
             if exception.as_object().expect("固定物件").len() > 2 {
@@ -88,7 +98,7 @@ pub fn compact(page: &Page) -> Value {
         headers.push(cell.text.clone());
         if cell.value != Value::String(cell.text.clone())
             || cell.kind != "text"
-            || cell.number_format != "General"
+            || !is_general(&cell.number_format)
             || cell.formula.is_some()
         {
             exceptions

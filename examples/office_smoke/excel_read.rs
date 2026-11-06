@@ -55,7 +55,7 @@ pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResul
         let mut request = json!({"tool":"read_excel_range","path":path,"revision":revision,"sheet":sheet,"columns":["A","F"],"start_row":2});
         let first = call(request.clone())?;
         assert_eq!(first["ok"], true, "{first}");
-        assert_eq!(first["result"]["format"], "excel-compact-v1");
+        assert_eq!(first["result"]["format"], "excel-values-v1");
         assert_eq!(first["result"]["row_count"], 100);
         assert_eq!(first["result"]["data_cells"], 200);
         assert_eq!(first["result"]["next_row"], 102);
@@ -63,11 +63,9 @@ pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResul
         assert_eq!(first["result"]["rows"][0][2].as_f64(), Some(2.0));
         assert_eq!(first["result"]["rows"][1][0], 3);
         assert_eq!(first["result"]["rows"][1][2], Value::Null);
-        assert!(first["result"]["exceptions"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|e| e["row"] == 3 && e["column"] == "F" && e["kind"] == "blank"));
+        assert_eq!(first["result"]["column_kinds"]["F"], "number");
+        assert!(first["result"].get("exceptions").is_none());
+        assert!(first["result"].get("formulas").is_none());
         assert!(!first.to_string().contains("不應讀到的中間欄"));
         request["start_row"] = json!(102);
         let second = call(request.clone())?;
@@ -75,10 +73,17 @@ pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResul
         assert_eq!(second["result"]["rows"][0][0], 102);
         assert_eq!(second["result"]["rows"][0][2].as_f64(), Some(202.0));
         assert_eq!(second["result"]["revision"], revision);
-        let details = call(
-            json!({"tool":"read_excel_range","path":path,"revision":revision,
-            "sheet":sheet,"columns":["A","F","H","J"],"start_row":2,"row_count":1}),
-        )?;
+        let mut selected = json!({"tool":"read_excel_range","path":path,"revision":revision,
+            "sheet":sheet,"columns":["A","F","H","J"],"start_row":2,"row_count":1});
+        selected["include_formulas"] = json!(true);
+        let sample = call(selected.clone())?;
+        assert_eq!(sample["ok"], true, "{sample}");
+        assert_eq!(sample["result"]["rows"][0][3], "#DIV/0!");
+        assert_eq!(sample["result"]["rows"][0][4], "2025-11-03 12:00:00");
+        assert_eq!(sample["result"]["formula_cells"], 4);
+        assert_eq!(sample["result"]["formulas"].as_array().unwrap().len(), 4);
+        selected["detail"] = json!("full");
+        let details = call(selected)?;
         assert_eq!(details["ok"], true, "{details}");
         let data = &details["result"];
         assert_eq!(data["format"], "excel-compact-v1");
@@ -119,6 +124,11 @@ pub fn verify(root: &Path, worker: &mut Worker, cancel: &AtomicBool) -> AppResul
             serde_json::from_str(recalled["result"]["text"].as_str().unwrap()).unwrap();
         assert_eq!(log["result"]["result"]["format"], "excel-compact-v1");
         assert_eq!(log["result"]["result"]["rows"], data["rows"]);
+        let recalled = call(json!({"tool":"read_work_log","operation_id":sample["operation_id"]}))?;
+        let log: Value =
+            serde_json::from_str(recalled["result"]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(log["result"]["result"]["format"], "excel-values-v1");
+        assert_eq!(log["result"]["result"]["rows"], sample["result"]["rows"]);
         let chart = call(
             json!({"tool":"chart_excel_range","path":path,"revision":revision,"sheet":sheet,"x_column":"A","y_columns":["F"],"start_row":2,"kind":"line","title":"量測趨勢","x_label":"序號","y_label":"數值"}),
         )?;

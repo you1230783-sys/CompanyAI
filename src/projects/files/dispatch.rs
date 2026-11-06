@@ -366,6 +366,8 @@ impl Broker {
                 header_row,
                 start_row,
                 row_count,
+                detail,
+                include_formulas,
             } => {
                 self.txt_context = true;
                 let selection = office::excel::Selection {
@@ -379,12 +381,21 @@ impl Broker {
                 let (page, _) = self.with_excel(path, Some(revision), |target| {
                     office::excel::read(target, &selection, cancel)
                 })?;
-                let mut value = office::excel::compact::compact(&page);
+                let (mut value, detail_scope) = match detail {
+                    office::excel::RangeDetail::Values => (
+                        office::excel::values::values(&page, *include_formulas),
+                        "數字是四捨五入的樣本值；最終計算或報告數值請先匯出 CSV，再用 Python。",
+                    ),
+                    office::excel::RangeDetail::Full => (
+                        office::excel::compact::compact(&page),
+                        "value 為 Excel Value2；日期是序號，text 為顯示文字。",
+                    ),
+                };
                 value["path"] = json!(path);
                 value["revision"] = json!(revision);
                 value["row_count"] = json!(page.rows.len());
                 value["data_cells"] = json!(page.rows.len() * page.columns.len());
-                value["scope"] = json!("僅所列欄位與列號；next_row 為所選欄位下一批位置，不代表整份文件已讀完。value 為 Excel Value2；日期是序號，text 為顯示文字。公式值為 Excel 本次開啟時提供，未主動更新外部連結。");
+                value["scope"] = json!(format!("僅所列欄位與列號；next_row 為所選欄位下一批位置，不代表整份文件已讀完。{detail_scope}公式值為 Excel 本次開啟時提供，未主動更新外部連結。"));
                 Ok(value)
             }
             Tool::ChartExcelRange {

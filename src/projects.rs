@@ -392,6 +392,10 @@ pub enum Tool {
         start_row: usize,
         #[serde(default = "office::excel::default_rows")]
         row_count: usize,
+        #[serde(default, skip_serializing_if = "office::excel::RangeDetail::is_values")]
+        detail: office::excel::RangeDetail,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        include_formulas: bool,
     },
     ChartExcelRange {
         path: String,

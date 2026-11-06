@@ -4,6 +4,30 @@ use super::*;
 use serde_json::{json, Value};
 pub mod compact;
 pub mod planned;
+pub mod values;
+
+/// 模型結果的詳細程度，舊工具請求省略此欄時使用純值樣本。
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RangeDetail {
+    #[default]
+    Values,
+    Full,
+}
+
+impl RangeDetail {
+    /// 舊操作封存省略預設欄位，查回同一組參數時維持原本的識別。
+    pub fn is_values(&self) -> bool {
+        matches!(self, Self::Values)
+    }
+}
+
+/// 兩種模型格式都以陣列保存列資料，舊結果則是帶 cells 的物件。
+pub fn row_array_format(format: &Value) -> Option<&str> {
+    format
+        .as_str()
+        .filter(|format| matches!(*format, compact::FORMAT | values::FORMAT))
+}
 
 pub const MAX_CELLS: usize = 2000;
 pub fn default_sheet() -> usize {

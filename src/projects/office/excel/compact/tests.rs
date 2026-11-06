@@ -161,3 +161,108 @@ fn compact_numeric_100_by_9_is_under_forty_percent() {
     assert!(new_chars * 100 < old_chars * 40);
     assert_eq!(restore(&new), old);
 }
+
+#[test]
+fn sample_formats_dates_and_preserves_formula_and_column_semantics() {
+    let rows = vec![
+        json!({"row":3,"cells":[
+            cell(json!(4740.124567), "4.74E+03", "number", "0.00E+00", Some("=B1")),
+            cell(json!(1.5), "1904/1/2 12:00", "number", "yyyy/m/d h:mm", None)
+        ]}),
+        json!({"row":4,"cells":[
+            cell(json!(1.234567e-5), "1.23E-05", "number", "0.00E+00", None),
+            cell(json!(0.5), "12:00", "number", "h:mm", None)
+        ]}),
+        json!({"row":5,"cells":[
+            cell(json!(123456789), "123456789", "number", "G/通用格式", None),
+            cell(json!(1.5), "36:00", "number", "[h]:mm", None)
+        ]}),
+        json!({"row":6,"cells":[
+            cell(Value::Null, "", "blank", "G/通用格式", None),
+            cell(json!(0), "1904/1/1", "number", "yyyy/m/d", None)
+        ]}),
+        json!({"row":7,"cells":[
+            cell(json!(true), "TRUE", "boolean", "General", None),
+            cell(Value::Null, "#DIV/0!", "error", "General", Some("=1/0"))
+        ]}),
+    ];
+    let mut page = page(
+        vec![cell(
+            json!("樣本"),
+            "樣本",
+            "text",
+            "General",
+            Some("=\"樣本\""),
+        )],
+        rows,
+    );
+    let values = super::super::values::values;
+    let result = values(&page, false);
+    assert_eq!(
+        result["rows"],
+        json!([
+            [3, 4740.12, "1904-01-02 12:00:00"],
+            [4, 1.23457e-5, "12:00:00"],
+            [5, 123456789, "36:00"],
+            [6, null, "1904-01-01"],
+            [7, true, "#DIV/0!"]
+        ])
+    );
+    assert_eq!(result["column_kinds"], json!({"A":"mixed","F":"mixed"}));
+    assert_eq!(
+        result["temporal_fallbacks"]["cells"],
+        json!([{"row":5,"column":"F"}])
+    );
+    assert_eq!(result["formula_cells"], 3);
+    assert!(result.get("formulas").is_none());
+    let result = values(&page, true);
+    assert_eq!(result["formulas"][0]["row"], 2);
+    assert_eq!(result["formulas"][1]["formula"], "=B1");
+    assert_eq!(result["formulas"][2]["formula"], "=1/0");
+    page.date_1904 = false;
+    assert_eq!(values(&page, false)["rows"][0][2], "1900-01-01 12:00:00");
+    page.rows[0].cells[1].value = json!(60.5);
+    assert_eq!(
+        values(&page, false)["temporal_fallbacks"]["cells"][0]["row"],
+        3
+    );
+}
+
+#[test]
+fn eis_shaped_fixture_reduces_sample_size_and_handles_localized_general() {
+    let columns: Vec<_> = (2..=40).map(super::super::column_name).collect();
+    let mut page = page(
+        columns.iter().map(|c| cell(json!(c), c, "text", "G/通用格式", None)).collect(),
+        (3..=33).map(|row| json!({"row":row,"cells":(0..39).map(|index| {
+            if index == 0 {
+                cell(json!(row), &row.to_string(), "number", if row == 3 { "General" } else { "G/通用格式" }, None)
+            } else if row > 24 && index > 20 {
+                cell(Value::Null, "", "blank", "G/通用格式", None)
+            } else {
+                let value = f64::from(row * 47 + index) * 3.172834275318469;
+                cell(json!(value), &format!("{value:.2E}"), "number", "0.00E+00", None)
+            }
+        }).collect::<Vec<_>>() })).collect(),
+    );
+    page.columns = columns;
+    let baseline = compact_page(&page, |format| format == "General");
+    let full = compact(&page);
+    let values = super::super::values::values(&page, false);
+    let (before, full_size, values_size) = (
+        baseline.to_string().chars().count(),
+        full.to_string().chars().count(),
+        values.to_string().chars().count(),
+    );
+    println!(
+        "EIS_SIZE v0.9.18={before} full={full_size} values={values_size} ratio={:.4}",
+        values_size as f64 / before as f64
+    );
+    assert!(values_size < before / 2);
+    assert!(full_size < before);
+    assert!(full["exceptions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|item| item["header"] != true && item["column"] != "B"));
+    assert_eq!(values["column_kinds"]["AN"], "number");
+}

@@ -156,6 +156,9 @@ impl Overview {
                         "未提供單一檔案路徑，詳見工具紀錄"
                     });
                 let mut range = Vec::new();
+                if data["format"] == super::office::excel::values::FORMAT {
+                    range.push("四捨五入的 Excel 樣本值".into());
+                }
                 for (key, label) in [
                     ("offset", "起點"),
                     ("end", "終點"),

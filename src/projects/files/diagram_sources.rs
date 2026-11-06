@@ -6,7 +6,7 @@ use crate::projects::diagram_sources::{Link, Origin};
 fn excel_excerpt(data: &Value) -> AppResult<String> {
     Ok(
         serde_json::to_string(&json!({"format":data["format"],"columns":data["columns"],
-        "headers":data["headers"],"rows":data["rows"]}))
+        "headers":data["headers"],"numeric_precision":data["numeric_precision"],"rows":data["rows"]}))
         .map_err(|e| e.to_string())?
         .chars()
         .take(500)
