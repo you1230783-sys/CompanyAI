@@ -116,6 +116,30 @@ fn main() {
         }
         return;
     }
+    if arguments.as_slice() == ["--retire-old-python-runtime"] {
+        if let Err(error) = company_ai::projects::python::cleanup::retire_previous_runtime() {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return;
+    }
+    if arguments.as_slice() == ["--cleanup-old-python-runtimes"] {
+        let code = match company_ai::projects::python::cleanup::cleanup_and_record() {
+            Ok(report) => {
+                println!("{}", serde_json::json!(&report));
+                if report.kept.is_empty() {
+                    0
+                } else {
+                    2
+                }
+            }
+            Err(error) => {
+                eprintln!("{error}");
+                1
+            }
+        };
+        std::process::exit(code);
+    }
     // 安裝器只在提交成功後呼叫；不啟動UI／CAD，也不接受任意清理路徑。
     if arguments.as_slice() == ["--cleanup-old-cad-runtimes"] {
         let code = match company_ai::cad::cleanup::obsolete_runtimes() {
@@ -154,6 +178,14 @@ fn main() {
         } else {
             None
         };
+        if !smoke {
+            // 一次啟動只嘗試一次；使用中、被修改或未知內容保留並記錄，不強制重試。
+            company_ai::reliability::spawn(|| {
+                if let Err(error) = company_ai::projects::python::cleanup::cleanup_and_record() {
+                    eprintln!("Python 背景清理未完成：{error}");
+                }
+            });
+        }
         ui::run(demo.as_ref(), smoke)
     })();
     if let Err(error) = result {

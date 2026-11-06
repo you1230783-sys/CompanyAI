@@ -47,6 +47,11 @@ $cadLines.Add('!macroend')
 [IO.File]::WriteAllLines((Join-Path $root '.build\cad-files.nsh'), $cadLines, (New-Object Text.UTF8Encoding($false)))
 # 刪除清單由本版 runtime 產生，只移除已知檔案；未知使用者檔案永不遞迴刪除。
 $pythonRoot = Join-Path $root 'dist\python'
+$pythonHash = (Get-Content -LiteralPath (Join-Path $root 'assets\python-runtime-sha256.txt') -Raw).Trim()
+$pythonHistory = @(Get-Content -LiteralPath (Join-Path $root 'assets\python-runtime-history.json') -Raw | ConvertFrom-Json)
+if ($pythonHistory -notcontains $pythonHash -or @($pythonHistory | Where-Object { $_ -cnotmatch '^[0-9a-f]{64}$' }).Count -gt 0) {
+    throw 'Python runtime history must include the reviewed current manifest before packaging.'
+}
 $entries = Get-ChildItem -LiteralPath $pythonRoot -Recurse
 $lines = New-Object 'System.Collections.Generic.List[string]'
 $lines.Add('!macro PythonCheckTree root')

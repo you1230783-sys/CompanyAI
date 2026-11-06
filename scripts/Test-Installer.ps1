@@ -36,14 +36,18 @@ function Start-Hidden([string]$File, [string]$Arguments, [string]$BrowserFolder 
     return $process
 }
 function Run-Checked([string]$File, [string]$Arguments, [int]$Expected = 0, [string]$BrowserFolder = '') {
+    Write-Host "$(Get-Date -Format o) START $File $Arguments (expected $Expected)"
     $process = Start-Hidden $File $Arguments $BrowserFolder
+    # 在等待程序退出前持續讀取錯誤輸出，避免管線滿載而讓驗證程序互等。
+    $stderr = $process.StandardError.ReadToEndAsync()
     if (-not $process.WaitForExit(240000)) { $process.Kill(); throw "Timeout: $File" }
     if ($process.ExitCode -ne $Expected) {
-        $detail = $process.StandardError.ReadToEnd()
+        $detail = $stderr.GetAwaiter().GetResult()
         $code = $process.ExitCode
         $process.Dispose()
         throw "Exit code $code, expected ${Expected}: $File`n$detail"
     }
+    Write-Host "$(Get-Date -Format o) PASS exit=$($process.ExitCode)"
     $process.Dispose()
 }
 # 只對測試子程序指定不存在的 Runtime 位置，不移除本機 WebView2 或修改登錄。
@@ -228,6 +232,23 @@ foreach ($case in $repairCases) {
     foreach ($temporary in @('python.pending', 'python.previous')) {
         if (Test-Path -LiteralPath (Join-Path $installRoot $temporary)) { throw "Python repair left $temporary" }
     }
+    # 成功修復不等待舊樹刪除；清單／內容損壞的 trash 必須保留，不能誤刪。
+    $trash = @(Get-ChildItem -LiteralPath $installRoot -Directory | Where-Object Name -Match '^python\.trash-[0-9a-f]{32}$')
+    if ($trash.Count -ne 1) { throw 'Python repair must leave exactly one deferred runtime.' }
+    $trashRoot = [IO.Path]::GetFullPath($trash[0].FullName)
+    if ([IO.Path]::GetDirectoryName($trashRoot) -cne $installRoot) { throw 'Unexpected Python trash test location.' }
+    if ($case -eq 'missing-file') {
+        # 缺少已知檔案等同清理中斷，可接續完成。
+        Run-Checked $app '--cleanup-old-python-runtimes'
+    } else {
+        Run-Checked $app '--cleanup-old-python-runtimes' 2
+        if (-not (Test-Path -LiteralPath (Join-Path $trashRoot 'python.exe'))) { throw 'Modified runtime was partially deleted.' }
+        # 只還原本案例刻意損壞的一個檔案，再透過正式 helper 清理，不使用遞迴刪除。
+        $changedFile = if ($case -eq 'same-size-corruption') { 'lm_worker.py' } else { 'runtime-manifest.json' }
+        Copy-Item -LiteralPath (Join-Path $pythonRoot $changedFile) -Destination (Join-Path $trashRoot $changedFile)
+        Run-Checked $app '--cleanup-old-python-runtimes'
+    }
+    if (Test-Path -LiteralPath $trashRoot) { throw 'Verified Python trash was not removed.' }
 }
 # 後續成功更新及修復也不可刪除未知目錄；只移除本測試自行建立的兩個檔案。
 if ([IO.File]::ReadAllText((Join-Path $unknownCad 'user-note.txt')) -ne 'keep unknown CAD data') { throw 'Update removed unknown CAD data.' }
@@ -246,6 +267,7 @@ if ($ValidateOnly) {
         app_sha256 = (Get-FileHash $AppSource -Algorithm SHA256).Hash.ToLowerInvariant()
         python_reused_without_replacement = $true
         python_repair_cases = $repairCases
+        python_deferred_cleanup = 'repair creates trash; interrupted cleanup resumes; modified content or manifest is preserved until fixture restoration'
         python_failure_rollback = $true
         reused_python_survives_app_rollback = $true
         release_setup_tested = $false
@@ -316,6 +338,7 @@ Remove-Item -LiteralPath $releaseKeep
     python_failure_rollback = $true
     python_reused_without_replacement = $true
     python_repair_cases = $repairCases
+    python_deferred_cleanup = 'repair creates trash; interrupted cleanup resumes; modified content or manifest is preserved until fixture restoration'
     reused_python_survives_app_rollback = $true
     runtime_check_stage = 'application startup only; no installer prerequisite check'
     runtime_unavailable_simulation = 'child-only WEBVIEW2_BROWSER_EXECUTABLE_FOLDER points to a nonexistent folder; Setup succeeds, installed app exits with existing guidance'

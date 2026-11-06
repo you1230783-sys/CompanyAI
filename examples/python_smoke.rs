@@ -293,7 +293,8 @@ result = {{'denied': denied}}
     let timeout = python::execute("while True: pass", json!([]), &cancel).unwrap_err();
     assert!(timeout.contains("逾時"), "{timeout}");
     assert!(timeout_started.elapsed() < Duration::from_secs(145));
-    // 只更動此驗收 EXE 旁的環境：清單外模組與被改寫的已知模組都要拒絕。
+    // 只更動此驗收 EXE 旁的環境：快取命中仍須拒絕新加模組，
+    // 已驗證的已知檔案則由程序層級 handle 阻止寫入，不等到下次分析才偵測。
     let runtime = python::runtime_root()?;
     let extra = runtime.join("smoke-unlisted.py");
     let extra_file = std::fs::OpenOptions::new()
@@ -307,10 +308,15 @@ result = {{'denied': denied}}
     assert!(unlisted.unwrap_err().contains("清單外"));
     let known = runtime.join("lm_worker.py");
     let original_worker = std::fs::read(&known).map_err(|e| e.to_string())?;
-    std::fs::write(&known, b"changed runtime fixture").map_err(|e| e.to_string())?;
-    let changed_runtime = python::execute("result={}", json!([]), &cancel);
-    std::fs::write(&known, &original_worker).map_err(|e| e.to_string())?;
-    assert!(changed_runtime.unwrap_err().contains("損毀或版本不符"));
+    let write_error = std::fs::write(&known, b"changed runtime fixture").unwrap_err();
+    assert_eq!(write_error.raw_os_error(), Some(32), "{write_error}");
+    assert_eq!(
+        std::fs::read(&known).map_err(|e| e.to_string())?,
+        original_worker,
+        "寫入被拒絕後，原始 worker 內容必須保持不變"
+    );
+    let after_refusal = python::execute("result={'still_valid':True}", json!([]), &cancel)?;
+    assert_eq!(after_refusal["summary"]["still_valid"], true);
     let artifacts = [python_copy];
     let completed = broker.finish(&artifacts)?;
     // revision回歸新增同次計算的CSV／XLSX／PNG；原有交付項目仍全部保留。
@@ -328,7 +334,7 @@ result = {{'denied': denied}}
             "literal XLSX formula text","idempotent results","source/output path and revision rejection","OS file/network/child-process isolation",
             "two Python processes overlap with separate AppContainers","parallel chart and next file read; per-item errors and idempotent batch","incremental edits persist same draft before syntax check","PY working copy edit and unchanged source","AST plus compile without executing source","UTF-8 BOM and Big5 source encoding","coding declaration mismatch rejection","current revision syntax validation required before publish","PY artifact verified at finish",
             "BOM raw source_revision bridge with changed-source rejection","SciPy NNLS against known solution","extension-free CSV/XLSX/PNG with native readback",
-            "environment allowlist","active cancellation","120 second timeout","unlisted and modified runtime files rejected","original unchanged","modified output rejected at finish"]});
+            "environment allowlist","active cancellation","120 second timeout","cache hit rejects unlisted modules; retained handles deny runtime writes with sharing violation; original bytes and subsequent analysis verified","original unchanged","modified output rejected at finish"]});
     std::fs::write(
         root.join("python-verification.json"),
         serde_json::to_vec_pretty(&report).map_err(|e| e.to_string())?,

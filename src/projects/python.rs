@@ -12,8 +12,15 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
+mod cache;
+pub mod cleanup;
 pub(super) mod encoding;
 mod png;
+use cache::verified_runtime;
+#[cfg(debug_assertions)]
+mod measurement;
+#[cfg(debug_assertions)]
+pub use measurement::measure_runtime;
 pub(super) use png::validate as validate_png;
 
 pub const MAX_INPUT: usize = 32 * 1024 * 1024;
@@ -78,7 +85,7 @@ pub fn runtime_root() -> AppResult<PathBuf> {
 
 /// 全部檔案都需符合編入 EXE 的清單雜湊，且在執行期間持有唯讀鎖。
 /// 缺少或不一致時要求完整 NSIS 修復，不退回使用者的環境。
-fn verified_runtime(root: &Path, cancel: &AtomicBool) -> AppResult<Vec<File>> {
+fn verify_runtime_files(root: &Path, cancel: &AtomicBool) -> AppResult<Vec<File>> {
     let mut guards =
         files::pin(root).map_err(|_| "缺少 Python 環境；請使用本版完整 NSIS 安裝包。")?;
     let manifest = read_locked(root, "runtime-manifest.json", 2 * 1024 * 1024, &mut guards)?;
@@ -176,7 +183,8 @@ pub fn prepare_runtime() -> AppResult<()> {
         Security::{Authorization::*, *},
     };
     let root = runtime_root()?;
-    let _guards = verified_runtime(&root, &AtomicBool::new(false))?;
+    // 安裝入口使用一次性 guards；設定權限後即釋放，不占用安裝器的切換工作。
+    let _guards = verify_runtime_files(&root, &AtomicBool::new(false))?;
     unsafe {
         let mut descriptor = std::ptr::null_mut();
         let mut old_acl = std::ptr::null_mut();
@@ -366,7 +374,7 @@ pub fn execute(code: &str, inputs: Value, cancel: &AtomicBool) -> AppResult<Valu
         return Err("Python 程式需為 1–32000 bytes。".into());
     }
     let root = runtime_root()?;
-    let _runtime = verified_runtime(&root, cancel)?;
+    verified_runtime(&root, cancel)?;
     let mut worker = Worker::start_python(&root.join("python.exe"), cancel)?;
     let response = worker.analyze(&json!({"code":code,"inputs":inputs}), cancel)?;
     if response["ok"] != true {
@@ -385,7 +393,7 @@ pub(super) fn execute_tests(
     cancel: &AtomicBool,
 ) -> AppResult<Value> {
     let root = runtime_root()?;
-    let _runtime = verified_runtime(&root, cancel)?;
+    verified_runtime(&root, cancel)?;
     let mut worker = Worker::start_python(&root.join("python.exe"), cancel)?;
     inputs[0]["workspace"] = json!(worker.test_workspace()?);
     let response = worker.analyze(&json!({"code":code,"inputs":inputs}), cancel)?;

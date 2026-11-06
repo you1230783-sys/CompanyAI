@@ -5,7 +5,7 @@ use super::*;
 #[cfg(debug_assertions)]
 pub fn verify_parallel_workers() -> AppResult<Value> {
     let root = runtime_root()?;
-    let _runtime = verified_runtime(&root, &AtomicBool::new(false))?;
+    verified_runtime(&root, &AtomicBool::new(false))?;
     let barrier = std::sync::Barrier::new(2);
     let reports = std::thread::scope(|scope| -> AppResult<Vec<Value>> {
         let workers: Vec<_> = [1,2].into_iter().map(|id| {

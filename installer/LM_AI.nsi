@@ -152,8 +152,12 @@ Section "安裝 LM_AI"
     ; 不符合時仍完整解壓再切換，尚未成功前保留舊程式與舊 Python。
     StrCpy $HadPython "no"
     StrCpy $PythonSwapped "no"
+    DetailPrint "正在清理 Python 安裝暫存…"
+    SetDetailsPrint none
     !insertmacro PythonRemove "$INSTDIR\python.pending"
-    !insertmacro PythonRemove "$INSTDIR\python.previous"
+    SetDetailsPrint both
+    DetailPrint "Python 安裝暫存清理已結束；未能移除的內容將保留。"
+    ; previous 只供失敗回復；成功版本會改名為 trash，不能在下次更新前靜默刪除。
     IfFileExists "$INSTDIR\python.pending\*.*" failed
     IfFileExists "$INSTDIR\python.previous\*.*" failed
     !insertmacro PythonCheckTree "$INSTDIR\python"
@@ -170,8 +174,11 @@ Section "安裝 LM_AI"
     DetailPrint "正在安裝本版 Python 分析環境…"
     ClearErrors
     SetOutPath "$INSTDIR\python.pending"
+    SetDetailsPrint none
     File /r "..\dist\python\*.*"
+    SetDetailsPrint both
     IfErrors failed
+    DetailPrint "Python 分析環境解壓完成。"
     SetOutPath "$INSTDIR"
     IfFileExists "$INSTDIR\python\*.*" 0 replace_python
     Rename "$INSTDIR\python" "$INSTDIR\python.previous"
@@ -235,7 +242,14 @@ Section "安裝 LM_AI"
     IfErrors rollback
     Delete "$INSTDIR\Uninstall.previous.exe"
     Delete "$INSTDIR\LM_AI.previous.exe"
+!ifdef TEST_PAYLOAD
+    ; 合成 C++ 交易測試沒有原生清理入口；正式 Rust 安裝在 onInstSuccess 改名。
+    DetailPrint "正在清理 Python 安裝暫存…"
+    SetDetailsPrint none
     !insertmacro PythonRemove "$INSTDIR\python.previous"
+    SetDetailsPrint both
+    DetailPrint "Python 安裝暫存清理已結束；未能移除的內容將保留。"
+!endif
     ; 清除舊的腳本式解除安裝入口，所有捷徑與登錄改為 NSIS 原生解除安裝。
     Delete "$INSTDIR\LM_AI_Uninstall.exe"
     ; 捷徑及重新啟動共用 $OUTDIR 作為工作目錄，不能指向稍後會刪除的解壓暫存。
@@ -259,14 +273,22 @@ Section "安裝 LM_AI"
     Rename "$INSTDIR\Uninstall.previous.exe" "$INSTDIR\Uninstall.exe"
     rollback_python:
     StrCmp $PythonSwapped "yes" 0 restore_python
+    DetailPrint "正在清理 Python 安裝暫存…"
+    SetDetailsPrint none
     !insertmacro PythonRemove "$INSTDIR\python"
+    SetDetailsPrint both
+    DetailPrint "Python 安裝暫存清理已結束；未能移除的內容將保留。"
     restore_python:
     StrCmp $HadPython "yes" 0 failed
     Rename "$INSTDIR\python.previous" "$INSTDIR\python"
     failed:
     StrCmp $CadCreated "yes" 0 +2
     Call RemoveNewCad
+    DetailPrint "正在清理 Python 安裝暫存…"
+    SetDetailsPrint none
     !insertmacro PythonRemove "$INSTDIR\python.pending"
+    SetDetailsPrint both
+    DetailPrint "Python 安裝暫存清理已結束；未能移除的內容將保留。"
     Delete "$INSTDIR\LM_AI.pending.exe"
     Delete "$INSTDIR\Uninstall.pending.exe"
     MessageBox MB_ICONSTOP "安裝未完成。舊版檔案已保留；請檢查磁碟空間及防毒紀錄。若無法寫入 ${INSTALL_PATH}\，請聯絡 IT 配置該目錄權限，再以一般權限重試。" /SD IDOK
@@ -281,6 +303,16 @@ FunctionEnd
 
 Function .onInstSuccess
 !ifndef TEST_PAYLOAD
+    ; 交易已完整提交才可放棄 previous 回復名稱；此處不等待舊檔案刪除。
+    DetailPrint "正在整理舊版 Python 分析環境…"
+    ClearErrors
+    ExecWait '"$INSTDIR\LM_AI.exe" --retire-old-python-runtime' $0
+    IfErrors python_retire_kept
+    StrCmp $0 0 python_retire_done
+    python_retire_kept:
+    DetailPrint "舊版 Python 暫時無法改名，保留原位；請關閉占用程式後修復安裝。"
+    python_retire_done:
+    ClearErrors
     ; 只能在整個安裝提交成功後清理；之前的任何失敗仍可使用原CAD環境回復。
     ; 原生helper核對已知清單、雜湊、連結與占用；不使用萬用字元遞迴刪除。
     DetailPrint "正在清理不再使用的舊版 CAD 執行環境…"
@@ -325,6 +357,17 @@ FunctionEnd
 Section "Uninstall"
     !insertmacro CadCheckTree
     !insertmacro PythonCheckTree "$INSTDIR\python"
+!ifndef TEST_PAYLOAD
+    DetailPrint "正在核對並清理已暫存的舊版 Python 環境…"
+    ClearErrors
+    ExecWait '"$INSTDIR\LM_AI.exe" --cleanup-old-python-runtimes' $0
+    IfErrors python_cleanup_kept
+    StrCmp $0 0 python_cleanup_done
+    python_cleanup_kept:
+    DetailPrint "部分舊 Python 環境無法核對或使用中，已保留；詳細原因已記錄。"
+    MessageBox MB_ICONEXCLAMATION "部分舊 Python 環境已保留，可能包含額外檔案、被修改或使用中；不會強制刪除。" /SD IDOK
+    python_cleanup_done:
+!endif
     ClearErrors
     Delete "$INSTDIR\LM_AI.exe"
     IfErrors 0 +3
@@ -334,7 +377,11 @@ Section "Uninstall"
     Delete "$INSTDIR\LM_AI.pending.exe"
     Delete "$INSTDIR\LM_AI_Uninstall.exe"
     Delete "$INSTDIR\Uninstall.exe"
+    DetailPrint "正在清理 Python 安裝暫存…"
+    SetDetailsPrint none
     !insertmacro PythonRemove "$INSTDIR\python"
+    SetDetailsPrint both
+    DetailPrint "Python 安裝暫存清理已結束；未能移除的內容將保留。"
     !insertmacro CadRemove
     RMDir "$INSTDIR"
     Delete "$SMPROGRAMS\${PRODUCT_DIR}.lnk"
