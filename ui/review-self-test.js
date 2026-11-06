@@ -13,6 +13,31 @@ window.runReviewTests = async (check) => {
       conversations:[{id:"review-chat",title:"內容審閱",project_id:"review-project"}],
       projects:{items:[],running:false}});
     await frame();
+    const diffTarget={conversation:"review-chat",message_index:1,request_id:"diff-run",path:"_AI_Output/a.txt"};
+    const diffButton=DiffPreviewUI.button(diffTarget);document.body.append(diffButton);diffButton.click();await frame();
+    check(commands.at(-1).command.action==="diff_preview" && commands.at(-1).command.offset===0,"M8 preview uses local native command only");
+    const diffData={status:"available",name:"a.txt",summary:"3處差異",source_notice:"原件已變更，差異以建立副本時的版本為準。",offset:0,shown:30,total_changes:30,next_offset:25,page_size:25,
+      changes:[{kind:"modified",before_line:2,after_line:2,before:{text:"<img src=x>",kind:"formula",calculation:{value:2}},after:{text:"=1+1",kind:"formula",calculation:{value:2}}}],notice:"固定快照"};
+    const response={type:"project_diff_preview",...diffTarget,offset:0,data:diffData};
+    DiffPreviewUI.receive({...response,conversation:"other"});
+    check(!document.querySelector('#diff-preview-window h3'),"M8 rejects another conversation response");
+    DiffPreviewUI.receive(response);await frame();
+    const diffWindow=document.getElementById('diff-preview-window');
+    check(diffWindow.textContent.includes('原件已變更') && diffWindow.textContent.includes('第 2 行') && !diffWindow.querySelector('img'),"M8 shows immutable-baseline warning and escaped line text");
+    check(diffWindow.textContent.includes('計算值') && diffWindow.textContent.includes('=1+1'),"M8 formula and calculated value display separately");
+    [...diffWindow.querySelectorAll('button')].find(b=>b.textContent==='下一頁').click();
+    check(commands.at(-1).command.offset===25,"M8 next page requests native offset");
+    DiffPreviewUI.receive(response);
+    check(!diffWindow.querySelector('h3'),"M8 rejects stale page response");
+    DiffPreviewUI.receive({...response,offset:25,data:{...diffData,offset:25,next_offset:null}});
+    [...diffWindow.querySelectorAll('button')].find(b=>b.textContent==='上一頁').click();
+    check(commands.at(-1).command.offset===0,"M8 previous page returns to correct offset");
+    diffWindow.close();await frame();DiffPreviewUI.receive(response);
+    check(!diffWindow.open,"M8 late response cannot reopen closed preview");diffButton.remove();
+    const overviewHolder=document.createElement('div');
+    ConversationUI.overview(overviewHolder,{role:'assistant',request_id:'diff-run',project_overview:{state:'completed',operations:1,outputs:['a.txt','new.txt','slides.pptx'],reads:[],failures:[],previews:[
+      {path:'a.txt',status:'available',summary:'修改3行'},{path:'new.txt',status:'new',summary:'新建'},{path:'slides.pptx',status:'unsupported',summary:'此格式未提供差異預覽'}]}},true,1);
+    check(overviewHolder.querySelectorAll('.diff-preview-open').length===1 && overviewHolder.textContent.includes('新建') && overviewHolder.textContent.includes('此格式未提供'),"M8 overview only offers supported existing-source preview");
     const changed=ReviewUI.buildRows(sample).rows;
     check(changed.filter(r=>r.kind!=="same").length===3,"comparison preserves changed/deleted/added Unicode lines");
     const office=ReviewUI.buildRows({office:true,before:{scope:"Excel",blocks:[block("42","A!B2",{bold:false})]},after:{scope:"Excel",blocks:[block("42","A!B2",{bold:true})]}});

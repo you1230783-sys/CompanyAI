@@ -191,3 +191,77 @@ window.ReviewUI = (() => {
   }
   return {attach,receive,source,open,buildRows,align,sync};
 })();
+
+/* 0.9.14：Rust 已計算差異，這裡只顯示有界分頁，不讀磁碟、不對齊或呼叫模型。 */
+window.DiffPreviewUI = (() => {
+  const make=(tag,text="")=>{const item=document.createElement(tag);item.textContent=text;return item;};
+  let dialog, body, pending;
+  function ensure() {
+    if(dialog)return;
+    dialog=make("dialog");dialog.id="diff-preview-window";dialog.className="review-window";
+    const header=make("div"),close=make("button","關閉");header.className="review-header";
+    close.onclick=()=>dialog.close();header.append(make("strong","副本修改預覽"),close);
+    body=make("div");body.className="diff-preview-body";dialog.append(header,body);
+    dialog.addEventListener("close",()=>{pending=null;body.replaceChildren();});
+    document.body.append(dialog);
+  }
+  function request(target,offset=0) {
+    ensure();pending={...target,offset};body.replaceChildren(make("p","正在讀取本機固定快照…"));
+    if(!dialog.open)dialog.showModal();
+    send({type:"project",command:{action:"diff_preview",...pending}});
+  }
+  function button(target) {
+    const node=make("button","查看修改");node.className="diff-preview-open";
+    node.onclick=()=>request(target);return node;
+  }
+  function attach(container,target,previews=[]) {
+    const seen=new Set();
+    for(const link of container.querySelectorAll(".project-artifact")) {
+      const path=link.dataset.path;if(!path||seen.has(path))continue;seen.add(path);
+      // 總覽含精確的新建／支援狀態；回答連結則由原生端重新核對。
+      if(/\.(png|jpe?g|pdf|pptx?|pptm|dwg|dxf)$/i.test(path))continue;
+      const preview=previews.find(p=>p.path===path);
+      if(preview && preview.status!=="available")link.after(make("small",preview.summary));
+      else link.after(button({...target,path}));
+    }
+  }
+  function cell(value,line,label) {
+    const box=make("div");box.className="review-cell";
+    box.append(make("small",label+(line?` · 第 ${line} 行`:"")));
+    if(value==null){box.append(make("p","此側無內容"));return box;}
+    box.append(make("pre",typeof value.text==="string"?value.text:JSON.stringify(value,null,2)));
+    // 公式與計算值分開呈現，避免把相同顯示值誤認成未修改公式。
+    if(value.kind!==undefined)box.append(make("p",`種類：${({formula:"公式",number:"數值",text:"文字",readonly:"唯讀"})[value.kind]||value.kind}`));
+    if(value.calculation!=null)box.append(make("pre","計算值："+JSON.stringify(value.calculation,null,2)));
+    if(value.format!=null){const detail=make("details");detail.append(make("summary","格式"),make("pre",JSON.stringify(value.format,null,2)));box.append(detail);}
+    return box;
+  }
+  function receive(message) {
+    if(message.type!=="project_diff_preview"||!pending||message.conversation!==state.active_id||
+       message.conversation!==pending.conversation||message.request_id!==pending.request_id||
+       message.path!==pending.path||message.offset!==pending.offset)return;
+    body.replaceChildren();
+    if(message.error){body.append(make("p",message.error));return;}
+    const data=message.data;
+    body.append(make("h3",data.name||pending.path),make("p",data.summary),make("p",data.source_notice||""));
+    if(data.truncated)body.append(make("p",`已截斷：可顯示 ${data.shown} 處／已比較範圍共 ${data.total_changes} 處。未顯示或未比較部分不能視為相同。`));
+    if(data.before_lines!==undefined)body.append(make("p",`原件 ${data.before_lines} 行（比較 ${data.compared_before_lines} 行）；成果 ${data.after_lines} 行（比較 ${data.compared_after_lines} 行）。`));
+    if(data.structure_changed){const detail=make("details");detail.append(make("summary","結構變更"),make("pre",JSON.stringify({before:data.before_structure,after:data.after_structure},null,2)));body.append(detail);}
+    for(const change of data.changes||[]) {
+      const row=make("section");row.className="diff-preview-change";
+      const kind=change.kind||(!change.before?"added":!change.after?"deleted":"modified");row.dataset.kind=kind;
+      row.append(make("strong",({added:"新增",deleted:"刪除",modified:"修改"})[kind]+" · "+(change.location||"文字行")));
+      const pair=make("div");pair.className="review-row";
+      pair.append(cell(change.before,change.before_line,change.before_location?.label||"建立時"),cell(change.after,change.after_line,change.after_location?.label||"已保存成果"));
+      row.append(pair);body.append(row);
+    }
+    body.append(make("p",data.notice||"此格式沒有可比較的差異。"));
+    const target={...pending};delete target.offset;
+    const nav=make("div");nav.className="review-toolbar";
+    if(data.offset>0){const previous=make("button","上一頁");previous.onclick=()=>request(target,Math.max(0,data.offset-data.page_size));nav.append(previous);}
+    if(data.next_offset!=null){const next=make("button","下一頁");next.onclick=()=>request(target,data.next_offset);nav.append(next);}
+    nav.append(make("span",`本頁 ${data.changes?.length||0} 處；已保存可顯示 ${data.shown||0} 處`));body.append(nav);
+  }
+  function sync(){if(pending&&(!state.logged_in||state.active_id!==pending.conversation)){dialog.close();}}
+  return {button,attach,receive,sync};
+})();

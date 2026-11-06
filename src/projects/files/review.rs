@@ -15,6 +15,7 @@ impl Copy {
                     .and_then(|s| s.serialize().ok())
             });
         Snapshot {
+            origin: self.origin.clone(),
             name: self.name.clone(),
             path: path.into(),
             before_revision: before.as_ref().map(|s| text::revision(s)),
@@ -52,6 +53,7 @@ mod tests {
         };
         let mut broker = Broker::new(project.clone(), "review".into()).unwrap();
         let mut copy = Copy {
+            origin: None,
             baseline: Some("原文".into()),
             reviews: BTreeMap::new(),
             office: None,

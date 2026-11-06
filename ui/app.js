@@ -659,8 +659,8 @@ function renderMessages() {
     const toolHistory = content.querySelector(".project-activity");
     if (toolHistory) projectDetails.append(toolHistory);
     content.append(bubble);
-    window.ConversationUI?.overview(content,message,!!state.conversations.find(c=>c.id===state.active_id)?.project_id);
-    if(message.request_id)window.ReviewUI?.attach(bubble,{conversation:state.active_id,message_index:index,request_id:message.request_id});
+    window.ConversationUI?.overview(content,message,!!state.conversations.find(c=>c.id===state.active_id)?.project_id,index);
+    if(message.request_id)window.DiffPreviewUI?.attach(bubble,{conversation:state.active_id,message_index:index,request_id:message.request_id},message.project_overview?.previews);
     if (message.project_analysis) {
       const analysis = node("div");
       AnalysisUI.render(analysis,message.project_analysis,true); projectDetails.append(analysis);
@@ -1410,6 +1410,7 @@ if (bridge) {
       window.ProjectComposer?.receive(event.data);
       window.WorkUI?.receive(event.data);
       window.ReviewUI?.receive(event.data);
+      window.DiffPreviewUI?.receive(event.data);
       window.VncUI?.receive(event.data);
     }
   });

@@ -175,6 +175,7 @@ mod tests {
         broker.copies.insert(
             "copy".into(),
             Copy {
+                origin: None,
                 baseline: None,
                 reviews: BTreeMap::new(),
                 name: "draft.py".into(),

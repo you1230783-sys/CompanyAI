@@ -590,6 +590,7 @@ fn tools_require_existing_edit_and_export_targets() {
     broker.copies.insert(
         "c".into(),
         Copy {
+            origin: None,
             baseline: None,
             reviews: BTreeMap::new(),
             office: None,

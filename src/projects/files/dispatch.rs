@@ -1175,6 +1175,11 @@ impl Broker {
                 if matches!(ext.as_str(), "pdf" | "msg") {
                     return Err("PDF／MSG 只支援 TXT 文字副本。".into());
                 }
+                // 前後檔案指紋必須一致，不能把讀取中途變更的來源綁到錯誤基準。
+                let source_fingerprint = source
+                    .as_ref()
+                    .map(|path| fingerprint(&self.project, path))
+                    .transpose()?;
                 let (content, encoding) = if let Some(source) = source {
                     if ext != "md" {
                         self.txt_context = true;
@@ -1215,16 +1220,24 @@ impl Broker {
                     // 原文閱讀可達4MiB；所有一般文字副本維持200KB的既有編輯／編碼上限。
                     text::validate(&content)?;
                 }
+                if let (Some(path), Some(expected)) = (source, &source_fingerprint) {
+                    if fingerprint(&self.project, path)? != *expected {
+                        return Err("建立副本期間原件已變更，請重新讀取後再建立。".into());
+                    }
+                }
+                let origin = Some(match source {
+                    Some(path) => super::super::review::Origin::Source {
+                        path: path.clone(),
+                        fingerprint: source_fingerprint.clone().unwrap_or_default(),
+                    },
+                    None => super::super::review::Origin::New,
+                });
                 let office = if office::supported(&rel) {
                     let original: office::Snapshot =
                         serde_json::from_str(&content).map_err(|e| e.to_string())?;
                     Some(OfficeCopy {
                         source: source.clone(),
-                        fingerprint: source
-                            .as_ref()
-                            .map(|s| fingerprint(&self.project, s))
-                            .transpose()?
-                            .unwrap_or_default(),
+                        fingerprint: source_fingerprint.unwrap_or_default(),
                         desired: original.clone(),
                         original: source.as_ref().map(|_| original),
                         actions: Vec::new(),
@@ -1237,6 +1250,7 @@ impl Broker {
                 self.copies.insert(
                     id.clone(),
                     Copy {
+                        origin,
                         baseline: Some(content.clone()),
                         reviews: BTreeMap::new(),
                         office,

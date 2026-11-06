@@ -1700,3 +1700,10 @@ dialog textarea:focus, dialog input:focus { outline: 2px solid var(--accent); ou
 #diagnostics-preview { width: min(820px, 92vw); max-height: 85vh; overflow: auto; }
 #diagnostics-preview-text { box-sizing: border-box; width: 100%; font-family: monospace; }
 #project-capability-hint { flex-basis: 100%; margin: 2px 0 6px; }
+
+/* 本機差異分頁：長行可換行，避免壓出視窗。 */
+.diff-preview-body { overflow: auto; padding: 1rem; }
+.diff-preview-body pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.diff-preview-change { margin-block: 1rem; border-top: 1px solid var(--border, #888); padding-top: .5rem; }
+.diff-preview-change[data-kind="added"] { border-left: 3px solid #238636; }
+.diff-preview-change[data-kind="deleted"] { border-left: 3px solid #cf222e; }

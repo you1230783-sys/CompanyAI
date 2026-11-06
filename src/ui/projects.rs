@@ -47,6 +47,14 @@ pub(super) enum ProjectCommand {
         request_id: String,
         choice: String,
     },
+    DiffPreview {
+        conversation: String,
+        message_index: usize,
+        request_id: String,
+        path: String,
+        #[serde(default)]
+        offset: usize,
+    },
     Review {
         conversation: String,
         message_index: usize,
@@ -519,6 +527,43 @@ impl App {
             return Ok(());
         }
         if self.artifact_command(&command)? {
+            return Ok(());
+        }
+        // 此原生命令只讀取本機加密快照，不進入模型工具 dispatcher。
+        if let ProjectCommand::DiffPreview {
+            conversation,
+            message_index,
+            request_id,
+            path,
+            offset,
+        } = &command
+        {
+            if !self.logged_in()
+                || self.versions.blocked()
+                || self.active_id.as_deref() != Some(conversation)
+                || !self
+                    .messages
+                    .get(*message_index)
+                    .is_some_and(|m| m.request_id.as_deref() == Some(request_id))
+            {
+                return Err("請在原專案對話選擇成果。".into());
+            }
+            let project = self
+                .projects
+                .store
+                .project_for(conversation)
+                .ok_or("此對話不屬於專案。")?;
+            let result = projects::runner::recover_review(&self.root, request_id, path).and_then(
+                |snapshot| {
+                    let mut data = projects::review::preview::page(&snapshot, *offset)?;
+                    data["source_notice"] =
+                        json!(projects::review::preview::source_notice(&snapshot, project));
+                    Ok(data)
+                },
+            );
+            // 不呼叫 friendly_error：原文與差異不寫入錯誤診斷。
+            self.view.post(&json!({"type":"project_diff_preview","conversation":conversation,
+                "request_id":request_id,"path":path,"offset":offset,"data":result.as_ref().ok(),"error":result.as_ref().err()}))?;
             return Ok(());
         }
         if let ProjectCommand::Review {
@@ -1126,6 +1171,7 @@ impl App {
             }
             ProjectCommand::OpenFolder { .. }
             | ProjectCommand::Reveal { .. }
+            | ProjectCommand::DiffPreview { .. }
             | ProjectCommand::Review { .. }
             | ProjectCommand::Methods { .. } => unreachable!("已於上方處理專案審閱"),
             ProjectCommand::AnswerPreference { .. }

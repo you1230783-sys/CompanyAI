@@ -59,6 +59,7 @@ fn review_journal_restores_only_the_selected_encrypted_artifact() {
     let id = jobs::new_id().unwrap();
     let path = root.join("project-runs").join(format!("{id}.dpapi"));
     let snapshot = super::super::review::Snapshot {
+        origin: None,
         name: "test.txt".into(),
         path: "_AI_Output/run/test.txt".into(),
         before: Some("PRIVATE ORIGINAL TEXT".into()),
@@ -71,6 +72,8 @@ fn review_journal_restores_only_the_selected_encrypted_artifact() {
     checkpoint(&path, &json!({"reviews":[snapshot]})).unwrap();
     let bytes = std::fs::read(&path).unwrap();
     assert!(!String::from_utf8_lossy(&bytes).contains("PRIVATE ORIGINAL TEXT"));
+    let diagnostic = crate::errors::export(&root, true).unwrap();
+    assert!(!String::from_utf8_lossy(&diagnostic).contains("PRIVATE ORIGINAL TEXT"));
     let recovered = recover_review(&root, &id, "_AI_Output\\run\\test.txt").unwrap();
     assert_eq!(recovered.before.as_deref(), Some("PRIVATE ORIGINAL TEXT"));
     assert_eq!(recovered.after, "固定成果");

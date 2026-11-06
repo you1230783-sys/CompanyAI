@@ -919,6 +919,8 @@ fn render_office(
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Copy {
+    #[serde(default)]
+    origin: Option<super::review::Origin>,
     /// 建立副本時的固定基準；舊紀錄缺少時維持 None。
     #[serde(default)]
     baseline: Option<String>,

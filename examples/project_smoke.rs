@@ -181,6 +181,12 @@ fn run() -> AppResult<()> {
     println!("PASS: AppContainer handshake, OS file/network isolation, Unicode edit, replay, source protection, publish/readback, path escape and hardlink rejection. Fixture: {}", root.display());
     drop(worker);
     review::verify(&exe, &root)?;
+    if args.iter().any(|arg| arg == "--review-only") {
+        println!(
+            "PASS targeted file protection and M8 preview; unrelated long-task cases not run."
+        );
+        return Ok(());
+    }
     source_code::verify(&exe, &root)?;
     logs::verify(&exe, &root)?;
     native::verify(&root)?;

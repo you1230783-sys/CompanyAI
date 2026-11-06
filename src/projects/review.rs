@@ -1,9 +1,14 @@
 //! 唯讀內容比較的固定快照；比較來源由 broker 產生，不接受模型提供的舊內容。
+pub mod preview;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Snapshot {
+    /// 新版保存來源種類；舊紀錄缺少時不能推定為新建文件。
+    #[serde(default)]
+    pub origin: Option<Origin>,
     pub name: String,
     pub path: String,
     pub before_revision: Option<String>,
@@ -12,6 +17,14 @@ pub struct Snapshot {
     pub after: String,
     pub office: bool,
     pub draft: bool,
+}
+
+/// 建立副本時的來源檔案指紋與路徑；內容仍由 before 固定快照提供。
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Origin {
+    New,
+    Source { path: String, fingerprint: String },
 }
 
 impl Snapshot {
@@ -50,6 +63,7 @@ mod tests {
             "blocks":[{"id":"cell1","label":"A!B2","kind":"number","text":"42","format":0}]})
         .to_string();
         let snapshot = Snapshot {
+            origin: None,
             name: "a.xlsx".into(),
             path: "out/a.xlsx".into(),
             before_revision: None,

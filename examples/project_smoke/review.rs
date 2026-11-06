@@ -95,6 +95,27 @@ pub fn verify(exe: &Path, parent: &Path) -> AppResult<()> {
     assert_eq!(first_snapshot.before.as_deref(), Some(original));
     assert!(first_snapshot.after.contains("修訂完成") && !first_snapshot.after.contains("第二次"));
     assert!(second_snapshot.after.contains("第二次修訂"));
+    let preview = company_ai::projects::review::preview::page(first_snapshot, 0)?;
+    assert_eq!(preview["total_changes"], 1);
+    assert_eq!(preview["changes"][0]["before_line"], 2);
+    assert_eq!(preview["changes"][0]["after"]["text"], "修訂完成");
+    assert!(
+        company_ai::projects::review::preview::source_notice(first_snapshot, &project)
+            .contains("原件已變更")
+    );
+    let overview = company_ai::projects::overview::Overview::from_operations(
+        &json!([]),
+        broker.published(),
+        "completed",
+    )
+    .with_previews(&snapshots);
+    assert_eq!(overview.previews.len(), 2);
+    assert!(overview
+        .previews
+        .iter()
+        .all(|entry| entry.status == "available"));
+    assert!(!serde_json::to_string(&overview).unwrap().contains("原文😀"));
+    println!("PASS M8 preview: actual AppContainer copy/edit/save, native line numbers, original-change warning, fixed saved version and content-free overview.");
     println!("PASS review tools: real source search/cap/error, two versioned copies, fixed baseline after source change, source-bound LOG pairing.");
     Ok(())
 }

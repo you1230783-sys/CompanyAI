@@ -8,6 +8,9 @@ pub struct Overview {
     pub operations: usize,
     pub reads: Vec<Access>,
     pub outputs: Vec<String>,
+    /// 本機副本預覽入口，只含數量與狀態，不含差異原文。
+    #[serde(default)]
+    pub previews: Vec<super::review::preview::Entry>,
     pub failures: Vec<Failure>,
     pub truncated: bool,
     pub unavailable: bool,
@@ -39,6 +42,26 @@ impl Overview {
             unavailable: true,
             ..Self::default()
         }
+    }
+    /// 成果路徑必須來自原生發布清單；未保存快照的成果明示無法預覽。
+    pub fn with_previews(mut self, snapshots: &[super::review::Snapshot]) -> Self {
+        self.previews = self
+            .outputs
+            .iter()
+            .map(|path| {
+                snapshots
+                    .iter()
+                    .find(|s| s.path == *path)
+                    .map(super::review::preview::entry)
+                    .unwrap_or_else(|| super::review::preview::Entry {
+                        path: path.clone(),
+                        status: "unavailable".into(),
+                        summary: "此格式未提供差異預覽或未保存副本基準；CAD 請查看既有比較報告。"
+                            .into(),
+                    })
+            })
+            .collect();
+        self
     }
     /// 完整操作索引包含批次的各子項；略過批次容器以免重複計數。
     pub fn from_operations(rows: &Value, outputs: &[String], state: &str) -> Self {

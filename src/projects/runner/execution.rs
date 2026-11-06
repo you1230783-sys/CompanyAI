@@ -1310,7 +1310,8 @@ pub(super) fn run_for(
     let operations = broker.operation_history();
     record["overview"] = json!(match &operations {
         Ok(rows) =>
-            crate::projects::overview::Overview::from_operations(rows, broker.published(), state),
+            crate::projects::overview::Overview::from_operations(rows, broker.published(), state)
+                .with_previews(&broker.review_snapshots()),
         Err(_) => crate::projects::overview::Overview::unavailable(state),
     });
     checkpoint(&journal, &record)?;

@@ -68,7 +68,7 @@
       $('project-tools-hint').textContent=project ? `專案：${project.name}。純文字問題可直接在此提問，不必切回一般對話。` : '建立或選擇專案對話後，即可使用文件與資料夾工具。';
       pathHint();
     },
-    overview(container, message, isProject) {
+    overview(container, message, isProject, messageIndex) {
       if(message.role!=='assistant' || !isProject)return;
       const value=message.project_overview, card=node('section','task-overview');
       card.append(node('strong','','本次任務總覽'));
@@ -83,7 +83,18 @@
           if(!rows.length)list.append(node('li','','沒有可列出的紀錄。'));detail.append(list);card.append(detail);
         }
         section('讀取／查詢範圍',value.reads,r=>`${r.path} · ${r.tool} · ${r.range}`);
-        section('已保存副本／成果',value.outputs,p=>p);
+        const outputs=document.createElement('details');outputs.append(node('summary','',`已保存副本／成果（${value.outputs.length}）`));
+        const list=node('ul');
+        for(const path of value.outputs) {
+          const row=node('li','',path),preview=value.previews?.find(p=>p.path===path);
+          row.append(node('p','muted',preview?.summary||'舊紀錄未保存預覽摘要。'));
+          if(preview?.status==='available' && message.request_id && Number.isInteger(messageIndex)) {
+            row.append(window.DiffPreviewUI.button({conversation:state.active_id,message_index:messageIndex,request_id:message.request_id,path}));
+          }
+          list.append(row);
+        }
+        if(!value.outputs.length)list.append(node('li','','沒有可列出的紀錄。'));
+        outputs.append(list);card.append(outputs);
         section('失敗／結果未知',value.failures,r=>`${r.tool}：${r.message}`);
         card.append(node('p','muted','未驗證：工具成功不代表全文已讀完或內容正確；未列出的檔案、外部服務效果及語意結論仍需另行核對。此卡不會重播任何操作。'));
       }
