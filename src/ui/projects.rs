@@ -597,6 +597,14 @@ impl App {
                 self.projects.recovered_retries.insert(conversation, id);
                 return Ok(false);
             }
+            if self.config.model == "fast" || projects::runner::pending_fast_model(&self.root, &id)
+            {
+                self.projects.completed_status.insert(
+                    conversation,
+                    "重啟後的快速模型任務已暫停，請按「繼續」確認後續接。".into(),
+                );
+                return Ok(true);
+            }
             self.begin_project_for(conversation, chat.messages.clone(), Some(id), None)?;
             return Ok(true);
         }
@@ -612,6 +620,8 @@ impl App {
     }
     pub(super) fn project_state(&self) -> serde_json::Value {
         let retry_target = self.project_retry_target();
+        let retry_fast = self.config.model == "fast"
+            || retry_target.is_some_and(|id| projects::runner::pending_fast_model(&self.root, id));
         let retry_enabled = retry_target
             .and_then(|id| {
                 let control = match self.projects.run(id) {
@@ -621,7 +631,7 @@ impl App {
                 control.retry_state().ok().map(|state| state.enabled)
             })
             .unwrap_or(self.projects.store.continuous_retry);
-        json!({"plan_mode":self.projects.store.plan_mode,"retry_enabled":retry_enabled,"retry_run_id":retry_target,"batch":self.batch_state(),"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len(),"collapsed":self.projects.store.collapsed.contains(&p.id)})).collect::<Vec<_>>(),
+        json!({"plan_mode":self.projects.store.plan_mode,"retry_enabled":retry_enabled,"retry_fast":retry_fast,"retry_run_id":retry_target,"batch":self.batch_state(),"items":self.projects.store.projects.iter().map(|p| json!({"id":p.id,"name":p.name,"root":p.root,"import_count":p.imports.len(),"collapsed":self.projects.store.collapsed.contains(&p.id)})).collect::<Vec<_>>(),
             "preferences":self.projects.current(self.active_id.as_deref()).and_then(|r|r.instructions.questions().ok()),
             "chart_review":self.projects.current(self.active_id.as_deref()).and_then(|r|r.pending_chart.as_ref().map(|p|json!({"request_id":p.id,"review":p.review}))),
             "outlook_consent":self.projects.current(self.active_id.as_deref()).and_then(|r|r.pending_outlook.as_ref().map(|p|json!({"request_id":p.id,"folders":p.folders}))),

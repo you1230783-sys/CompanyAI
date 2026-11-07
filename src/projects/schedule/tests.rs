@@ -38,6 +38,30 @@ fn root() -> std::path::PathBuf {
     fs::create_dir_all(&path).unwrap();
     path
 }
+
+#[test]
+fn continuous_retry_survives_reload_and_changes_the_grant_revision() {
+    let root = root();
+    for enabled in [false, true] {
+        let mut grant = grant();
+        grant.continuous_retry = enabled;
+        let original_revision = grant_revision(&grant).unwrap();
+        let mut store = Store::default();
+        store.add(grant.clone(), 1).unwrap();
+        store.save(&root).unwrap();
+        let loaded = Store::load(&root).unwrap();
+        assert_eq!(loaded.entries[0].grant.continuous_retry, enabled);
+        grant.continuous_retry = !enabled;
+        assert_ne!(grant_revision(&grant).unwrap(), original_revision);
+    }
+    let mut legacy = serde_json::to_value(grant()).unwrap();
+    legacy.as_object_mut().unwrap().remove("continuous_retry");
+    assert!(
+        !serde_json::from_value::<Grant>(legacy)
+            .unwrap()
+            .continuous_retry
+    );
+}
 #[test]
 fn claims_are_unique_and_recurrence_advances_only_after_confirmed_completion() {
     let mut store = Store::default();

@@ -24,7 +24,8 @@ window.ScheduleUI = (() => {
     const repeat=make("select");for(const [value,text] of [[0,"單次"],[1,"每24小時"],[7,"每7天"]]){const option=make("option",text);option.value=value;repeat.append(option);}
     field(form,"重複間隔（固定時間差，非工作日／夏令時間日曆）",repeat);
     const retry=make("input");retry.type="checkbox";
-    field(form,"連線錯誤時持續重試（固定流程執行中防止睡眠）",retry);
+    field(form,"連線錯誤時持續重試",retry);
+    form.append(make("p","固定流程不連線 AI 服務，此選項在流程執行期間防止電腦睡眠；需保持程式開啟，公司電源設定仍可能讓電腦睡眠。"));
     form.append(make("pre",JSON.stringify(parameters,null,2)));
     const preview=make("button","預覽固定步驟與權限");preview.id="schedule-preview";
     confirmButton=make("button","確認授權並保存排程");confirmButton.id="schedule-confirm";confirmButton.disabled=true;
@@ -55,7 +56,7 @@ window.ScheduleUI = (() => {
       pending=false;previewId=event.id;
       form.querySelectorAll("input,select,#schedule-preview").forEach(control=>control.disabled=false);
       confirmButton.disabled=false;
-      previewBox.textContent=`${event.notice}\n專案根目錄：${event.root}\n核准資料與完整固定步驟：\n${JSON.stringify(event.grant,null,2)}`;
+      previewBox.textContent=`${event.notice}\n專案根目錄：${event.root}\n持續重試：${event.grant.continuous_retry ? "開" : "關"}（僅防睡眠）\n核准資料與完整固定步驟：\n${JSON.stringify(event.grant,null,2)}`;
       formStatus.textContent="請核對參數、來源、輸出名稱、程式碼與每一步，再確認。預覽有效2分鐘。";
     } else if(event.type==="schedule_error") {
       pending=false;previewId=null;if(confirmButton)confirmButton.disabled=true;
@@ -71,6 +72,7 @@ window.ScheduleUI = (() => {
       if(!event.entries?.length)listBody.append(make("p","目前帳號沒有排程。"));
       for(const entry of event.entries||[]) {
         const card=make("section");card.append(make("h3",entry.grant.template.name),make("p",`${entry.status}；${entry.enabled?"啟用":"停用"}；下次：${entry.next_due?new Date(entry.next_due*1000).toLocaleString():"無"}`));
+        card.append(make("p",`持續重試：${entry.grant.continuous_retry ? "開" : "關"}（僅防睡眠）`));
         action(card,"停用並停止",{action:"disable",id:entry.id});
         const audits=(event.audit||[]).filter(a=>a.schedule===entry.id).reverse();
         if(!event.running && entry.execution && audits.some(a=>a.execution===entry.execution&&a.status==="已暫停，可從未執行步驟續接")) {

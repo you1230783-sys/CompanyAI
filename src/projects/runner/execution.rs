@@ -75,6 +75,8 @@ pub(super) fn run_for(
         .memory()?
         .save_run(&run.id, &request_text, "尚未完成", "running", None, &[])?;
     let explicit_pause = std::cell::Cell::new(false);
+    // 批次結果由實際控制流程分類，不從給使用者看的原因文字反推。
+    let batch_state = std::cell::Cell::new(crate::projects::batch::State::Failed);
     // 尚未核對帳號／來源前，不能以此次失敗清除另一個有效的續接狀態。
     let checkpoint_owned = std::cell::Cell::new(!run.resume);
     let result = (|| {
@@ -1092,6 +1094,11 @@ pub(super) fn run_for(
                         None
                     };
                     if result["result"]["waiting_for_user"] == true || batch_wait.is_some() {
+                        batch_state.set(if result["result"]["wait_kind"] == "file_busy" {
+                            crate::projects::batch::State::OfficeWait
+                        } else {
+                            crate::projects::batch::State::WaitingUser
+                        });
                         // 預檢及等待未修改文件，不記為成功／失敗；續接重讀同一已完成的模型請求。
                         record["pending_operation"] = Value::Null;
                         checkpoint(&journal, &record)?;
@@ -1198,6 +1205,7 @@ pub(super) fn run_for(
                     // 寫入結果與副本版本都已核對，才能重新提供可恢復 checkpoint。
                     broker.archive_results()?;
                     if broker.task_plan.pending.is_some() {
+                        batch_state.set(crate::projects::batch::State::WaitingUser);
                         return pause(
                             "工作計畫等待使用者核准或退回",
                             &broker,
@@ -1312,6 +1320,7 @@ pub(super) fn run_for(
                     }
                 }
                 Decision::AskUser { message } => {
+                    batch_state.set(crate::projects::batch::State::WaitingUser);
                     if let Some((call, call_id)) = native_call {
                         record["terminal_tool_result"] = json!({"call":call,"result":crate::projects::agent::Message::result(&call_id,&json!({"ok":true,"state":"waiting_user"}))});
                     }
@@ -1354,14 +1363,21 @@ pub(super) fn run_for(
         "failed"
     } else if paused {
         "paused"
-    } else if outcome.starts_with("需要你的補充：") {
+    } else if batch_state.get() == crate::projects::batch::State::WaitingUser {
         "waiting_user"
     } else if broker.has_blocked_deliverables() {
         "partial"
     } else {
         "completed"
     };
-    broker.analysis.recovery = json!({"state":state,"can_resume":paused,
+    let batch_result = if state == "completed" {
+        crate::projects::batch::State::Completed
+    } else if matches!(state, "paused" | "waiting_user") {
+        batch_state.get()
+    } else {
+        crate::projects::batch::State::Failed
+    };
+    broker.analysis.recovery = json!({"state":state,"can_resume":paused,"batch_state":batch_result,
         "request_id":run.id,"outputs":broker.published(),
         "notice":if paused {"可使用原任務的繼續按鈕；續接前會核對帳號與來源。"}
             else if state != "completed" {"已保存成果保留；可整理剩餘工作後另送要求，結果未知的寫入須先查明。"}

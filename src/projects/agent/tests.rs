@@ -1,6 +1,23 @@
 use super::*;
 
 #[test]
+fn certificate_errors_stop_status_retry_immediately() {
+    for error in [
+        "HTTPS v2 伺服器憑證不符（TLS_PIN_MISMATCH）",
+        "Windows 網路錯誤 12175（WinHttpSendRequest）。",
+        "HTTPS v2 未啟用：尚未設定正式公鑰。",
+    ] {
+        let classified = status_transport_error(error.into());
+        assert!(!classified.retryable);
+        assert_eq!(classified.summary, "安全連線驗證失敗");
+    }
+    assert!(
+        status_transport_error("Windows 網路錯誤 12002（WinHttpReceiveResponse）。".into())
+            .retryable
+    );
+}
+
+#[test]
 fn reading_depth_defaults_to_readme_first_overview_and_keeps_explicit_full_reading() {
     let prompt = system_prompt_for("fast");
     assert!(prompt.contains("先看README") && prompt.contains("不預設逐行讀完"));

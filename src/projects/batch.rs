@@ -18,7 +18,6 @@ const NIGHT_JITTER_MINUTES: u32 = 10;
 pub const OFFICE_RECHECK_MINUTES: i64 = 10;
 pub const WAIT_OUTLOOK: &str = "晚間批次等待 Outlook 授權";
 pub const WAIT_CAD: &str = "晚間批次等待 CAD 連線確認";
-pub const WAIT_FILE: &str = "等待關閉占用檔案後繼續讀取";
 const MAX_PENDING: usize = 20;
 const MAX_HISTORY: usize = 100;
 const MAX_BYTES: usize = 2_000_000;
@@ -37,6 +36,21 @@ pub enum State {
 impl State {
     pub fn pending(self) -> bool {
         matches!(self, Self::Queued | Self::Running | Self::OfficeWait)
+    }
+}
+
+/// 只接受原生 runner 保存的結束分類。舊紀錄缺少細分類時保守列為未完成。
+pub fn result_state(recovery: &serde_json::Value) -> State {
+    match recovery["batch_state"].as_str() {
+        Some("completed") => State::Completed,
+        Some("waiting_user") => State::WaitingUser,
+        Some("office_wait") => State::OfficeWait,
+        Some(_) => State::Failed,
+        None => match recovery["state"].as_str() {
+            Some("completed") => State::Completed,
+            Some("waiting_user") => State::WaitingUser,
+            _ => State::Failed,
+        },
     }
 }
 
@@ -169,8 +183,14 @@ impl Queue {
             .ok_or_else(|| "批次任務已開始或已從佇列移除。".into())
     }
 
-    /// 只讓等待檔案的舊項目暫時讓位。尚未到時的第一筆新草稿維持佇列順序。
+    /// 單元測試中沒有其他忙碌對話的派送情境。
+    #[cfg(test)]
     pub fn next_ready(&self, now: NaiveDateTime) -> Option<usize> {
+        self.next_ready_for(now, |_| false)
+    }
+
+    /// 忙碌對話及等待檔案的項目暫時讓位；可執行的新草稿仍維持佇列順序。
+    pub fn next_ready_for(&self, now: NaiveDateTime, busy: impl Fn(&str) -> bool) -> Option<usize> {
         if self
             .entries
             .iter()
@@ -180,9 +200,36 @@ impl Queue {
             return None;
         }
         let index = self.entries.iter().position(|entry| {
-            entry.state == State::Queued || (entry.state == State::OfficeWait && entry.ready <= now)
+            !busy(&entry.conversation)
+                && (entry.state == State::Queued
+                    || (entry.state == State::OfficeWait && entry.ready <= now))
         })?;
         (self.entries[index].ready <= now).then_some(index)
+    }
+
+    /// 錯過原窗口的等待項目重新抽籤，避免下晚全部在 21:00 整同時到期。
+    /// 連續開啟、跨數晚才重開，以及午夜後重開，都使用同一個窗口身分。
+    pub fn roll_over(
+        &mut self,
+        now: NaiveDateTime,
+        mut jitter: impl FnMut() -> AppResult<u32>,
+    ) -> AppResult<bool> {
+        let target = active_window(now).unwrap_or(now.date());
+        let mut changed = false;
+        for entry in &mut self.entries {
+            if matches!(entry.state, State::Queued | State::OfficeWait)
+                && active_window(entry.ready).is_none_or(|old| old < target)
+            {
+                entry.ready = at(target, START_HOUR)
+                    + Duration::minutes(i64::from(jitter()? % (START_JITTER_MINUTES + 1)));
+                // 若開啟時已過抽籤區間，用當晚加入規則再錯開 0～10 分鐘。
+                if entry.ready < now {
+                    entry.ready = ready_at(now, jitter()?);
+                }
+                changed = true;
+            }
+        }
+        Ok(changed)
     }
 }
 
@@ -261,6 +308,53 @@ mod tests {
 
     fn time(value: &str) -> NaiveDateTime {
         NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M").unwrap()
+    }
+
+    #[test]
+    fn missed_nights_redraw_once_and_busy_conversation_yields() {
+        let mut queue = Queue::default();
+        let old = time("2026-11-06 21:10");
+        queue.enqueue(entry("first", old)).unwrap();
+        queue.enqueue(entry("second", old)).unwrap();
+        let now = time("2026-11-07 21:00");
+        assert!(queue.roll_over(now, || Ok(25)).unwrap());
+        assert_eq!(queue.entries[0].ready, time("2026-11-07 21:25"));
+        assert!(!queue.roll_over(now, || panic!("同一晚不可重抽")).unwrap());
+        assert_eq!(queue.next_ready(now), None);
+        assert_eq!(
+            queue.next_ready_for(time("2026-11-07 21:30"), |chat| chat == "chat_first"),
+            Some(1)
+        );
+        assert!(queue.roll_over(time("2026-11-09 23:00"), || Ok(5)).unwrap());
+        assert_eq!(queue.entries[0].ready, time("2026-11-09 23:05"));
+    }
+
+    #[test]
+    fn results_use_native_classification_and_unknown_pauses_are_incomplete() {
+        use serde_json::json;
+        for (state, expected) in [
+            ("office_wait", State::OfficeWait),
+            ("waiting_user", State::WaitingUser),
+            ("failed", State::Failed),
+            ("completed", State::Completed),
+        ] {
+            assert_eq!(
+                result_state(&json!({"batch_state":state,"text":"任意顯示文字"})),
+                expected
+            );
+        }
+        assert_eq!(
+            result_state(&json!({"state":"paused","text":"已自動重試 50 次"})),
+            State::Failed
+        );
+        assert_eq!(
+            result_state(&json!({"state":"paused","text":"時間上限"})),
+            State::Failed
+        );
+        assert_eq!(
+            result_state(&json!({"state":"paused","text":"需要你的補充："})),
+            State::Failed
+        );
     }
 
     #[test]

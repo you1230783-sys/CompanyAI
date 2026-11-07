@@ -236,7 +236,7 @@ impl Broker {
                         continue;
                     }
                     return Ok(
-                        json!({"ok":true,"result":{"waiting_for_user":true,"wait_reason":"等待關閉占用檔案後繼續讀取","executed":false}}),
+                        json!({"ok":true,"result":{"waiting_for_user":true,"wait_kind":"file_busy","wait_reason":"等待關閉占用檔案後繼續讀取","executed":false}}),
                     );
                 }
                 Err(error) => {
@@ -305,7 +305,7 @@ impl Broker {
                     continue;
                 }
                 return Ok(
-                    json!({"ok":true,"result":{"waiting_for_user":true,"wait_reason":"等待關閉占用檔案後繼續讀取","executed":false}}),
+                    json!({"ok":true,"result":{"waiting_for_user":true,"wait_kind":"file_busy","wait_reason":"等待關閉占用檔案後繼續讀取","executed":false}}),
                 );
             }
             break result;

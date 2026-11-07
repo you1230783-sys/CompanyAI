@@ -757,6 +757,22 @@ pub struct StatusError {
     pub summary: &'static str,
 }
 
+/// 傳輸層產生的安全錯誤不是暫時壅塞，必須立刻交回介面。
+fn status_transport_error(message: String) -> StatusError {
+    let security = message.contains("TLS_PIN_MISMATCH")
+        || message.starts_with("Windows 網路錯誤 12175（")
+        || message.starts_with("HTTPS v2");
+    StatusError {
+        message,
+        retryable: !security,
+        summary: if security {
+            "安全連線驗證失敗"
+        } else {
+            "連線中斷或查詢逾時"
+        },
+    }
+}
+
 pub fn status(
     config: &Config,
     session: &Session,
@@ -779,11 +795,7 @@ pub fn status(
         &config.endpoint(&path).map_err(stop)?,
         Some(("Authorization", &format!("Bearer {}", session.access_token))),
     )
-    .map_err(|message| StatusError {
-        message,
-        retryable: true,
-        summary: "連線中斷或查詢逾時",
-    })?;
+    .map_err(status_transport_error)?;
     // 身分、額度及格式拒絕不靠延長等待修復；404 僅查原 ID，不代表能重送。
     let error: Value = serde_json::from_str(&response.body).unwrap_or(Value::Null);
     let retryable = matches!(response.status, 404 | 408 | 429 | 500..=599)

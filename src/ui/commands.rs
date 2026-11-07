@@ -604,7 +604,10 @@ impl App {
                 self.status = "正在申請一次性登入碼…".into();
                 self.error = false;
                 let (config, tx, id) = (self.config.clone(), self.tx.clone(), self.login_operation);
+                let root = self.root.clone();
                 crate::reliability::spawn(move || {
+                    // 已驗證的停用回應只授權那次 v1 登入，不清除後續登入的防降級保護。
+                    let (config, _) = storage::transport_for_startup(&root, config);
                     let _ = tx.send(Event::Grant(id, auth::begin_login(&config)));
                 });
             }

@@ -68,7 +68,28 @@ pub(super) fn wait(
     deadline: Instant,
     notify: &mut impl FnMut(Activity),
 ) -> AppResult<Wait> {
+    wait_with_clock(cancel, control, task, deadline, notify, now_millis)
+}
+
+/// 注入牆鐘只用來重現 Windows 校時；實際等待仍由 Instant 保護。
+fn wait_with_clock(
+    cancel: &std::sync::atomic::AtomicBool,
+    control: &Inbox,
+    task: &Task,
+    deadline: Instant,
+    notify: &mut impl FnMut(Activity),
+    mut wall_now: impl FnMut() -> u64,
+) -> AppResult<Wait> {
     let until = task.project_retry.due_at_millis;
+    // Unix 截止時間供重啟與畫面還原；執行中再用單調時鐘限制本次等待。
+    // 新表最長 700 秒，不能沿用舊 300 秒上限截斷正常的持續重試。
+    let maximum = task
+        .project_retry
+        .activity
+        .as_ref()
+        .map_or(700, |activity| activity.total_seconds.min(700));
+    let initial_wait = until.saturating_sub(wall_now()).min(maximum * 1000);
+    let monotonic_end = Instant::now() + Duration::from_millis(initial_wait);
     // 每次等待只記一次；取消與期限仍每100ms檢查，不把逐秒倒數灌進歷史。
     if let Some(activity) = task.project_retry.activity.clone() {
         notify(Activity::retry(activity, "AI 連線恢復：等待重試"));
@@ -81,7 +102,11 @@ pub(super) fn wait(
         if task.project_retry.attempts > 2 && !control.retry_state()?.enabled {
             return Ok(Wait::Disabled);
         }
-        let remaining = until.saturating_sub(now_millis());
+        let remaining = until.saturating_sub(wall_now()).min(
+            monotonic_end
+                .saturating_duration_since(Instant::now())
+                .as_millis() as u64,
+        );
         if remaining == 0 {
             return Ok(Wait::Ready);
         }
@@ -107,6 +132,34 @@ mod tests {
         let root =
             std::env::temp_dir().join(format!("lmai-retry-{}", crate::jobs::new_id().unwrap()));
         Inbox::open(&root, "retry-test").unwrap()
+    }
+    #[test]
+    fn backwards_wall_clock_cannot_extend_the_reserved_wait() {
+        use std::sync::atomic::AtomicBool;
+        let mut task: Task = serde_json::from_value(json!({"request_id":"r","conversation_id":"c",
+            "request":{},"mode":"background","title":"t","created_at":0,"remote":null,"applied":false})).unwrap();
+        let control = control();
+        schedule_project(&control, &mut task, true, "逾時").unwrap();
+        task.project_retry.due_at_millis = 10_100;
+        let mut first = true;
+        let start = Instant::now();
+        let waited = wait_with_clock(
+            &AtomicBool::new(false),
+            &control,
+            &task,
+            start + Duration::from_secs(2),
+            &mut |_| {},
+            || {
+                if std::mem::take(&mut first) {
+                    10_000
+                } else {
+                    1_000
+                }
+            },
+        )
+        .unwrap();
+        assert!(matches!(waited, Wait::Ready));
+        assert!(start.elapsed() < Duration::from_secs(1));
     }
     #[test]
     fn waiting_across_second_boundaries_emits_once_and_remains_cancellable() {

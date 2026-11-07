@@ -133,6 +133,28 @@ impl Account {
         remove(&self.cache_path())
     }
 
+    fn exited_path(&self) -> PathBuf {
+        self.directory.join("clean-exit.flag")
+    }
+
+    /// 完整退出同步撤銷快取；刪除失敗時寫入不含任何秘密的旗標。
+    /// 保險旗標成功時回傳警告；兩種撤銷方式都失敗則回傳錯誤，供正常退出流程中止。
+    pub(crate) fn complete_exit(&self) -> AppResult<Option<String>> {
+        match self.lock() {
+            Ok(()) => {
+                remove(&self.exited_path())?;
+                Ok(None)
+            }
+            Err(error) => {
+                durable_write(&self.exited_path(), b"exited")
+                    .map_err(|marker| format!("{error}；完整退出標記也無法保存：{marker}"))?;
+                Ok(Some(format!(
+                    "{error}；已保存完整退出標記，下次開啟必須重新輸入聊天密碼。"
+                )))
+            }
+        }
+    }
+
     pub(crate) fn change_password(
         &self,
         old: &str,
@@ -145,8 +167,20 @@ impl Account {
         self.write_key(&current.key, new, server)
     }
 
-    /// 正常退出、登出與主動上鎖都會移除快取。只在非正常重開時復原未到期的金鑰。
+    /// 選單／托盤離開、更新重啟、Windows 登出／關機會刪除快取；縮到托盤不刪除。
+    /// 登出、切換帳號、裝置被取代、服務不可用、主動或自動上鎖也會刪除。
+    /// 只有當機、強制結束或斷電後，才可在自動上鎖期限內復原，最長 24 小時。
+    /// 有完整退出旗標時一律拒絕復原；先刪快取再刪旗標，清理失敗保留旗標。
     pub(crate) fn recover(&self, now: u64) -> AppResult<Option<(Vault, u64, u64)>> {
+        if self
+            .exited_path()
+            .try_exists()
+            .map_err(|error| format!("無法檢查完整退出標記：{error}"))?
+        {
+            self.lock()?;
+            remove(&self.exited_path())?;
+            return Ok(None);
+        }
         if !self.cache_path().is_file() {
             return Ok(None);
         }
@@ -224,7 +258,9 @@ impl Vault {
         durable_write(
             &self.account.cache_path(),
             &storage::protect(&bytes.0, true)?,
-        )
+        )?;
+        // 密碼驗證後重新解鎖才可建立新快取；清除舊旗標失敗時維持不可復原。
+        remove(&self.account.exited_path())
     }
 
     pub(crate) fn read<T: DeserializeOwned + Default>(&self, file: &str, max: u64) -> AppResult<T> {
@@ -309,6 +345,50 @@ pub(super) fn durable_write(path: &Path, data: &[u8]) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn complete_exit_clears_cache_and_failed_deletion_blocks_recovery() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let root =
+            std::env::temp_dir().join(format!("lmai-exit-{}", crate::jobs::new_id().unwrap()));
+        let account = Account::new(&root, "fixture", "account").unwrap();
+        let secret = ServerSecret {
+            version: 1,
+            value: Secret([3; 32]),
+        };
+        let vault = account.create("Test123", &secret).unwrap();
+        vault.cache(100, 160).unwrap();
+        // 未呼叫退出清理代表當機／強制結束；期限內可復原。
+        assert!(account.recover(120).unwrap().is_some());
+        account.complete_exit().unwrap();
+        assert!(!account.cache_path().exists());
+        assert!(account.recover(120).unwrap().is_none());
+
+        vault.cache(100, 160).unwrap();
+        let held = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(account.cache_path())
+            .unwrap();
+        assert!(account
+            .complete_exit()
+            .unwrap()
+            .unwrap()
+            .contains("已保存完整退出標記"));
+        assert!(account.exited_path().is_file());
+        // 仍被鎖住時不能復原，也不能先刪掉保險旗標。
+        assert!(account.recover(120).is_err());
+        assert!(account.exited_path().is_file());
+        drop(held);
+        assert!(account.recover(120).unwrap().is_none());
+        assert!(!account.cache_path().exists());
+        assert!(!account.exited_path().exists());
+
+        vault.cache(100, 100 + MAX_CACHE_SECONDS).unwrap();
+        assert!(account.recover(99).unwrap().is_none());
+        vault.cache(100, 100 + MAX_CACHE_SECONDS).unwrap();
+        assert!(account.recover(100 + MAX_CACHE_SECONDS).unwrap().is_none());
+    }
 
     #[test]
     fn accepts_exact_password_alphabet_and_reports_bad_character() {

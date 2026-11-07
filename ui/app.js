@@ -728,15 +728,17 @@ function renderMessages() {
         window.confirmFastModelSend(() => {
           resume.disabled = true;
           send({type:"project", command:{action:"resume",conversation,run_id:message.request_id,message_count:count}});
-        }, () => resume.isConnected && !resume.disabled && !!state.retry?.enabled && state.messages.length === count && !state.projects?.running);
+        }, () => resume.isConnected && !resume.disabled && !!state.retry?.enabled && state.messages.length === count && !state.projects?.running, state.projects?.retry_fast ? "fast" : state.config.model);
       };
       tools.append(resume);
       if (state.projects?.batch && message.content.includes("可改為今晚批次處理")) {
-        resume.textContent = "稍後手動繼續";
+        const later = node("button", "", "稍後手動繼續");
+        // 只收起建議，保留原生暫停狀態；真正續接仍由「繼續」按鈕確認。
+        later.onclick = () => { later.remove(); tonight.remove(); };
         const tonight = node("button", "", "今晚批次繼續");
         tonight.disabled = !!state.projects.running;
         tonight.onclick = () => window.BatchUI.enqueue(state.active_id, message.request_id);
-        tools.append(tonight);
+        tools.append(tonight, later);
       }
     } else if (state.retry && index === state.messages.length - 1) {
       const retry = node("button", "retry-message", "重新再試一次");

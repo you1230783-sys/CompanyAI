@@ -5,7 +5,7 @@ const {spawn} = require('node:child_process');
 const {pathToFileURL} = require('node:url');
 // 更新公告只保留使用者操作資訊；集中維護詞彙，避免日後再次加入內部細節。
 const releaseNotes = JSON.parse(fs.readFileSync('assets/release-notes.json', 'utf8').replace(/^\uFEFF/, ''));
-const excludedReleaseTerms = ['塔羅', '桌寵', '牌義', '抽牌', '回歸', '候選', 'NSIS', 'v142', 'ThinLTO', 'codegen', 'panic', 'AppContainer', 'DPAPI', 'SHA256', 'JSON Pointer', 'tokens', 'Cargo', 'COM', 'GitHub', '簽章', '雜湊', 'Junction', 'ACL'];
+const excludedReleaseTerms = ['私聊', '好友', '聊天 ID', '塔羅', '桌寵', '牌義', '抽牌', '回歸', '候選', 'NSIS', 'v142', 'ThinLTO', 'codegen', 'panic', 'AppContainer', 'DPAPI', 'SHA256', 'JSON Pointer', 'tokens', 'Cargo', 'COM', 'GitHub', '簽章', '雜湊', 'Junction', 'ACL'];
 for (const note of releaseNotes) {
   const text = [note.section, ...note.items].join('\n').toLowerCase();
   for (const term of excludedReleaseTerms) {
@@ -15,7 +15,7 @@ for (const note of releaseNotes) {
     throw Error(`Release ${note.version} must have a title and one to four short user-facing sentences`);
   }
 }
-for (const version of ['0.8.75', '0.8.76', '0.8.77', '0.8.78', '0.8.79', ...Array.from({length:20}, (_, i) => `0.9.${i}`)]) {
+for (const version of ['0.8.75', '0.8.76', '0.8.77', '0.8.78', '0.8.79', ...Array.from({length:26}, (_, i) => `0.9.${i}`)]) {
   if (releaseNotes.filter(note => note.version === version).length !== 1) throw Error(`Missing or duplicated release ${version}`);
 }
 const delay = ms => new Promise(r => setTimeout(r, ms));
@@ -292,6 +292,33 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
     if(!chartPng.startsWith('data:image/png;base64,') || chartPng.length<1000) throw Error('real ECharts PNG missing');
     fs.writeFileSync('.build/settings-reference-lines.png',Buffer.from(chartPng.split(',')[1],'base64'));
     checks.push('real ECharts PNG with two parameter reference lines');
+    const retryChecks = await evaluate(`(async () => {
+      document.querySelectorAll('dialog[open]').forEach(d=>d.close());
+      const check=(ok,label)=>{if(!ok)throw Error(label);};
+      window.testCommands=[];send=message=>testCommands.push(message);
+      const fixture={...LMUI.getState(),logged_in:true,can_send:true,busy:'none',active_id:'review-retry',
+        config:{...LMUI.getState().config,model:'quality'},
+        conversations:[{id:'review-retry',project_id:'project',title:'重試測試'}],
+        messages:[{role:'assistant',content:'可改為今晚批次處理',project_paused:true,request_id:'paused-run'}],
+        retry:{enabled:true},projects:{items:[],running:false,batch:{entries:[]},retry_fast:true}};
+      LMUI.receive(fixture);LMUI.showView('chat');
+      const later=[...document.querySelectorAll('button')].find(b=>b.textContent==='稍後手動繼續');
+      check(!!later,'稍後手動繼續按鈕存在');later.click();
+      check(testCommands.length===0 && !document.querySelector('.fast-model-dialog'),'稍後不送出或確認任何任務');
+      check(document.querySelector('.resume-project').textContent==='繼續','保留真正的手動續接入口');
+      document.querySelector('.resume-project').click();
+      check(!!document.querySelector('.fast-model-dialog') && testCommands.length===0,'原請求為快速模型時仍須確認，即使目前已改品質模型');
+      document.querySelector('.fast-model-dialog .secondary-button').click();
+      await new Promise(r=>setTimeout(r,30));
+      check(testCommands.length===0,'取消快速模型確認維持暫停');
+      document.querySelector('.resume-project').click();
+      document.querySelector('.fast-model-dialog .primary-button').click();
+      await new Promise(r=>setTimeout(r,30));
+      check(testCommands.length===1 && testCommands[0].command.action==='resume' && testCommands[0].command.run_id==='paused-run','確認後才續接原任務');
+      check(document.querySelector('#private-chat-settings').textContent.includes('只有程式意外結束時，才會在上鎖期限內免輸入'),'自動上鎖說明包含完整退出及意外復原規則');
+      return '稍後不執行、原快速模型確認／取消／續接、完整退出設定說明';
+    })()`);
+    checks.push(retryChecks);
     fs.writeFileSync('.build/settings-review.json',JSON.stringify({result:'PASS',checks},null,2));console.log(JSON.stringify({result:'PASS',checks}));
   } finally {if(ws)ws.close();edge.kill();}
 })().catch(error=>{process.stderr.write(String(error.stack||error));process.exitCode=1;});

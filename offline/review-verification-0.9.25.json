@@ -1,0 +1,197 @@
+{
+  "version": "0.9.25",
+  "scope": "local source verification only; no installer or Release",
+  "build": {
+    "recorded_at": "2026-11-07T10:42:04.6280070+08:00",
+    "msvc": "14.29.30133",
+    "compiler_report": [
+      "v142.c",
+      "Verified _MSC_FULL_VER=192930159 x64"
+    ],
+    "empty_cargo_cache": true,
+    "default_features": true,
+    "exe_sha256": "24d4bc97078414fb4f2bb6692a4add76ed7c4b35fc7cc63ab3d1bc1370d55783",
+    "installer_built": false
+  },
+  "rust": {
+    "command": "cargo test --lib --frozen -j 2 -- --test-threads=1",
+    "passed": 611,
+    "failed": 0,
+    "ignored_fixture_tests": 3
+  },
+  "clippy": {
+    "command": "cargo clippy --workspace --all-targets --frozen -j 2 -- -D warnings",
+    "result": "PASS",
+    "environment_warning": "Y: incremental cache hard-link failed; compiler copied files instead"
+  },
+  "tls": {
+    "result": "PASS",
+    "checks": [
+      "primary pin",
+      "backup pin",
+      "wrong pin: zero HTTP bytes",
+      "wrong hostname: zero HTTP bytes",
+      "device and account lifecycle",
+      "two-account message durability, images, receipts and deduplication"
+    ],
+    "company_server_contacted": false
+  },
+  "native_window": {
+    "result": "PASS",
+    "exit_code": 0,
+    "exe_sha256": "24d4bc97078414fb4f2bb6692a4add76ed7c4b35fc7cc63ab3d1bc1370d55783",
+    "checked_at": "2026-11-07T10:43:17.9519123+08:00",
+    "scope": "WebView2 plus WM_CLOSE(0/1), WM_QUERYENDSESSION, WM_ENDSESSION(FALSE/TRUE); synthetic cache"
+  },
+  "schedules_ui": {
+    "result": "PASS",
+    "scope": "source_ui_only",
+    "checks": [
+      "排程重試預設關閉，文字符合手冊",
+      "固定流程防睡眠限制完整顯示",
+      "沒有原生預覽不能確認",
+      "預覽僅送固定參數與範本身分",
+      "勾選保存到原生授權預覽",
+      "過期預覽回覆不啟用確認",
+      "原生完整步驟與來源可見",
+      "修改防睡眠選項撤銷既有預覽",
+      "取消勾選重新預覽",
+      "確認只送原生一次性預覽ID",
+      "確認送出後避免重複提交",
+      "編輯時間使預覽失效",
+      "舊授權顯示關閉",
+      "執行中的排程可以停止",
+      "未知結果不提供續接入口",
+      "審計保留成果位置",
+      "重新載入已勾選授權顯示保存結果",
+      "通知直接開啟略過原因審計並保留下次",
+      "排程清單版面 1180",
+      "排程清單版面 520"
+    ]
+  },
+  "settings_ui": {
+    "result": "PASS",
+    "checks": [
+      "settings tabs, Other preferences, selected task, export default, round navigation and stale replies",
+      {
+        "name": "diagnostics-light",
+        "width": 1180,
+        "scroll": 1180,
+        "left": 110,
+        "right": 1070,
+        "top": 17,
+        "bottom": 783
+      },
+      {
+        "name": "advanced-light",
+        "width": 1180,
+        "scroll": 1180,
+        "left": 270,
+        "right": 910,
+        "top": 71.5,
+        "bottom": 728.5
+      },
+      {
+        "name": "advanced-dark",
+        "width": 1180,
+        "scroll": 1180,
+        "left": 270,
+        "right": 910,
+        "top": 71.5,
+        "bottom": 728.5
+      },
+      {
+        "name": "advanced-narrow",
+        "width": 520,
+        "scroll": 520,
+        "left": 20,
+        "right": 500,
+        "top": 71.5,
+        "bottom": 728.5
+      },
+      {
+        "name": "tutorials-narrow",
+        "width": 520,
+        "scroll": 520,
+        "left": 20,
+        "right": 500,
+        "top": 71.5,
+        "bottom": 728.5
+      },
+      {
+        "name": "tutorial-card-narrow",
+        "width": 520,
+        "scroll": 520,
+        "left": 16,
+        "right": 504,
+        "top": 16,
+        "bottom": 784
+      },
+      {
+        "name": "release-history-narrow",
+        "width": 520,
+        "scroll": 520,
+        "left": 20,
+        "right": 500,
+        "top": 24,
+        "bottom": 776
+      },
+      "all 58 tutorials completed in real browser; input/select/checkbox gates, focus, isolation and search",
+      {
+        "name": "operations-narrow",
+        "width": 520,
+        "scroll": 520,
+        "left": 20,
+        "right": 500,
+        "top": 71.5,
+        "bottom": 728.5
+      },
+      {
+        "name": "notifications-narrow",
+        "width": 520,
+        "scroll": 520,
+        "left": 20,
+        "right": 500,
+        "top": 99.875,
+        "bottom": 700.109375
+      },
+      {
+        "name": "general-light",
+        "width": 1180,
+        "scroll": 1180,
+        "left": 270,
+        "right": 910,
+        "top": 71.5,
+        "bottom": 728.5
+      },
+      "real ECharts PNG with two parameter reference lines",
+      "稍後不執行、原快速模型確認／取消／續接、完整退出設定說明"
+    ]
+  },
+  "schedules_native": {
+    "checks": [
+      "fixed template creates and saves actual copy",
+      "completed execution cannot replay",
+      "principal and root changes rejected",
+      "durably idle resume executes only next step",
+      "before-submit interruption cannot resume",
+      "successful write before checkpoint cannot replay",
+      "original source unchanged"
+    ],
+    "company_environment_validated": false,
+    "result": "PASS"
+  },
+  "known_limits": [
+    "Windows actual logoff/shutdown remains pending",
+    "Actual installed update restart and task-manager kill after company-account unlock remain pending",
+    "powercfg /requests required administrator elevation; actual OS sleep request and company policy remain pending",
+    "Transport anti-downgrade marker still has Windows-profile scope; documented deviation"
+  ],
+  "failures_and_retries": [
+    "Sandbox loopback EACCES; browser retested with local connection access",
+    "Initial workspace test interrupted at loopback case; complete library suite rerun",
+    "First library run: 610 pass, 1 failed old preference-field count; assertion corrected from 22 to 23, final run 611 pass"
+  ],
+  "release_created": false,
+  "production_pins_replaced": false
+}

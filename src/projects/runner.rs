@@ -134,6 +134,16 @@ pub(crate) fn recovering_retry(root: &Path, id: &str, conversation: &str, princi
             })
     })
 }
+
+/// 未完成請求會沿用原模型；不能只用目前設定決定是否需要快速模型確認。
+pub(crate) fn pending_fast_model(root: &Path, id: &str) -> bool {
+    load_pause(root, id).is_ok_and(|saved| {
+        saved
+            .pending_model
+            .as_ref()
+            .is_some_and(|task| task.request["model"] == "fast")
+    })
+}
 fn save_pause(
     run: &Run,
     principal: &str,

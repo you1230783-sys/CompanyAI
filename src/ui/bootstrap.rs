@@ -197,6 +197,14 @@ pub(super) unsafe extern "system" fn window_proc(
                     }
                     WM_CLOSE => {
                         if crate::reliability::faulted() {
+                            match app.private_chat.complete_exit() {
+                                Ok(Some(warning)) => show_cleanup_warning(&warning),
+                                Ok(None) => (),
+                                Err(error) => {
+                                    show_cleanup_warning(&error);
+                                    return 0;
+                                }
+                            }
                             // 狀態可能部分修改，不再保存／覆寫歷史；明確離開以便重新啟動。
                             DestroyWindow(window);
                             return 0;
@@ -213,8 +221,32 @@ pub(super) unsafe extern "system" fn window_proc(
                         if !app.confirm_batch_exit() {
                             return 0;
                         }
+                        match app.private_chat.complete_exit() {
+                            Ok(Some(warning)) => show_cleanup_warning(&warning),
+                            Ok(None) => (),
+                            Err(error) => {
+                                // 刪除與標記均失敗時保留視窗，避免把未撤銷的快取留到下次復原。
+                                app.fail(error);
+                                app.publish();
+                                return 0;
+                            }
+                        }
                         unsafe {
                             DestroyWindow(window);
+                        }
+                        return 0;
+                    }
+                    WM_QUERYENDSESSION => return 1,
+                    WM_ENDSESSION => {
+                        if wparam != 0 {
+                            // 結束工作階段只同步撤銷快取；不顯示對話框、連線或另寫 DPAPI 診斷。
+                            match app.private_chat.complete_exit() {
+                                Ok(None) => (),
+                                Ok(Some(warning)) | Err(warning) => {
+                                    app.status = warning;
+                                    app.error = true;
+                                }
+                            }
                         }
                         return 0;
                     }
@@ -413,6 +445,7 @@ pub(super) fn run_with_local(
             root
         }
     };
+    let mut transport_warning = None;
     let config = if let Some(local) = &local {
         local.config.clone()
     } else if let Some(demo) = demo {
@@ -420,11 +453,14 @@ pub(super) fn run_with_local(
     } else if smoke {
         Config::default()
     } else {
-        storage::restore_transport(&root, storage::load_config(&root)?)?
+        let saved = storage::load_config(&root)?;
+        let (restored, warning) = storage::transport_for_startup(&root, saved);
+        transport_warning = warning;
+        restored
     };
     let session = if let Some(local) = &local {
         Some(local.session.clone())
-    } else if demo.is_none() && !smoke {
+    } else if demo.is_none() && !smoke && transport_warning.is_none() {
         storage::load_session(&root, &config)?
     } else {
         None
@@ -589,6 +625,9 @@ pub(super) fn run_with_local(
             app.start_notifications();
             tray(window, NIM_ADD);
         }
+        if let Some(warning) = transport_warning {
+            app.fail(warning);
+        }
         let state = Box::new(RefCell::new(app));
         SetWindowLongPtrW(
             window,
@@ -670,7 +709,9 @@ pub(super) fn run_with_local(
                 let done = state.borrow_mut().smoke_result.take();
                 if let Some(done) = done {
                     // 放開 RefCell 借用後，真正送出原生最小化／關閉訊息。
-                    result = done.and_then(|()| window_behavior::verify(&state));
+                    result = done
+                        .and_then(|()| window_behavior::verify(&state))
+                        .and_then(|()| private_chat::verify_exit(&state));
                     break;
                 }
                 if started.elapsed() > Duration::from_secs(45) {
@@ -720,6 +761,18 @@ pub fn show_fatal_error(error: &str) {
             wide(error).as_ptr(),
             wide("LM_AI 啟動失敗").as_ptr(),
             MB_OK | MB_ICONERROR,
+        );
+    }
+}
+
+/// 完整退出前的同步清理警告，與阻止啟動的致命錯誤分開。
+fn show_cleanup_warning(error: &str) {
+    unsafe {
+        MessageBoxW(
+            ptr::null_mut(),
+            wide(error).as_ptr(),
+            wide("LM_AI 退出清理提醒").as_ptr(),
+            MB_OK | MB_ICONWARNING,
         );
     }
 }

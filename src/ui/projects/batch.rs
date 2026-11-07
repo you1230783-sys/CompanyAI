@@ -246,6 +246,11 @@ impl App {
             _ => (),
         }
         let mut changed = account_changed | self.recover_batch_run(now, window)?;
+        let mut queue = self.projects.batch.queue.clone();
+        if queue.roll_over(now, crate::jobs::random_u32)? {
+            self.batch_commit(queue)?;
+            changed = true;
+        }
         if let Some(window) = window.filter(|_| !self.project_slots_full()) {
             changed |= self.dispatch_batch(now, window)?;
         }
@@ -297,15 +302,12 @@ impl App {
             .and_then(|chat| chat.messages.last())
             .filter(|msg| msg.request_id.as_deref() == Some(&entry.run_id));
         if let Some(message) = last.filter(|msg| msg.role == "assistant" && !msg.project_paused) {
-            let status = message
+            entry.state = message
                 .project_analysis
                 .as_ref()
-                .and_then(|analysis| analysis.recovery["state"].as_str());
-            entry.state = match status {
-                Some("completed") => State::Completed,
-                _ if message.content.starts_with("需要你的補充：") => State::WaitingUser,
-                _ => State::Failed,
-            };
+                .map_or(State::Failed, |analysis| {
+                    batch::result_state(&analysis.recovery)
+                });
             entry.detail = "依原生任務紀錄還原結果。".into();
         } else if safe
             || (!entry.resume
@@ -334,15 +336,13 @@ impl App {
 
     fn dispatch_batch(&mut self, now: NaiveDateTime, window: NaiveDate) -> AppResult<bool> {
         let mut queue = self.projects.batch.queue.clone();
-        let Some(index) = queue.next_ready(now) else {
+        let Some(index) = queue.next_ready_for(now, |conversation| {
+            self.projects.active(Some(conversation))
+                || self.schedules.active_conversation(conversation)
+        }) else {
             return Ok(false);
         };
         let entry = &mut queue.entries[index];
-        if self.projects.active(Some(&entry.conversation))
-            || self.schedules.active_conversation(&entry.conversation)
-        {
-            return Ok(false);
-        }
         entry.state = State::Running;
         entry.window = Some(window);
         entry.detail.clear();
@@ -420,7 +420,13 @@ impl App {
         } else {
             text.chars().take(220).collect()
         };
-        entry.state = if paused && text.contains(batch::WAIT_FILE) {
+        let native_state = projects::runner::recover_analysis(&self.root, id)
+            .map_or(State::Failed, |analysis| {
+                batch::result_state(&analysis.recovery)
+            });
+        entry.state = if cancelled || !succeeded {
+            State::Failed
+        } else if paused && native_state == State::OfficeWait {
             let now = batch::local_now()?;
             entry.resume = true;
             let check = now + LocalDuration::minutes(batch::OFFICE_RECHECK_MINUTES);
@@ -430,14 +436,8 @@ impl App {
                 batch::next_evening(check, crate::jobs::random_u32()?)
             };
             State::OfficeWait
-        } else if cancelled || text.contains("已自動重試 50 次") {
-            State::Failed
-        } else if paused || text.starts_with("需要你的補充：") {
-            State::WaitingUser
-        } else if succeeded {
-            State::Completed
         } else {
-            State::Failed
+            native_state
         };
         self.batch_commit(queue)
     }

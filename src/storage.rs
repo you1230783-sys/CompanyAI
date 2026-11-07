@@ -64,6 +64,7 @@ const V2_LOCK: &[u8] = b"CompanyAI/transport/v2";
 
 /// 裝置授權在瀏覽器核准前沒有帳號代號。已建立 v2 的 Windows 設定檔必須先走安全連線。
 /// 記錄與 Session 分開加密保存，登出或 Token 到期不能移除防降級狀態。
+/// 這是 Windows 設定檔層級的連線保護，並非帳號紀錄；已驗證的伺服器停用回應仍可回退。
 pub(crate) fn restore_transport(root: &Path, config: Config) -> AppResult<Config> {
     let Some(bytes) = read_optional(&root.join("transport-v2.dpapi"))? else {
         return Ok(config);
@@ -81,6 +82,18 @@ pub(crate) fn remember_transport(root: &Path, config: &Config) -> AppResult<()> 
         atomic_write(&root.join("transport-v2.dpapi"), &protect(V2_LOCK, true)?)?;
     }
     Ok(())
+}
+
+/// 記錄損壞不能阻止開啟介面，也不能因此默默允許 HTTP 降級。
+/// 有效公鑰仍可重新驗證並登入；公鑰未配置時提示安裝正確版本。
+pub(crate) fn transport_for_startup(root: &Path, config: Config) -> (Config, Option<String>) {
+    match restore_transport(root, config.clone()) {
+        Ok(restored) => (restored, None),
+        Err(error) => (
+            Config { server_url: crate::config::SERVER_URL_V2.into(), ..config },
+            Some(format!("{error} 已保留安全連線限制；可重新登入以修復記錄，或請維護者安裝含有效公鑰的版本。")),
+        ),
+    }
 }
 
 /// 先寫暫存檔再替換，避免程式中途關閉時留下半份 JSON 或憑證。
@@ -177,6 +190,29 @@ pub fn protect(bytes: &[u8], encrypt: bool) -> AppResult<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn invalid_transport_record_returns_warning_without_dropping_security() {
+        let root = std::env::temp_dir().join(format!(
+            "lmai-invalid-transport-{}",
+            crate::jobs::new_id().unwrap()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("transport-v2.dpapi"), b"broken").unwrap();
+        let (config, warning) = transport_for_startup(&root, Config::default());
+        assert!(config.uses_transport_v2());
+        assert!(warning.is_some());
+        assert_eq!(
+            fs::read(root.join("transport-v2.dpapi")).unwrap(),
+            b"broken"
+        );
+        remember_transport(&root, &config).unwrap();
+        let (config, warning) = transport_for_startup(&root, Config::default());
+        assert!(config.uses_transport_v2());
+        assert_eq!(
+            warning.is_some(),
+            crate::transport::pins::configured().unwrap().is_none()
+        );
+    }
     #[test]
     fn v1_session_and_separate_upgrade_marker_do_not_overwrite_each_other() {
         let root =

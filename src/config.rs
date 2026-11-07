@@ -124,7 +124,6 @@ struct Preferences {
     sidebar_collapsed: bool,
     projects_collapsed: bool,
     recent_collapsed: bool,
-    #[serde(skip_serializing)]
     notification_popups: Option<bool>,
     notification_preferences: Option<crate::notification_preferences::Preferences>,
     minimize_to_taskbar: Option<bool>,
@@ -153,7 +152,7 @@ impl Serialize for Config {
             sidebar_collapsed: self.sidebar_collapsed,
             projects_collapsed: self.projects_collapsed,
             recent_collapsed: self.recent_collapsed,
-            notification_popups: None,
+            notification_popups: Some(self.notification_preferences.legacy_enabled()),
             notification_preferences: Some(self.notification_preferences.clone()),
             minimize_to_taskbar: Some(self.minimize_to_taskbar),
             dark_mode: self.dark_mode,
@@ -536,7 +535,8 @@ mod tests {
         assert_eq!(config.model, "quality");
         assert_eq!(config.hotkey, "Ctrl+Shift+F8");
         let saved = serde_json::to_value(&config).unwrap();
-        assert_eq!(saved.as_object().unwrap().len(), 22);
+        assert_eq!(saved.as_object().unwrap().len(), 23);
+        assert_eq!(saved["notification_popups"], true);
         assert_eq!(saved["extra_features_enabled"], false);
         assert_eq!(saved["private_chat_enabled"], false);
         assert_eq!(saved["private_chat_lock"]["windows_lock"], true);

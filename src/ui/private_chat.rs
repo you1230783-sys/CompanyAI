@@ -152,6 +152,21 @@ impl Runtime {
         Ok(())
     }
 
+    /// 只處理本機金鑰與記憶體，不等待背景工作或進行網路呼叫。
+    pub(super) fn complete_exit(&mut self) -> AppResult<Option<String>> {
+        let cleanup = self
+            .account
+            .as_ref()
+            .map_or(Ok(None), Account::complete_exit);
+        // 即使磁碟刪除失敗，也必須撤銷記憶體與晚到背景回應的操作世代。
+        let locked = self.lock();
+        match cleanup {
+            Ok(Some(warning)) => Ok(Some(warning)),
+            Ok(None) => locked.map(|()| None),
+            Err(error) => Err(error),
+        }
+    }
+
     fn active(&self) -> bool {
         self.device.as_ref().is_some_and(|device| device.active)
     }
@@ -164,6 +179,46 @@ impl Runtime {
 pub(super) fn unregister_windows_lock(window: HWND) {
     // SAFETY: 只解除本視窗註冊，未註冊或已銷毀時 Windows 會回傳失敗。
     unsafe { WTSUnRegisterSessionNotification(window) };
+}
+
+/// --self-check 專用：透過真正的視窗程序模擬結束工作階段及完整退出。
+/// 測試只建立無金鑰的合成檔案；DPAPI 復原與刪除失敗另由 vault 測試涵蓋。
+pub(super) fn verify_exit(state: &RefCell<App>) -> AppResult<()> {
+    if !state.borrow().smoke {
+        return Err("退出自檢只允許隔離測試視窗。".into());
+    }
+    let root = std::env::temp_dir().join(format!("lmai-exit-window-{}", crate::jobs::new_id()?));
+    let account = Account::new(&root, "fixture", "exit-test")?;
+    std::fs::create_dir_all(&account.directory).map_err(|error| error.to_string())?;
+    let cache = account.directory.join("unlocked.dpapi");
+    std::fs::write(&cache, b"synthetic-no-key").map_err(|error| error.to_string())?;
+    let window = state.borrow().window;
+    state.borrow_mut().private_chat.account = Some(account);
+    // SAFETY: window 是同執行緒的隔離自檢視窗，送訊息前沒有持有 App 借用。
+    unsafe {
+        SendMessageW(window, WM_CLOSE, 0, 0);
+        if !cache.is_file() || IsWindow(window) == 0 {
+            return Err("縮到托盤不應刪除解鎖快取。".into());
+        }
+        if SendMessageW(window, WM_QUERYENDSESSION, 0, 0) != 1 {
+            return Err("結束工作階段查詢應允許 Windows 繼續。".into());
+        }
+        SendMessageW(window, WM_ENDSESSION, 0, 0);
+        if !cache.is_file() {
+            return Err("取消登出不應刪除快取。".into());
+        }
+        SendMessageW(window, WM_ENDSESSION, 1, 0);
+        if cache.exists() {
+            return Err("WM_ENDSESSION(TRUE) 未清除快取。".into());
+        }
+        std::fs::write(&cache, b"synthetic-no-key").map_err(|error| error.to_string())?;
+        // 選單、托盤及更新重啟共用 WM_CLOSE(1)；必須在 DestroyWindow 前完成清理。
+        SendMessageW(window, WM_CLOSE, 1, 0);
+        if cache.exists() || IsWindow(window) != 0 {
+            return Err("完整退出未清除快取或未關閉視窗。".into());
+        }
+    }
+    Ok(())
 }
 
 impl App {

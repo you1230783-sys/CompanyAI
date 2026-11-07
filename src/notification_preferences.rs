@@ -64,6 +64,11 @@ pub(crate) enum Delivery {
 }
 
 impl Preferences {
+    /// 保留舊版總開關供回退使用；細分類無法完整投影，只有全關時寫 false。
+    pub(crate) fn legacy_enabled(&self) -> bool {
+        self.mode != Mode::Off && (self.mode != Mode::Legacy || self.legacy_popups)
+    }
+
     pub(crate) fn migrate(legacy_popups: Option<bool>) -> Self {
         Self {
             mode: Mode::Legacy,
@@ -110,6 +115,23 @@ impl Preferences {
 mod tests {
     use super::*;
     use crate::config::Config;
+
+    #[test]
+    fn saved_config_preserves_legacy_master_switch_for_downgrade() {
+        let mut config: Config = serde_json::from_str(r#"{"notification_popups":false}"#).unwrap();
+        let value = serde_json::to_value(&config).unwrap();
+        assert_eq!(value["notification_popups"], false);
+        config.notification_preferences.mode = Mode::Off;
+        assert_eq!(
+            serde_json::to_value(&config).unwrap()["notification_popups"],
+            false
+        );
+        config.notification_preferences.mode = Mode::Windows;
+        assert_eq!(
+            serde_json::to_value(&config).unwrap()["notification_popups"],
+            true
+        );
+    }
 
     #[test]
     fn legacy_settings_preserve_per_source_channels_and_flash() {

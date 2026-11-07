@@ -62,7 +62,10 @@ pub(crate) enum LoginResult {
 }
 
 enum DeviceFailure {
+    /// TCP 無法連線／逾時，只有尚無 v2 紀錄時允許回退。
     Unavailable(String),
+    /// 已通過公鑰驗證的伺服器明確停用 v2，包含 test_accounts 與 off。
+    Disabled(String),
     Rejected(String),
 }
 
@@ -95,7 +98,7 @@ fn request_device_for(config: &Config) -> Result<DeviceGrant, DeviceFailure> {
     if response.status != 200 {
         let message = protocol::api_error(response.status, &response.body, "");
         if config.uses_transport_v2() && transport_v2_unavailable(&response) {
-            return Err(DeviceFailure::Unavailable(message));
+            return Err(DeviceFailure::Disabled(message));
         }
         return Err(DeviceFailure::Rejected(message));
     }
@@ -115,7 +118,9 @@ fn transport_v2_unavailable(response: &transport::HttpResponse) -> bool {
 
 pub fn request_device(config: &Config) -> AppResult<DeviceGrant> {
     request_device_for(config).map_err(|error| match error {
-        DeviceFailure::Unavailable(message) | DeviceFailure::Rejected(message) => message,
+        DeviceFailure::Unavailable(message)
+        | DeviceFailure::Disabled(message)
+        | DeviceFailure::Rejected(message) => message,
     })
 }
 
@@ -128,30 +133,37 @@ fn begin_login_with(
     secure: Option<Config>,
     mut request: impl FnMut(&Config) -> Result<DeviceGrant, DeviceFailure>,
 ) -> AppResult<LoginGrant> {
-    let allow_v1 = !config.uses_transport_v2();
+    let allow_unreachable_fallback = !config.uses_transport_v2();
     if let Some(secure) = secure {
         match request(&secure) {
             Ok(grant) => {
                 return Ok(LoginGrant {
                     grant,
                     config: secure,
-                    allow_v1,
+                    allow_v1: true,
                 })
             }
-            Err(DeviceFailure::Unavailable(_)) if allow_v1 => (),
+            Err(DeviceFailure::Disabled(_)) => (),
+            Err(DeviceFailure::Unavailable(_)) if allow_unreachable_fallback => (),
             Err(DeviceFailure::Unavailable(message) | DeviceFailure::Rejected(message)) => {
                 return Err(message)
             }
         }
-    } else if !allow_v1 {
+    } else if !allow_unreachable_fallback {
         return Err("此登入已使用 HTTPS v2，但正式公鑰未設定。".into());
     }
-    let grant = request(config).map_err(|error| match error {
-        DeviceFailure::Unavailable(message) | DeviceFailure::Rejected(message) => message,
+    let mut fallback = config.clone();
+    if fallback.uses_transport_v2() {
+        fallback.server_url = crate::config::SERVER_URL.into();
+    }
+    let grant = request(&fallback).map_err(|error| match error {
+        DeviceFailure::Unavailable(message)
+        | DeviceFailure::Disabled(message)
+        | DeviceFailure::Rejected(message) => message,
     })?;
     Ok(LoginGrant {
         grant,
-        config: config.clone(),
+        config: fallback,
         allow_v1: false,
     })
 }
@@ -340,6 +352,31 @@ mod tests {
             server_url: crate::config::SERVER_URL_V2.into(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn verified_disabled_response_can_fallback_even_with_persistent_v2_lock() {
+        let mut routes = Vec::new();
+        let flow = begin_login_with(&secure(), Some(secure()), |config| {
+            routes.push(config.uses_transport_v2());
+            if config.uses_transport_v2() {
+                Err(DeviceFailure::Disabled("transport_v2_unavailable".into()))
+            } else {
+                Ok(grant("fresh-v1"))
+            }
+        })
+        .unwrap();
+        assert_eq!(routes, [true, false]);
+        assert_eq!(flow.grant.device_code, "fresh-v1");
+
+        // test_accounts 通常在 token 輪詢後才得知帳號；同樣不可被 Windows 共用記錄擋住。
+        let flow = begin_login_with(&secure(), Some(secure()), |_| Ok(grant("v2"))).unwrap();
+        let result = finish_login_with(flow, None, &AtomicBool::new(false), |config| {
+            assert!(!config.uses_transport_v2());
+            Ok(grant("other-account-v1"))
+        })
+        .unwrap();
+        assert!(matches!(result, LoginResult::StartV1(_)));
     }
 
     #[test]
