@@ -1,8 +1,20 @@
 ﻿[CmdletBinding()]
 param([switch]$IncludeInstaller, [switch]$EmptyCargoCache, [switch]$ValidateOnly, [switch]$BasicValidation, [switch]$TestVnc, [switch]$TestOffice, [switch]$TestCadComparison, [string]$NetworkTestRoot, [switch]$BuildOnly, [switch]$SkipCad,
     [switch]$NoDefaultFeatures, [ValidateSet('cad','pet','tarot','vnc')][string[]]$Features = @(),
-    [string]$BuildTargetDirectory)
+    [string]$BuildTargetDirectory, [switch]$RequireHttpsPins)
 $ErrorActionPreference = 'Stop'
+# 正式公鑰交付時使用 RequireHttpsPins。未帶開關仍拒絕格式錯誤或只替換一個公鑰。
+$httpsPins = & (Join-Path $PSScriptRoot 'Get-HttpsPinStatus.ps1') -RequireHttpsPins:$RequireHttpsPins
+Write-Host "HTTPS pin configuration: $($httpsPins.mode); required=$([bool]$RequireHttpsPins)"
+# 封裝會核對這份收據，避免用新來源的公鑰狀態標示舊 EXE。
+function Write-HttpsPinBuildReceipt([string]$Executable) {
+    [ordered]@{
+        recorded_at = (Get-Date -Format o)
+        version = (Get-Item -LiteralPath $Executable).VersionInfo.FileVersion
+        exe_sha256 = (Get-FileHash -LiteralPath $Executable -Algorithm SHA256).Hash.ToLowerInvariant()
+        https_pins = $httpsPins
+    } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $projectRoot '.build\https-pins-build.json') -Encoding UTF8
+}
 # 選用模組先提供開發建置。正式更新與NSIS仍只有完整版本，避免更新後改變功能集合。
 $customFeatures = $NoDefaultFeatures -or $Features.Count -gt 0
 if ($customFeatures -and -not $BuildOnly) { throw 'Custom features require BuildOnly; release validation and installers use the complete default feature set.' }
@@ -103,9 +115,11 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         & cargo @previewArguments
         if ($LASTEXITCODE -ne 0) { throw 'Local preview build failed.' }
         $previewExe = Join-Path $env:CARGO_TARGET_DIR 'x86_64-pc-windows-msvc\release\company-ai.exe'
+        Write-HttpsPinBuildReceipt $previewExe
         [ordered]@{
             recorded_at = (Get-Date -Format o)
             result = 'BUILD_ONLY'
+            https_pins = $httpsPins
             msvc = $env:VCToolsVersion
             compiler_report = $compilerReport
             linker = $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER
@@ -128,7 +142,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     # 測試涵蓋登入兌換、重複登入碼、API Header 與 Windows 憑證加密。
     if ($BasicValidation) {
         # 本版新增的本機功能與門檻檢查不依賴公司服務，納入必要驗證。
-        foreach ($filter in @('reminders::', 'pet::typography::', 'ui::access::')) {
+        foreach ($filter in @('reminders::', 'pet::typography::', 'ui::access::', 'auth::', 'storage::', 'transport::pins::')) {
             & cargo test --lib $filter --frozen
             if ($LASTEXITCODE -ne 0) { throw "Local feature tests failed: $filter" }
         }
@@ -150,6 +164,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     & cargo build --workspace --release --frozen
     if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
     $exe = Join-Path $projectRoot 'target\x86_64-pc-windows-msvc\release\company-ai.exe'
+    Write-HttpsPinBuildReceipt $exe
     if (-not $SkipCad) {
         & (Join-Path $PSScriptRoot 'Stage-Cad.ps1') -ExecutableDirectory (Split-Path $exe -Parent)
         $cadStage = (Get-Content (Join-Path $projectRoot '.build\cad-runtime-stage.txt') -Raw).Trim()
@@ -242,6 +257,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
             recorded_at = (Get-Date -Format o)
             version = (Get-Item $exe).VersionInfo.FileVersion
             result = 'PASS_BASIC'
+            https_pins = $httpsPins
             validation_scope = 'basic; full validation deferred by user'
             msvc = $env:VCToolsVersion
             compiler = $compiler
@@ -268,7 +284,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         New-Item -ItemType Directory -Path $dist -Force | Out-Null
         Copy-Item -LiteralPath $exe -Destination (Join-Path $dist 'LM_AI.exe') -Force
         if ($IncludeInstaller) {
-            & (Join-Path $PSScriptRoot 'Build-Installer.ps1')
+            & (Join-Path $PSScriptRoot 'Build-Installer.ps1') -RequireHttpsPins:$RequireHttpsPins
             Copy-Item -LiteralPath (Join-Path $dist 'update-manifest.json') -Destination (Join-Path $dist 'update-manifest-exe.json') -Force
             $basic.installer_built = $true
             $basic['installer_sha256'] = (Get-FileHash (Join-Path $dist 'LM_AI_Setup.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -407,6 +423,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         [ordered]@{
             recorded_at = (Get-Date -Format o)
             scope = if ($SkipCad) { 'non-CAD source validation; CAD pending' } else { 'source validation' }
+            https_pins = $httpsPins
             msvc = $env:VCToolsVersion
             compiler_report = $compilerReport
             linker = $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER
@@ -464,7 +481,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
     # 本版 Python 需要完整 NSIS；不發布可能漏掉 runtime 的獨立 EXE 更新清單。
     # 本版已授權完整 NSIS 發行；未選用安裝包的建置不更新任何簽署清單。
     if ($IncludeInstaller) {
-        & (Join-Path $PSScriptRoot 'Build-Installer.ps1')
+        & (Join-Path $PSScriptRoot 'Build-Installer.ps1') -RequireHttpsPins:$RequireHttpsPins
         & (Join-Path $PSScriptRoot 'Test-Installer.ps1')
         Copy-Item -LiteralPath (Join-Path $dist 'update-manifest.json') -Destination (Join-Path $dist 'update-manifest-exe.json') -Force
     }
@@ -473,6 +490,7 @@ int company_ai_toolset_probe(void) { return _MSC_VER; }
         version = (Get-Item $exe).VersionInfo.FileVersion
         result = 'PASS'
         scope = if ($SkipCad) { 'non-CAD release validation; CAD deferred' } else { 'release validation' }
+        https_pins = $httpsPins
         cad_skipped = [bool]$SkipCad
         model_validation = 'separate; automated PASS does not imply model content acceptance'
         msvc = $env:VCToolsVersion

@@ -15,7 +15,7 @@ for (const note of releaseNotes) {
     throw Error(`Release ${note.version} must have a title and one to four short user-facing sentences`);
   }
 }
-for (const version of ['0.8.75', '0.8.76', '0.8.77', '0.8.78', '0.8.79', ...Array.from({length:26}, (_, i) => `0.9.${i}`)]) {
+for (const version of ['0.8.75', '0.8.76', '0.8.77', '0.8.78', '0.8.79', ...Array.from({length:27}, (_, i) => `0.9.${i}`)]) {
   if (releaseNotes.filter(note => note.version === version).length !== 1) throw Error(`Missing or duplicated release ${version}`);
 }
 const delay = ms => new Promise(r => setTimeout(r, ms));

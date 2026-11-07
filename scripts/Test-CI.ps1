@@ -15,6 +15,7 @@ Push-Location $projectRoot
 try {
     # BuildOnly 不部署或封裝，但沿用正式 v142 x64 探針與空 Cargo 快取 frozen 建置。
     & (Join-Path $PSScriptRoot 'Build.ps1') -BuildOnly -EmptyCargoCache
+    & (Join-Path $PSScriptRoot 'Test-HttpsPinConfiguration.ps1')
     & cargo fmt --all -- --check
     if ($LASTEXITCODE -ne 0) { throw 'CI formatting failed.' }
     $testArguments = @('--')
@@ -31,6 +32,7 @@ try {
     [ordered]@{
         recorded_at = (Get-Date -Format o)
         result = 'PASS_CI_SCOPE'
+        https_pins = $build.https_pins
         msvc = $build.msvc
         compiler_report = $build.compiler_report
         empty_cargo_cache = $build.empty_cargo_cache

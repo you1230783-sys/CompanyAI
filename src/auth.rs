@@ -54,10 +54,12 @@ pub(crate) struct LoginGrant {
     pub grant: DeviceGrant,
     pub config: Config,
     allow_v1: bool,
+    /// 只有通過公鑰驗證的 v2 停用回應，才能讓 HTTP Session 在防降級紀錄下恢復。
+    verified_v1_fallback: bool,
 }
 
 pub(crate) enum LoginResult {
-    Session(Session, Config),
+    Session(Session, Config, bool),
     StartV1(LoginGrant),
 }
 
@@ -134,6 +136,7 @@ fn begin_login_with(
     mut request: impl FnMut(&Config) -> Result<DeviceGrant, DeviceFailure>,
 ) -> AppResult<LoginGrant> {
     let allow_unreachable_fallback = !config.uses_transport_v2();
+    let mut verified_v1_fallback = false;
     if let Some(secure) = secure {
         match request(&secure) {
             Ok(grant) => {
@@ -141,9 +144,10 @@ fn begin_login_with(
                     grant,
                     config: secure,
                     allow_v1: true,
+                    verified_v1_fallback: false,
                 })
             }
-            Err(DeviceFailure::Disabled(_)) => (),
+            Err(DeviceFailure::Disabled(_)) => verified_v1_fallback = true,
             Err(DeviceFailure::Unavailable(_)) if allow_unreachable_fallback => (),
             Err(DeviceFailure::Unavailable(message) | DeviceFailure::Rejected(message)) => {
                 return Err(message)
@@ -165,6 +169,7 @@ fn begin_login_with(
         grant,
         config: fallback,
         allow_v1: false,
+        verified_v1_fallback,
     })
 }
 
@@ -241,7 +246,11 @@ fn finish_login_with(
     request: impl FnOnce(&Config) -> AppResult<DeviceGrant>,
 ) -> AppResult<LoginResult> {
     if let Some(session) = session {
-        return Ok(LoginResult::Session(session, flow.config));
+        return Ok(LoginResult::Session(
+            session,
+            flow.config,
+            flow.verified_v1_fallback,
+        ));
     }
     if !flow.allow_v1 || cancelled.load(Ordering::Relaxed) {
         return Err("此登入無法使用 HTTPS v2，已停止連線。".into());
@@ -254,6 +263,7 @@ fn finish_login_with(
         grant,
         config,
         allow_v1: false,
+        verified_v1_fallback: true,
     }))
 }
 
@@ -368,6 +378,8 @@ mod tests {
         .unwrap();
         assert_eq!(routes, [true, false]);
         assert_eq!(flow.grant.device_code, "fresh-v1");
+        assert!(flow.verified_v1_fallback);
+        assert_verified_fallback_survives_restart(flow);
 
         // test_accounts 通常在 token 輪詢後才得知帳號；同樣不可被 Windows 共用記錄擋住。
         let flow = begin_login_with(&secure(), Some(secure()), |_| Ok(grant("v2"))).unwrap();
@@ -376,7 +388,61 @@ mod tests {
             Ok(grant("other-account-v1"))
         })
         .unwrap();
-        assert!(matches!(result, LoginResult::StartV1(_)));
+        let LoginResult::StartV1(flow) = result else {
+            panic!("必須重新取得 HTTP 授權")
+        };
+        assert!(flow.verified_v1_fallback);
+        assert_verified_fallback_survives_restart(flow);
+    }
+
+    /// 模擬同一 Windows 使用者先登入 v2、登出，再登入非測試帳號並重開。
+    /// 使用真實 DPAPI 與正式保存／啟動路徑；伺服器回應由上方兩種協商流程注入。
+    fn assert_verified_fallback_survives_restart(flow: LoginGrant) {
+        use crate::storage;
+        let root = std::env::temp_dir().join(format!(
+            "lmai-login-restart-{}",
+            crate::jobs::new_id().unwrap()
+        ));
+        let token = |config: &Config| {
+            Session::from_token(
+                TokenResponse {
+                    access_token: "restart-fixture".into(),
+                    token_type: "Bearer".into(),
+                    expires_in: 3600,
+                },
+                config,
+            )
+            .unwrap()
+        };
+        storage::save_login_session(&root, &token(&secure()), &secure(), false).unwrap();
+        storage::clear_session(&root).unwrap();
+        let session = token(&flow.config);
+        let result = finish_login_with(flow, Some(session), &AtomicBool::new(false), |_| {
+            panic!("不應再次授權")
+        })
+        .unwrap();
+        let LoginResult::Session(session, route, verified) = result else {
+            panic!("缺少 HTTP Session")
+        };
+        storage::save_login_session(&root, &session, &route, verified).unwrap();
+        for saved_config in [Config::default(), secure()] {
+            let (restored, warning) =
+                storage::transport_for_saved_session(&root, saved_config).unwrap();
+            assert!(!restored.uses_transport_v2());
+            assert!(warning.is_none());
+            assert_eq!(
+                storage::load_session(&root, &restored)
+                    .unwrap()
+                    .unwrap()
+                    .access_token,
+                session.access_token
+            );
+        }
+        // 恢復 Session 不解除新登入的防降級限制，連不上仍不可回退。
+        assert!(storage::transport_for_startup(&root, Config::default())
+            .0
+            .uses_transport_v2());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -394,6 +460,7 @@ mod tests {
         .unwrap();
         assert_eq!(routes, [true, false]);
         assert_eq!(flow.grant.device_code, "v1");
+        assert!(!flow.verified_v1_fallback);
         for (route, unavailable) in [(&normal, false), (&secure(), true)] {
             let mut calls = 0;
             let result = begin_login_with(route, Some(secure()), |config| {
@@ -414,6 +481,7 @@ mod tests {
         })
         .unwrap();
         assert_eq!(flow.grant.device_code, "placeholder");
+        assert!(!flow.verified_v1_fallback);
     }
 
     #[test]
@@ -452,6 +520,7 @@ mod tests {
             grant: original,
             config: secure,
             allow_v1: true,
+            verified_v1_fallback: false,
         };
         let result = finish_login_with(flow.clone(), None, &cancel, |route| {
             assert!(!route.uses_transport_v2());

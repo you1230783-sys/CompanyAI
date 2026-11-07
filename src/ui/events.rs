@@ -110,18 +110,22 @@ impl App {
             Event::Login(id, result) if id == self.login_operation => {
                 self.busy = "none";
                 self.grant = None;
-                let (session, route) = match result? {
-                    auth::LoginResult::Session(session, route) => (session, route),
+                let (session, route, verified_v1_fallback) = match result? {
+                    auth::LoginResult::Session(session, route, verified) => {
+                        (session, route, verified)
+                    }
                     auth::LoginResult::StartV1(grant) => return self.show_login_grant(id, grant),
                 };
                 if !self.demo {
-                    storage::remember_transport(&self.root, &route)?;
+                    storage::save_login_session(
+                        &self.root,
+                        &session,
+                        &route,
+                        verified_v1_fallback,
+                    )?;
                 }
                 // 登入期間使用者仍可能修改個人偏好，僅套用剛完成授權的傳輸來源。
                 self.config.server_url = route.server_url;
-                if !self.demo {
-                    storage::save_session(&self.root, &session)?;
-                }
                 self.generation += 1;
                 self.session = Some(session);
                 if let Err(error) = self.apply_hotkey(self.config.hotkey.clone()) {

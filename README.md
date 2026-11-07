@@ -2,9 +2,9 @@
 
 LM_AI 連接公司 AI 服務，協助問答、文件整理、Office 副本修訂、Python 分析與 Classic Outlook 郵件分析。支援 Windows 11 x64。
 
-**目前原始碼：0.9.25。修正連線協商、退出清理與任務續接等審查問題；只做本機驗證，等待正式公鑰後再安排安裝包。最新已發布安裝包仍為 0.9.20。**
+**目前原始碼：0.9.26。修正重開程式的登入恢復，加入公鑰建置檢查；本機使用佔位值驗證編譯與安裝包，不發布 Release。正式公鑰提供後重新建置與封裝。最新已發布安裝包仍為 0.9.20。**
 
-[0.9.25 修正與驗證](docs/validation/VALIDATION_0_9_25.md) · [0.9.20 發布驗證](docs/validation/VALIDATION_0_9_20.md) · [固定流程排程](docs/features/SCHEDULED_WORKFLOWS.md)。
+[0.9.26 修正與驗證](docs/validation/VALIDATION_0_9_26.md) · [0.9.25 修正與驗證](docs/validation/VALIDATION_0_9_25.md) · [0.9.20 發布驗證](docs/validation/VALIDATION_0_9_20.md) · [固定流程排程](docs/features/SCHEDULED_WORKFLOWS.md)。
 
 [0.9.9原始碼改動與待驗項目](docs/history/IMPLEMENTATION_0_9_9.md)。
 

@@ -1,0 +1,76 @@
+{
+  "version": "0.9.26",
+  "recorded_at": "2026-11-07T16:09:26.2015652+08:00",
+  "result": "PASS_LOCAL_SOURCE_AND_PACKAGE",
+  "scope": "Local placeholder-key source and candidate package verification; not a published release",
+  "https_pins": {
+    "mode": "placeholder",
+    "primary_spki": "LMAI-PIN-PLACEHOLDER-PRIMARY",
+    "backup_spki": "LMAI-PIN-PLACEHOLDER-BACKUP",
+    "config_sha256": "2071b31d7954d2d0aace745a72735957a332f6967f90a6d770de0fe187c10a5d",
+    "required": false,
+    "server_verified": false
+  },
+  "msvc": "14.29.30133",
+  "compiler_report": [
+    "v142.c",
+    "Verified _MSC_FULL_VER=192930159 x64"
+  ],
+  "rust": "1.98.1",
+  "empty_cargo_cache": true,
+  "default_features": true,
+  "frozen": true,
+  "source_receipt": "offline/source-verification-0.9.26.json",
+  "installer_receipt": "offline/installer-verification-0.9.26.json",
+  "packaging_checks": [
+    "RequireHttpsPins rejects placeholder source before compilation",
+    "RequireHttpsPins rejects placeholder source before packaging",
+    "packaging rejects old staged EXE with mismatched build receipt",
+    "native updater validates signed manifest and exact Setup hash",
+    "identical nsis manifests and final SHA256SUMS verified"
+  ],
+  "artifacts": [
+    {
+      "file": "LM_AI.exe",
+      "bytes": 71553024,
+      "sha256": "f9650b5c1ef29441500e2c5d5f95d6cfe51fe07bc8b68cd03b12fe678ac5d6ad"
+    },
+    {
+      "file": "LM_AI_Setup.exe",
+      "bytes": 92617801,
+      "sha256": "671335df49974fc2347621189a44f73d6c4f150afa2a53e13afb9d6dc33fab54"
+    },
+    {
+      "file": "update-manifest.json",
+      "bytes": 1050,
+      "sha256": "33d440a2f75eec0af2b5e4b6bbc3398a80fd43f8e0ef0c7b526dbcefd413c5eb"
+    },
+    {
+      "file": "update-manifest-exe.json",
+      "bytes": 1050,
+      "sha256": "33d440a2f75eec0af2b5e4b6bbc3398a80fd43f8e0ef0c7b526dbcefd413c5eb"
+    },
+    {
+      "file": "SHA256SUMS.txt",
+      "bytes": 340,
+      "sha256": "18184e2ca1d66c6116765b65e9508568348f672918e9b420edf56a7b7b884cce"
+    }
+  ],
+  "production_pins_replaced": false,
+  "company_server_tested": false,
+  "release_published": false,
+  "company_update_deployed": false,
+  "full_regression_rerun": false,
+  "deferred": [
+    "company test_accounts/off/required and actual browser-account sequence",
+    "formal and backup production pin verification",
+    "unmodified full installer PID, rollback and repair matrix reused from 0.9.19",
+    "Windows actual logout/shutdown and other company checks remain as recorded in 0.9.25"
+  ],
+  "after_production_pins": [
+    "rebuild and repackage with RequireHttpsPins",
+    "run configured-constants test",
+    "generate new hashes and receipts",
+    "native signed-package verification; reuse unaffected functional and installation lifecycle results"
+  ]
+}

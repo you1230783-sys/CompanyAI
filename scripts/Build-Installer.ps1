@@ -1,8 +1,14 @@
 ﻿# 開發／離線重建專用，使用者端不攜帶或執行此腳本。
 [CmdletBinding()]
-param()
+param([switch]$RequireHttpsPins)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
+$pinStatus = & (Join-Path $PSScriptRoot 'Get-HttpsPinStatus.ps1') -RequireHttpsPins:$RequireHttpsPins
+$pinBuild = Get-Content -LiteralPath (Join-Path $root '.build\https-pins-build.json') -Raw | ConvertFrom-Json
+$appHash = (Get-FileHash -LiteralPath (Join-Path $root 'dist\LM_AI.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($pinBuild.exe_sha256 -cne $appHash -or $pinBuild.https_pins.config_sha256 -cne $pinStatus.config_sha256) {
+    throw 'HTTPS pin build receipt does not match the staged EXE and current source. Rebuild with Build.ps1 before packaging.'
+}
 $zip = Join-Path $root 'installer\nsis-3.12.zip'
 if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne '56581F90DB321581C5381193D796FFFCF2D24B2F8FED2160A6C6A3BAA67F2C4F') { throw 'NSIS tool archive checksum mismatch.' }
 $tools = Join-Path $root '.build\nsis'
@@ -94,3 +100,13 @@ if (Test-Path (Join-Path $root '.private\update-key.dpapi')) {
     if (Test-Path $oldManifest) { Remove-Item -LiteralPath $oldManifest }
     Write-Host 'No private update key: installer rebuilt, no publishable update manifest generated.'
 }
+[ordered]@{
+    recorded_at = (Get-Date -Format o)
+    version = $version
+    result = 'PACKAGED'
+    https_pins = $pinStatus
+    app_sha256 = $appHash
+    setup_sha256 = (Get-FileHash -LiteralPath (Join-Path $root 'dist\LM_AI_Setup.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+    installation_tested = $false
+    published = $false
+} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $root '.build\installer-build.json') -Encoding UTF8

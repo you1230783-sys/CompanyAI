@@ -4,6 +4,11 @@
 param()
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
+$package = Get-Content -LiteralPath (Join-Path $root '.build\installer-build.json') -Raw | ConvertFrom-Json
+if ($package.app_sha256 -cne (Get-FileHash -LiteralPath (Join-Path $root 'dist\LM_AI.exe')).Hash.ToLowerInvariant() -or
+    $package.setup_sha256 -cne (Get-FileHash -LiteralPath (Join-Path $root 'dist\LM_AI_Setup.exe')).Hash.ToLowerInvariant()) {
+    throw 'Installer receipt does not match the candidate under test.'
+}
 $releaseRoot = [IO.Path]::GetFullPath('C:\largan\LM_AI')
 if ($releaseRoot -cne 'C:\largan\LM_AI') { throw 'Unexpected installation path.' }
 $releaseKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\LARGAN.LM_AI'
@@ -116,6 +121,7 @@ Remove-Item -LiteralPath $releaseKeep
 [IO.Directory]::Delete($releaseRoot, $false)
 [ordered]@{
     result = 'PASS_RELEASE_PACKAGE'
+    https_pins = $package.https_pins
     version = (Get-Item $releaseSetup).VersionInfo.FileVersion
     recorded_at = (Get-Date -Format o)
     toolset = $env:VCToolsVersion
@@ -124,7 +130,7 @@ Remove-Item -LiteralPath $releaseKeep
     install_path = $releaseRoot
     checks = @('actual candidate Setup install','fixed path ignores /D','company metadata, registry and shortcut targets','missing WebView2 child-only guidance','installed WebView2/self-check including feature receipts','installed Python and CAD self-check','same-package update preserves user data and runtime identity','updated EXE/self-check/Python/CAD','uninstall preserves unknown user file')
     not_rerun = @('PID handoff and automatic restart','locked-file rollback','runtime repair matrix','obsolete CAD cleanup matrix')
-    prior_full_matrix = 'offline/installer-verification-0.9.15.json'
+    prior_full_matrix = 'offline/installer-verification-0.9.19.json'
     scope = 'actual candidate only; installer and runtime unchanged; company environment remains separate'
 } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $root 'offline\installer-verification.json') -Encoding UTF8
 Write-Host 'Actual release installation/update/startup/uninstall: PASS_RELEASE_PACKAGE'

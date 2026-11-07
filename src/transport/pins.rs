@@ -60,7 +60,7 @@ impl Pins {
 pub(crate) fn configured() -> AppResult<Option<Pins>> {
     if [config::PRIMARY_SPKI, config::BACKUP_SPKI]
         .iter()
-        .any(|value| value.starts_with("LMAI-PIN-PLACEHOLDER-"))
+        .all(|value| value.starts_with("LMAI-PIN-PLACEHOLDER-"))
     {
         return Ok(None);
     }
@@ -245,6 +245,14 @@ pub(super) fn send(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 直接檢查實際編入 EXE 的常數；只有兩個佔位值或兩個有效且不同的雜湊可交付。
+    #[test]
+    fn configured_constants_are_unset_or_valid_never_an_error() {
+        if let Err(error) = configured() {
+            panic!("HTTPS 公鑰常數格式錯誤，禁止建置交付：{error}");
+        }
+    }
 
     #[test]
     fn company_placeholders_are_separate_from_pin_format_validation() {

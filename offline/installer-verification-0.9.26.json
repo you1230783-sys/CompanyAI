@@ -1,0 +1,36 @@
+{
+  "result": "PASS_RELEASE_PACKAGE",
+  "https_pins": {
+    "mode": "placeholder",
+    "primary_spki": "LMAI-PIN-PLACEHOLDER-PRIMARY",
+    "backup_spki": "LMAI-PIN-PLACEHOLDER-BACKUP",
+    "config_sha256": "2071b31d7954d2d0aace745a72735957a332f6967f90a6d770de0fe187c10a5d",
+    "required": false,
+    "server_verified": false
+  },
+  "version": "0.9.26.0",
+  "recorded_at": "2026-11-07T16:08:46.1087102+08:00",
+  "toolset": "14.29.30133",
+  "setup_sha256": "671335df49974fc2347621189a44f73d6c4f150afa2a53e13afb9d6dc33fab54",
+  "app_sha256": "f9650b5c1ef29441500e2c5d5f95d6cfe51fe07bc8b68cd03b12fe678ac5d6ad",
+  "install_path": "C:\\largan\\LM_AI",
+  "checks": [
+    "actual candidate Setup install",
+    "fixed path ignores /D",
+    "company metadata, registry and shortcut targets",
+    "missing WebView2 child-only guidance",
+    "installed WebView2/self-check including feature receipts",
+    "installed Python and CAD self-check",
+    "same-package update preserves user data and runtime identity",
+    "updated EXE/self-check/Python/CAD",
+    "uninstall preserves unknown user file"
+  ],
+  "not_rerun": [
+    "PID handoff and automatic restart",
+    "locked-file rollback",
+    "runtime repair matrix",
+    "obsolete CAD cleanup matrix"
+  ],
+  "prior_full_matrix": "offline/installer-verification-0.9.19.json",
+  "scope": "actual candidate only; installer and runtime unchanged; company environment remains separate"
+}

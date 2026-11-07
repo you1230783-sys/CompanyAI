@@ -454,7 +454,7 @@ pub(super) fn run_with_local(
         Config::default()
     } else {
         let saved = storage::load_config(&root)?;
-        let (restored, warning) = storage::transport_for_startup(&root, saved);
+        let (restored, warning) = storage::transport_for_saved_session(&root, saved)?;
         transport_warning = warning;
         restored
     };

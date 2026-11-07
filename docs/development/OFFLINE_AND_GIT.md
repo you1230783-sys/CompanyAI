@@ -26,7 +26,13 @@ Clone原始碼不等於取得完整離線建置環境。既有建置機的vendor
 
 Python輸入整包的ZIP中繼資料也會影響整包SHA256，因此自行重新壓縮相同檔案不等於原包。需要新包時必須另行更新鎖定清單並完成runtime重建驗證，不能略過現有整包校驗。CAD可直接將清單中的x64官方檔放入`.build/cad-probe-downloads/`，再執行`tools/build_cad_runtime.py`。
 
-正式建置使用 `scripts/Build.ps1 -EmptyCargoCache -IncludeInstaller`，固定MSVC v142 x64並完成必要測試；Office、CAD、VNC與公司驗收分別記錄。私鑰、Token、設定及測試對話不提交。
+正式公鑰提供後，正式建置使用 `scripts/Build.ps1 -EmptyCargoCache -IncludeInstaller -RequireHttpsPins`，固定 MSVC v142 x64 並完成必要測試；Office、CAD、VNC 與公司驗收分別記錄。私鑰、Token、設定及測試對話不提交。
+
+`-RequireHttpsPins` 要求正式與備用 SPKI 都已設定為不同的 32 位元組 Base64 雜湊；不帶開關時允許兩個佔位值，供本機編譯／封裝驗證。任何模式皆拒絕格式錯誤與混合佔位值。`configured` 只代表兩個雜湊格式有效，不能取代公司伺服器實際釘選驗證。
+
+建置收據記錄 `https_pins.mode`（`placeholder`／`configured`）、公開 SPKI 值與要求開關。`.build/https-pins-build.json` 同時綁定來源設定與 EXE 的 SHA-256；`Build-Installer.ps1` 在封裝前核對它，並產生 `.build/installer-build.json`。獨立封裝正式產物時也加 `-RequireHttpsPins`。本機測試安裝包不可當作正式公鑰版本發布。
+
+只替換公鑰後可沿用未受影響的功能與安裝生命週期驗證，但仍須以 `-RequireHttpsPins` 重建 EXE／安裝包，執行公鑰常數測試，核對新版本與 SHA-256、更新簽署清單並由原生更新器驗證新包；公司主機的正式／備用釘選與模式切換另驗。舊產物收據不能直接套用到新包。
 
 ## 歷史整理
 
